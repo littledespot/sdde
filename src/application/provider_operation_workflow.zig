@@ -1,7 +1,5 @@
 const requests = @import("model_request_workflow.zig");
-const values = @import("pipeline_values.zig");
 const accounting = @import("workflow_model_accounting.zig");
-const attempts = @import("../domain/model_attempt_accounting.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const operation = @import("../domain/workflow_operation.zig");
@@ -28,7 +26,7 @@ pub const Assign = struct {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const prepared = request.prepared() orelse return error.OperationExecutionFailed;
-        const attempt = values.read(&input.step.data, accounting.schema, attempts.AccountedAttempt) catch |operation_error| return operation_error;
+        const attempt = accounting.readAttempt(&input.step.data) catch |operation_error| return operation_error;
         const kind = selection.resolve(input.step.step.parameters) orelse return error.OperationExecutionFailed;
         const facts = input.step.provider_operation orelse return error.OperationExecutionFailed;
         const assignment: lifecycle.Assignment = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id };

@@ -26,8 +26,9 @@ admission and canonical resolved records are retained beside it. The
 identifies the rollback scope. Historical source hashes are intentionally not
 rewritten to match restored production code.
 
-The preceding assembly-requirements calibration remains in the normal offline
-test suite. Its implementation does not execute or reclassify this withdrawn
-panel. The removed candidate data files remain available in the frozen workspace
-and rollback archive. Any new candidate needs fresh preparation and approval;
+The preceding assembly-requirements calibration is also historical: B9 retired
+its conditional entity-batch comparison on 17 October 2026. Current tests cover
+feature-owned entities; they do not execute or reclassify either historical panel.
+The removed candidate data files remain available in the frozen workspace and
+rollback archive. Any new candidate needs fresh preparation and approval;
 retained results cannot authorize production promotion or new model calls.

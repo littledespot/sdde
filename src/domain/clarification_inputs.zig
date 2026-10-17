@@ -178,6 +178,21 @@ pub fn validate(parsed: ParsedState, selected: feature.FeatureId) Error!Validate
     return .{ .value = state };
 }
 
+/// Structural input validation precedes corpus construction. Engine-owned
+/// question prose is revalidated once the current native source witness exists;
+/// submitted answer/business text is deliberately outside this model rule.
+pub fn validateQuestions(a: std.mem.Allocator, state: ValidatedState, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
+    const wire = @import("model_text_wire.zig");
+    if (!wire.validSources(sources)) return error.InvalidClarificationInput;
+    const current = state.value orelse return;
+    const text = @import("typed_text.zig");
+    for (current.records) |record| {
+        const nodes: []const text.BusinessSegment = &.{.{ .literal = .{ .value = record.question } }};
+        if (text.composition(text.BusinessSegment, .clarification_question, nodes) != null or
+            try text.wireCompositionSources(text.BusinessSegment, a, sources, .clarification_question, nodes) != null) return error.InvalidClarificationInput;
+    }
+}
+
 pub fn findRecord(state: State, id: []const u8) ?Record {
     for (state.records) |record| if (std.mem.eql(u8, record.id, id)) return record;
     return null;

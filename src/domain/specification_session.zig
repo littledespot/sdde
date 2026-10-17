@@ -7,6 +7,7 @@ const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
 const binding = @import("specification_source_binding.zig");
 pub const unit_count = std.meta.fields(g.Unit).len;
+pub const entities_index = @intFromEnum(std.meta.Tag(g.Unit).entities);
 pub const records_index = @intFromEnum(std.meta.Tag(g.Unit).records);
 pub const Session = struct {
     feature: @import("feature_identity.zig").FeatureId,
@@ -18,12 +19,10 @@ pub const Session = struct {
     record_batches: []const g.Checked = &.{},
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
-    omission_target_bound: ?u32 = null,
-    pending_coverage_repair: ?@import("atomic_repair.zig").Pending(@import("specification_coverage.zig").TokenSubject) = null,
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
-/// One native population covers the narrative units and every retained group.
+/// One native population covers narrative units and record-authoring groups.
 /// Repairs of already completed units do not reopen this authoring pass.
 pub fn iterationProgress(current: Session) Error!struct { limit: usize, position: usize } {
     if (current.record_group_count == 0 or current.completed > unit_count or current.record_cursor > current.record_group_count) return error.InvalidSpecificationUnit;
@@ -98,11 +97,18 @@ fn referenceSnapshot(a: std.mem.Allocator, context: p.Context) Error!@import("at
 
 fn checkBatchGroup(checked: g.Checked, group: @import("reference_reconciliation.zig").SignalId) Error!void {
     if (checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
-    for (checked.response.content.records) |record| if (record.source_group_ids.len != 1 or record.source_group_ids[0].ordinal != group.ordinal) return error.InvalidSpecificationUnit;
+    for (checked.response.content.records) |record| if (record.content == .entity or record.source_group_ids.len != 1 or record.source_group_ids[0].ordinal != group.ordinal) return error.InvalidSpecificationUnit;
 }
 
 pub fn validateRecordAssignments(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
-    if (!current.reference_state.eql(context.inputs.corpus.state_id) or current.record_group_count == 0 or current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references)) or current.record_cursor != current.record_group_count or current.record_batches.len != current.record_group_count) return error.InvalidSpecificationUnit;
+    if (current.record_cursor != current.record_group_count) return error.InvalidSpecificationUnit;
+    try validateRecordPrefix(a, current, context);
+}
+
+/// Empty batches retain the same current reference witness as nonempty batches.
+/// Presentation may read this admitted prefix, never a stale or fabricated one.
+fn validateRecordPrefix(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
+    if (!current.reference_state.eql(context.inputs.corpus.state_id) or current.record_group_count == 0 or current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references)) or current.record_cursor > current.record_group_count or current.record_batches.len != current.record_cursor) return error.InvalidSpecificationUnit;
     const references = try referenceSnapshot(a, context);
     for (current.record_batches, 0..) |batch, index| {
         const assigned = try binding.record(a, @import("reference_support.zig").records(context.references), context.inputs, index);
@@ -144,7 +150,26 @@ pub const PacketOptions = struct {
 const RecordRequirements = struct {
     scope: enum { assembled_specification } = .assembled_specification,
     required_families: []const g.spec.Kind,
+    present_families: []const g.spec.Kind,
+    unmet_required_families: []const g.spec.Kind,
 };
+
+/// Family presence is a native structural fact, not evidence that the earlier
+/// candidate's content is correct or that its obligations have been fulfilled.
+fn recordRequirements(a: std.mem.Allocator, current: Session, context: p.Context) Error!RecordRequirements {
+    if (current.completed != records_index or current.record_cursor >= current.record_group_count) return error.InvalidSpecificationUnit;
+    try validateRecordPrefix(a, current, context);
+    var present: std.EnumSet(g.spec.Kind) = .initEmpty();
+    for (current.record_batches) |batch| for (batch.response.content.records) |record| present.insert(std.meta.activeTag(record.content));
+    const required = &g.spec.required_record_families;
+    var families: std.ArrayList(g.spec.Kind) = .empty;
+    errdefer families.deinit(a);
+    for (std.meta.tags(g.spec.Kind)) |kind| if (present.contains(kind)) try families.append(a, kind);
+    var unmet: std.ArrayList(g.spec.Kind) = .empty;
+    errdefer unmet.deinit(a);
+    for (required) |kind| if (!present.contains(kind)) try unmet.append(a, kind);
+    return .{ .required_families = required, .present_families = try families.toOwnedSlice(a), .unmet_required_families = try unmet.toOwnedSlice(a) };
+}
 
 /// Repair retains all source claims but offers exact-copy choices only from the
 /// bound owning unit. An explicit task replaces authoring purposes while retaining
@@ -159,9 +184,14 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const entity_decision: ?g.spec.ApplicabilityProposal = if (selected == .records) decision: {
         const checked = current.units[2] orelse return error.InvalidSpecificationUnit;
         if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
-        break :decision checked.response.content.entities;
+        break :decision checked.response.content.entities.decision();
     } else null;
-    const excluded: []const @import("model_result_schema.zig").ExcludedVariant = if (entity_decision != null and entity_decision.?.disposition == .not_applicable) &.{.{ .kind = "entity" }} else &.{};
+    var excluded_list: std.ArrayList(@import("model_result_schema.zig").ExcludedVariant) = .empty;
+    if (selected == .records) try excluded_list.append(a, .{ .kind = "entity" });
+    if (selected == .entities) for (std.meta.tags(g.spec.Kind)) |kind| {
+        if (kind != .entity) try excluded_list.append(a, .{ .kind = @tagName(kind) });
+    };
+    const excluded = excluded_list.items;
     // The schema restriction is also the presentation filter. Descriptions do
     // not establish another applicability rule or offer an excluded family.
     var record_kinds: std.ArrayList(g.spec.Kind) = .empty;
@@ -180,7 +210,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
         if (item.claim.content == .preserved_token) {
             const token = item.claim.content.preserved_token;
-            if (p.permitsExactKind(token.value.kind) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
+            if (try @import("specification_exact_tokens.zig").permits(all, item.claim.id) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
                 try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
             }
         }
@@ -214,7 +244,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
-    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);
     var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
@@ -222,6 +252,26 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
+    const scoped = try packets.withExactScope(allocator, result, .{ .reference_state = all.state_id, .occurrences = try p.exactOccurrences(a, @import("reference_support.zig").records(context.references), options.exact_claims) });
+    packets.release(result);
+    result = scoped;
+    const witnessed = try packets.withOriginalSources(allocator, result, context.inputs);
+    packets.release(result);
+    result = witnessed;
+    const model_fields = @import("model_candidate_json.zig").fieldBindings(g.ModelResponse, a, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    const policies = try packets.withFieldPolicies(allocator, result, model_fields);
+    packets.release(result);
+    result = policies;
+    const presentation = @import("model_field_presentation.zig");
+    var omissions: std.ArrayList(presentation.Omission) = .empty;
+    try omissions.append(a, .{ .requires = .exact_copy, .path = &.{.{ .property = "preserved_tokens" }} });
+    for (source_groups, 0..) |group, group_index| if (try binding.tokenOnly(@import("reference_support.zig").records(context.references), group.signal_id)) {
+        const path = try a.dupe(presentation.BodyStep, &.{ .{ .property = "source_groups" }, .{ .index = std.math.cast(u32, group_index) orelse return error.InvalidSpecificationUnit } });
+        try omissions.append(a, .{ .requires = .exact_copy, .path = path });
+    };
+    const offered = try packets.withPresentationOmissions(allocator, result, omissions.items);
+    packets.release(result);
+    result = offered;
     if (options.task) |task| {
         const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
         packets.release(result);
@@ -242,13 +292,11 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
             result = contextual;
         },
     }
-    const exact_ids = try a.alloc(i64, exact_choices.items.len);
-    for (exact_choices.items, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const input = @import("reference_model_input.zig");
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
         if (assigned != null and options.task == null) {
-            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{ .required_families = g.spec.assemblyRequiredRecordFamilies(entity_decision.?.disposition) });
+            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", try recordRequirements(a, current, context));
             packets.release(result);
             result = contextual;
         }
@@ -259,7 +307,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     }
     const fixed = try packets.withExcludedVariants(allocator, result, excluded);
     defer packets.release(fixed);
-    const choices = try input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
+    const choices = try input.withTextChoices(allocator, fixed, passive_ids);
     defer packets.release(choices);
     if (options.task != null or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
@@ -272,12 +320,31 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     const records = @import("reference_support.zig").records(context.references);
     const positive = try binding.catalogue(a, records, .content);
     const questions = try binding.catalogue(a, records, .question);
+    const returned_fields = switch (selected) {
+        inline else => |_, tag| @import("model_candidate_json.zig").selectedFieldBindings(g.ModelResponse, a, @field(std.meta.Tag(g.ModelResponse), @tagName(tag)), .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit,
+    };
+    const permits_exact = for (returned_fields) |field| {
+        if (@import("text_field_policy.zig").permits(field.field, .exact_copy)) break true;
+    } else false;
     var question_ids: std.ArrayList(i64) = .empty;
     if (selected == .records) {
         try question_ids.append(a, (try binding.record(a, records, context.inputs, cursor)).records.signal.ordinal);
-    } else for (questions) |group| try question_ids.append(a, group.signal_id.ordinal);
-    const positive_ids = try a.alloc(i64, positive.len);
-    for (positive, positive_ids) |group, *id| id.* = group.signal_id.ordinal;
+    } else for (questions) |group| {
+        if ((!permits_exact or selected == .entities) and try binding.tokenOnly(records, group.signal_id)) continue;
+        try question_ids.append(a, group.signal_id.ordinal);
+    }
+    var eligible_positive: std.ArrayList(i64) = .empty;
+    for (positive) |group| {
+        if (!permits_exact and try binding.tokenOnly(records, group.signal_id)) continue;
+        try eligible_positive.append(a, group.signal_id.ordinal);
+    }
+    const positive_ids = eligible_positive.items;
+    // Adding exact-capable entity names does not widen the unchanged basis's
+    // prose-only group catalogue. Entity records select their own support.
+    var basis_ids: std.ArrayList(i64) = .empty;
+    if (selected == .entities) for (positive) |group| {
+        if (!try binding.tokenOnly(records, group.signal_id)) try basis_ids.append(a, group.signal_id.ordinal);
+    };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
@@ -285,12 +352,15 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
         },
         .primary_user_story => try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "primary_user_story", .field = "signal_ids" } }, .allowed = positive_ids, .collection = .unique_subset }),
-        .entities => try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset }),
+        .entities => {
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .unique_subset });
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+        },
         .records => unreachable,
     };
     const narrowed = try packets.withIntegerChoices(allocator, base, choices.items);
     defer packets.release(narrowed);
-    if (selected != .records and positive_ids.len == 0) {
+    if (selected != .records and (positive_ids.len == 0 or (selected == .entities and basis_ids.items.len == 0))) {
         const excluded = try a.alloc(@import("model_result_schema.zig").ExcludedVariant, base.excludedVariants().len + 1);
         @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
         excluded[excluded.len - 1] = .{ .kind = @tagName(std.meta.activeTag(selected)) };
@@ -311,7 +381,9 @@ pub fn withSelectionChoices(a: std.mem.Allocator, base: *const packets.Packet, c
     for (choices.exact_copy, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const visible = try narrowDisplayCatalogues(a, base, passive_ids, exact_ids);
     defer packets.release(visible);
-    return @import("reference_model_input.zig").withTextChoices(a, visible, passive_ids, exact_ids);
+    const scoped = try packets.withExactScope(a, visible, .{ .reference_state = (try p.items(context)).state_id, .occurrences = try p.exactOccurrences(scratch, @import("reference_support.zig").records(context.references), selection.claim_ids) });
+    defer packets.release(scoped);
+    return @import("reference_model_input.zig").withTextChoices(a, scoped, passive_ids);
 }
 
 /// Keep Spec's presented display choices aligned with the bound native scope.
@@ -345,17 +417,16 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
         }
     }
     const body = try std.json.Stringify.valueAlloc(scratch, parsed.value, .{});
-    const projected = if (base.repairPermit()) |permit|
-        packets.createRepair(a, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin())
-    else
-        packets.create(a, body, base.unit(), base.purpose(), base.resultDefinition());
-    const unbound = try projected;
-    defer packets.release(unbound);
-    return packets.withRestrictions(a, unbound, base.excludedVariants(), base.integerChoices());
+    return packets.withBody(a, base, body);
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {
     if (!std.meta.eql(try unit(current.completed), checked.unit) or checked.response != .content) return error.InvalidSpecificationUnit;
+    if (checked.response.content == .entities) {
+        const entities = checked.response.content.entities;
+        if (!g.spec.entityMembershipSatisfied(entities.disposition, entities.records.len)) return error.InvalidSpecificationUnit;
+        for (entities.records) |record| if (record.content != .entity) return error.InvalidSpecificationUnit;
+    }
     var next = current;
     if (next.units[current.completed] != null) return error.InvalidSpecificationUnit;
     next.units[current.completed] = checked;
@@ -387,25 +458,36 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
     var total: usize = 0;
     for (batches) |batch| total = std.math.add(usize, total, batch.response.content.records.len) catch return error.InvalidSpecificationUnit;
     const records = try a.alloc(g.spec.RecordProposal, total);
-    const origins = try a.alloc(@import("specification_candidate.zig").FieldOrigin, total);
+    errdefer a.free(records);
+    var origins: @import("specification_candidate.zig").Origins = .{};
+    errdefer {
+        a.free(origins.fields);
+        a.free(origins.record_occurrences.values);
+    }
     var offset: usize = 0;
     for (batches) |batch| {
-        for (batch.response.content.records, 0..) |record, index| {
-            records[offset] = record;
-            origins[offset] = .{ .target = .{ .record = offset }, .origin = batch.origins.at(.{ .target = .{ .record = index } }) };
-            offset += 1;
-        }
+        const count = batch.response.content.records.len;
+        @memcpy(records[offset..][0..count], batch.response.content.records);
+        const projected = origins.appendingRecords(a, offset, batch.origins, count) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.InvalidRepairOccurrence, error.InvalidSpecificationRepair => error.InvalidSpecificationUnit,
+        };
+        a.free(origins.fields);
+        a.free(origins.record_occurrences.values);
+        origins = projected;
+        offset += count;
     }
     var combined = checked;
     combined.record_assignment = null;
     combined.response.content.records = records;
-    combined.origins = .{ .fields = origins };
+    combined.origins = origins;
     return append(next, combined);
 }
 
 /// Cross-batch and cross-unit consistency belongs to the session. The same
 /// check governs admission, completed replacements and assembly.
-pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+    _ = context;
     if (checked.response != .content) return null;
     const proposed = checked.response.content;
     if (proposed != .records and proposed != .entities) return null;
@@ -414,29 +496,7 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Check
             if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
         };
     };
-    const entities = if (proposed == .entities) proposed.entities else (current.units[2] orelse return error.InvalidSpecificationUnit).response.content.entities;
-    const records = if (proposed == .records) proposed.records else if (current.units[records_index]) |entry| entry.response.content.records else return null;
-    var count: usize = 0;
-    var first: ?usize = null;
-    for (records, 0..) |record, index| if (record.content == .entity) {
-        count += 1;
-        if (first == null) first = index;
-    };
-    if (proposed == .records) {
-        if (current.completed == records_index) for (current.record_batches) |batch| for (batch.response.content.records) |record| if (record.content == .entity) {
-            count += 1;
-        };
-        if (entities.disposition == .required and count == 0 and current.record_cursor + 1 < current.record_group_count) return null;
-    }
-    if (g.spec.entityMembershipSatisfied(entities.disposition, count)) return null;
-    return .{
-        .unit = checked.unit,
-        .field = if (proposed == .records and first != null) .{ .target = .{ .record = first.? } } else .unit,
-        .rule = .entity_membership,
-        .observed = null,
-        .membership = .{ .disposition = entities.disposition, .entity_count = count },
-        .detail = if (count == 0) "The fixed entity decision requires at least one entity record; none was supplied." else "Entity records contradict the fixed not_applicable decision.",
-    };
+    return null;
 }
 
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
@@ -451,16 +511,23 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkConsistency(allocator, current, result) != null) return error.InvalidSpecificationUnit;
-        if (result.response.content == .records) {
+        if (try checkConsistency(allocator, current, context, result) != null) return error.InvalidSpecificationUnit;
+        if (g.recordCollection(.canonical, result.response.content)) |unit_records| {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.
-            for (std.enums.values(g.spec.Kind)) |kind| for (result.response.content.records) |record| {
+            for (std.enums.values(g.spec.Kind)) |kind| for (unit_records) |record| {
                 if (record.content == kind) try records.append(allocator, record);
             };
         }
     }
-    const entities = current.units[2].?.response.content.entities;
+    // Canonical family order spans both native record owners. Stable sorting
+    // preserves each family's authoring order and its local occurrence mapping.
+    std.mem.sort(g.spec.RecordProposal, records.items, {}, struct {
+        fn before(_: void, left: g.spec.RecordProposal, right: g.spec.RecordProposal) bool {
+            return @intFromEnum(std.meta.activeTag(left.content)) < @intFromEnum(std.meta.activeTag(right.content));
+        }
+    }.before);
+    const entities = current.units[2].?.response.content.entities.decision();
     return @import("specification_identity.zig").assign(allocator, .{
         .display_name = current.units[0].?.response.content.brief.title,
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
@@ -473,10 +540,11 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
 /// candidate values or their per-field repair origins.
 pub fn recordIndex(current: Session, id: g.spec.Id) Error!usize {
     if (current.completed != unit_count) return error.InvalidSpecificationUnit;
-    const checked = current.units[records_index] orelse return error.InvalidSpecificationUnit;
-    if (checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
+    const checked = current.units[if (id.kind == .entity) 2 else records_index] orelse return error.InvalidSpecificationUnit;
+    if (checked.response != .content) return error.InvalidSpecificationUnit;
+    const unit_records = g.recordCollection(.canonical, checked.response.content) orelse return error.InvalidSpecificationUnit;
     var ordinal = current.starting_ledger.next[@intFromEnum(id.kind)];
-    for (checked.response.content.records, 0..) |record, index| {
+    for (unit_records, 0..) |record, index| {
         if (record.content != id.kind) continue;
         if (ordinal == id.ordinal) return index;
         ordinal = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecificationUnit;
@@ -497,6 +565,6 @@ pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_
     var next = current;
     next.revision = merged.revision_after;
     next.units[index] = checked;
-    if (try checkConsistency(allocator, next, checked) != null) return error.InvalidSpecificationUnit;
+    if (try checkConsistency(allocator, next, context, checked) != null) return error.InvalidSpecificationUnit;
     return next;
 }

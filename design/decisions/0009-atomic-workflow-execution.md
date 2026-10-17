@@ -113,9 +113,7 @@
 - Existing files alone are not evidence that the current execution completed
   successfully.
 
-## Acceptance and implementation status
-
-### Required evidence
+## Acceptance
 
 Tests must prove:
 
@@ -131,16 +129,5 @@ Tests must prove:
   write failure prevents new successful completion, already-replaced files may remain,
   and a fresh rerun replaces the complete output set without recovery.
 
-### Implemented and remaining
-
-- The transaction-ID modules/codecs, provider lifecycle journal projections, and logging
-  transaction stabilization/events have been removed.
-- Regression tests cover reruns from `start`, fresh provider state, lease cleanup, and
-  preservation of terminal outcomes (`zig build test-atomic-execution`).
-- The shared writer now publishes registered specification/sidecar/state outputs and
-  preserves protected clarification forms.
-- Authenticated answer application and complete live/rerun acceptance remain open; see
-  [F0100
-  §3.12](../features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication).
-- Prior transaction/checkpoint/recovery contracts in the named documents and samples are
-  withdrawn; they must not be used to reintroduce this machinery.
+Prior transaction/checkpoint/recovery contracts are withdrawn and must not be used
+to reintroduce this machinery.

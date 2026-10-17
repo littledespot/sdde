@@ -26,7 +26,7 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
 /// Source identity survives producer rebuilding; generated claim/signal IDs do not.
 pub fn permits(finding: a.Finding) bool {
     return switch (finding) {
-        .supported, .candidate_omission, .inconclusive => true,
+        .supported, .candidate_omission, .candidate_invalid, .inconclusive => true,
         .ambiguous, .conflicting, .unsupported => false,
     };
 }

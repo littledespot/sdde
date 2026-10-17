@@ -303,7 +303,7 @@ test "repair roles keep declared guards native and cannot acquire accounting eff
         registry.operations = &.{changed};
         try std.testing.expect(!registry.validate());
     }
-    var native: @import("application/model_attempt_workflow.zig").Advance = .{};
+    var native: @import("application/model_attempt_workflow.zig").Advance = .{ .allocator = std.testing.allocator };
     const entry: Entry = .{ .contract = @TypeOf(native).contract, .binding = bindings.bind(@TypeOf(native), &native, @TypeOf(native).invoke) };
     var registry: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
     try std.testing.expect(registry.validate());

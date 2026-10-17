@@ -5,13 +5,13 @@ const comparison = loss.comparisons;
 const r = @import("reference_reconciliation.zig");
 const Records = @import("reference_support.zig").Records;
 const authority = @import("required_authority.zig");
-const bindings = @import("specification_source_binding.zig");
-pub const ComparisonError = comparison.Error || bindings.Error;
+pub const ComparisonError = comparison.Error;
 
 /// Build immutable request evidence from canonical facts, never a consumed
 /// generation cursor. All slices belong to/borrow the caller's request arena.
 /// Production packet retention copies these facts before that arena is released.
 pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.evidence.Inputs, target: authority.Id, ordinal: u32, review_revision: u64, finding: authority.ReviewEvidence) ComparisonError!comparison.Assignment {
+    if (authority.assessmentPolicy(inputs.projection) == .advisory) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     if (!@import("specification_support_evidence.zig").validObligation(.candidate_omission, finding.missing_obligation)) return error.InvalidRequiredAuthority;
     if (finding.source_ids.len == 0 or finding.detail.len == 0 or ordinal == 0 or review_revision == 0 or !records.items.state_id.eql(source_inputs.corpus.state_id)) return error.InvalidRequiredAuthority;
@@ -88,18 +88,10 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
     var target_owner: ?comparison.Owner = null;
     switch (target.unit) {
         .feature => {
-            const group_ids = try authoredGroupIds(a, inputs, target);
-            const chosen: []const r.ClaimId = if (group_ids.len == 0) &.{} else (try bindings.selectGroups(a, records, source_inputs, group_ids, .content)).claim_ids;
-            try builder.append(chosen, .{ .source_association = target });
-            if (inputs.brief != null or inputs.specification != null) target_owner = .{ .existing = .{ .candidate = .{} } };
+            // Source readiness precedes any authored specification selection.
+            try builder.append(&.{}, .{ .source_association = target });
         },
-        .record => {
-            const selected = try @import("specification_authority.zig").recordField(inputs, target) orelse return error.InvalidRequiredAuthority;
-            if (selected.record.proposal.source_group_ids.len != 1) return error.InvalidRequiredAuthority;
-            const bound = try bindings.recordForGroup(a, records, source_inputs, selected.record.proposal.source_group_ids[0]);
-            try builder.append(bound.records.selection.claim_ids, .{ .source_association = target });
-            target_owner = .{ .existing = .{ .candidate = .{} } };
-        },
+        .record => return error.InvalidRequiredAuthority,
         .signal => |id| {
             const signal = for (records.signals) |item| {
                 if (std.meta.eql(item.id, id)) break item;
@@ -128,32 +120,6 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
         .comparisons = builder.views.items,
         .boundaries = builder.boundaries.items,
     };
-}
-
-/// Current authored association for the exact review subject. A collection
-/// aggregates only its existing members; eligibility never fills missing groups.
-pub fn authoredGroupIds(a: std.mem.Allocator, inputs: authority.Inputs, target: authority.Id) authority.Error![]const r.SignalId {
-    const owner = @import("specification_authority.zig");
-    if (owner.featureField(inputs, target)) |field| return a.dupe(r.SignalId, field.source_group_ids);
-    if (target.unit == .record) {
-        const field = try owner.recordField(inputs, target) orelse return error.InvalidRequiredAuthority;
-        return a.dupe(r.SignalId, field.record.proposal.source_group_ids);
-    }
-    if (target.unit != .feature) return error.InvalidRequiredAuthority;
-    switch (target.slot) {
-        .display_name, .description, .primary_goal, .primary_user_story => return a.alloc(r.SignalId, 0),
-        .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage => {},
-        else => return error.InvalidRequiredAuthority,
-    }
-    const content = inputs.specification orelse return a.alloc(r.SignalId, 0);
-    if (target.slot == .entities) return a.dupe(r.SignalId, content.entities.basis.source_group_ids);
-    var groups: std.ArrayList(r.SignalId) = .empty;
-    errdefer groups.deinit(a);
-    for (content.records) |record| {
-        if (!try owner.collectionContains(target.slot, std.meta.activeTag(record.proposal.content))) continue;
-        for (record.proposal.source_group_ids) |id| if (!r.contains(r.SignalId, groups.items, id)) try groups.append(a, id);
-    }
-    return groups.toOwnedSlice(a);
 }
 
 const ComparisonBuilder = struct {

@@ -31,6 +31,22 @@ pub fn resultSchema(allocator: std.mem.Allocator) std.mem.Allocator.Error![]cons
     writeSchema(@import("judgment.zig").Proposal, &out.writer) catch return error.OutOfMemory;
     return out.toOwnedSlice() catch return error.OutOfMemory;
 }
+/// Binds retained grading evidence to the exact instruction and derived schema,
+/// including edits that do not change their descriptive revision labels.
+pub fn protocolSha256(a: std.mem.Allocator) std.mem.Allocator.Error![]const u8 {
+    const schema = try resultSchema(a);
+    defer a.free(schema);
+    const bytes = try std.json.Stringify.valueAlloc(a, .{
+        .prompt_revision = revision,
+        .judgment_schema = @import("judgment.zig").schema_revision,
+        .instructions = instructions,
+        .result_schema = schema,
+    }, .{});
+    defer a.free(bytes);
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+    return a.dupe(u8, &std.fmt.bytesToHex(digest, .lower));
+}
 fn writeSchema(comptime T: type, out: *std.Io.Writer) std.Io.Writer.Error!void {
     switch (@typeInfo(T)) {
         .@"struct" => |s| {

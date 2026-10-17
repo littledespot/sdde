@@ -1,4 +1,4 @@
-//! Policy assessment contributes native Plan-owned obligations, never business support.
+//! Post-generation principle judgments remain advisory and never grant repair authority.
 const std = @import("std");
 const a = @import("required_authority.zig");
 const registry = @import("principle_registry.zig");
@@ -25,7 +25,9 @@ pub const Canonical = struct {
     candidate_revision: u64,
     requirements: []const a.Id,
     evidence: []const a.Evidence,
+    candidates: []const a.Candidate,
     result: a.Result,
+    advice_stop: ?a.AdviceStop = null,
 };
 pub const Value = struct { decision: Decision, citations: []const registry.Citation, detail: []const u8 };
 pub const Decision = enum {
@@ -61,7 +63,7 @@ pub const CitationRejection = struct { index: usize, diagnostic: registry.Citati
 pub const Rejection = struct { issue: Issue, rule: Rule, citation: ?CitationRejection = null };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
-pub fn subjects(allocator: std.mem.Allocator, business: Business) Error![]const a.Id {
+pub fn subjects(allocator: std.mem.Allocator, business: Business) a.Error![]const a.Id {
     const ledger = try a.build(allocator, try @import("specification_authority.zig").projectRecords(allocator, business.feature, business.references, business.content, business.brief));
     var ids: std.ArrayList(a.Id) = .empty;
     for (ledger.requirements) |requirement| if (requirement.seed.id.kind == .feature_intent or requirement.seed.id.kind == .entity_applicability) try ids.append(allocator, requirement.seed.id);
@@ -91,6 +93,7 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     for (ledger.requirements, 0..) |requirement, index| {
         const matches = switch (scope) {
             .finding, .correction => |id| std.meta.eql(id, requirement.seed.id),
+            .assignment => return error.InvalidRequiredAuthority,
         };
         if (matches) {
             if (selected != null or index >= assigned.len) return error.InvalidRequiredAuthority;
@@ -104,12 +107,15 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
         .subject = try @import("specification_review_subject.zig").projectBusiness(scratch, business, source_context, subject),
         .principles = try registry.guidance(scratch, context.registry, context.selection),
     };
-    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
     const state = source_context.inputs.corpus.state_id;
     const slot = switch (scope) {
         .finding, .correction => |id| try @import("specification_support.zig").reviewSlot(scratch, inputs, id),
+        .assignment => return error.InvalidRequiredAuthority,
     };
-    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "principle_finding" });
+    const base = try packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "principle_finding" });
+    defer packets.release(base);
+    return @import("specification_support.zig").Contract(.principles).classifyAdvicePacket(allocator, inputs, state, base);
 }
 pub fn rule(inputs: a.Inputs, finding: a.Finding) Error!Rule {
     return .{ .citations_required = finding != .supported, .permitted_chunks = (inputs.principle_context orelse return error.InvalidRequiredAuthority).selection.chunks };
@@ -132,15 +138,14 @@ pub fn canonical(allocator: std.mem.Allocator, inputs: a.Inputs) Error!Canonical
     const observations = try a.buildObservations(allocator, ledger);
     const result = try a.reconcile(allocator, ledger, observations);
     for (result.entries) |entry| switch (entry.outcome) {
-        .resolved_exactly_one => {},
-        .clarification_required => |gap| if (gap.owner != .plan or (gap.reason != .ambiguous and gap.reason != .conflicting)) return error.InvalidRequiredAuthority,
+        .assessment_complete, .assessment_incomplete => {},
         else => return error.InvalidRequiredAuthority,
     };
-    return .{ .registry = context.registry, .selection = context.selection, .candidate_revision = context.business.revision, .requirements = try subjects(allocator, context.business), .evidence = inputs.evidence, .result = result };
+    return .{ .registry = context.registry, .selection = context.selection, .candidate_revision = context.business.revision, .requirements = try subjects(allocator, context.business), .evidence = inputs.evidence, .candidates = inputs.candidates, .result = result, .advice_stop = inputs.advice_stop };
 }
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: @import("reference_evidence.zig").Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
-    if (review.loss != null or review.preservation != null or review.missing_obligation != null) return error.InvalidRequiredAuthority;
+    if (review.loss != null or review.preservation != null or review.missing_obligation != null or review.authority_gap != null) return error.InvalidRequiredAuthority;
     if (review.principle_registry == null or !std.meta.eql(review.principle_registry.?, (inputs.principle_context orelse return error.InvalidRequiredAuthority).registry.id)) return error.InvalidRequiredAuthority;
     if (!(inputs.references orelse return error.InvalidRequiredAuthority).items.state_id.eql(sources.corpus.state_id) or evidence.method != .model_assisted or
         review.question != null or review.provenance.claim_ids.len != 0 or review.provenance.citation_ids.len != 0 or review.provenance.clarification_response_ids.len != 0 or review.source_ids.len != 0 or
@@ -153,6 +158,8 @@ pub fn validateStored(allocator: std.mem.Allocator, business: a.Inputs, sources:
     if (business.revision != value.candidate_revision) return error.InvalidRequiredAuthority;
     var inputs = try project(allocator, .{ .business = try businessInput(allocator, business), .registry = value.registry, .selection = value.selection });
     inputs.evidence = value.evidence;
+    inputs.candidates = value.candidates;
+    inputs.advice_stop = value.advice_stop;
     try @import("specification_support.zig").Contract(.principles).validateStored(allocator, inputs, sources);
     const expected = try canonical(allocator, inputs);
     const expected_bytes = try @import("canonical_json.zig").encode(Canonical, allocator, expected);

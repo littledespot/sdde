@@ -18,7 +18,7 @@ pub const Outcome = union(enum) {
     not_decoded: *const observation.Result,
 };
 
-/// Syntax only. The original observation remains the sole association authority.
+/// Syntax and mechanical text composition only; the original observation owns association.
 pub const Result = opaque {
     pub fn source(self: *const Result) *const observation.Result {
         return storage(self).source;
@@ -41,7 +41,7 @@ pub const Decode = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_decode = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_envelope_result } },
     };
@@ -68,7 +68,7 @@ pub fn complete(source: *const observation.Result) ?*const @import("../domain/pr
             .complete => |candidate| candidate,
             .stopped, .failed => null,
         },
-        .rejected, .cancelled => null,
+        .rejected, .cancelled, .advisory_stopped => null,
     };
 }
 
@@ -117,7 +117,7 @@ pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTa
         .protocol_rejected => .invalid,
         .not_decoded => |source| switch (source.outcome()) {
             .validated => |evidence| if (evidence.missingFinalText()) .invalid else observation.status(source),
-            .rejected, .cancelled => observation.status(source),
+            .rejected, .cancelled, .advisory_stopped => observation.status(source),
         },
     };
 }

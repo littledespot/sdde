@@ -22,6 +22,14 @@ pub fn build(b: *std.Build) void {
     unicode_module.addIncludePath(unicode_dependency.path(""));
     unicode_module.addCMacro("UTF8PROC_STATIC", "1");
     unicode_module.addCSourceFile(.{ .file = unicode_dependency.path("utf8proc.c"), .flags = &.{"-DUTF8PROC_STATIC"} });
+    const exact_value_unicode = b.createModule(.{
+        .root_source_file = b.path("test/harness/exact_value/unicode_properties.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    exact_value_unicode.addIncludePath(unicode_dependency.path(""));
     b.getInstallStep().dependOn(&b.addInstallFileWithDir(unicode_dependency.path("LICENSE.md"), .prefix, "share/licenses/utf8proc/LICENSE.md").step);
     const yaml_dependency = b.dependency("yaml", .{
         .target = target,
@@ -95,6 +103,22 @@ pub fn build(b: *std.Build) void {
     b.step("test-architecture", "Test repository dependency and authority boundaries").dependOn(&run_architecture_tests.step);
 
     const test_step = b.step("test", "Run all unit tests");
+    const heuristics_module = b.createModule(.{
+        .root_source_file = b.path("code_heuristics.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const heuristics_tool = b.addExecutable(.{ .name = "sdde-code-heuristics", .root_module = heuristics_module });
+    const heuristics_report = b.addRunArtifact(heuristics_tool);
+    heuristics_report.setCwd(b.path("."));
+    heuristics_report.addArg(b.getInstallPath(.prefix, "code-heuristics"));
+    // Source inventory is read at runtime; always refresh after local edits.
+    heuristics_report.has_side_effects = true;
+    b.step("code-heuristics", "Write advisory code metrics to zig-out/code-heuristics/report.{md,json}").dependOn(&heuristics_report.step);
+    const heuristics_tests = b.addRunArtifact(b.addTest(.{ .root_module = heuristics_module }));
+    heuristics_tests.setCwd(b.path("."));
+    b.step("test-code-heuristics", "Test code metrics, source inventory and deterministic report rendering").dependOn(&heuristics_tests.step);
     const evaluator_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("harness.zig"),
         .target = target,
@@ -113,6 +137,36 @@ pub fn build(b: *std.Build) void {
     b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
+    const adjudicator = b.addExecutable(.{ .name = "sdde-adjudicate-spec", .root_module = b.createModule(.{
+        .root_source_file = b.path("adjudicate.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_adjudicator = b.addRunArtifact(adjudicator);
+    if (b.args) |args| run_adjudicator.addArgs(args);
+    b.step("adjudicate-spec", "Apply a bound human rubric judgment offline, without model calls").dependOn(&run_adjudicator.step);
+    b.step("build-adjudicator", "Build the offline human adjudication tool").dependOn(&adjudicator.step);
+    const adjudicator_directory = b.addTempFiles();
+    const adjudicator_binary = adjudicator_directory.addCopyFile(adjudicator.getEmittedBin(), adjudicator.out_filename);
+    const adjudicator_help = std.Build.Step.Run.create(b, "run standalone offline adjudicator help");
+    adjudicator_help.addFileArg(adjudicator_binary);
+    adjudicator_help.addArg("--help");
+    adjudicator_help.setCwd(adjudicator_directory.getDirectory());
+    adjudicator_help.clearEnvironment();
+    adjudicator_help.expectExitCode(0);
+    adjudicator_help.expectStdErrEqual("");
+    const adjudicator_denied = std.Build.Step.Run.create(b, "reject missing standalone adjudicator inputs");
+    adjudicator_denied.addFileArg(adjudicator_binary);
+    adjudicator_denied.setCwd(adjudicator_directory.getDirectory());
+    adjudicator_denied.clearEnvironment();
+    adjudicator_denied.expectExitCode(1);
+    adjudicator_denied.expectStdOutEqual("");
+    adjudicator_denied.expectStdErrEqual("Invalid arguments; use --help. No API call is possible.\n");
+    const adjudicator_smoke = b.step("smoke-adjudicator", "Test isolated human adjudication startup without model calls");
+    adjudicator_smoke.dependOn(&adjudicator_help.step);
+    adjudicator_smoke.dependOn(&adjudicator_denied.step);
+    test_step.dependOn(adjudicator_smoke);
     const call_module = b.createModule(.{
         .root_source_file = b.path("e2e_call.zig"),
         .target = target,
@@ -128,6 +182,63 @@ pub fn build(b: *std.Build) void {
     const call_tests = b.addRunArtifact(b.addTest(.{ .root_module = call_module }));
     call_tests.setCwd(b.path("."));
     b.step("test-e2e-call", "Test captured-call selection, binding and reporting offline").dependOn(&call_tests.step);
+    const attribution_module = b.createModule(.{
+        .root_source_file = b.path("attribution_replay.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const attribution_executable = b.addExecutable(.{ .name = "sdde-attribution-replay", .root_module = attribution_module });
+    const run_attribution = b.addRunArtifact(attribution_executable);
+    run_attribution.setCwd(b.path("."));
+    run_attribution.has_side_effects = true;
+    if (b.args) |args| run_attribution.addArgs(args);
+    b.step("attribution-replay", "Prepare and score retained presentation replays offline; never send model requests").dependOn(&run_attribution.step);
+    const attribution_tests = b.addRunArtifact(b.addTest(.{ .root_module = attribution_module }));
+    attribution_tests.setCwd(b.path("."));
+    b.step("test-attribution-replay", "Test offline attribution preparation and scoring contracts").dependOn(&attribution_tests.step);
+    const exact_value_module = b.createModule(.{
+        .root_source_file = b.path("exact_value_replay.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
+        },
+    });
+    const exact_value_executable = b.addExecutable(.{ .name = "sdde-exact-value-replay", .root_module = exact_value_module });
+    const run_exact_value = b.addRunArtifact(exact_value_executable);
+    run_exact_value.setCwd(b.path("."));
+    run_exact_value.has_side_effects = true;
+    if (b.args) |args| run_exact_value.addArgs(args);
+    b.step("exact-value-replay", "Prototype exact-value recognition over retained captures offline; never send model requests").dependOn(&run_exact_value.step);
+    const exact_value_tests = b.addRunArtifact(b.addTest(.{ .root_module = exact_value_module }));
+    exact_value_tests.setCwd(b.path("."));
+    const exact_value_test_step = b.step("test-exact-value-replay", "Test prototype recognition, independent controls and retained-capture accounting offline");
+    exact_value_test_step.dependOn(&exact_value_tests.step);
+    const exact_value_unicode_tests = b.addRunArtifact(b.addTest(.{ .root_module = exact_value_unicode }));
+    exact_value_test_step.dependOn(&exact_value_unicode_tests.step);
+    const exact_value_directory = b.addTempFiles();
+    const exact_value_binary = exact_value_directory.addCopyFile(exact_value_executable.getEmittedBin(), exact_value_executable.out_filename);
+    _ = exact_value_directory.addCopyFile(b.path("test/calibration/exact-value-recognition/retained.json"), "captures/retained.json");
+    const exact_value_help = std.Build.Step.Run.create(b, "run standalone exact-value prototype help without development assets or credentials");
+    exact_value_help.addFileArg(exact_value_binary);
+    exact_value_help.addArg("--help");
+    exact_value_help.setCwd(exact_value_directory.getDirectory());
+    exact_value_help.clearEnvironment();
+    exact_value_help.expectExitCode(0);
+    exact_value_help.expectStdErrEqual("");
+    const exact_value_scan = std.Build.Step.Run.create(b, "scan supplied captures with standalone exact-value prototype without source assets or credentials");
+    exact_value_scan.addFileArg(exact_value_binary);
+    exact_value_scan.addArgs(&.{ "--root", "captures", "--output", "report.json" });
+    exact_value_scan.setCwd(exact_value_directory.getDirectory());
+    exact_value_scan.clearEnvironment();
+    exact_value_scan.expectExitCode(0);
+    exact_value_scan.expectStdErrEqual("");
+    exact_value_scan.expectStdOutEqual("Offline corpus: 3 captures, 22 measured fields; report report.json. Zero model calls.\n");
+    const exact_value_smoke = b.step("smoke-exact-value-replay", "Test isolated offline exact-value prototype startup");
+    exact_value_smoke.dependOn(&exact_value_help.step);
+    exact_value_smoke.dependOn(&exact_value_scan.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -146,6 +257,78 @@ pub fn build(b: *std.Build) void {
     // Only live E2E execution embeds the checkout identity. Offline test builds
     // must not be invalidated by changes to unrelated provenance inputs.
     e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const compatibility_module = b.createModule(.{
+        .root_source_file = b.path("provider_compatibility.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    compatibility_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const compatibility_executable = b.addExecutable(.{ .name = "sdde-provider-compatibility", .root_module = compatibility_module });
+    const run_compatibility = b.addRunArtifact(compatibility_executable);
+    run_compatibility.has_side_effects = true;
+    if (b.args) |args| run_compatibility.addArgs(args);
+    b.step("provider-compatibility", "Manually inspect one fresh production GPT-OSS-20B exchange (explicit --live required)").dependOn(&run_compatibility.step);
+    b.step("build-provider-compatibility", "Build the compatibility diagnostic without an API call").dependOn(&compatibility_executable.step);
+    const compatibility_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("provider_compatibility.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    }) }));
+    compatibility_tests.setCwd(b.path("."));
+    b.step("test-provider-compatibility", "Test one-exchange limits and diagnostic reports offline").dependOn(&compatibility_tests.step);
+    const baseline_module = b.createModule(.{
+        .root_source_file = b.path("baseline.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    baseline_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const baseline_executable = b.addExecutable(.{ .name = "sdde-baseline", .root_module = baseline_module });
+    const run_baseline = b.addRunArtifact(baseline_executable);
+    run_baseline.has_side_effects = true;
+    if (b.args) |args| run_baseline.addArgs(args);
+    b.step("baseline", "Prepare, acquire or score one explicit frozen development baseline").dependOn(&run_baseline.step);
+    b.step("build-baseline", "Build the baseline harness without model calls").dependOn(&baseline_executable.step);
+    const baseline_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("baseline.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    }) }));
+    baseline_tests.setCwd(b.path("."));
+    b.step("test-baseline", "Test baseline planning, capture and supplied assessments offline").dependOn(&baseline_tests.step);
+    const baseline_directory = b.addTempFiles();
+    const baseline_binary = baseline_directory.addCopyFile(offlineExecutable(b, baseline_executable).getEmittedBin(), baseline_executable.out_filename);
+    const baseline_help = std.Build.Step.Run.create(b, "run baseline help without source assets or credentials");
+    baseline_help.addFileArg(baseline_binary);
+    baseline_help.addArg("--help");
+    baseline_help.setCwd(baseline_directory.getDirectory());
+    baseline_help.clearEnvironment();
+    baseline_help.expectExitCode(0);
+    const baseline_denied = std.Build.Step.Run.create(b, "reject baseline dispatch without explicit freeze and live opt-in");
+    baseline_denied.addFileArg(baseline_binary);
+    baseline_denied.setCwd(baseline_directory.getDirectory());
+    baseline_denied.clearEnvironment();
+    baseline_denied.expectExitCode(1);
+    baseline_denied.expectStdErrEqual("Select explicit baseline prepare, acquire --live, or score inputs; use --help. No API call made.\n");
+    const baseline_smoke = b.step("smoke-baseline", "Test isolated native baseline startup without model calls");
+    baseline_smoke.dependOn(&baseline_help.step);
+    baseline_smoke.dependOn(&baseline_denied.step);
+    baseline_smoke.dependOn(&baseline_executable.step);
     const all_tests_module = b.createModule(.{
         .root_source_file = b.path("tests.zig"),
         .target = target,
@@ -153,6 +336,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
         },
     });
     const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
@@ -165,12 +349,19 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
         },
     });
     // Imported engine modules retain their own tests in the repository suite.
     const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{ "test.integration.", "test.harness.integration.tests." } });
     const run_integration_tests = b.addRunArtifact(integration_tests);
     run_integration_tests.setCwd(b.path("."));
+    const exact_value_admission_tests = b.addRunArtifact(b.addTest(.{
+        .root_module = integration_module,
+        .filters = &.{"test.integration.exact_value.production_admission"},
+    }));
+    exact_value_admission_tests.setCwd(b.path("."));
+    b.step("test-exact-value-admission", "Replay retained exact-value failures through production admission offline").dependOn(&exact_value_admission_tests.step);
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
@@ -181,6 +372,16 @@ pub fn build(b: *std.Build) void {
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
     integration_step.dependOn(&integration_script_tests.step);
+    const compatibility_launcher_tests = b.addSystemCommand(&.{"sh"});
+    compatibility_launcher_tests.addFileArg(b.path("test/harness/integration/compatibility_launcher_test.sh"));
+    compatibility_launcher_tests.addFileArg(b.path("scripts/provider-compatibility.sh"));
+    integration_step.dependOn(&compatibility_launcher_tests.step);
+    b.step("test-provider-compatibility-launcher", "Test compatibility launcher arguments and credentials offline").dependOn(&compatibility_launcher_tests.step);
+    const baseline_launcher_tests = b.addSystemCommand(&.{"sh"});
+    baseline_launcher_tests.addFileArg(b.path("test/harness/integration/baseline_launcher_test.sh"));
+    baseline_launcher_tests.addFileArg(b.path("scripts/baseline.sh"));
+    integration_step.dependOn(&baseline_launcher_tests.step);
+    b.step("test-baseline-launcher", "Test baseline offline modes and live credential forwarding").dependOn(&baseline_launcher_tests.step);
     const call_launcher_tests = b.addSystemCommand(&.{"sh"});
     call_launcher_tests.addFileArg(b.path("test/harness/integration/call_launcher_test.sh"));
     call_launcher_tests.addFileArg(b.path("scripts/e2e-call.sh"));
@@ -224,6 +425,29 @@ pub fn build(b: *std.Build) void {
     e2e_extra_case.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
     e2e_smoke.dependOn(&e2e_extra_case.step);
     test_step.dependOn(e2e_smoke);
+    const compatibility_directory = b.addTempFiles();
+    const compatibility_offline = offlineExecutable(b, compatibility_executable);
+    const compatibility_binary = compatibility_directory.addCopyFile(compatibility_offline.getEmittedBin(), compatibility_offline.out_filename);
+    const compatibility_help = std.Build.Step.Run.create(b, "run standalone compatibility help without assets or credentials");
+    compatibility_help.addFileArg(compatibility_binary);
+    compatibility_help.addArg("--help");
+    compatibility_help.setCwd(compatibility_directory.getDirectory());
+    compatibility_help.clearEnvironment();
+    compatibility_help.expectExitCode(0);
+    compatibility_help.expectStdErrEqual("");
+    const compatibility_denied = std.Build.Step.Run.create(b, "reject compatibility without explicit case and live opt-in");
+    compatibility_denied.addFileArg(compatibility_binary);
+    compatibility_denied.addArgs(&.{ "--case", "case.json" });
+    compatibility_denied.setCwd(compatibility_directory.getDirectory());
+    compatibility_denied.clearEnvironment();
+    compatibility_denied.expectExitCode(1);
+    compatibility_denied.expectStdOutEqual("");
+    compatibility_denied.expectStdErrEqual("Select one explicit --case <path> --live; use --help. No API call made.\n");
+    const compatibility_smoke = b.step("smoke-provider-compatibility", "Test standalone compatibility startup without model connections");
+    compatibility_smoke.dependOn(&compatibility_executable.step);
+    compatibility_smoke.dependOn(&compatibility_help.step);
+    compatibility_smoke.dependOn(&compatibility_denied.step);
+    test_step.dependOn(compatibility_smoke);
     const call_directory = b.addTempFiles();
     const call_offline = offlineExecutable(b, call_executable);
     const call_binary = call_directory.addCopyFile(call_offline.getEmittedBin(), call_offline.out_filename);
@@ -267,15 +491,20 @@ pub fn build(b: *std.Build) void {
     evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
-    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
+    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":\"low\",\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
     for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
-        .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
-        .{ .name = "reject production credential as evaluator fallback", .model = "scripted-judge", .key = null, .expected = "TEST_OPENAI_API_KEY is missing. No API call made.\n" },
-        .{ .name = "accept test environment then reject unavailable input before any API call", .model = "scripted-judge", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
-        .{ .name = "reject Bedrock evaluator without an explicit region", .provider = "bedrock", .model = "openai.gpt-oss-20b-1:0", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
-        .{ .name = "reject production Bedrock credential as evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },
-        .{ .name = "reject unregistered Bedrock evaluation model", .provider = "bedrock", .region = "ap-southeast-2", .model = "unregistered-model", .key = null, .expected = "Invalid evaluator configuration. No API call made.\n" },
-        .{ .name = "accept Bedrock test environment then reject unavailable input before any API call", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
+        .{ .name = "reject missing test evaluation model", .provider = "bedrock", .region = null, .model = null, .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
+        .{ .name = "reject production credential as Bedrock evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },
+        .{ .name = "accept current Bedrock GPT-OSS-20B selection then reject unavailable input before any API call", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
+        .{ .name = "reject current Bedrock evaluator without an explicit region", .provider = "bedrock", .region = null, .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
+        .{ .name = "reject invalid Bedrock evaluator credential", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is invalid. No API call made.\n" },
+        .{ .name = "reject superseded Haiku evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-haiku-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject unknown Bedrock evaluation model before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "unregistered-model", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Bedrock Luna evaluation before invalid credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sonnet evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-sonnet-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sol evaluation before missing credentials", .provider = "openai", .region = null, .model = "gpt-6-sol", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sol evaluation before invalid credentials", .provider = "openai", .region = null, .model = "gpt-6.1-sol", .key_name = "TEST_OPENAI_API_KEY", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject direct OpenAI Luna evaluation before credentials", .provider = "openai", .region = null, .model = "gpt-6-luna", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
     }) |fixture| {
         const check = std.Build.Step.Run.create(b, fixture.name);
         check.addFileArg(evaluator_binary);
@@ -299,6 +528,8 @@ pub fn build(b: *std.Build) void {
     const unicode_tests = b.addTest(.{ .root_module = unicode_module });
     const run_unicode_tests = b.addRunArtifact(unicode_tests);
     test_step.dependOn(&run_unicode_tests.step);
+    test_step.dependOn(&exact_value_unicode_tests.step);
+    test_step.dependOn(exact_value_smoke);
 
     const result_schema_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -516,6 +747,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/model_candidate_json_test.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
     }) });
     b.step("test-model-candidate-json", "Test compact model wire contracts against independent schema cases").dependOn(&b.addRunArtifact(candidate_json_tests).step);
 
@@ -626,6 +858,7 @@ pub fn build(b: *std.Build) void {
 
     const smoke_command = packaging_smoke.add(b, offlineExecutable(b, executable));
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");
+    smoke_step.dependOn(baseline_smoke);
     smoke_step.dependOn(&smoke_command.step);
     smoke_step.dependOn(&executable.step);
     const network_probe = b.addExecutable(.{ .name = "model-network-probe", .root_module = b.createModule(.{
@@ -654,9 +887,15 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("build_provenance.zig"));
+    lint_command.addFileArg(b.path("code_heuristics.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
+    lint_command.addFileArg(b.path("adjudicate.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
+    lint_command.addFileArg(b.path("attribution_replay.zig"));
+    lint_command.addFileArg(b.path("exact_value_replay.zig"));
+    lint_command.addFileArg(b.path("provider_compatibility.zig"));
+    lint_command.addFileArg(b.path("baseline.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
@@ -672,7 +911,7 @@ pub fn build(b: *std.Build) void {
     verify_step.dependOn(integration_step);
     verify_step.dependOn(smoke_step);
     @import("build/test_registration.zig").check(b.allocator, verify_step, &.{
-        all_tests, run_integration_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests,
+        all_tests, run_integration_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests, exact_value_unicode_tests,
     }) catch |err| std.debug.panic("full-suite test registration failed: {s}", .{@errorName(err)});
     // Live execution is reachable only from the explicitly selected manual
     // commands. Check transitive dependencies, including every targeted suite.
@@ -682,7 +921,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step, &run_compatibility.step, &run_baseline.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

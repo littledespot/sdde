@@ -28,6 +28,8 @@ pub const StepInput = struct {
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
     provider_token_count: ?@import("../domain/model_token_count_validation.zig").Call = null,
+    /// Execution-owned allowance decision; cannot be supplied by workflow parameters.
+    model_attempt_exhaustion: ?@import("../domain/workflow_retry.zig").Exhaustion = null,
     model_attempt: ?struct {
         accounting: *const @import("../domain/model_attempt_accounting.zig").RunnerModelAttemptAccounting,
         operations: *const @import("../domain/provider_operation_lifecycle.zig").Ledger,
@@ -129,7 +131,8 @@ pub const Registry = struct {
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
             if (workflow.OperationId.parse(entry.contract.id) == null or
-                !validContract(entry.contract, entry.binding.capabilities())) return false;
+                !validContract(entry.contract, entry.binding.capabilities()))
+                return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
                 for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
             }

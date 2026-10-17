@@ -3,7 +3,7 @@ const std = @import("std");
 const format = @import("feature_log_format.zig");
 const limits = @import("feature_log_limits.zig");
 const debug = @import("request_debugger.zig");
-pub const Error = std.mem.Allocator.Error || error{InvalidDebugArchive};
+pub const Error = std.mem.Allocator.Error || error{ InvalidDebugArchive, UnsupportedDebugDescriptionVersion };
 const Body = struct {
     provenance: []const u8,
     direction: []const u8,
@@ -103,7 +103,10 @@ pub const Archive = struct {
                 const complete = body.expected == body.bytes.items.len;
                 if (std.mem.eql(u8, body.direction, "request")) {
                     if (std.mem.eql(u8, body.provenance, "source_snapshot") and complete and std.mem.eql(u8, body.encoding, "utf8")) destination.source_snapshot = @import("request_source_snapshot.zig").Snapshot.decode(self.allocator, body.bytes.items) catch return error.InvalidDebugArchive;
-                    if (std.mem.eql(u8, body.provenance, "request_description") and complete and std.mem.eql(u8, body.encoding, "utf8")) destination.description = debug.Description.decode(self.allocator, body.bytes.items) catch return error.InvalidDebugArchive;
+                    if (std.mem.eql(u8, body.provenance, "request_description") and complete and std.mem.eql(u8, body.encoding, "utf8")) {
+                        try requireCurrentDescription(self.allocator, body.bytes.items);
+                        destination.description = debug.Description.decode(self.allocator, body.bytes.items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidDebugArchive;
+                    }
                     if (std.mem.eql(u8, body.provenance, "provider_body")) {
                         destination.request = body.bytes.items;
                         destination.request_complete = complete and std.mem.eql(u8, body.encoding, "utf8");
@@ -200,4 +203,17 @@ pub fn optionalCell(a: std.mem.Allocator, line: []const u8, index: usize) Error!
 }
 fn cell(a: std.mem.Allocator, line: []const u8, index: usize) Error![]const u8 {
     return (try optionalCell(a, line, index)) orelse error.InvalidDebugArchive;
+}
+
+/// Version preflight refuses unsupported descriptions without interpreting
+/// their fields. It is not a legacy reader and never supplies missing evidence.
+fn requireCurrentDescription(a: std.mem.Allocator, bytes: []const u8) Error!void {
+    var parsed = @import("strict_json.zig").parse(a, bytes, .{ .maximum_depth = 64 }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidDebugArchive;
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidDebugArchive;
+    const version = parsed.value.object.get("version") orelse return error.InvalidDebugArchive;
+    if (version != .string) return error.InvalidDebugArchive;
+    const versions = std.meta.tags(@FieldType(debug.Description, "version"));
+    comptime std.debug.assert(versions.len == 1);
+    if (!std.mem.eql(u8, version.string, @tagName(versions[0]))) return error.UnsupportedDebugDescriptionVersion;
 }

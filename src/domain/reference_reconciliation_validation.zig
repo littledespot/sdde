@@ -24,7 +24,7 @@ pub fn scopes(allocator: std.mem.Allocator, items: r.Items, ids: []const r.Claim
     const result = try allocator.alloc(r.evidence.Scope, ids.len);
     if (!items.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidReferenceReconciliation;
     for (ids, result) |id, *scope| scope.* = .{ .state_id = items.state_id, .chunk_id = (try r.item(items, id)).claim.chunk_id };
-    return .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = result };
+    return .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = result, .field = .reconciliation_conflict };
 }
 pub fn contentKind(value: r.ContentProposal) d.ContentKind {
     return switch (value) {
@@ -64,15 +64,21 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
     if (try contentIssue(items, ids, candidate)) |issue| return .{ .invalid = issue };
     switch (candidate) {
         .model => |model| {
-            const context_set = try scopes(allocator, items, ids, context);
+            var context_set = try scopes(allocator, items, ids, context);
             return .{ .valid = .{ .model = switch (model) {
-                inline .business, .scope_guard => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), switch (try validator.checkBusinessIn(allocator, context_set, value)) {
-                    .valid => |checked| checked,
-                    .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                inline .business, .scope_guard => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), checked: {
+                    context_set.field = r.text.field_policy.referenceField(.reconciliation, @tagName(tag));
+                    break :checked switch (try validator.checkBusinessIn(allocator, context_set, value)) {
+                        .valid => |checked| checked,
+                        .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                    };
                 }),
-                inline else => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), switch (try validator.checkReferenceIn(allocator, context_set, value)) {
-                    .valid => |checked| checked,
-                    .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                inline else => |value, tag| @unionInit(r.extraction.Content, @tagName(tag), checked: {
+                    context_set.field = r.text.field_policy.referenceField(.reconciliation, @tagName(tag));
+                    break :checked switch (try validator.checkReferenceIn(allocator, context_set, value)) {
+                        .valid => |checked| checked,
+                        .invalid => |issue| return .{ .invalid = d.textFailure(issue, .{ .content = candidate }) },
+                    };
                 }),
             } } };
         },

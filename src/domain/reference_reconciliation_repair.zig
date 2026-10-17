@@ -161,6 +161,7 @@ fn withRetry(a: std.mem.Allocator, authorization: Authorization) Error!Authoriza
 }
 
 pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rejection: d.Rejection) Error!Decision {
+    if (rejection.issue.expected == .text_issue and rejection.issue.expected.text_issue.isComposition()) return error.InvalidAtomicRepair;
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(rejection.unit)) ctx else null);
     defer a.free(facts.lineage.history);
@@ -200,13 +201,17 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .dispositions, .disposition => {
             if (parsed.proposal != .global) return error.InvalidAtomicRepair;
             const values = parsed.proposal.global.claim_dispositions;
-            if (rejection.relations.redundant) |index| return deletion(a, parsed, facts, .{ .disposition_record = index }, rule);
+            if (rejection.relations.redundant) |index| {
+                if (index >= values.len or !try modelDisposition(parsed.input.progress.plan.layout.items, values[index].claim_id)) return .{ .blocked = .no_independent_target };
+                return deletion(a, parsed, facts, .{ .disposition_record = index }, rule);
+            }
             if (rejection.relations.competing) return .{ .blocked = .competing_entries };
             var missing: ?r.ClaimId = null;
             for (parsed.input.partition.group.claim_ids) |id| {
                 for (values) |value| {
                     if (value.claim_id.ordinal == id.ordinal) break;
                 } else {
+                    if (!try modelDisposition(parsed.input.progress.plan.layout.items, id)) return .{ .blocked = .no_independent_target };
                     missing = id;
                     break;
                 }
@@ -217,6 +222,7 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
             if (missing) |id| return insertion(a, parsed, facts, .{ .insert_disposition = .{ .index = values.len, .claim = id } }, .disposition, rule);
             if (rejection.unit != .disposition or rejection.unit.disposition >= values.len) return .{ .blocked = .no_independent_target };
             const index = rejection.unit.disposition;
+            if (!try modelDisposition(parsed.input.progress.plan.layout.items, values[index].claim_id)) return .{ .blocked = .no_independent_target };
             return replace(a, parsed, facts, .{ .disposition = .{ .index = index, .claim = values[index].claim_id } }, rule);
         },
         .signal => |index| {
@@ -312,6 +318,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .insert => |kind| kind,
         .delete => return error.InvalidAtomicRepair,
     };
+    var options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .reference_phase = .reconciliation, .inherited = if (kind == .summary or kind == .conflict_detail) .reconciliation_conflict else null } } };
     const scope: d.Constraint.Scope = switch (kind) {
         .selection => .{ .selection = switch (authorization.target) {
             .statement_selection => .statement,
@@ -325,6 +332,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .conflict_detail => .conflict_detail,
         .statement, .disposition_record, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
     };
+    if (scope == .content) options.fields = .{ .selected = try contentFieldBindings(scratch, scope.content) };
     const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope);
     defer packets.release(base);
     const contextual = if (authorization.target == .conflict_selection)
@@ -339,10 +347,10 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         },
         .preserved_token => return error.InvalidAtomicRepair,
     } else try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
-    const prepared_input = try atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field));
+    const prepared_input = try atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field), options);
     if (kind == .disposition) {
         defer packets.release(prepared_input);
-        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, parsed.input.partition.group.claim_ids, authorization.rule.disposition_choices, false);
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, parsed.input.items), authorization.rule.disposition_choices, false);
     }
     if (kind != .selection) return prepared_input;
     defer packets.release(prepared_input);
@@ -363,6 +371,15 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .allowed = ids,
         .collection = if (authorization.target == .conflict_selection) .sequence else .unique_subset,
     }});
+}
+
+/// Content repairs use the same engine-selected leaf as parse/decodeSelected,
+/// rather than the larger native Replacement.content wrapper retained for CAS.
+fn contentFieldBindings(a: std.mem.Allocator, kind: d.ContentKind) Error![]const @import("model_text_field.zig").Binding {
+    return switch (kind) {
+        .model => |selected| @import("model_candidate_json.zig").selectedFieldBindings(@FieldType(r.ContentProposal, "model"), a, selected, .{ .reference_phase = .reconciliation }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair,
+        .preserved_token => error.InvalidAtomicRepair,
+    };
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, input);
@@ -387,13 +404,14 @@ fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Er
         else => null,
     };
 }
-pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
+    if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
     const replacement = if (proposed_replacement) |value| try atomic.copyReplacement(a, value) else null;
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null);
     defer a.free(facts.lineage.history);
     const target = authorization.target;
-    const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = try apply(a, parsed, target, replacement, merged, origin);
     if (authorization.retry) |permit| result.source.pending_repair = .{ .permit = permit, .target = .{
         .selected = if (target == .insert_conflict) .{ .insert_conflict = .{ .index = target.insert_conflict.index, .claims = try a.dupe(r.ClaimId, target.insert_conflict.claims) } } else target,
@@ -595,6 +613,13 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
 }
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
+    switch (target) {
+        inline .disposition, .insert_disposition => |value| if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim)) return error.InvalidAtomicRepair,
+        .disposition_record => |index| {
+            if (summary or index >= parsed.proposal.global.claim_dispositions.len or !try modelDisposition(parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions[index].claim_id)) return error.InvalidAtomicRepair;
+        },
+        else => {},
+    }
     return switch (target) {
         .statement_selection, .statement_content, .statement => |index| if (summary and index < parsed.proposal.summary.statements.len) switch (target) {
             .statement_selection => .{ .selection = .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids } },
@@ -621,6 +646,10 @@ fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
         } else error.InvalidAtomicRepair,
         .insert_conflict => |value| if (!summary and value.index == parsed.proposal.global.conflicts.len) null else error.InvalidAtomicRepair,
     };
+}
+
+fn modelDisposition(items: r.Items, id: r.ClaimId) Error!bool {
+    return (r.item(items, id) catch return error.InvalidAtomicRepair).claim.content == .model;
 }
 fn owner(a: std.mem.Allocator, parsed: r.Parsed) Error!@import("model_request_identity.zig").ImmutableUnitOwnerId {
     return .{ .reference_global = .{ .reference_state_id = .{ .bytes = parsed.input.progress.plan.layout.items.state_id.bytes }, .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(a, "reconciliation-{d}", .{parsed.input.partition.id.ordinal}) } } };
@@ -705,6 +734,7 @@ pub const Omission = struct {
         return .{ .reconciliation = try context.capture(a, parsed, ctx), .support = support };
     }
     pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support) OmissionError!OmissionAuthorization {
+        try loss.requireRepairPhase(support.repair_phase);
         if (parsed.proposal != .global) return error.InvalidAtomicRepair;
         try v.input(a, parsed.input);
         const selected = try loss.select(a, ctx.inputs, support);
@@ -717,6 +747,7 @@ pub const Omission = struct {
                 break :blk .{ .unit = .{ .signal_content = index } };
             },
             .reconciliation_disposition => |id| blk: {
+                if (!try modelDisposition(parsed.input.progress.plan.layout.items, id)) return error.InvalidAtomicRepair;
                 for (parsed.proposal.global.claim_dispositions, 0..) |value, index| if (std.meta.eql(value.claim_id, id)) break :blk .{ .unit = .{ .disposition = .{ .index = index, .claim = id } } };
                 return error.InvalidAtomicRepair;
             },
@@ -740,6 +771,9 @@ pub const Omission = struct {
         return loss.retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, current.support, selected.finding.requirement, current.reconciliation.source.omission_retry);
     }
     pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        try loss.requireRepairPhase(support.repair_phase);
+        var arena: std.heap.ArenaAllocator = .init(a);
+        defer arena.deinit();
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
         try Atomic.checkDependencies(a, auth, current);
@@ -752,10 +786,10 @@ pub const Omission = struct {
                 .business, .scope_guard => "business_text",
                 else => "reference_text",
             },
-        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record));
+        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
         if (kind != null) return prepared_input;
         defer packets.release(prepared_input);
-        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else parsed.input.partition.group.claim_ids, auth.rule.disposition_choices, auth.target == .conflict_group);
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else try @import("reference_reconciliation_projection.zig").semanticClaimIds(arena.allocator(), parsed.input.items), auth.rule.disposition_choices, auth.target == .conflict_group);
     }
     pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!Replacement {
         const json = @import("model_candidate_json.zig");
@@ -773,11 +807,13 @@ pub const Omission = struct {
             .preserved_token => return error.InvalidAtomicRepair,
         } };
     }
-    pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+        try loss.requireRepairPhase(support.repair_phase);
+        if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
-        const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
+        const merged = try Atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
         var result = if (auth.target == .unit) try apply(a, parsed, auth.target.unit, replacement, merged, origin) else try applyGroup(a, parsed, auth.target.conflict_group, replacement.conflict_group, merged, origin);
         result.source.omission_conflict_claims = if (auth.target == .conflict_group) try a.dupe(r.ClaimId, auth.target.conflict_group) else &.{};
         result.source.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;
@@ -787,6 +823,7 @@ pub const Omission = struct {
         if (target == .unit) return select(parsed, target.unit);
         if (parsed.proposal != .global or target.conflict_group.len < 2) return error.InvalidAtomicRepair;
         const claims = target.conflict_group;
+        for (claims) |id| if (!try modelDisposition(parsed.input.progress.plan.layout.items, id)) return error.InvalidAtomicRepair;
         var selected_dispositions: std.ArrayList(r.ClaimDispositionProposal) = .empty;
         var selected_conflicts: std.ArrayList(r.ConflictProposal) = .empty;
         var selected_groups: std.ArrayList(@import("reference_conflict_groups.zig").Group) = .empty;
@@ -823,10 +860,11 @@ pub const Omission = struct {
         // widen this native-bound unit. Ordinary validators judge its meaning.
         if (replacement.claim_dispositions.len != claims.len) return error.InvalidAtomicRepair;
         for (replacement.claim_dispositions, 0..) |value, index| {
+            if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim_id)) return error.InvalidAtomicRepair;
             if (!r.contains(r.ClaimId, claims, value.claim_id)) return error.InvalidAtomicRepair;
             for (replacement.claim_dispositions[0..index]) |prior| if (std.meta.eql(prior.claim_id, value.claim_id)) return error.InvalidAtomicRepair;
             const canonical = try value.canonical(a);
-            for (canonical.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id)) return error.InvalidAtomicRepair;
+            for (canonical.related_claim_ids) |id| if (!r.contains(r.ClaimId, claims, id) or !try modelDisposition(parsed.input.progress.plan.layout.items, id)) return error.InvalidAtomicRepair;
         }
         for (replacement.conflict_groups) |group| {
             if (group.claim_ids.len < 2) return error.InvalidAtomicRepair;

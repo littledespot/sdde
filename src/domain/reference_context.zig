@@ -85,17 +85,20 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
     }
     if (assessment) |review| {
         const registry = @import("principle_registry.zig");
-        try write(w, "\n## Principle Consistency\n\nModel-assisted assessment; Plan must reassess current principles.\n\n");
+        try write(w, "\n## Principle Consistency\n\nModel-assisted advisory assessment. Plan independently validates current required policy.\n\n");
         w.print("Registry {d}, revision {d}. Selected chunks:", .{ review.registry.id.ordinal, review.registry.id.revision }) catch return error.OutOfMemory;
         for (review.selection.chunks) |id| w.print(" POL-{d}", .{id.ordinal}) catch return error.OutOfMemory;
-        try write(w, "\n\n### Policy Obligations for Plan\n\n");
-        var obligations: usize = 0;
+        try write(w, "\n\n### Advisory Principle Findings\n\n");
+        if (review.advice_stop) |stopped| {
+            w.print("Assessment incomplete ({s}): {d} of {d} subjects were not assessed. Missing advice is not a compatible finding.\n\n", .{ @tagName(stopped.reason), stopped.unassessed.len, review.requirements.len }) catch return error.OutOfMemory;
+        }
+        var findings: usize = 0;
         for (review.evidence) |finding| {
             if (finding.finding == .supported) continue;
             const ordinal = finding.requirement.unit.decision.ordinal;
             if (ordinal == 0 or ordinal > review.requirements.len) return error.InvalidRequiredAuthority;
             const subject = review.requirements[ordinal - 1];
-            w.print("- **POLICY-{d}** ({s}, {s}/{s}): ", .{ ordinal, @tagName(finding.finding), @tagName(subject.kind), @tagName(subject.slot) }) catch return error.OutOfMemory;
+            w.print("- **REVIEW-{d}** ({s}, {s}/{s}): ", .{ ordinal, @tagName(finding.finding), @tagName(subject.kind), @tagName(subject.slot) }) catch return error.OutOfMemory;
             const evidence = finding.review orelse return error.InvalidRequiredAuthority;
             try markdown.literal(w, evidence.detail);
             for (evidence.principle_citations) |citation| {
@@ -109,9 +112,9 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
                 w.print(", lines {d}–{d})", .{ citation.first_line, citation.last_line }) catch return error.OutOfMemory;
             }
             try write(w, "\n");
-            obligations += 1;
+            findings += 1;
         }
-        if (obligations == 0) try write(w, "No policy obligations recorded.\n");
+        if (findings == 0) try write(w, "No adverse principle findings recorded.\n");
     }
     return out.toOwnedSlice();
 }

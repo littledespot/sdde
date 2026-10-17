@@ -1,7 +1,8 @@
 {
-  "schema": "spec-e2e-case/v1",
+  "schema": "spec-e2e-case/v2",
   "id": "wf-001-hello-world-node-vitest-spec",
   "workflow_id": "spec-generation",
+  "expected_outcome": "publication",
   "feature": "hello-world",
   "reference": "hello-world",
   "config": "test/e2e/wf-001-hello-world/.sddtoolkit.json",

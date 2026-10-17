@@ -2,6 +2,7 @@
 const std = @import("std");
 const c = @import("contracts.zig");
 const j = @import("judgment.zig");
+const gate = @import("acceptance_gate.zig");
 pub const Failure = enum {
     authentication,
     configuration,
@@ -27,7 +28,7 @@ pub const Attempt = struct {
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
 pub const Report = struct {
-    schema: []const u8 = "evaluation-report/v2",
+    schema: []const u8 = "evaluation-report/v3",
     prompt_revision: []const u8 = @import("packet.zig").revision,
     judgment_schema: []const u8 = j.schema_revision,
     capture: c.Capture,
@@ -35,7 +36,34 @@ pub const Report = struct {
     attempts: []const Attempt,
     outcome: Outcome,
     judgment_diagnostic: ?j.Diagnostic = null,
+    acceptance: gate.Evidence = .{},
+    grader_qualification: ?@import("grading_evidence.zig").Evidence = null,
+    protocol_sha256: ?[]const u8 = null,
 };
+
+/// Persisted reports carry their exact protocol and acceptance identities.
+/// Construction defaults never stand in for omitted external evidence.
+pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) c.Error!Report {
+    var tree = @import("../../src/domain/strict_json.zig").parse(allocator, bytes, c.json_limits, false, null) catch |err| {
+        return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidEvaluationContract;
+    };
+    defer tree.deinit();
+    if (tree.value != .object) return error.InvalidEvaluationContract;
+    for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
+        if (!tree.value.object.contains(key)) return error.InvalidEvaluationContract;
+    }
+    const value = try c.decode(Report, allocator, bytes);
+    if (!std.mem.eql(u8, value.schema, "evaluation-report/v3") or
+        !std.mem.eql(u8, value.prompt_revision, @import("packet.zig").revision) or
+        !std.mem.eql(u8, value.judgment_schema, j.schema_revision)) return error.InvalidEvaluationContract;
+    if (value.protocol_sha256) |digest| {
+        if (digest.len != 64) return error.InvalidEvaluationContract;
+        for (digest) |byte| {
+            if (!(byte >= '0' and byte <= '9') and !(byte >= 'a' and byte <= 'f')) return error.InvalidEvaluationContract;
+        }
+    }
+    return value;
+}
 
 pub fn json(allocator: std.mem.Allocator, report: Report) std.mem.Allocator.Error![]const u8 {
     return std.json.Stringify.valueAlloc(allocator, report, .{ .whitespace = .indent_2 });
@@ -56,6 +84,25 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
     try out.writeAll("\n\nRubric: ");
     try escape(out, report.capture.rubric.id);
     try out.print(" (revision {d}; scale {d}–{d})\n\n", .{ report.capture.rubric.revision, report.capture.rubric.minimum_score, report.capture.rubric.maximum_score });
+    try out.writeAll("Development acceptance: ");
+    switch (report.acceptance.decision) {
+        .passed => try out.writeAll("passed"),
+        .failed => |failure| try out.print("failed ({s})", .{@tagName(failure)}),
+        .unresolved => |reason| try out.print("unresolved ({s})", .{@tagName(reason)}),
+    }
+    try out.print("\n\nJudge independence: {s}; qualification: {s}\n\n", .{ @tagName(report.acceptance.independence), @tagName(report.acceptance.qualification) });
+    if (report.grader_qualification) |evidence| switch (evidence) {
+        .unresolved => |reason| try out.print("Grader qualification evidence: unresolved ({s})\n\n", .{@tagName(reason)}),
+        .qualified => |proof| {
+            try out.writeAll("Grader qualification evidence: qualified\n\n");
+            inline for (@typeInfo(@TypeOf(proof)).@"struct".fields) |field| {
+                try out.print("- {s}: ", .{field.name});
+                try escape(out, @field(proof, field.name));
+                try out.writeByte('\n');
+            }
+            try out.writeByte('\n');
+        },
+    };
     for (report.attempts) |attempt| {
         try out.print("Attempt {d}: ", .{attempt.ordinal});
         switch (attempt.identity) {
@@ -116,6 +163,12 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
                 try escape(out, criterion.criterion_id);
                 try out.print("\n\n{s}", .{@tagName(criterion.disposition)});
                 if (criterion.score) |score| try out.print(": {d}", .{score});
+                for (report.capture.rubric.criteria) |definition| {
+                    if (std.mem.eql(u8, definition.id, criterion.criterion_id)) {
+                        if (definition.minimum_acceptable_score) |minimum| try out.print("; critical minimum: {d}", .{minimum});
+                        break;
+                    }
+                }
                 try out.writeAll("\n\n");
                 try escape(out, criterion.explanation);
                 try out.writeAll("\n\n");

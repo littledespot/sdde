@@ -27,6 +27,10 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         .response_schema = try source.resultSchema(),
         .response_guidance_mode = selected.registry_entry.responseMode(),
         .controls = selected.controls,
+        .original_sources = source.original_sources,
+        .prose_fields = source.prose_fields,
+        .field_policies = source.field_policies,
+        .exact_scope = source.exact_scope,
     };
     try validateRequest(source, &request);
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -39,6 +43,12 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         };
     }
     request.content = parts;
+    const sources = try owned.alloc(@import("model_text_wire.zig").SourceText, source.original_sources.len);
+    for (source.original_sources, sources) |original, *copy| copy.* = .{ .source_id = original.source_id, .bytes = try owned.dupe(u8, original.bytes) };
+    request.original_sources = sources;
+    request.prose_fields = try @import("model_text_wire.zig").cloneProseFields(owned, source.prose_fields);
+    request.field_policies = try @import("model_text_field.zig").clone(owned, source.field_policies);
+    if (source.exact_scope) |scope| request.exact_scope = try @import("model_exact_values.zig").clone(owned, scope);
     request.request_schema_id.bytes = try owned.dupe(u8, request.request_schema_id.bytes);
     request.model_visible_input_id.bytes = try owned.dupe(u8, request.model_visible_input_id.bytes);
     const result = try owned.create(provider.IdentifiedProviderNeutralModelRequest);
@@ -58,6 +68,10 @@ pub const Source = struct {
     result_resource: *const compilation.CompiledResource,
     composition: ?@import("json_composition_runtime.zig").Binding = null,
     restriction: ?*const @import("model_result_schema.zig").Restricted = null,
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
+    field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
 
     pub fn resultSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
         const canonical = try self.canonicalSchema();
@@ -103,7 +117,16 @@ pub const Owned = struct {
 /// This grants no send authority and produces no separate preflight evidence.
 pub fn validateRequest(source: Source, request: *const provider.IdentifiedProviderNeutralModelRequest) ValidationError!void {
     try request.validate();
+    if (!@import("model_exact_values.zig").same(source.exact_scope, request.exact_scope)) return error.ModelRequestAssociationInvalid;
+    if (source.original_sources.len != request.original_sources.len) return error.ModelRequestAssociationInvalid;
+    for (source.original_sources, request.original_sources) |expected, actual| {
+        if (expected.source_id.ordinal != actual.source_id.ordinal or !std.mem.eql(u8, expected.bytes, actual.bytes)) return error.ModelRequestAssociationInvalid;
+    }
     const schema = try source.resultSchema();
+    const complete = if (source.composition) |part| part.plan.completeSchema() else source.result_resource.content.result_schema;
+    if (!@import("model_text_wire.zig").validProseSchema(source.prose_fields, complete.root())) return error.InvalidModelRequestSource;
+    if (!@import("model_text_wire.zig").sameProseFields(source.prose_fields, request.prose_fields)) return error.ModelRequestAssociationInvalid;
+    if (!@import("model_text_field.zig").same(source.field_policies, request.field_policies)) return error.ModelRequestAssociationInvalid;
     if (request.model_request_id != source.request_binding.modelRequestId() or
         !std.mem.eql(u8, request.request_schema_id.bytes, source.request_schema_id.bytes) or
         !std.mem.eql(u8, request.result_schema_id.bytes, source.result_resource.id.bytes) or

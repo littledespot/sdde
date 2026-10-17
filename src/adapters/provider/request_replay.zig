@@ -8,7 +8,7 @@ const envelope = @import("../../domain/model_envelope.zig");
 const contracts = @import("../../domain/llm_provider_contracts.zig");
 pub const Authorization = struct {
     context: *port.Context,
-    authorize_fn: *const fn (*port.Context, debug.Description) port.Error!void,
+    authorize_fn: *const fn (*port.Context, debug.Description) port.Error!contracts.BedrockRequestProfile,
 };
 pub const Adapter = struct {
     authorization: Authorization,
@@ -22,9 +22,12 @@ pub const Adapter = struct {
     }
     fn prepare(context: *port.Context, a: std.mem.Allocator, description: debug.Description) port.Error![]const u8 {
         const self: *Adapter = @ptrCast(@alignCast(context));
-        try self.authorization.authorize_fn(self.authorization.context, description);
+        const request_profile = try self.authorization.authorize_fn(self.authorization.context, description);
         if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
+        const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
+        if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
         const body = request.encodeText(a, .{
             .content = description.content,
             .schema = switch (description.response_mode) {
@@ -35,6 +38,7 @@ pub const Adapter = struct {
             .temperature = description.controls.temperature,
             .max_output_tokens = description.controls.max_output_tokens,
             .reasoning_effort = request.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay,
+            .request_profile = request_profile,
         }, .inference) catch return error.InvalidReplay;
         // A modified request must not persist an authorization secret as content.
         var material = @import("../system/bedrock_api_key_source.zig").read(a, self.environment);
@@ -94,18 +98,34 @@ pub const Adapter = struct {
         var result: debug.Validation = .{};
         // Token-count observations contain no generated candidate to validate.
         if (description.operation_kind != .inference) return result;
-        var raw = strict.parse(a, body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch {
+        var syntax: ?strict.Diagnostic = null;
+        defer if (syntax) |value| value.deinit(a);
+        var raw = strict.parse(a, body, .{ .maximum_depth = std.math.maxInt(usize) }, false, &syntax) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
             result.extraction = .invalid;
+            result.reason = "Invalid provider response JSON";
+            if (syntax) |value| if (value.context) |context_value| {
+                result.path = try a.dupe(u8, context_value.path);
+            };
             return result;
         };
         defer raw.deinit();
-        const decoded = @import("bedrock_response.zig").decodeInvoke(raw.value) catch {
+        var provider_diagnostic: ?@import("bedrock_response.zig").DecodeDiagnostic = null;
+        defer if (provider_diagnostic) |value| value.deinit(a);
+        var decoded = @import("bedrock_response.zig").decodeConverse(a, raw.value, &provider_diagnostic) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
             result.extraction = .invalid;
+            if (provider_diagnostic) |value| {
+                result.reason = value.explanation();
+                result.path = try a.dupe(u8, value.path);
+            }
             return result;
         };
+        defer decoded.deinit(a);
         result.input_tokens = decoded.usage.input_tokens;
         result.output_tokens = decoded.usage.output_tokens;
         result.latency_ms = decoded.latency_ms;
+        result.reasoning = try @import("../../domain/provider_reasoning.zig").clone(a, decoded.reasoning);
         if (decoded.output != .text) {
             result.extraction = .invalid;
             result.reason = switch (decoded.output) {
@@ -127,10 +147,23 @@ pub const Adapter = struct {
         result.normalization = document.normalization;
         result.parsed = strict.decode(std.json.Value, a, document.content, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         result.json = .valid;
-        const schema = self.compiler.compileSelected(a, description.schema) catch {
+        const schema = self.compiler.compileSelected(a, description.schema) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
             result.reason = "Captured schema is invalid";
             return result;
         };
+        const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null) or (description.exact_scope != null and !@import("../../domain/model_exact_values.zig").valid(description.exact_scope.?))) {
+            result.reason = "Captured schema and native field policies disagree";
+            return result;
+        }
+        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources, .{ .exact_scope = description.exact_scope })) |diagnostic| {
+            defer diagnostic.deinit(a);
+            result.json = .invalid;
+            result.reason = "ModelTextComposition";
+            result.path = try a.dupe(u8, diagnostic.fields[0].path);
+            return result;
+        }
         if (@import("../../domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), schema.root())) |diagnostic| {
             result.schema = .invalid;
             const detail = try diagnostic.describe(a);

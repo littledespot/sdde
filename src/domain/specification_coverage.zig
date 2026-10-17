@@ -4,6 +4,7 @@ const spec = @import("specification.zig");
 const g = @import("specification_generation.zig");
 const r = @import("reference_reconciliation.zig");
 const provenance = @import("specification_provenance.zig");
+const text = @import("typed_text.zig");
 pub const Key = union(enum) { title, description, primary_goal, primary_user_story, entities, record: spec.Id };
 pub const Account = struct {
     claim_id: r.ClaimId,
@@ -65,47 +66,78 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
                 .business, .scope_guard => false,
                 .design, .technical, .validation, .implementation_assumption, .open_question => true,
             },
-            .preserved_token => |token| token.value.kind != .business_exact_string,
+            .preserved_token => policy: {
+                const value = @import("specification_exact_tokens.zig").policy(items, item.claim.id) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage;
+                break :policy !value.mandatory;
+            },
         };
         if (!spec.permitsPositiveMapping(item.claim.content) and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
         if (targets.items.len == 0 and (!context_only or signals.items.len == 0)) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = if (context_only) .missing_context_mapping else .missing_business_mapping, .targets = targets.items } };
         try accounts.append(allocator, .{ .claim_id = item.claim.id, .disposition = if (targets.items.len != 0) .{ .mapped = targets.items } else .{ .context_only = signals.items } });
-        if (item.claim.content == .preserved_token) {
-            const token = item.claim.content.preserved_token;
-            const exact = try exactTargets(allocator, brief, candidate, item.claim.id);
-            if (token.value.kind == .business_exact_string and exact.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = token }, .targets = targets.items } };
-            if (exact.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = targets.items } };
-            try obligations.append(allocator, .{ .claim_id = item.claim.id, .exact_targets = exact, .context_signals = signals.items });
-        }
+    }
+    // A duplicate retains its original obligation and citation identity. Only
+    // the native equal-byte edge permits sharing the representative's witness;
+    // it never adds the duplicate claim to authored S, recognized E or L.
+    for (items.entries) |item| {
+        if (item.claim.content != .preserved_token) continue;
+        const disposition = for (references.dispositions) |value| {
+            if (value.claim_id.ordinal == item.claim.id.ordinal) break value;
+        } else return error.InvalidSpecificationCoverage;
+        if (!(@import("reference_token_disposition.zig").matches(items, disposition) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage)) return error.InvalidSpecificationCoverage;
+        const policy = @import("specification_exact_tokens.zig").policy(items, item.claim.id) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage;
+        const exact = try exactTargets(allocator, brief, candidate, policy.representative);
+        const targets: []const Key = for (accounts.items) |account| {
+            if (account.claim_id.ordinal == policy.representative.ordinal and account.disposition == .mapped) break account.disposition.mapped;
+        } else &.{};
+        var signals: std.ArrayList(r.SignalId) = .empty;
+        for (references.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
+        if (policy.mandatory and exact.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = item.claim.content.preserved_token }, .targets = targets } };
+        if (exact.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = &.{} } };
+        try obligations.append(allocator, .{ .claim_id = item.claim.id, .exact_targets = exact, .context_signals = signals.items });
     }
     return .{ .valid = .{ .accounts = accounts.items, .obligations = obligations.items } };
 }
-const AttributedTarget = struct { key: Key, value: spec.AttributedValue };
+const AttributedTarget = struct { key: Key, value: spec.AttributedValue, field: text.field_policy.Field };
 fn singletons(brief: g.Brief, candidate: spec.IdentifiedContent) [5]AttributedTarget {
     return .{
-        .{ .key = .title, .value = brief.title },                 .{ .key = .description, .value = brief.description },
-        .{ .key = .primary_goal, .value = brief.primary_goal },   .{ .key = .primary_user_story, .value = candidate.primary_user_story },
-        .{ .key = .entities, .value = candidate.entities.basis },
+        .{ .key = .title, .value = brief.title, .field = .spec_title },                        .{ .key = .description, .value = brief.description, .field = .spec_description },
+        .{ .key = .primary_goal, .value = brief.primary_goal, .field = .spec_goal },           .{ .key = .primary_user_story, .value = candidate.primary_user_story, .field = .spec_story },
+        .{ .key = .entities, .value = candidate.entities.basis, .field = .spec_entity_basis },
     };
 }
 pub fn exactTargets(a: std.mem.Allocator, brief: g.Brief, candidate: spec.IdentifiedContent, claim_id: r.ClaimId) Error![]const Key {
     var exact: std.ArrayList(Key) = .empty;
-    for (singletons(brief, candidate)) |entry| if (copies(entry.value.value, claim_id)) try exact.append(a, entry.key);
+    for (singletons(brief, candidate)) |entry| if (copies(entry.value.value, entry.field, claim_id)) try exact.append(a, entry.key);
     for (candidate.records) |record| if (recordCopies(record.proposal.content, claim_id)) try exact.append(a, .{ .record = record.id });
     return exact.toOwnedSlice(a);
 }
-fn copies(value: spec.BusinessValue, claim_id: r.ClaimId) bool {
+fn copies(value: spec.BusinessValue, field: text.field_policy.Field, claim_id: r.ClaimId) bool {
+    if (text.field_policy.get(field).exact_copy != .obligation_bearing or text.composition(text.BusinessSegment, field, value.segments) != null) return false;
     for (value.segments) |segment| if (segment == .exact_copy and segment.exact_copy.claim_id.ordinal == claim_id.ordinal) return true;
     return false;
 }
 fn recordCopies(content: spec.Content(spec.BusinessValue), claim_id: r.ClaimId) bool {
     switch (content) {
-        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+        inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
             const value = @field(fields, field.name);
             if (comptime field.type == spec.BusinessValue) {
-                if (copies(value, claim_id)) return true;
-            } else for (value) |relationship| if (copies(relationship, claim_id)) return true;
+                if (copies(value, spec.textField(kind, field.name), claim_id)) return true;
+            } else for (value) |relationship| if (copies(relationship, spec.textField(kind, field.name), claim_id)) return true;
         },
     }
     return false;
+}
+
+test "only composition-admitted behavioral insertions satisfy exact-copy obligations" {
+    const claim: r.ClaimId = .{ .ordinal = 1 };
+    const insertion: text.BusinessSegment = .{ .exact_copy = .{ .claim_id = claim } };
+    const mixed: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = "The user sees " } }, insertion } };
+    const insertion_only: spec.BusinessValue = .{ .segments = &.{ insertion, insertion } };
+    const raw_prose: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "The user sees Hello, World!" } }} };
+    for (std.meta.tags(text.field_policy.Field)) |field| {
+        try std.testing.expectEqual(text.field_policy.get(field).exact_copy == .obligation_bearing, copies(mixed, field, claim));
+        try std.testing.expect(!copies(insertion_only, field, claim));
+        try std.testing.expect(!copies(raw_prose, field, claim));
+    }
+    try std.testing.expect(!copies(mixed, .spec_story, .{ .ordinal = 2 }));
 }

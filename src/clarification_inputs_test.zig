@@ -31,7 +31,7 @@ test "clarification notices use published open forms and survive invocation rele
         const prior = try load(a, try fixture.closed(a, "S01", true));
         view.slots[@intFromEnum(input.inputs_schema.key)] = try values.create(std.testing.allocator, input.inputs_schema, c.Inputs, prior);
         const record = fixture.record("T01");
-        const state = try refresh.refresh(a, prior, .{ .feature = selected, .entries = &.{.{ .stage = .tasks, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
+        const state = try refresh.refresh(a, prior, .{ .feature = selected, .original_sources = &.{}, .entries = &.{.{ .stage = .tasks, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
         view.slots[@intFromEnum(refreshed.state_schema.key)] = try values.create(std.testing.allocator, refreshed.state_schema, refresh.Result, .{ .ready = state });
         // Preparing a new form is not evidence that its write succeeded.
         try std.testing.expectEqual(@as(usize, 0), (try capture(report.arena.allocator(), &view)).len);
@@ -52,25 +52,25 @@ test "refresh allocates stable subject IDs and replaces open drafts for every st
     for ([_][]const u8{ "S01", "P01", "T01" }) |name| {
         const record = fixture.record(name);
         const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
-        const fresh = try refresh.refresh(a, try load(a, .{ .state = null, .forms = &.{} }), .{ .feature = selected, .entries = &.{need} });
-        try std.testing.expectEqualStrings(name, fresh.value.?.records[0].id);
+        const fresh = try refresh.refresh(a, try load(a, .{ .state = null, .forms = &.{} }), .{ .feature = selected, .original_sources = &.{}, .entries = &.{need} });
+        try std.testing.expectEqualStrings(name, fresh.state.value.?.records[0].id);
         var state = fresh;
         for (0..2) |_| {
-            const old = state.value.?;
+            const old = state.state.value.?;
             const draft = try forms.render(a, old.records[0], fixture.binding(old, old.records[0]), .open, "Unsubmitted draft text that must be replaced, including sample.txt.");
             const captures: c.Captures = .{ .state = try std.json.Stringify.valueAlloc(a, old, .{}), .forms = &.{.{ .id = c.Id.parse(name).?, .bytes = draft }} };
             const inputs = try load(a, captures);
             try std.testing.expectEqual(.none, std.meta.activeTag(inputs.submissions[0].answer));
-            state = try refresh.refresh(a, inputs, .{ .feature = selected, .entries = &.{need} });
-            try std.testing.expectEqual(@as(usize, 1), state.value.?.records.len);
-            try std.testing.expectEqualStrings(name, state.value.?.records[0].id);
+            state = try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need} });
+            try std.testing.expectEqual(@as(usize, 1), state.state.value.?.records.len);
+            try std.testing.expectEqualStrings(name, state.state.value.?.records[0].id);
             const rendered = try views.render(a, state, inputs.protected_forms);
             try std.testing.expect(rendered[0].content == .replace);
             try std.testing.expect(rendered[0].content.replace.len < draft.len);
-            const parsed = try parser.formParser().parse(a, rendered[0].content.replace, state.value.?.records[0], fixture.binding(state.value.?, state.value.?.records[0]));
+            const parsed = try parser.formParser().parse(a, rendered[0].content.replace, state.state.value.?.records[0], fixture.binding(state.state.value.?, state.state.value.?.records[0]));
             try std.testing.expectEqual(.none, std.meta.activeTag(parsed.answer));
         }
-        try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, try load(a, .{ .state = null, .forms = &.{} }), .{ .feature = selected, .entries = &.{ need, need } }));
+        try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, try load(a, .{ .state = null, .forms = &.{} }), .{ .feature = selected, .original_sources = &.{}, .entries = &.{ need, need } }));
     }
 }
 
@@ -84,18 +84,105 @@ test "clarification refresh preserves closure history and never authenticates a 
         const captured = try fixture.closed(a, name, true);
         const inputs = try load(a, captured);
         const before = inputs.state.value.?;
-        const refreshed = try refresh.refresh(a, inputs, .{ .feature = selected, .entries = &.{} });
+        const refreshed = try refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} });
         const rendered = try views.render(a, refreshed, inputs.protected_forms);
         try std.testing.expectEqualStrings(captured.forms[0].bytes, rendered[0].content.retain);
-        try std.testing.expectEqualDeep(before.responses, refreshed.value.?.responses);
+        try std.testing.expectEqualDeep(before.responses, refreshed.state.value.?.responses);
         try std.testing.expectError(error.InvalidClarificationInput, views.render(a, refreshed, &.{}));
         const pending = try load(a, try fixture.closed(a, name, false));
-        try std.testing.expectError(error.AuthenticationRequired, refresh.refresh(a, pending, .{ .feature = selected, .entries = &.{} }));
+        try std.testing.expectError(error.AuthenticationRequired, refresh.refresh(a, pending, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} }));
         const record = before.records[0];
         const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = "A revised question must not overwrite closure.", .why_required = record.why_required, .answer_schema = record.answer_schema };
-        try std.testing.expectError(error.ProtectedClarification, refresh.refresh(a, inputs, .{ .feature = selected, .entries = &.{need} }));
+        try std.testing.expectError(error.ProtectedClarification, refresh.refresh(a, inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need} }));
         try std.testing.expectEqualStrings(captured.forms[0].bytes, inputs.protected_forms[0].bytes);
     }
+}
+
+test "stored and untouched clarification questions revalidate against current original sources" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const views = @import("domain/clarification_views.zig");
+    const wire = @import("domain/model_text_wire.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][2][]const u8{
+        .{ "S01", "{\"kind\":\"source\",\"source_id\":1}" },
+        .{ "P01", "{\"fragments\":[\"Use \",{\"kind\":\"passive\",\"passive_literal_id\":1}]}" },
+        .{ "T01", "{\"kind\":\"exact_copy\",\"claim_id\":2}" },
+    }) |example| {
+        var record = fixture.record(example[0]);
+        record.question = try std.fmt.allocPrint(a, "Which use of {s} is required?", .{example[1]});
+        const stored = fixture.state(&.{record});
+        const bytes = try forms.render(a, record, fixture.binding(stored, record), .open, "");
+        const captured: c.Captures = .{ .state = try std.json.Stringify.valueAlloc(a, stored, .{}), .forms = &.{.{ .id = c.Id.parse(record.id).?, .bytes = bytes }} };
+        // Initial structural/form parsing grants no model-text applicability.
+        const loaded = try load(a, captured);
+        const sources: []const wire.SourceText = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = example[1] }};
+        const current = try refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = sources, .entries = &.{} });
+        try std.testing.expectEqualStrings(record.question, current.state.value.?.records[0].question);
+        _ = try views.render(a, current, &.{});
+        try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} }));
+        const stale: refresh.Ready = .{ .state = loaded.state, .original_sources = &.{} };
+        try std.testing.expectError(error.InvalidClarificationInput, views.render(a, stale, &.{}));
+        const whitespace_changed = try std.mem.concat(a, u8, &.{ "{ ", example[1][1..] });
+        try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = whitespace_changed }}, .entries = &.{} }));
+        // A fresh need receives the same rule as untouched stored questions.
+        const need: refresh.Need = .{ .stage = c.Id.parse(record.id).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
+        try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, .{ .state = .{ .value = null }, .submissions = &.{}, .protected_forms = &.{} }, .{ .feature = selected, .original_sources = &.{}, .entries = &.{need} }));
+    }
+}
+
+test "source-aware question refresh preserves closed bytes and exempts submitted answer text" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const views = @import("domain/clarification_views.zig");
+    const wire = @import("domain/model_text_wire.zig");
+    const quoted = "{\"kind\":\"source\",\"source_id\":1}";
+    const answer = "Keep the user-supplied example {\"kind\":\"passive\",\"passive_literal_id\":99}.";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prior = try fixture.closed(a, "S01", true);
+    var stored = try parser.stateParser().parse(a, prior.state.?);
+    const records = try a.dupe(c.Record, stored.records);
+    const responses = try a.dupe(c.Response, stored.responses);
+    stored.records = records;
+    stored.responses = responses;
+    records[0].question = "Which meaning of " ++ quoted ++ " should apply?";
+    responses[0].answer = .{ .business_text = answer };
+    const closed = try forms.render(a, records[0], .{ .state_ordinal = responses[0].input_state_ordinal, .state_revision = responses[0].input_state_revision, .record_revision = responses[0].input_record_revision, .status = .open }, .closed, answer);
+    responses[0].submitted_form_bytes = closed;
+    const captured: c.Captures = .{ .state = try std.json.Stringify.valueAlloc(a, stored, .{}), .forms = &.{.{ .id = c.Id.parse("S01").?, .bytes = closed }} };
+    const loaded = try load(a, captured);
+    const sources: []const wire.SourceText = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = quoted }};
+    const current = try refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = sources, .entries = &.{} });
+    const rendered = try views.render(a, current, loaded.protected_forms);
+    try std.testing.expectEqualStrings(closed, rendered[0].content.retain);
+    try std.testing.expectEqualDeep(stored.responses, current.state.value.?.responses);
+    try std.testing.expectEqualStrings(answer, current.state.value.?.responses[0].answer.business_text);
+    try std.testing.expectError(error.InvalidClarificationInput, refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} }));
+    const need: refresh.Need = .{ .stage = .spec, .subject = records[0].subject, .authority = records[0].authority, .question = "Replace this protected question.", .why_required = records[0].why_required, .answer_schema = records[0].answer_schema };
+    try std.testing.expectError(error.ProtectedClarification, refresh.refresh(a, loaded, .{ .feature = selected, .original_sources = sources, .entries = &.{need} }));
+    try std.testing.expectEqualStrings(closed, loaded.protected_forms[0].bytes);
+}
+
+test "source-aware clarification state binds the current native corpus before publication" {
+    const refresh = @import("domain/clarification_refresh.zig");
+    const reference = @import("reference_evidence_test.zig");
+    const quoted = "{\"kind\":\"source\",\"source_id\":1}";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: reference.IdSource = .{};
+    const inputs = try reference.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "source.md", "A grammar example is " ++ quoted ++ ".\n"));
+    var record = fixture.record("S01");
+    record.question = "Which meaning of " ++ quoted ++ " should apply?";
+    const ready: refresh.Ready = .{ .state = try c.validate(.{ .value = fixture.state(&.{record}) }, selected), .original_sources = try refresh.originalSources(a, inputs) };
+    _ = try ready.validateFor(a, inputs);
+    var substituted = ready;
+    substituted.original_sources = &.{.{ .source_id = inputs.corpus.sources[0].id, .bytes = "A different current source." }};
+    try std.testing.expectError(error.InvalidClarificationInput, substituted.validateFor(a, inputs));
+    substituted.original_sources = &.{.{ .source_id = .{ .ordinal = 2 }, .bytes = inputs.corpus.sources[0].bytes }};
+    try std.testing.expectError(error.InvalidClarificationInput, substituted.validateFor(a, inputs));
 }
 
 fn load(allocator: std.mem.Allocator, captures: c.Captures) !c.Inputs {
@@ -119,19 +206,19 @@ test "clarification publication selects its terminal outcome before any write" {
     const empty_inputs = try load(a, empty);
     for ([_][]const u8{ "S01", "P01", "T01" }) |id| {
         const record = fixture.record(id);
-        const state = try refresh.refresh(a, empty_inputs, .{ .feature = selected, .entries = &.{.{ .stage = c.Id.parse(id).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
+        const state = try refresh.refresh(a, empty_inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{.{ .stage = c.Id.parse(id).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema }} });
         const prepared = try output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = state }, try views.render(a, state, &.{}));
         try std.testing.expectEqual(.needs_user, prepared.terminal_outcome);
         const closed_capture = try fixture.closed(a, id, true);
         const closed_inputs = try load(a, closed_capture);
-        const resolved = try refresh.refresh(a, closed_inputs, .{ .feature = selected, .entries = &.{} });
+        const resolved = try refresh.refresh(a, closed_inputs, .{ .feature = selected, .original_sources = &.{}, .entries = &.{} });
         const completed = try output.prepare(a, directory, paths, closed_capture, closed_inputs, .{ .ready = resolved }, try views.render(a, resolved, closed_inputs.protected_forms));
         try std.testing.expectEqual(.ok, completed.terminal_outcome);
     }
     inline for (.{ .authentication_required, .protected_clarification, .limit_exceeded }) |reason| {
         try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .blocked = reason }, &.{}));
     }
-    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = .{ .value = null } }, &.{}));
+    try std.testing.expectError(error.InvalidWorkflowOutput, output.prepare(a, directory, paths, empty, empty_inputs, .{ .ready = .{ .state = .{ .value = null }, .original_sources = &.{} } }, &.{}));
 }
 
 test "fixed paths use configured roots and preserve the selected feature key" {

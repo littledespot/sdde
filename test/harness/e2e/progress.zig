@@ -7,7 +7,7 @@ const pipeline = @import("../../../src/domain/pipeline.zig");
 
 pub const Progress = struct {
     arena: std.heap.ArenaAllocator,
-    first: ?c.ObservedDefect = null,
+    first: ?c.NativeRejection = null,
     corrections: std.ArrayList(c.Correction) = .empty,
     outstanding: [@import("../../../src/domain/pipeline_data.zig").key_count]?usize = @splat(null),
 
@@ -20,10 +20,10 @@ pub const Progress = struct {
     pub fn observe(self: *Progress, sequence: usize, step: []const u8, report: c.Report, effects: ?execution.AppliedEffects) !void {
         const a = self.arena.allocator();
         if (self.first == null) {
-            const evidence: ?@FieldType(c.ObservedDefect, "evidence") = if (report.candidate_error) |value|
+            const evidence: ?@FieldType(c.NativeRejection, "evidence") = if (report.candidate_error) |value|
                 .{ .candidate = value }
             else if (report.model_diagnostic) |reason|
-                .{ .protocol = .{ .call = report.last_model_call orelse return error.MissingRequestEvidence, .origin = report.last_model_origin orelse return error.MissingRequestEvidence, .reason = reason, .json_error = report.json_error, .schema_error = report.schema_error } }
+                .{ .protocol = .{ .call = report.last_model_call orelse return error.MissingRequestEvidence, .origin = report.last_model_origin orelse return error.MissingRequestEvidence, .reason = reason, .json_error = report.json_error, .composition_error = report.composition_error, .schema_error = report.schema_error } }
             else if (report.provider_diagnostic) |reason|
                 .{ .provider = .{ .call = if (report.provider_origin != null) report.last_model_call else null, .origin = report.provider_origin, .reason = reason, .content = report.provider_content_diagnostic } }
             else if (report.last_operation_rejection) |value|
@@ -32,7 +32,7 @@ pub const Progress = struct {
                 .{ .runner = value }
             else
                 null;
-            if (evidence) |value| self.first = try copy(c.ObservedDefect, a, .{ .sequence = sequence, .step = step, .evidence = value });
+            if (evidence) |value| self.first = try copy(c.NativeRejection, a, .{ .sequence = sequence, .step = step, .evidence = value });
         }
         const applied = effects orelse return;
         var invalidated: std.ArrayList(pipeline.DataKey) = .empty;
@@ -60,7 +60,7 @@ pub const Progress = struct {
         });
     }
     pub fn project(self: *const Progress, a: std.mem.Allocator, report: *c.Report) !void {
-        report.first_observed_defect = if (self.first) |first| try copy(c.ObservedDefect, a, first) else null;
+        report.first_native_rejection = if (self.first) |first| try copy(c.NativeRejection, a, first) else null;
         report.corrections = try copy([]const c.Correction, a, self.corrections.items);
         var outstanding: std.ArrayList(c.WorkLink) = .empty;
         for (self.outstanding, 0..) |sequence, index| if (sequence) |value| {

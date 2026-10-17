@@ -1,14 +1,14 @@
 {
-  "schema": "evaluation-rubric/v1",
+  "schema": "evaluation-rubric/v2",
   "id": "loan-renewal-spec",
-  "revision": 1,
+  "revision": 2,
   "minimum_score": 0,
   "maximum_score": 4,
-  "pass_threshold_percent": null,
+  "pass_threshold_percent": 80,
   "criteria": [
     {
       "id": "renewal-eligibility",
-      "description": "Preserve renewal for active loans that have not previously been renewed, and the one-renewal limit. Do not invent eligibility conditions.",
+      "description": "Preserve the requirement that the borrower must be able to renew an active loan that has not previously been renewed, and the one-renewal limit. Do not weaken this ability to optional permission or invent eligibility conditions.",
       "evidence": "Quote the eligibility and one-renewal source statements and corresponding specification behavior, or identify omissions.",
       "weight": 1,
       "allow_not_applicable": false,
@@ -23,7 +23,7 @@
         },
         {
           "score": 2,
-          "description": "Some conditions survive, but at least one material eligibility or limit condition is wrong or missing."
+          "description": "Some conditions survive, but the required borrower ability or at least one material eligibility or limit condition is wrong or missing."
         },
         {
           "score": 3,
@@ -31,9 +31,10 @@
         },
         {
           "score": 4,
-          "description": "Eligibility and the one-renewal limit are clearly preserved without unsupported conditions."
+          "description": "The required borrower ability, eligibility and one-renewal limit are clearly preserved without unsupported conditions."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     },
     {
       "id": "successful-renewal",
@@ -62,7 +63,8 @@
           "score": 4,
           "description": "The extension from the existing due date, fourteen calendar days, exact confirmation and displayed new due date are clearly preserved."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     },
     {
       "id": "refusal-behavior",
@@ -91,7 +93,8 @@
           "score": 4,
           "description": "Both refusal conditions, unchanged due date and exact refusal message are clearly preserved without new refusal reasons."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     },
     {
       "id": "source-grounding",
@@ -120,7 +123,8 @@
           "score": 4,
           "description": "All behavior and scope commitments remain supported; no unsupported business or technical commitments are introduced."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     },
     {
       "id": "clarity-testability",
@@ -149,7 +153,8 @@
           "score": 4,
           "description": "Eligibility, successful renewal and refusal are clear, consistent and testable."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     },
     {
       "id": "organization",
@@ -178,7 +183,8 @@
           "score": 4,
           "description": "The story and requirements are coherent and easy to follow without unresolved filler or unnecessary repetition."
         }
-      ]
+      ],
+      "minimum_acceptable_score": null
     },
     {
       "id": "proportionate-business-scope",
@@ -207,7 +213,8 @@
           "score": 4,
           "description": "The specification is proportionate and business-facing without invented filler or technical commitments."
         }
-      ]
+      ],
+      "minimum_acceptable_score": 3
     }
   ]
 }

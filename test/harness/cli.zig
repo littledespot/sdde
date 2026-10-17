@@ -5,6 +5,8 @@ const files = @import("files.zig");
 const configuration = @import("configuration.zig");
 const environment = @import("environment.zig");
 const reports = @import("report.zig");
+const qualification = @import("grader_qualification.zig");
+const gate = @import("acceptance_gate.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
 pub const Options = struct { case: []const u8, spec: []const u8, config: []const u8, output: []const u8 };
 pub fn parse(args: []const []const u8) error{InvalidArguments}!Options {
@@ -42,13 +44,16 @@ pub fn main(init: std.process.Init) !void {
     var args: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |arg| try args.append(a, arg);
     if (args.items.len == 1 and std.mem.eql(u8, args.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to the selected provider and may incur charges. Set TEST_EVALUATION_PROVIDER=openai|bedrock, TEST_EVALUATION_MODEL and its TEST_ credential. Bedrock also requires TEST_EVALUATION_REGION. No .env file is loaded automatically.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to the selected provider and may incur charges. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. GPT-OSS-20B judge settings may select low, medium or high reasoning_effort; temperature follows the registered provider controls. No .env file is loaded automatically.\n");
         return;
     }
     const options = parse(args.items) catch return fail(io, "Invalid arguments; use --help. No API call made.");
     const config_bytes = files.read(io, a, .cwd(), options.config) catch return fail(io, "Evaluator configuration is unavailable. No API call made.");
-    const selection = environment.selection(init.environ_map) catch return fail(io, "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.");
-    const config = configuration.parse(a, config_bytes, selection) catch return fail(io, "Invalid evaluator configuration. No API call made.");
+    const selection = environment.selection(init.environ_map) catch |err| return fail(io, if (err == error.DisallowedTestModel)
+        "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made."
+    else
+        "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.");
+    const config = configuration.parse(a, config_bytes, selection) catch return fail(io, "Invalid evaluator settings or unavailable native-schema capability. GPT-OSS-20B requires a supported reasoning effort and registered provider controls. No API call made.");
     const key = environment.credential(init.environ_map, selection.api) catch |err| return fail(io, try std.fmt.allocPrint(a, "{s} is {s}. No API call made.", .{ environment.credentialName(selection.api), switch (err) {
         error.MissingTestApiKey => "missing",
         error.InvalidTestApiKey => "invalid",
@@ -62,6 +67,7 @@ pub fn main(init: std.process.Init) !void {
         .execution_id = null,
         .models = &.{},
     }) catch return fail(io, "Invalid or unavailable case, rubric, source or specification. No API call made.");
+    const grader = try qualification.inspect(io, a, .cwd(), inputs.case.grading_qualification, inputs.case, inputs.rubric_bytes, inputs.sources, config);
     const output = directories.open(io, .cwd(), options.output) catch return fail(io, "Output must be an existing safe directory. No API call made.");
     defer output.close(io);
     // Exclusive new reports cannot overwrite source/spec/clarification files.
@@ -76,7 +82,17 @@ pub fn main(init: std.process.Init) !void {
     const evidence_dir = try directories.open(io, output, id);
     defer evidence_dir.close(io);
     const store: @import("evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_dir, .secrets = &.{key} };
-    const result = @import("live.zig").run(io, a, config, key, inputs, store) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    var result = @import("live.zig").run(io, a, config, key, inputs, store) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    result.grader_qualification = grader;
+    if (result.outcome == .evaluated) {
+        // Supplied artifacts do not prove their generator identity. Calibration
+        // retains raw judgments while acceptance remains explicitly unresolved.
+        result.acceptance = gate.from(inputs.rubric, result.outcome.evaluated, .unknown_generation, if (grader == .qualified) .qualified else .unresolved);
+    }
+    if (!try unchanged(io, a, options, inputs, config_bytes, config, grader)) {
+        result.acceptance.qualification = .unresolved;
+        result.acceptance.decision = .{ .unresolved = .input_changed };
+    }
     try json_file.writeStreamingAll(io, try reports.json(a, result));
     try json_file.sync(io);
     try md_file.writeStreamingAll(io, try reports.markdown(a, result));
@@ -85,8 +101,29 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.File.stdout().writeStreamingAll(io, message);
     switch (result.outcome) {
         .evaluator_error => std.process.exit(1),
-        .evaluated => |value| if (value.assessment != .scored) std.process.exit(2),
+        .evaluated => switch (result.acceptance.decision) {
+            .passed => {},
+            .failed => std.process.exit(1),
+            .unresolved => std.process.exit(2),
+        },
     }
+}
+fn unchanged(io: std.Io, a: std.mem.Allocator, options: Options, inputs: c.Capture, config_bytes: []const u8, config: configuration.Config, grader: qualification.Evidence) !bool {
+    const current = files.capture(io, a, .cwd(), options.case, options.spec, inputs.evaluation_id, inputs.generation) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    const current_grader = qualification.inspect(io, a, .cwd(), current.case.grading_qualification, current.case, current.rubric_bytes, current.sources, config) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    const current_config = files.read(io, a, .cwd(), options.config) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    return std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, current, .{}), try std.json.Stringify.valueAlloc(a, inputs, .{})) and
+        std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, grader, .{}), try std.json.Stringify.valueAlloc(a, current_grader, .{})) and
+        std.mem.eql(u8, config_bytes, current_config);
 }
 fn fail(io: std.Io, message: []const u8) !void {
     try std.Io.File.stderr().writeStreamingAll(io, message);

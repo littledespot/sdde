@@ -66,10 +66,38 @@ pub fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
     return false;
 }
 
-pub const Resolution = union(enum) { existing_authority: Authority, supported_candidate: CandidateId, not_applicable: Rule, exception: ExceptionId };
+/// An assessment binds an admitted judgment to a current subject/revision. It
+/// does not assert that the candidate is supported or semantically correct.
+pub const Assessment = struct {
+    candidate: CandidateId,
+    /// Registered applicability of the current candidate, not a review verdict.
+    not_applicable: ?Rule = null,
+};
+pub const Resolution = union(enum) { existing_authority: Authority, supported_candidate: CandidateId, not_applicable: Rule, exception: ExceptionId, assessment: Assessment };
 /// Native, scope-checked evidence supplied by an owning validator/reviewer.
 /// Observation JSON can reference these IDs but cannot create this registry.
-pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, inconclusive };
+pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, candidate_invalid, inconclusive };
+/// A real source decision gap retained alongside invalid candidate content.
+/// It shares the bound finding's subject, authorities, provenance and origin.
+pub const AuthorityGap = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+    kind: GapKind,
+    source_ids: []const @import("reference_identity.zig").SourceId,
+    detail: []const u8,
+    question: []const u8,
+
+    pub const GapKind = enum {
+        unsupported,
+        ambiguous,
+        conflicting,
+
+        pub fn finding(self: GapKind) Finding {
+            return switch (self) {
+                inline else => |value| @field(Finding, @tagName(value)),
+            };
+        }
+    };
+};
 pub const ReviewEvidence = struct {
     loss: ?@import("source_omission.zig").Location = null,
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
@@ -77,6 +105,7 @@ pub const ReviewEvidence = struct {
     /// Source review's model-owned comparison target; absent for other reviews.
     missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
+    authority_gap: ?AuthorityGap = null,
     provenance: @import("specification.zig").Provenance,
     source_ids: []const @import("reference_identity.zig").SourceId,
     principle_citations: []const @import("principle_registry.zig").Citation = &.{},
@@ -94,9 +123,33 @@ pub const Evidence = struct {
 };
 pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Authority, authenticated_actor_ordinal: u64 };
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
+pub const Projection = enum { source_readiness, specification, source_preservation, principle_assessment, registered_obligations };
+pub const AssessmentPolicy = enum { required, advisory };
+/// Native termination of optional advice. Model findings cannot create this
+/// marker, and it never resolves a required authority or native candidate defect.
+pub const AdviceStop = struct {
+    pub const Reason = enum { usage_unavailable, provider_failure, provider_output_limit, protocol_exhausted };
+    reason: Reason,
+    projection: Projection,
+    candidate_revision: u64,
+    requirements: []const Id,
+    unassessed: []const Id,
+    authorities: []const Authority,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+};
+pub const IncompleteAssessment = struct { candidate_revision: u64, reason: AdviceStop.Reason, origin: ?@import("model_candidate_origin.zig").Origin };
+/// Current review authority must be retired before generation consumes sources.
+/// The retirement operation and source-consumption precondition share this set.
+pub const projection_keys = [_]@import("pipeline.zig").DataKey{ .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate };
+pub fn assessmentPolicy(projection: Projection) AssessmentPolicy {
+    return switch (projection) {
+        .specification, .principle_assessment => .advisory,
+        .source_readiness, .source_preservation, .registered_obligations => .required,
+    };
+}
 pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
-    projection: enum { specification, source_preservation, principle_assessment, registered_obligations } = .registered_obligations,
+    projection: Projection = .registered_obligations,
     source_inputs: ?@import("reference_evidence.zig").Inputs = null,
     principle_context: ?@import("principle_assessment.zig").Context = null,
     principle_assessment: ?@import("principle_assessment.zig").Canonical = null,
@@ -113,15 +166,35 @@ pub const Inputs = struct {
     review_origin: ?@import("model_candidate_origin.zig").Origin = null,
     revision: u64 = 1,
     review_origins: []const ?@import("model_candidate_origin.zig").Origin = &.{},
+    advice_stop: ?AdviceStop = null,
 };
+pub const Applicability = union(enum) { required, not_applicable: Rule, review: Rule };
+/// Registered applicability is a fact about the current candidate declaration,
+/// independent of the semantic judgment about that declaration.
+pub fn applicability(inputs: Inputs, id: Id) Error!Applicability {
+    const registered = policy(id) orelse return error.InvalidRequiredAuthority;
+    const rule = registered.not_applicable orelse return .required;
+    return switch (rule) {
+        .no_business_data => if (inputs.specification) |content|
+            switch (content.entities.disposition) {
+                .not_applicable => .{ .not_applicable = rule },
+                .required => .required,
+            }
+        else
+            .{ .review = rule },
+        .authenticated_exact_scope => error.InvalidRequiredAuthority,
+    };
+}
 pub const Requirement = struct { seed: Seed, registered_policy: ?Policy };
 pub const Ledger = struct { inputs: Inputs, requirements: []const Requirement };
 pub const Observation = struct { requirement: Id, inspected_authorities: []const Authority, evidence_ids: []const EvidenceId };
 pub const Observations = struct { entries: []const Observation };
 pub const GapReason = enum { missing, ambiguous, conflicting, multiple_non_equivalent, stale, unsupported, unregistered_ownership_or_policy };
 pub const Gap = struct { owner: Stage, reason: GapReason };
-pub const BlockReason = enum { unregistered_ownership_or_policy, unauthorized_authority_creation };
+pub const BlockReason = enum { unregistered_ownership_or_policy, unauthorized_authority_creation, incomplete_assessment };
 pub const Outcome = union(enum) {
+    assessment_complete: Assessment,
+    assessment_incomplete: IncompleteAssessment,
     resolved_exactly_one: Resolution,
     resolved_explicit_not_applicable: Rule,
     resolved_explicit_exception: ExceptionId,
@@ -129,7 +202,7 @@ pub const Outcome = union(enum) {
     upstream_rework_required: struct { owner: Stage, detected_at: DetectionStage, reason: GapReason },
     administrative_block: BlockReason,
 };
-pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved, inconclusive_review }, support: ?EvidenceId };
+pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved, invalid_content, inconclusive_review }, support: ?EvidenceId };
 pub const Entry = struct { candidate_defect: ?CandidateDefect = null, requirement: Id, outcome: Outcome, evidence_ids: []const EvidenceId, input_authorities: []const Authority };
 pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Entry, continuation: enum { all_resolved, invalid, needs_user, blocked } };
 
@@ -141,14 +214,16 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(Authority, expected.authorities, inputs.authorities);
     } else if (inputs.source_inputs != null) return error.InvalidRequiredAuthority;
-    if (inputs.projection == .specification) {
+    if (inputs.projection == .specification or inputs.projection == .source_readiness) {
+        if (inputs.projection == .specification and (inputs.specification == null or inputs.brief == null)) return error.InvalidRequiredAuthority;
+        if (inputs.projection == .source_readiness and (inputs.specification != null or inputs.brief != null)) return error.InvalidRequiredAuthority;
         const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification, inputs.brief);
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(ForcedGap, expected.forced_gaps, inputs.forced_gaps);
     }
     if (inputs.projection == .principle_assessment) {
         const expected = @import("principle_assessment.zig").project(allocator, inputs.principle_context orelse return error.InvalidRequiredAuthority) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-        if (inputs.specification != null or inputs.candidates.len != 0 or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
+        if (inputs.specification != null or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
         try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(Authority, expected.authorities, inputs.authorities);
     } else if (inputs.principle_context != null) return error.InvalidRequiredAuthority;
@@ -187,6 +262,28 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     for (inputs.forced_gaps, 0..) |gap, index| {
         if (findRequirement(requirements, gap.requirement) == null) return error.InvalidRequiredAuthority;
         for (inputs.forced_gaps[0..index]) |other| if (std.meta.eql(other.requirement, gap.requirement)) return error.InvalidRequiredAuthority;
+    }
+    if (inputs.advice_stop) |stop| {
+        if (assessmentPolicy(inputs.projection) != .advisory or stop.projection != inputs.projection or stop.candidate_revision != inputs.revision or stop.unassessed.len == 0 or stop.requirements.len != requirements.len) return error.InvalidRequiredAuthority;
+        if (stop.origin == null) return error.InvalidRequiredAuthority;
+        if (stop.origin) |origin| if (origin.kind != .inference or origin.request.value == 0 or origin.attempt.value == 0) return error.InvalidRequiredAuthority;
+        try sameSet(Authority, stop.authorities, inputs.authorities);
+        var missing: usize = 0;
+        for (requirements, stop.requirements) |requirement, bound| {
+            if (!std.meta.eql(requirement.seed.id, bound)) return error.InvalidRequiredAuthority;
+            var count: usize = 0;
+            for (inputs.evidence) |evidence| if (std.meta.eql(evidence.requirement, bound)) {
+                count += 1;
+            };
+            if (count != 0) {
+                if (missing != 0) return error.InvalidRequiredAuthority;
+                continue;
+            }
+            if (missing >= stop.unassessed.len or !std.meta.eql(bound, stop.unassessed[missing])) return error.InvalidRequiredAuthority;
+            for (inputs.candidates) |candidate| if (std.meta.eql(candidate.requirement, bound)) return error.InvalidRequiredAuthority;
+            missing += 1;
+        }
+        if (missing != stop.unassessed.len) return error.InvalidRequiredAuthority;
     }
     return .{ .inputs = inputs, .requirements = requirements };
 }
@@ -240,7 +337,7 @@ pub fn reconcile(allocator: std.mem.Allocator, ledger: Ledger, observations: Obs
         if (defect != null and result.continuation != .blocked) result.continuation = .invalid;
         entry.* = .{ .candidate_defect = defect, .requirement = requirement.seed.id, .outcome = outcome, .evidence_ids = evidence_ids, .input_authorities = requirement.seed.input_authorities };
         switch (outcome) {
-            .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
+            .assessment_complete, .assessment_incomplete, .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
             .clarification_required => if (result.continuation == .all_resolved) {
                 result.continuation = .needs_user;
             },
@@ -256,6 +353,7 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
     for (seed.input_authorities) |authority| if (!contains(Authority, inputs.authorities, authority)) return route(inputs.detected_at, registered.owner, .stale);
     for (inputs.forced_gaps) |gap| if (gap.subject == .authority and std.meta.eql(gap.requirement, seed.id)) return route(inputs.detected_at, registered.owner, gap.reason);
     var resolution: ?Resolution = null;
+    var assessment: ?Assessment = null;
     var reason: ?GapReason = null;
     for (inputs.evidence) |evidence| {
         if (!std.meta.eql(evidence.requirement, seed.id)) continue;
@@ -285,8 +383,22 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
                 }
             }
         }
-        switch (evidence.finding) {
-            .supported, .candidate_omission, .inconclusive => {},
+        if (assessmentPolicy(inputs.projection) == .advisory and evidence.method == .model_assisted) {
+            if (evidence.resolution != .assessment or evidence.review == null) return error.InvalidRequiredAuthority;
+            const binding = evidence.resolution.assessment;
+            if (!contains(Candidate, inputs.candidates, .{ .id = binding.candidate, .requirement = seed.id })) return error.InvalidRequiredAuthority;
+            const current_applicability = try applicability(inputs, seed.id);
+            const not_applicable: ?Rule = if (current_applicability == .not_applicable) current_applicability.not_applicable else null;
+            if (binding.not_applicable != not_applicable) return error.InvalidRequiredAuthority;
+            if (assessment) |previous| {
+                if (!std.meta.eql(previous, binding)) return error.InvalidRequiredAuthority;
+            } else assessment = binding;
+            continue;
+        }
+        if (evidence.resolution == .assessment) return error.InvalidRequiredAuthority;
+        const finding = if (evidence.finding == .candidate_invalid and evidence.review != null and evidence.review.?.authority_gap != null) evidence.review.?.authority_gap.?.kind.finding() else evidence.finding;
+        switch (finding) {
+            .supported, .candidate_omission, .candidate_invalid, .inconclusive => {},
             .ambiguous => reason = stronger(reason, .ambiguous),
             .conflicting => reason = stronger(reason, .conflicting),
             .unsupported => reason = stronger(reason, .unsupported),
@@ -308,6 +420,7 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
                 } else return .{ .administrative_block = .unauthorized_authority_creation };
                 if (!std.meta.eql(exception.requirement, seed.id) or exception.authenticated_actor_ordinal == 0 or !contains(Authority, evidence.authorities, exception.authority)) return .{ .administrative_block = .unauthorized_authority_creation };
             },
+            .assessment => return error.InvalidRequiredAuthority,
         }
         if (resolution) |previous| {
             // Only direct identity/revision equality is a registered equivalence.
@@ -316,11 +429,17 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
         } else resolution = evidence.resolution;
     }
     if (reason) |gap| return route(inputs.detected_at, registered.owner, gap);
+    if (assessmentPolicy(inputs.projection) == .advisory) {
+        if (assessment) |binding| return .{ .assessment_complete = binding };
+        if (inputs.advice_stop) |stop| if (contains(Id, stop.unassessed, seed.id)) return .{ .assessment_incomplete = .{ .candidate_revision = stop.candidate_revision, .reason = stop.reason, .origin = stop.origin } };
+        return .{ .administrative_block = .incomplete_assessment };
+    }
     const value = resolution orelse return route(inputs.detected_at, registered.owner, .missing);
     return switch (value) {
         .existing_authority, .supported_candidate => .{ .resolved_exactly_one = value },
         .not_applicable => |rule| .{ .resolved_explicit_not_applicable = rule },
         .exception => |id| .{ .resolved_explicit_exception = id },
+        .assessment => error.InvalidRequiredAuthority,
     };
 }
 
@@ -429,13 +548,14 @@ fn sameSet(comptime T: type, a: []const T, b: []const T) Error!void {
     for (a) |item| if (!contains(T, b, item)) return error.InvalidRequiredAuthority;
 }
 
-/// Candidate validity is separate from the six authority outcomes. Established
-/// source evidence cannot make absent content valid, or a source gap repairable.
+/// Candidate validity is separate from authority outcomes. Established
+/// source evidence cannot make absent/invalid content valid, or a source gap repairable.
 fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?CandidateDefect {
+    const advisory = assessmentPolicy(inputs.projection) == .advisory;
     // Contrary current judgments about the same authority and decision are an
     // interpretation defect, not evidence that the original sources conflict.
     for (inputs.evidence) |positive| {
-        if (!std.meta.eql(positive.requirement, requirement.seed.id) or positive.finding != .supported or positive.method != .model_assisted) continue;
+        if (advisory or !std.meta.eql(positive.requirement, requirement.seed.id) or positive.finding != .supported or positive.method != .model_assisted) continue;
         for (inputs.evidence) |negative| {
             if (!std.meta.eql(negative.requirement, requirement.seed.id) or negative.method != .model_assisted or !sameResolution(positive.resolution, negative.resolution)) continue;
             if (negative.finding != .ambiguous and negative.finding != .conflicting and negative.finding != .unsupported) continue;
@@ -451,10 +571,12 @@ fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?
     }
     var result: ?CandidateDefect = null;
     for (inputs.forced_gaps) |gap| if (gap.subject == .candidate and std.meta.eql(gap.requirement, requirement.seed.id)) {
-        if (!establishedConflict(requirement, inputs, gap)) result = .{ .reason = .missing_content, .support = null };
+        if (advisory or !establishedConflict(requirement, inputs, gap)) result = .{ .reason = .missing_content, .support = null };
     };
     for (inputs.evidence) |evidence| {
         if (!std.meta.eql(evidence.requirement, requirement.seed.id)) continue;
+        if (advisory and evidence.method == .model_assisted) continue;
+        if (evidence.finding == .candidate_invalid) return .{ .reason = .invalid_content, .support = null };
         if (evidence.finding == .inconclusive) return .{ .reason = .inconclusive_review, .support = null };
         if (evidence.finding != .candidate_omission) continue;
         if (result == null) result = .{ .reason = .not_preserved, .support = null };

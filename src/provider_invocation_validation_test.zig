@@ -340,3 +340,39 @@ fn rawComplete(fixture: *Fixture, bytes: []const u8) !provider.ProviderInvocatio
         },
     };
 }
+
+test "reasoning diagnostics never replace candidates or change stop and missing-answer admission" {
+    const reasoning = @import("domain/provider_reasoning.zig");
+    const blocks: []const reasoning.Block = &.{.{ .text = .{ .text = "{\"valid\":true,\"approved\":true,\"answer\":\"invented\"}", .signature = "opaque" } }};
+    for (0..3) |variant| {
+        var fixture: Fixture = undefined;
+        try fixture.init();
+        defer fixture.deinit();
+        fixture.fake.invocation_plan = switch (variant) {
+            0 => .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 2 } },
+            1 => .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } },
+            2 => .{ .complete = .{ .content = "", .content_diagnostic = .missing_final_text, .input_tokens = 10, .output_tokens = 2 } },
+            else => unreachable,
+        };
+        var response = try fixture.response();
+        defer response.deinit();
+        switch (response.completed.raw_result) {
+            inline .complete, .stopped, .rejected => |*value| value.reasoning = try reasoning.Owned.init(std.testing.allocator, blocks),
+        }
+        var validated = try validation.validate(std.testing.allocator, fixture.call, &response);
+        defer validated.deinit();
+        switch (variant) {
+            0 => try std.testing.expectEqualStrings("{}", validated.evidence.result().complete.content()),
+            1 => try std.testing.expectEqual(.output_limit, validated.evidence.result().stopped),
+            2 => {
+                try std.testing.expectEqual(.response_invalid, validated.evidence.result().failed.cause);
+                try std.testing.expect(validated.evidence.missingFinalText());
+            },
+            else => unreachable,
+        }
+        try std.testing.expectEqual(@as(u64, 12), validated.evidence.usage().?.total_tokens);
+        switch (response.completed.raw_result) {
+            inline .complete, .stopped, .rejected => |value| try std.testing.expectEqualStrings(blocks[0].text.text, value.reasoning.?.blocks[0].text.text),
+        }
+    }
+}

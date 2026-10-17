@@ -312,58 +312,7 @@ separate approved F0002 contract.
   F0003 never reads these files as a default, silently upgrades them, or falls back to
   them when runtime authority is absent.
 
-## 6. Legacy engine usage review
-
-At the user's request, this review inspected the local legacy
-`sdd-workflow-engine` working tree as it existed on 2026-08-29. The observations
-below are non-normative comparison evidence, not SDDE authority or a runtime
-dependency. Its recorded flow was:
-
-```text
-DefaultWorkflowToolchainService
-  -> receives config paths, but per-call/shared-state path values take precedence
-  -> absent principles/templates values fall back to built-in directories
-  -> loadToolchainAuthority reads principles/toolchain.yaml
-  -> scalar extends loads templates/toolchainPresets/<name>.yaml
-  -> recursively loads preset extends and generically deep-merges records
-  -> validates/derives an authority envelope
-  -> caches or reloads it in mutable shared workflow state
-  -> also resolves command templates and a default test command
-```
-
-The main evidence is in `src/workflow/toolchainService.ts`,
-`src/workflow/toolchainService.helper.ts`,
-`src/workflow/loadToolchainSetupHandler.ts`,
-`src/toolchain/toolchainLoader.ts`, `src/toolchain/toolchainPresets.ts`,
-`src/toolchain/toolchainRecordMerge.helper.ts`, and
-`src/toolchain/toolchainValidator.ts`. Supporting evidence is in
-`src/workflow/loadedToolchainAuthorityState.helper.ts`,
-`src/toolchain/loadedToolchainAuthority.helper.ts`,
-`src/toolchain/toolchainSourceAuthorityResolver.helper.ts`,
-`src/config/configMerger.ts`, and `src/config/configTypes.ts`.
-
-| Legacy observation | Concept carried into F0003 | Mechanic deliberately not carried |
-| --- | --- | --- |
-| Runtime code does not parse `_structure.yaml` as a schema. Compatibility tests explicitly exclude it from concrete preset inventories; production validation mentions it only in a human-facing suggestion. | Keep structural decoding in one closed typed implementation contract. | Reading `_structure.yaml` at runtime, treating its comments/placeholders as constraints, or accepting sibling files because they resemble it. |
-| Its `_structure.yaml` copy has drifted from the SDDE source: it omits `framework` and marks `package`, `build`, and `test` mandatory where the current SDDE file marks them optional. | None; the difference confirms that the closed Zig validation contract, not either documentation copy, must own the accepted shape. | Selecting either documentation copy as runtime authority or merging the two shapes. |
-| Uses one fixed `toolchain.yaml` below the selected principles directory and records source provenance. | Fixed filename, validated containment, immutable source evidence, and no auto-detection. | Default principles paths, optional absence, caller path overrides, or raw string path construction outside typed capabilities. |
-| Recursive loading detects inheritance cycles; later shared-state publication canonicalizes unique physical source identities. | Exact resolution, cycle/duplicate/conflict rejection, and complete provenance at the owning boundary. | Scalar unversioned `extends`, filename identity, `.yaml`/`.yml` first-match lookup, or preset storage under `paths.templates/toolchainPresets`. |
-| Merges inherited values before validating the resolved result. | Dependency-first deterministic composition and validate-before-publish. | Generic recursive map merge with implicit array replacement and no per-field operator or locked-safety proof. |
-| Its state helper freezes the cached authority envelope and clones consumer projections. | One immutable post-composition safety-valid result with no partial publication. | Mutable shared-state cache, `reload`, compatibility copies, optional deletion, or multiple query projections. |
-| The service also exposes `resolveCommand` and `getDefaultTestCommand`. | None; command consumers use compiled typed command IDs from the owning policy. | Command interpolation, arbitrary dot-string getters, and mixed reader/query/execution responsibilities. |
-| Runtime merges then validates, while the legacy file validator validates the raw project layer and resolved preset separately. | One canonical post-composition validation pipeline. | Split judges that can disagree on the same `toolchain.yaml`. |
-| Loader code performs synchronous filesystem reads and obtains a global logger; the setup handler separately accepts a free-text debug callback. | Narrow no-follow read ports and F0002 lifecycle observability. | Direct infrastructure imports, two logging mechanisms, free-text messages, caller-chosen fields, or raw path/preset data in logs. |
-| Reads use existence/stat checks followed by unbounded reads and may resolve through links. | Bounded capture, stable descriptor evidence, and contained source identity. | Time-of-check/time-of-use gaps, unbounded input, followed links, or optional treatment of an invalid present file. |
-| Configuration-derived values, per-call/shared-state overrides, and built-in defaults compete to select principles/templates roots. | One F0004 typed capability for each exact root. | F0003 access to F0001, derivation from a common toolkit path, caller precedence, or built-in fallback roots. |
-| Legacy configuration has `paths.templates` but no `paths.toolchainPreset`. | Presets come only from the explicit configured preset-registry root. | Treating templates as executable preset authority or using a source/package fallback. |
-
-The useful concepts are therefore fixed-location capture, provenance,
-inheritance validation, cycle rejection, effective-result validation, and
-immutable publication. The legacy service class, state mutation, reload model,
-path fallbacks, raw commands, logging implementation, and generic merge are not
-design inputs.
-
-## 7. Acceptance criteria
+## 6. Acceptance criteria
 
 1. `ToolChainService` has exactly one responsibility: expose one immutable
    `ValidToolchain` through its concrete read-only `toolchain()` accessor. The
@@ -412,7 +361,7 @@ design inputs.
 13. Workflows without toolchain operations do not read toolchain documents,
     including when another installed workflow references those operations.
 
-## 8. Verification
+## 7. Verification
 
 Implementation tests cover the owning boundaries:
 
@@ -447,7 +396,7 @@ Implementation tests cover the owning boundaries:
 - packaging: clean native-executable bootstrap with only target-owned runtime
   configuration, project toolchain layer, and installed preset registry.
 
-## 9. Traceability
+## 8. Traceability
 
 | Concern | Authority |
 | --- | --- |

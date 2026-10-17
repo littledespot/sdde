@@ -1,5 +1,32 @@
 # Citation completeness comparison and actual reviewer handoff
 
+**Current advisory cutover — 17 October 2026:** the frozen panel remains intact.
+Current offline checks prepare the complete captured-story candidate as advisory
+review without localization, and retain the direct-signal fixture's actual
+pre-generation comparisons and negative controls. Nine historical partial-only
+candidate subjects are explicitly unavailable (`incomplete_candidate`); they are
+not reinterpreted as pre-generation duties. The two B3 raw-admission rejections
+remain separate. All 13 primary inputs stay accounted for in
+`.zig-cache/source-loss-citation-completeness-current-contract/native-admission.json`.
+The two historical partial-only handoff controls also receive unavailable records.
+These mechanical checks provide no new semantic result, publication authority,
+or live-call authorization. Rerun them with
+`zig build test-specification-generation -j1 --summary all`.
+
+## Historical comparison and consumed handoff
+
+**B3 current-contract refresh — 17 October 2026:** current diagnostic candidates
+are rebuilt through native prose/occurrence admission; frozen historical payloads
+are not read as new canonical authority. The independent `dual-ready` input now
+records typed `ambiguous_exact` before review because its two eligible source
+occurrences have identical bytes. The frozen `captured-description` records
+`embedded_insertion_syntax` for invented encoded insertion syntax absent from the
+source. All 13 inputs remain counted as 11 prepared and two rejected cases, with
+no review packets for those negatives; frozen sources, expectations and historical
+results are unchanged. Current preparation writes separate admission reasons and denominators beneath
+`.zig-cache/source-loss-citation-completeness-current-contract/`. The dated live
+results below do not qualify the B3 cutover or authorize another send.
+
 **Citation comparison passed; actual source-review handoff failed.** All
 76 explicitly approved calls completed; complete/relevant citations improved from
 36/38 to 38/38 assessments, with 38/38 correct verdicts and 26/26 correct native
@@ -20,6 +47,13 @@ admission or attribution. It does not repeat the earlier response-contract study
 The [manifest](comparison.json) and [scorecard template](scorecard.template.json)
 declare both arms, settings, order, denominator and gates before execution.
 Historical panels, results and gates remain unchanged.
+
+The commands and frozen requests below describe that consumed historical panel.
+Current offline preparation uses
+`.zig-cache/source-loss-citation-completeness-current-contract/` after the shared
+text/finding cutover. It does not overwrite or admit historical receipts, and it
+grants no live-call authority. A renewed comparison needs current pins and a new
+bounded approval.
 
 ## One changed factor
 

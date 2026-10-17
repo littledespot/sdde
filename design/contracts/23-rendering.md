@@ -1,7 +1,7 @@
 # 23. Rendering and editability strategy
 
-Part of the [proposed design](../design.md#23-rendering-and-editability-strategy). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#23-rendering-and-editability-strategy), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - The engine, not the LLM, renders persistent artifacts.
 - `spec.md` is the only freely editable stage artifact.
@@ -51,10 +51,15 @@ Renderers own:
 - Tagged `RawSourceScalar`/verbatim values are the underlying text exception: their validated
   UTF-8 scalar sequence bypasses NFC and is emitted through the versioned deterministic
   Markdown/JSON escape function without altering the represented value.
-- At [ADR 0020's coordinated cutover](../decisions/0020-derived-exact-reference-lineage.md),
-  an `exact_copy` segment emits such a scalar only after its preserved-token
+- Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md),
+  an engine-derived canonical `exact_copy` segment emits such a scalar only after its preserved-token
   claim handle resolves to the current captured occurrence, token, citation
   and exact bytes; it never carries inline model bytes.
+- Native model-response recognition precedes NFC and rendering. It records an
+  unambiguous raw-byte occurrence from the current request scope; formatting and
+  escaped Markdown cannot create one. Ordinary prose normalizes only after those
+  exact spans have become canonical segments. Field roles and lineage remain
+  shared with admission, coverage, repair and stored validation.
 - Opaque copied file bytes are not rendered or Unicode-normalized; their immutable blob contract
   remains byte-exact.
 
@@ -88,6 +93,9 @@ Renderers own:
   Editable-view comparison uses the current canonical segment projection and compares exact
   source bytes; formatting or a matching substring cannot create a new binding. A changed exact
   segment requires the existing acknowledgement/provenance path or an exact-copy diagnostic.
+- This editable-view boundary is distinct from current native model-response
+  recognition. A user edit, matching displayed value or request log cannot create
+  a new exact binding merely by borrowing model-request eligibility.
 - Ordinary segments are NFC-normalized prose; explicit passive and exact segments are inert
   inline code. Adjacent display spans may share a fence while their canonical identities remain
   separate. Code samples render as deterministic fenced blocks in reference context and are

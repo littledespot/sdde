@@ -4,6 +4,14 @@ const std = @import("std");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const retry = @import("workflow_retry.zig");
+pub const CanonicalText = @import("typed_text.zig").CanonicalText;
+pub const FieldSelection = union(enum) {
+    replacement: json.FieldOptions,
+    /// A native decoder selects a smaller declared wire type than the CAS
+    /// replacement. Its owner supplies that same codec-derived field contract.
+    selected: []const @import("model_text_field.zig").Binding,
+};
+pub const PacketOptions = struct { fields: FieldSelection };
 
 /// Selected native target retained until its owning validator observes the merge.
 pub fn Pending(comptime Target: type) type {
@@ -29,6 +37,16 @@ pub const Merge = struct {
     changed: bool,
     origin: ?Origin,
     retry: ?retry.Permit = null,
+
+    /// The canonical merge owns the change fact; adapters must not infer it from
+    /// revisions, raw JSON, repair origins, or a semantic verdict.
+    pub fn transition(self: Merge, validation: retry.ValidationMode) error{InvalidAtomicRepair}!retry.Transition {
+        return .{ .merged = .{ .permit = self.retry orelse return error.InvalidAtomicRepair, .revision_after = self.revision_after, .changed = self.changed, .validation = validation } };
+    }
+
+    pub fn validatedTransition(self: Merge, result: retry.Validation) error{InvalidAtomicRepair}!retry.Transition {
+        return .{ .merged_validated = .{ .permit = self.retry orelse return error.InvalidAtomicRepair, .revision_after = self.revision_after, .changed = self.changed, .result = result } };
+    }
 
     pub fn copy(self: Merge, a: std.mem.Allocator) strict.Error!Merge {
         const bytes = try std.json.Stringify.valueAlloc(a, self, .{});
@@ -61,7 +79,7 @@ pub fn snapshot(comptime T: type, a: std.mem.Allocator, value: T) std.mem.Alloca
 
 pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Dependencies: type, comptime Rule: type) type {
     return struct {
-        pub const Error = packets.Error || strict.Error || error{InvalidAtomicRepair};
+        pub const Error = packets.Error || strict.Error || @import("naming_policy.zig").Error || error{InvalidAtomicRepair};
         pub const Authorization = struct {
             id: identity.RepairAuthorizationId,
             owner: identity.ImmutableUnitOwnerId,
@@ -100,7 +118,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             if (!try eql(Dependencies, a, authorization.dependencies, current)) return error.InvalidAtomicRepair;
         }
 
-        pub fn packet(a: std.mem.Allocator, authorization: Authorization, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin) Error!*packets.Packet {
+        pub fn packet(a: std.mem.Allocator, authorization: Authorization, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin, options: PacketOptions) Error!*packets.Packet {
             if (!identity.unitOwnerEql(authorization.owner, base.unit())) return error.InvalidAtomicRepair;
             var arena: std.heap.ArenaAllocator = .init(a);
             defer arena.deinit();
@@ -108,20 +126,38 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             const limits: strict.Limits = .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth };
             const input = try strict.decode(std.json.Value, scratch, base.body(), limits);
             if (authorization.operation == .delete) return error.InvalidAtomicRepair;
-            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
-            var repair = try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
+            const selected = if (authorization.operation == .replace) std.meta.activeTag(authorization.operation.replace) else authorization.operation.insert;
+            const bindings = switch (options.fields) {
+                .replacement => |fields| json.selectedFieldBindings(Replacement, scratch, selected, fields) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair,
+                .selected => |bindings| bindings,
+            };
+            if (!@import("model_text_field.zig").valid(bindings)) return error.InvalidAtomicRepair;
+            const target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target;
+            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
+            var repair = try strict.decode(std.json.Value, scratch, try json.encodeEvidence(@TypeOf(facts), scratch, facts), limits);
             // Only optional presentation fields are omitted. Evidence, old values
             // and the native authorization retain their complete contracts.
             packets.omitAbsent(repair.object.getPtr("target").?);
             packets.omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
-                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
+                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelectedEvidence(Replacement, scratch, authorization.operation.replace), limits);
                 try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
-            const result = try packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
+            const raw = try packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
+            defer packets.release(raw);
+            const classified = if (base.advisoryAssessment()) |assessment| try packets.withAdvisoryAssessment(a, raw, assessment) else try packets.retain(raw);
+            defer packets.release(classified);
+            const native = if (base.exactScope()) |scope| try packets.withExactScope(a, classified, scope) else try packets.retain(classified);
+            defer packets.release(native);
+            const result = try packets.withOriginalSourceTexts(a, native, base.originalSources());
             defer packets.release(result);
-            return packets.withRestrictions(a, result, base.excludedVariants(), base.integerChoices());
+            const restricted = try packets.withRestrictions(a, result, base.excludedVariants(), base.integerChoices());
+            defer packets.release(restricted);
+            const selected_fields = try packets.withFieldPolicies(a, restricted, bindings);
+            defer packets.release(selected_fields);
+            const omissions = try @import("model_field_presentation.zig").prefixed(scratch, base.presentationOmissions(), &.{.{ .property = "input" }});
+            return packets.withPresentationOmissions(a, selected_fields, omissions);
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -147,9 +183,9 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
         pub fn equal(a: std.mem.Allocator, left: Replacement, right: Replacement) std.mem.Allocator.Error!bool {
             return eql(Replacement, a, left, right);
         }
-        fn changed(a: std.mem.Allocator, authorization: Authorization, replacement: ?Replacement) Error!bool {
+        fn changed(a: std.mem.Allocator, canonical: CanonicalText, authorization: Authorization, replacement: ?Replacement) Error!bool {
             return switch (authorization.operation) {
-                .replace => |expected| !try equal(a, expected, replacement orelse return error.InvalidAtomicRepair),
+                .replace => |expected| !try progressEqual(Replacement, a, canonical, expected, replacement orelse return error.InvalidAtomicRepair),
                 .insert, .delete => true,
             };
         }
@@ -170,7 +206,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
 
         /// Validate the exact authorized old value before the domain applies the
         /// replacement. Semantic acceptance still requires the original validators.
-        pub fn checkMerge(a: std.mem.Allocator, owner: identity.ImmutableUnitOwnerId, revision: u64, current: ?Replacement, dependencies: Dependencies, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!Merge {
+        pub fn checkMerge(a: std.mem.Allocator, canonical: CanonicalText, owner: identity.ImmutableUnitOwnerId, revision: u64, current: ?Replacement, dependencies: Dependencies, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!Merge {
             try checkDependencies(a, authorization, dependencies);
             if (!identity.unitOwnerEql(owner, authorization.owner) or revision != authorization.revision) return error.InvalidAtomicRepair;
             switch (authorization.operation) {
@@ -191,10 +227,70 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
                 },
                 .revision_before = revision,
                 .revision_after = std.math.add(u64, revision, 1) catch return error.InvalidAtomicRepair,
-                .changed = try changed(a, authorization, replacement),
+                .changed = try changed(a, canonical, authorization, replacement),
                 .origin = origin,
                 .retry = authorization.retry,
             }).copy(a);
         }
+    };
+}
+
+/// Progress compares the representation used by text admission. CAS and all
+/// dependency checks above retain exact native equality. Only declared text
+/// fields are normalized; ordinary strings and native insertion IDs stay exact.
+pub fn progressEqual(comptime T: type, a: std.mem.Allocator, context: CanonicalText, left: T, right: T) (@import("naming_policy.zig").Error || std.mem.Allocator.Error)!bool {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const l = try canonicalValue(T, scratch, context, left);
+    const r = try canonicalValue(T, scratch, context, right);
+    return std.mem.eql(u8, try std.json.Stringify.valueAlloc(scratch, l, .{}), try std.json.Stringify.valueAlloc(scratch, r, .{}));
+}
+
+fn canonicalValue(comptime T: type, a: std.mem.Allocator, context: CanonicalText, value: T) @import("naming_policy.zig").Error!T {
+    return switch (@typeInfo(T)) {
+        .@"struct" => |info| result: {
+            var result = value;
+            if (comptime @hasDecl(T, "model_prose")) {
+                inline for (std.meta.fields(@TypeOf(T.model_prose))) |prose| comptime {
+                    if (!@hasField(T, prose.name) or @TypeOf(@field(T.model_prose, prose.name)) != @import("text_field_policy.zig").Field) @compileError("Native prose metadata must name an existing field and closed field policy");
+                };
+            }
+            inline for (info.fields) |field| if (!field.is_comptime) {
+                if (comptime @hasDecl(T, "model_text") and std.mem.eql(u8, T.model_text, field.name)) {
+                    const Node = @typeInfo(field.type).pointer.child;
+                    @field(result, field.name) = try @import("typed_text.zig").canonicalNodes(Node, a, context, @field(value, field.name));
+                } else if (comptime @hasDecl(T, "model_prose") and @hasField(@TypeOf(T.model_prose), field.name)) {
+                    @field(result, field.name) = try canonicalProse(field.type, a, context, @field(value, field.name));
+                } else @field(result, field.name) = try canonicalValue(field.type, a, context, @field(value, field.name));
+            };
+            break :result result;
+        },
+        .@"union" => switch (value) {
+            inline else => |payload, tag| @unionInit(T, @tagName(tag), try canonicalValue(@TypeOf(payload), a, context, payload)),
+        },
+        .optional => |info| if (value) |present| try canonicalValue(info.child, a, context, present) else null,
+        .pointer => |info| if (info.size == .slice and info.child != u8) result: {
+            const result = try a.alloc(info.child, value.len);
+            for (value, result) |entry, *destination| destination.* = try canonicalValue(info.child, a, context, entry);
+            break :result result;
+        } else value,
+        .array => |info| result: {
+            var result = value;
+            for (value, &result) |entry, *destination| destination.* = try canonicalValue(info.child, a, context, entry);
+            break :result result;
+        },
+        else => value,
+    };
+}
+
+fn canonicalProse(comptime T: type, a: std.mem.Allocator, context: CanonicalText, value: T) @import("naming_policy.zig").Error!T {
+    return switch (@typeInfo(T)) {
+        .optional => |info| if (value) |present| try canonicalProse(info.child, a, context, present) else null,
+        .pointer => |info| if (info.size == .slice and info.child == u8)
+            try @import("model_text_wire.zig").normalizeProse(a, value, context.original_sources, context.normalizer)
+        else
+            @compileError("Native raw prose metadata requires a byte slice"),
+        else => @compileError("Native raw prose metadata requires a byte slice or optional byte slice"),
     };
 }

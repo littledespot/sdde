@@ -6,6 +6,162 @@ const compilation = @import("domain/workflow_compilation.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const Fixture = @import("provider_authorization_test_fixture.zig").Fixture;
 
+test "current exact-capable fields require an explicit native scope even with no occurrences" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try compiler.compiler().compile(fixture.schema_arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"value\"],\"additionalProperties\":false}");
+    const resource: compilation.CompiledResource = .{ .id = .{ .bytes = "value-result" }, .content = .{ .result_schema = compiled } };
+    var selected = try source(&fixture, &resource);
+    selected.field_policies = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    const content: []const provider.ModelVisibleContent = &.{.{ .user = "Describe the assigned value." }};
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, preparation.build(std.testing.allocator, selected, content));
+    selected.exact_scope = .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
+    var owned = try preparation.build(std.testing.allocator, selected, content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected, owned.request);
+    try std.testing.expectEqual(@as(usize, 0), owned.request.exact_scope.?.occurrences.len);
+    var missing = owned.request.*;
+    missing.exact_scope = null;
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, missing.validate());
+    const Description = @import("domain/model_request_description.zig").Description;
+    var described = Description.from(owned.request, &fixture.provider_binding, .inference);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    _ = try Description.decode(a, try std.json.Stringify.valueAlloc(a, described, .{}));
+    described.exact_scope = null;
+    try std.testing.expectError(error.InvalidJsonDocument, Description.decode(a, try std.json.Stringify.valueAlloc(a, described, .{})));
+    selected.exact_scope = null;
+    selected.field_policies = &.{};
+    selected.prose_fields = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, preparation.build(std.testing.allocator, selected, content));
+    selected.prose_fields = &.{};
+    for ([_]@import("domain/text_field_policy.zig").Field{ .spec_goal, .extraction_business, .reconciliation_business }) |field| {
+        selected.exact_scope = null;
+        selected.field_policies = &.{ .{ .field = field, .path = &.{.{ .property = "value" }} }, .{ .field = .ac_then, .path = &.{.{ .property = "absent" }} } };
+        var prohibited = try preparation.build(std.testing.allocator, selected, content);
+        defer prohibited.deinit();
+        try std.testing.expect(prohibited.request.exact_scope == null);
+    }
+}
+
+test "native raw prose selectors are deep owned schema bound and absent from provider content" {
+    const wire = @import("domain/model_text_wire.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try compiler.compiler().compile(fixture.schema_arena.allocator(), "{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"question\"],\"additionalProperties\":false}");
+    const resource: compilation.CompiledResource = .{ .id = .{ .bytes = "question-result" }, .content = .{ .result_schema = compiled } };
+    var selected_source = try source(&fixture, &resource);
+    var name = "question".*;
+    var path = [_]@import("domain/model_result_schema.zig").ChoiceStep{.{ .property = &name }};
+    var fields = [_]wire.ProseField{.{ .field = .clarification_question, .path = &path }};
+    selected_source.prose_fields = &fields;
+    const content = [_]provider.ModelVisibleContent{.{ .user = "Ask the unresolved question." }};
+    var owned = try preparation.build(std.testing.allocator, selected_source, &content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected_source, owned.request);
+    try std.testing.expect(owned.request.prose_fields.ptr != fields[0..].ptr);
+    try std.testing.expect(owned.request.prose_fields[0].path.ptr != path[0..].ptr);
+    try std.testing.expect(owned.request.prose_fields[0].path[0].property.ptr != name[0..].ptr);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    name[0] = 'X';
+    try std.testing.expectEqualStrings("question", owned.request.prose_fields[0].path[0].property);
+    try std.testing.expectError(error.InvalidModelRequestSource, preparation.validateRequest(selected_source, owned.request));
+    name[0] = 'q';
+    fields[0].field = .spec_goal;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected_source, owned.request));
+    fields[0].field = .clarification_question;
+    const described = @import("domain/model_request_description.zig").Description.from(owned.request, &fixture.provider_binding, .inference);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const encoded = try std.json.Stringify.valueAlloc(a, described, .{});
+    const restored = try @import("domain/model_request_description.zig").Description.decode(a, encoded);
+    try std.testing.expectEqualDeep(owned.request.prose_fields, restored.prose_fields);
+    const malformed = try std.mem.replaceOwned(u8, a, encoded, "clarification_question", "unknown_prose_policy");
+    try std.testing.expectError(error.InvalidJsonDocument, @import("domain/model_request_description.zig").Description.decode(a, malformed));
+    path[0] = .items;
+    try std.testing.expectError(error.InvalidModelRequestSource, preparation.build(std.testing.allocator, selected_source, &content));
+}
+
+test "native packet prose selectors survive clones and release all failed allocations" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, prosePacketAllocation, .{});
+}
+
+fn prosePacketAllocation(a: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const wire = @import("domain/model_text_wire.zig");
+    const packet = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(packet);
+    var name = "question".*;
+    const fields = [_]wire.ProseField{.{ .field = .clarification_question, .path = &.{.{ .property = &name }} }};
+    const declared = try packets.withProseFields(a, packet, &fields);
+    defer packets.release(declared);
+    const witnessed = try packets.withOriginalSourceTexts(a, declared, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Original question." }});
+    defer packets.release(witnessed);
+    const policies = [_]@import("domain/model_text_field.zig").Binding{.{ .field = .clarification_question, .path = &.{.{ .property = &name }} }};
+    const bound = try packets.withFieldPolicies(a, witnessed, &policies);
+    defer packets.release(bound);
+    var catalogue = "catalogue".*;
+    const omissions = [_]@import("domain/model_field_presentation.zig").Omission{.{ .requires = .exact_copy, .path = &.{ .{ .property = &catalogue }, .{ .index = 2 } } }};
+    const presented = try packets.withPresentationOmissions(a, bound, &omissions);
+    defer packets.release(presented);
+    const cloned = try packets.withRestrictions(a, presented, &.{}, &.{});
+    defer packets.release(cloned);
+    name[0] = 'X';
+    catalogue[0] = 'X';
+    try std.testing.expectEqualStrings("question", cloned.proseFields()[0].path[0].property);
+    try std.testing.expectEqualStrings("question", cloned.fieldPolicies()[0].path[0].property);
+    try std.testing.expectEqualStrings("catalogue", cloned.presentationOmissions()[0].path[0].property);
+    try std.testing.expectEqual(@as(u32, 2), cloned.presentationOmissions()[0].path[1].index);
+    try std.testing.expectEqual(@import("domain/text_field_policy.zig").Insertion.exact_copy, cloned.presentationOmissions()[0].requires);
+    try std.testing.expect(cloned.fieldPolicies().ptr != bound.fieldPolicies().ptr);
+    try std.testing.expect(cloned.fieldPolicies()[0].path.ptr != bound.fieldPolicies()[0].path.ptr);
+    try std.testing.expect(cloned.fieldPolicies()[0].path[0].property.ptr != bound.fieldPolicies()[0].path[0].property.ptr);
+    try std.testing.expect(cloned.presentationOmissions().ptr != presented.presentationOmissions().ptr);
+    try std.testing.expect(cloned.presentationOmissions()[0].path.ptr != presented.presentationOmissions()[0].path.ptr);
+    try std.testing.expect(cloned.presentationOmissions()[0].path[0].property.ptr != presented.presentationOmissions()[0].path[0].property.ptr);
+    try std.testing.expectEqualStrings("Original question.", cloned.originalSources()[0].bytes);
+    try std.testing.expectEqualStrings(packet.body(), cloned.body());
+    try std.testing.expectEqual(@as(usize, 0), packet.proseFields().len);
+    try std.testing.expectEqual(@as(usize, 0), packet.fieldPolicies().len);
+    try std.testing.expectEqual(@as(usize, 0), packet.presentationOmissions().len);
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withProseFields(a, packet, &.{ .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }, .{ .field = .spec_goal, .path = &.{.{ .property = "question" }} } }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withFieldPolicies(a, packet, &.{ .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }, .{ .field = .spec_goal, .path = &.{.{ .property = "question" }} } }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withPresentationOmissions(a, packet, &.{ .{ .requires = .exact_copy, .path = &.{.{ .property = "catalogue" }} }, .{ .requires = .passive, .path = &.{.{ .property = "catalogue" }} } }));
+}
+
+test "native original-source witness is owned bound and absent from provider content" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const resource = resultResource(&fixture);
+    var selected = try source(&fixture, &resource);
+    var bytes = "Original {\"kind\":\"exact_copy\"} source".*;
+    var sources = [_]@import("domain/model_text_wire.zig").SourceText{.{ .source_id = .{ .ordinal = 1 }, .bytes = &bytes }};
+    selected.original_sources = &sources;
+    const content = [_]provider.ModelVisibleContent{.{ .user = "One assigned business value." }};
+    var owned = try (build.Action{}).execute(std.testing.allocator, selected, &content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected, owned.request);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    try std.testing.expect(owned.request.original_sources.ptr != sources[0..].ptr);
+    try std.testing.expect(owned.request.original_sources[0].bytes.ptr != bytes[0..].ptr);
+    const original = owned.request.original_sources[0].bytes;
+    bytes[0] = 'X';
+    try std.testing.expectEqual(@as(u8, 'O'), original[0]);
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    sources[0].bytes = original;
+    sources[0].source_id.ordinal = 2;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    sources[0].source_id.ordinal = 0;
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, (build.Action{}).execute(std.testing.allocator, selected, &content));
+}
+
 test "request construction is deterministic minimal and preserves immutable authorities" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -348,5 +504,96 @@ test "request mode cannot override catalogue JSON selection" {
         try std.testing.expect(fixture.request.matchesBinding(fixture.provider_binding));
         fixture.request.response_guidance_mode = if (json) .prompt_only else .native_schema;
         try std.testing.expect(!fixture.request.matchesBinding(fixture.provider_binding));
+    }
+}
+
+test "native exact occurrence scope is deep owned and bound across request descriptions" {
+    const exact = @import("domain/model_exact_values.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const resource = resultResource(&fixture);
+    var selected = try source(&fixture, &resource);
+    var bytes = "ACTIVE".*;
+    var occurrences = [_]@import("domain/exact_value_recognition.zig").Occurrence{.{ .claim_id = .{ .ordinal = 7 }, .bytes = &bytes }};
+    selected.exact_scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &occurrences };
+    const content = [_]provider.ModelVisibleContent{.{ .user = "Describe the assigned behavior." }};
+    var owned = try preparation.build(std.testing.allocator, selected, &content);
+    defer owned.deinit();
+    const scope = owned.request.exact_scope.?;
+    try std.testing.expect(exact.same(selected.exact_scope, scope));
+    try std.testing.expect(scope.occurrences.ptr != occurrences[0..].ptr);
+    try std.testing.expect(scope.occurrences[0].bytes.ptr != bytes[0..].ptr);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    var bound_id = owned.request.model_request_id.*;
+    bound_id.immutable_unit_owner_id = .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "native-unit" } } };
+    var bound_request = owned.request.*;
+    bound_request.model_request_id = &bound_id;
+    try bound_request.validate();
+    bound_id.immutable_unit_owner_id.reference_global.reference_state_id.bytes = "FOREIGN";
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, bound_request.validate());
+    bytes[0] = 'X';
+    try std.testing.expectEqualStrings("ACTIVE", scope.occurrences[0].bytes);
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    bytes[0] = 'A';
+    occurrences[0].claim_id.ordinal = 8;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    occurrences[0].claim_id.ordinal = 7;
+    selected.exact_scope.?.reference_state.bytes = "REF-2";
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    selected.exact_scope = scope;
+    try preparation.validateRequest(selected, owned.request);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const description = @import("domain/model_request_description.zig").Description;
+    const encoded = try std.json.Stringify.valueAlloc(a, description.from(owned.request, &fixture.provider_binding, .inference), .{});
+    const restored = try description.decode(a, encoded);
+    try std.testing.expect(exact.same(scope, restored.exact_scope));
+    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v6", "model-request-debug/v5");
+    try std.testing.expectError(error.InvalidJsonDocument, description.decode(a, old));
+}
+
+test "native exact packet scope narrows without widening and cleans every failed allocation" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, exactPacketAllocation, .{});
+}
+
+fn exactPacketAllocation(a: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const exact = @import("domain/model_exact_values.zig");
+    const base = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const scope: exact.Scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }, .{ .claim_id = .{ .ordinal = 9 }, .bytes = "READY" } } };
+    const scoped = try packets.withExactScope(a, base, scope);
+    defer packets.release(scoped);
+    const narrow = try packets.withExactScope(a, scoped, .{ .reference_state = scope.reference_state, .occurrences = scope.occurrences[1..] });
+    defer packets.release(narrow);
+    const clone = try packets.withBody(a, narrow, "{\"input\":\"projected\"}");
+    defer packets.release(clone);
+    try std.testing.expect(base.exactScope() == null);
+    try std.testing.expect(exact.same(narrow.exactScope(), clone.exactScope()));
+    try std.testing.expect(clone.exactScope().?.occurrences.ptr != narrow.exactScope().?.occurrences.ptr);
+    try std.testing.expectEqualStrings("{\"input\":\"projected\"}", clone.body());
+    try std.testing.expectEqualStrings("{\"input\":\"original\"}", base.body());
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, clone, scope));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, scoped, .{ .reference_state = .{ .bytes = "REF-2" }, .occurrences = scope.occurrences }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, scoped, .{ .reference_state = scope.reference_state, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "CHANGED" }} }));
+}
+
+test "native exact packet scopes must match reference-backed owner snapshots" {
+    const packets = @import("domain/model_input_packet.zig");
+    const ids = @import("domain/model_request_identity.zig");
+    const scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{} };
+    for ([_]ids.ImmutableUnitOwnerId{
+        .{ .reference_chunk = .{ .reference_state_id = scope.reference_state, .chunk_id = .{ .bytes = "chunk-1" } } },
+        .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "unit" } } },
+        .{ .specification_unit = .{ .reference_state_id = scope.reference_state, .feature_id = .{ .bytes = "feature" }, .unit_slot_id = .{ .bytes = "unit" } } },
+        .{ .semantic_review = .{ .parent_unit_owner_id = .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "unit" } } }, .review_slot_id = .{ .bytes = "review" } } },
+    }) |owner| {
+        const base = try packets.create(std.testing.allocator, "{}", owner, if (owner == .semantic_review) .{ .semantic_review = .{ .bytes = "review" } } else .initial_generation, null);
+        defer packets.release(base);
+        const bound = try packets.withExactScope(std.testing.allocator, base, scope);
+        defer packets.release(bound);
+        try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(std.testing.allocator, base, .{ .reference_state = .{ .bytes = "FOREIGN" }, .occurrences = &.{} }));
     }
 }

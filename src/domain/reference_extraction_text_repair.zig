@@ -42,6 +42,7 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
 }
 
 pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection) Error!Authorization {
+    if (rejection.issue.isComposition()) return error.InvalidAtomicRepair;
     const parsed = facts.candidate;
     if (parsed.revision != rejection.revision or !facts.text.inputs.corpus.state_id.eql(rejection.scope.state_id) or
         !std.meta.eql(rejection.dependencies, try shared.snapshot(Facts, a, facts))) return error.InvalidAtomicRepair;
@@ -67,19 +68,28 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = authorization.target.scope };
     const base = try @import("reference_model_input.zig").extractionPacket(a, facts.text.inputs, registry, candidates, scope);
     defer packets.release(base);
+    const entry = try entryAt(facts.candidate, authorization.target);
+    const field: e.text.field_policy.Field = switch (authorization.target.field) {
+        .reason => .extraction_reason,
+        .claim => |index| switch (entry.outcome.claims[index].content) {
+            inline else => |_, tag| e.text.field_policy.referenceField(.extraction, @tagName(tag)),
+        },
+    };
+    const options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .inherited = field, .reference_phase = .extraction } } };
     return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
         .business => "business_text_replacement",
         .reference => "reference_text_replacement",
-    } }, e.textOrigin(try entryAt(facts.candidate, authorization.target), authorization.target.field));
+    } }, e.textOrigin(entry, authorization.target.field), options);
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);
 }
-pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!e.Parsed {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!e.Parsed {
+    if (!canonical.matchesInputs(facts.text.inputs)) return error.InvalidAtomicRepair;
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const target = authorization.target;
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = target.scope };
-    const merged = try atomic.checkMerge(a, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
     const entries = try a.dupe(e.ParsedResult, facts.candidate.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(target.scope)) {
         switch (target.field) {

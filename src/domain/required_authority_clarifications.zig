@@ -3,7 +3,9 @@ const std = @import("std");
 const a = @import("required_authority.zig");
 const c = @import("clarification_inputs.zig");
 const refresh = @import("clarification_refresh.zig");
-pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
+pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
+    if (!std.mem.eql(u8, source_inputs.corpus.feature_id.bytes, inputs.feature.bytes)) return error.InvalidRequiredAuthority;
+    if (inputs.references) |references| if (!source_inputs.corpus.state_id.eql(references.items.state_id)) return error.InvalidRequiredAuthority;
     if (try a.validate(allocator, inputs, observations, result)) return error.InvalidRequiredAuthority;
     for (result.entries) |entry| if (entry.candidate_defect != null) return error.InvalidRequiredAuthority;
     var needs: std.ArrayList(refresh.Need) = .empty;
@@ -12,7 +14,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
             .clarification_required => |value| value,
             .upstream_rework_required => |value| .{ .owner = value.owner, .reason = value.reason },
             .administrative_block => return error.InvalidRequiredAuthority,
-            .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
+            .assessment_complete, .assessment_incomplete, .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
         };
         const registered = a.policy(entry.requirement) orelse return error.InvalidRequiredAuthority;
         if (registered.owner != gap.owner or entry.input_authorities.len == 0) return error.InvalidRequiredAuthority;
@@ -28,6 +30,9 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
         defer citations.deinit(allocator);
         for (inputs.evidence) |evidence| {
             if (!std.meta.eql(evidence.requirement, entry.requirement) or evidence.finding == .supported) continue;
+            // Advice cannot supply the question for an independently detected
+            // authority gap. Its narrative retains no clarification authority.
+            if (evidence.resolution == .assessment) continue;
             if (evidence.review) |review| {
                 if (!c.validText(review.detail, c.max_text_bytes)) return error.InvalidRequiredAuthority;
                 if (review.principle_registry == null) {
@@ -57,7 +62,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
         };
         // A descriptor can phrase a mechanically missing decision, but cannot
         // manufacture a question for an unresolved semantic assessment.
-        if (questions.items.len == 0 and inputs.projection != .principle_assessment) switch (gap.reason) {
+        if (questions.items.len == 0) switch (gap.reason) {
             .missing, .stale => {},
             else => return error.InvalidRequiredAuthority,
         };
@@ -72,7 +77,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
         });
     }
     if (needs.items.len == 0) return error.InvalidRequiredAuthority;
-    return .{ .feature = inputs.feature, .entries = try needs.toOwnedSlice(allocator) };
+    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = try needs.toOwnedSlice(allocator) };
 }
 pub fn subjectFor(allocator: std.mem.Allocator, id: a.Id) a.Error!c.Subject {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;

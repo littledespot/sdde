@@ -14,7 +14,25 @@ pub const AssignmentContextId = struct {
     }
 };
 pub const AssignmentContext = struct { id: AssignmentContextId, body: []const u8 };
+/// Bound by the native post-generation assessment owner after projection validation.
+pub const AdvisoryAssessment = struct {
+    feature: @import("feature_identity.zig").FeatureId,
+    reference_state: @import("reference_identity.zig").StateId,
+    candidate_revision: u64,
+    projection: enum { source, principles },
+    dependencies: [32]u8,
+};
+
+pub fn sameAdvisoryAssessment(left: ?AdvisoryAssessment, right: ?AdvisoryAssessment) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return left.?.candidate_revision == right.?.candidate_revision and left.?.projection == right.?.projection and
+        std.mem.eql(u8, left.?.feature.bytes, right.?.feature.bytes) and left.?.reference_state.eql(right.?.reference_state) and
+        std.mem.eql(u8, &left.?.dependencies, &right.?.dependencies);
+}
 pub const Packet = opaque {
+    pub fn advisoryAssessment(self: *const Packet) ?AdvisoryAssessment {
+        return storage(self).advisory_assessment;
+    }
     pub fn body(self: *const Packet) []const u8 {
         return storage(self).body;
     }
@@ -39,6 +57,21 @@ pub const Packet = opaque {
     pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
         return storage(self).integer_choices;
     }
+    pub fn proseFields(self: *const Packet) []const @import("model_text_wire.zig").ProseField {
+        return storage(self).prose_fields;
+    }
+    pub fn fieldPolicies(self: *const Packet) []const @import("model_text_field.zig").Binding {
+        return storage(self).field_policies;
+    }
+    pub fn presentationOmissions(self: *const Packet) []const @import("model_field_presentation.zig").Omission {
+        return storage(self).presentation_omissions;
+    }
+    pub fn originalSources(self: *const Packet) []const @import("model_text_wire.zig").SourceText {
+        return storage(self).original_sources;
+    }
+    pub fn exactScope(self: *const Packet) ?@import("model_exact_values.zig").Scope {
+        return storage(self).exact_scope;
+    }
     pub fn assignmentContext(self: *const Packet, id: AssignmentContextId) ?[]const u8 {
         for (storage(self).assignment_contexts) |context| {
             if (std.mem.eql(u8, context.id.bytes, id.bytes)) return context.body;
@@ -58,7 +91,13 @@ const Storage = struct {
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
+    field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    presentation_omissions: []const @import("model_field_presentation.zig").Omission = &.{},
     assignment_contexts: []const AssignmentContext = &.{},
+    advisory_assessment: ?AdvisoryAssessment = null,
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
@@ -117,6 +156,35 @@ pub fn view(packet: *const Packet) *const Packet {
     return packet;
 }
 
+/// A native payload projection retains every bound request fact and repair
+/// authority. Changing visible evidence cannot reset out-of-band restrictions.
+pub fn withBody(a: std.mem.Allocator, base: *const Packet, body: []const u8) Error!*Packet {
+    return cloneWith(a, base, body, base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+}
+
+/// No model-visible field, slot, workflow parameter or request purpose can mint
+/// this classification. The registered assessment owner binds its native scope.
+pub fn withAdvisoryAssessment(a: std.mem.Allocator, base: *const Packet, assessment: AdvisoryAssessment) Error!*Packet {
+    if (assessment.candidate_revision == 0 or base.unit() != .semantic_review or
+        (base.purpose() != .semantic_review and base.purpose() != .atomic_repair)) return error.InvalidModelInputPacket;
+    const parent = base.unit().semantic_review.parent_unit_owner_id;
+    if (parent != .specification_unit or
+        !std.mem.eql(u8, parent.specification_unit.feature_id.bytes, assessment.feature.bytes) or
+        !std.mem.eql(u8, parent.specification_unit.reference_state_id.bytes, assessment.reference_state.bytes)) return error.InvalidModelInputPacket;
+    if (base.advisoryAssessment() != null and !sameAdvisoryAssessment(base.advisoryAssessment(), assessment)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    const owned = storage(result).arena.allocator();
+    storage(result).advisory_assessment = .{
+        .feature = .{ .bytes = try owned.dupe(u8, assessment.feature.bytes) },
+        .reference_state = .{ .bytes = try owned.dupe(u8, assessment.reference_state.bytes) },
+        .candidate_revision = assessment.candidate_revision,
+        .projection = assessment.projection,
+        .dependencies = assessment.dependencies,
+    };
+    return result;
+}
+
 /// Copy native availability facts across packet projections. No model bytes
 /// can create or change these restrictions.
 pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant) Error!*Packet {
@@ -139,6 +207,13 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
     const result = try createBound(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
     errdefer release(result);
     const a = storage(result).arena.allocator();
+    if (base.advisoryAssessment()) |assessment| storage(result).advisory_assessment = .{
+        .feature = .{ .bytes = try a.dupe(u8, assessment.feature.bytes) },
+        .reference_state = .{ .bytes = try a.dupe(u8, assessment.reference_state.bytes) },
+        .candidate_revision = assessment.candidate_revision,
+        .projection = assessment.projection,
+        .dependencies = assessment.dependencies,
+    };
     const copy = try a.alloc(schema.ExcludedVariant, excluded.len);
     for (excluded, copy) |entry, *destination| destination.* = .{ .kind = try a.dupe(u8, entry.kind) };
     storage(result).excluded_variants = copy;
@@ -168,7 +243,79 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
         .body = try a.dupe(u8, context.body),
     };
     storage(result).assignment_contexts = copied_contexts;
+    try copyOriginalSources(storage(result), base.originalSources());
+    if (base.exactScope()) |scope| storage(result).exact_scope = try @import("model_exact_values.zig").clone(a, scope);
+    storage(result).prose_fields = try @import("model_text_wire.zig").cloneProseFields(a, base.proseFields());
+    storage(result).field_policies = try @import("model_text_field.zig").clone(a, base.fieldPolicies());
+    storage(result).presentation_omissions = try @import("model_field_presentation.zig").clone(a, base.presentationOmissions());
     return result;
+}
+
+pub fn withPresentationOmissions(a: std.mem.Allocator, base: *const Packet, omissions: []const @import("model_field_presentation.zig").Omission) Error!*Packet {
+    const presentation = @import("model_field_presentation.zig");
+    if (!presentation.valid(omissions)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).presentation_omissions = try presentation.clone(storage(result).arena.allocator(), omissions);
+    return result;
+}
+
+/// Only native field declarations bind a semantic policy to a wire-text leaf.
+pub fn withFieldPolicies(a: std.mem.Allocator, base: *const Packet, fields: []const @import("model_text_field.zig").Binding) Error!*Packet {
+    const owner = @import("model_text_field.zig");
+    if (!owner.valid(fields)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).field_policies = try owner.clone(storage(result).arena.allocator(), fields);
+    return result;
+}
+
+/// Native response metadata does not alter model-visible input or its grammar.
+/// Owners select exact raw prose locations in their own closed result contract.
+pub fn withProseFields(a: std.mem.Allocator, base: *const Packet, fields: []const @import("model_text_wire.zig").ProseField) Error!*Packet {
+    const wire = @import("model_text_wire.zig");
+    if (!wire.validProseFields(fields)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).prose_fields = try wire.cloneProseFields(storage(result).arena.allocator(), fields);
+    return result;
+}
+
+/// Original captured corpus evidence stays native. Guidance, derived claims,
+/// candidate text and provider output cannot create the wire-literal exception.
+pub fn withOriginalSources(a: std.mem.Allocator, base: *const Packet, inputs: @import("reference_evidence.zig").Inputs) Error!*Packet {
+    if (!inputs.corpus.state_id.eql(inputs.chunks.state_id)) return error.InvalidModelInputPacket;
+    const sources = try a.alloc(@import("model_text_wire.zig").SourceText, inputs.corpus.sources.len);
+    defer a.free(sources);
+    for (inputs.corpus.sources, sources) |source, *destination| destination.* = .{ .source_id = source.id, .bytes = source.bytes };
+    return withOriginalSourceTexts(a, base, sources);
+}
+
+/// Preserve the already captured source witness across native repair packets.
+pub fn withOriginalSourceTexts(a: std.mem.Allocator, base: *const Packet, sources: []const @import("model_text_wire.zig").SourceText) Error!*Packet {
+    if (!@import("model_text_wire.zig").validSources(sources)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    try copyOriginalSources(storage(result), sources);
+    return result;
+}
+
+pub fn withExactScope(a: std.mem.Allocator, base: *const Packet, scope: @import("model_exact_values.zig").Scope) Error!*Packet {
+    const owner = @import("model_exact_values.zig");
+    if (!owner.valid(scope)) return error.InvalidModelInputPacket;
+    if (identity.referenceStateForUnit(base.unit())) |state| if (!state.eql(scope.reference_state)) return error.InvalidModelInputPacket;
+    if (base.exactScope()) |prior| if (!owner.narrows(prior, scope)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).exact_scope = try owner.clone(storage(result).arena.allocator(), scope);
+    return result;
+}
+
+fn copyOriginalSources(owner: *Storage, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
+    const a = owner.arena.allocator();
+    const copy = try a.alloc(@import("model_text_wire.zig").SourceText, sources.len);
+    for (sources, copy) |source, *destination| destination.* = .{ .source_id = source.source_id, .bytes = try a.dupe(u8, source.bytes) };
+    owner.original_sources = copy;
 }
 
 /// Native presentation facts only. The catalogue stays outside model content;
@@ -196,7 +343,7 @@ pub fn withContext(comptime T: type, allocator: std.mem.Allocator, base: *const 
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
-    const bytes = try @import("model_candidate_json.zig").encode(T, scratch, context);
+    const bytes = try @import("model_candidate_json.zig").encodeEvidence(T, scratch, context);
     var parsed = try @import("strict_json.zig").parse(scratch, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null);
     defer parsed.deinit();
     return withJsonContext(allocator, base, field, parsed.value);

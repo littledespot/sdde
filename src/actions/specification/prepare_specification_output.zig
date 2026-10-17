@@ -16,7 +16,7 @@ pub const Action = struct {
     pub fn execute(self: Action, allocator: std.mem.Allocator, feature: @import("../../domain/feature_directory.zig").Directory, paths: @import("../../domain/workflow_artifact_registry.zig").FeaturePaths, captured: c.Captures, inputs: c.Inputs, clarifications: @import("../../domain/clarification_refresh.zig").Result, views: []const @import("../../domain/clarification_views.zig").View, prior: state.Prior, value: state.State, context: @import("../../domain/specification_provenance.zig").Context, specification: []const u8, rendering_valid: bool, reference_context: []const u8) !output.Prepared {
         if (!rendering_valid or clarifications != .ready) return error.InvalidWorkflowOutput;
         try state.validate(allocator, value, feature.selector.feature_id, self.contracts);
-        const resolved = try state.checkClarifications(clarifications.ready);
+        const resolved = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
         if (value.revision != try state.nextRevision(prior) or value.clarification.state_ordinal != resolved.state_ordinal or value.clarification.revision != resolved.revision) return error.InvalidWorkflowOutput;
         if (!value.reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidWorkflowOutput;
         const document = try @import("../../domain/specification_projection.zig").project(allocator, context, value.content);

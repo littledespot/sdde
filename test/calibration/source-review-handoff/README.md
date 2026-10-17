@@ -1,5 +1,40 @@
 # Actual reviewer-to-loss handoff preparation
 
+**Current advisory cutover — 17 October 2026:** post-generation source findings
+retain their actual detail as advice and cannot produce a loss or repair request.
+Current offline preparation uses complete native assignments and writes to
+`.zig-cache/source-review-handoff/current-advisory/`. Of the 12 frozen inputs,
+three have a runnable current subject: the existing two explicit collection
+fixtures exercise advisory admission, and the direct-signal fixture retains its
+actual pre-generation comparison controls. Seven partial-only historical
+candidates are recorded as `incomplete_candidate`, and the two B3 admission
+rejections remain separate. No qualification case is counted as currently
+prepared. Six diagnostic review trials and at most two pre-generation comparison
+trials are prepared; none is dispatched or authorized by running the tests.
+The current checks retain reviewer values, validate exact receipt bindings and
+foreign/stale negatives, and reject generated loss preparation. They do not
+measure semantic discovery, repair quality, or live success.
+
+Rerun the offline checks with `zig build test-specification-generation -j1
+--summary all`. The dated plan and evidence below remain historical and are
+superseded for current dispatch/admission by this cutover.
+
+## Historical preparation
+
+**B3 current-contract refresh — 17 October 2026:** fixture candidates now pass
+through current native raw-prose admission before canonical validation. The frozen
+`dual-ready` input has two eligible occurrences with identical exact bytes, so the
+approved policy records `ambiguous_exact` before review. The frozen
+`captured-description` contains invented encoded insertion syntax and records
+`embedded_insertion_syntax` before review. Neither case prepares a review or loss
+request. Their original data, expectations and historical evidence remain
+unchanged. Current preparation accounts for all 12 inputs as 10 prepared cases
+and two explicit admission rejections: 20 review and at most 20 conditional loss
+sends, rather than the historical 24/24 plan below. The generated manifest and
+per-case native-admission records keep those denominators and reasons separate.
+This is offline preparation in progress, not a new frozen panel, semantic result
+or live-run authorization.
+
 This unexecuted plan is regenerated during FIX03 Phase 4 for current native
 preparation/admission code, schema, guidance and approved fixed temperature 0.1.
 Its selected duties use explicit focused `.finding` packets; the separate record

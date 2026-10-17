@@ -1,7 +1,7 @@
 # 17. Specify stage design
 
-Part of the [proposed design](../design.md#17-specify-stage-design). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#17-specify-stage-design), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 17.1 Inputs
 
@@ -77,6 +77,12 @@ append, activation registry, transaction directory or recovery scan precedes it.
 
 ### 17.3 LLM work
 
+The [field-composition contract](text-field-composition.md) owns the complete native
+text-field inventory, prose requirements and insertion roles. The same policy
+drives presentation, admission, repair, exact coverage and stored readback.
+Structurally invalid values stop before semantic review; legitimate exact
+insertions retain lineage. Prose presence never certifies business meaning.
+
 The LLM performs these semantic activities:
 
 1. reference claim extraction and bounded hierarchical reconciliation;
@@ -104,12 +110,13 @@ Typed content covers these concerns; each concern does not require a separate ca
 - Every initial brief/spec record has eligible effective reference claims from
   explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
-- Meaningful exact-copy and source selections remain explicit. At the coordinated
-  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) cutover, each
-  exact segment selects one eligible preserved-token claim occurrence; the
-  model does not repeat its citation or that claim in explicit support merely
-  to satisfy a join. Generation guidance embeds exact values in meaningful
-  business content; a reference alone does not describe behavior or a goal.
+- Source selections remain explicit under their own contract. Under
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
+  the model types exact values in meaningful prose and never returns `exact_copy`.
+  Native code recognizes unambiguous raw-byte occurrences within the current
+  request's eligible scope and contextual delimiters, retaining canonical handles.
+  Recognized `E` may extend unchanged selected support `S`; it neither chooses a
+  source group nor proves semantic use. A reference alone describes no behavior.
 - The engine assigns canonical IDs, validates current authority and selection
   joins, and derives effective claims and their citation union from explicit
   support plus exact segments through the shared reference owner.
@@ -117,98 +124,85 @@ Typed content covers these concerns; each concern does not require a separate ca
   reference citations.
 - Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is
   never misrepresented as deterministic proof.
-- For explicit path/filename/URI references the model selects a unit-allowlisted
-  passive ID or an admitted exact occurrence as defined by ADR 0020. Ordinary
+- For explicit path/filename/URI references the model may select a unit-allowlisted
+  passive ID. Native recognition admits exact values in prose under ADR 0020. Ordinary
   prose punctuation is not a reference.
 - A valid display reference proves neither business meaning nor source preservation.
   Existing source review must distinguish a path-valued requirement from a filename
-  substituted for the behavior described in that file; confirmed candidate loss
-  follows existing repair/failure routing, never missing-user-information routing.
-- Focused source review retains one finding for each bound requirement. The
-  task-authorized Phase 4 transport/lifecycle amendment (11 October 2026) permits
-  one acceptance-criterion record assignment to batch its three existing Given,
-  When and Then requirements. Production selects this assignment only at that
-  record's first Given requirement, with all three current native IDs present.
-  Under the task-authorized Phase 6 amendment (11 October 2026), a complete
-  unchanged source assignment may instead be re-admitted from the current
-  execution's native receipt through an explicit workflow transition. All three
-  AC members are reused together; no unassessed member is supplied. The collector
-  retains canonical order and accepts a mixture of retained and newly assessed
-  assignments only through its existing native evidence validator. Current
-  candidate authority is rebuilt for the current revision. Broad collection,
-  entity and fallback context remains part of equality; sibling changes invalidate
-  record assignments. Principle context is not narrowed and policy review reruns.
-  See [§22.4](22-repair.md#224-repair-request-and-response) for origin, lifetime and
-  conservative retention exclusions. Full coverage, authority and publication
-  checks remain mandatory.
-  The direct `finding` assignment remains a singleton for the comparison baseline,
-  other subjects and narrow finding repair; principle review remains separate.
-  The record response is a closed `findings` array whose entries contain
-  `requirement_ordinal` and `value`, the existing closed source-finding value.
-  Exactly one entry must bind to each assigned native requirement. Missing,
-  duplicate, foreign, partial or wrong-record membership rejects before any
-  member is appended; response order cannot choose canonical ledger order.
-  Each finding is independently validated with its current field purpose and
-  evidence rule before the next assignment. A whole-record pass cannot supply
-  unassessed field findings or replace acceptance/scenario collection coverage.
-  The three per-finding origins may reference the same actual accepted call;
-  batching does not create child calls or new origin authority. This amendment
-  retains requiredness, field repair permissions and failure precedence. Mechanical
-  batching does not establish semantic equivalence or justify promotion without
-  the separate Phase 11 comparison.
-  Each closed finding contains the semantic finding, explanation, required question
-  and genuinely selectable source evidence. A source `candidate_omission` also requires an
-  explicit `missing_obligation`: the omitted source requirement, preserving its
-  conditions, negation and obligation strength, separately from the defect
-  explanation. Its selected sources support that statement; native admission
-  checks the binding and shape without deciding semantic faithfulness. Other
-  findings and principle reviews do not acquire this field.
-  Independent feature fields carry only the assigned
-  field's resolved text and provenance, its purpose and complete original source
-  evidence. Their assessment covers represented behavior and its qualifying
-  conditions; it does not require repeating unrelated feature duties.
-  Record-field review selects through the canonical value lens and
-  retains that record's siblings; its task explains the selected field's purpose.
-  Sibling fields may jointly supply conditions and results. Collection review
-  checks complete source-required coverage of its assigned purpose across the
-  selected members, including obligations absent from current claim associations.
-  The shared descriptive owner presents these scopes and distinguishes original
-  source obligations from candidate assertions and derived evidence. This
-  presentation neither assigns new duties nor changes evidence eligibility.
-  Signal review presents the selected native signal and any resolved exact value.
-  Exact and passive references resolve through the canonical text projector.
-  These read-only assignments do not certify support or alter evidence eligibility.
-  Coverage assessments retain surrounding candidate context. A candidate omission
-  triggers the separate bound-preservation comparison in [§22.1](22-repair.md).
-  When a record response contains several omissions, the engine selects the
-  earliest canonical omission without retained preservation evidence, localizes
-  it through one complete comparison assignment, then selects the next. Every
-  other finding, origin and completed comparison remains unchanged; no later
-  review assignment proceeds while a current omission awaits localization.
-  Its packet presents that unchanged obligation as the single comparison target,
-  numbered source lines and assigned original-claim collections. The resolved
-  subject, diagnostic explanation, final-field purpose and producer outputs remain
-  supporting context. Upstream collections need not have final-field form or
-  describe the downstream defect. Every
-  comparison receives one evidenced `preserved`, `lost` or `uncertain` assessment;
-  native code derives attribution without allowing a new verdict or culprit choice.
-  The complete review and retained comparison must revalidate before repair or
-  publication. Valid coordinates and fluent explanations are not semantic proof.
-  For a positive finding with a fixed claim set, the engine
-  supplies that set from the current requirement rule; the response omits
-  `provenance` and is rejected if it echoes it. The engine constructs invariant
-  empty clarification-response IDs and unlocalized loss. Selectable source
-  choices remain explicit. For candidate omission, the natively derived producer determines its diagnostic
-  claims; the closed comparison response cannot select that producer or claims. The full
-  canonical review is validated before it contributes to clarification, repair
-  or publication.
+  substituted for the behavior described in that file. After generation the
+  judgment remains advice; independent native defects retain their typed routes.
+- **Post-generation assessment:**
+  [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
+  and principle review. Source review assesses one whole canonical unit or
+  complete collection per call: the brief, story, entity applicability, all
+  fields/relationship members of one record, or an independently assigned
+  collection/reference subject. Principle review assesses the complete generated
+  requirement set together, carrying the selected principle corpus once. Native
+  ownership defines each complete member set; a model cannot choose a subset.
+  Each closed assignment response contains exactly one finding per assigned
+  requirement. Missing, duplicate, foreign or partial membership rejects before
+  any member is appended. Canonical ledger order, per-member evidence, origins,
+  current candidate revision and full assignment context remain bound. Initial
+  admission cannot fall back to a singleton response for a required batch.
+  Narrow finding correction preserves the verdict and every sibling.
+  Retention must compare the complete current assignment and dependencies;
+  reuse creates neither a new call nor semantic proof.
+  All inference, including post-generation review and correction, counts once
+  against the single 100,000-token workflow budget (ADR 0011). Global exhaustion, overshoot or unavailable
+  usage prohibits all later model calls. A global budget rejection ends the workflow
+  with `WorkflowTokenBudgetExceeded`, including during advice; it cannot publish or
+  become incomplete advice. Eligible provider stops, exhausted protocol correction
+  or genuinely missing usage may record `assessment_incomplete`, with the exact
+  unassessed member set and native stop evidence. Only a fully admitted assignment contributes
+  findings. This is no assessment success or semantic support, and it cannot fail an
+  otherwise valid workflow. Native defects, invalid trusted associations, cancellation, deadlines
+  and security/logging/operational failures retain their ordinary blocking routes.
+  Inspectable retained findings and the incomplete status are published together
+  with the same current candidate binding; stale or forged stop evidence rejects.
+- Registered source-readiness and preservation projections require native
+  pre-generation phase facts. Generation sessions cannot be treated as readiness
+  merely because no brief has been produced yet. Late required-review projection
+  attempts reject; complete generated content selects the advisory projection.
+  Generation initialization requires the canonical required-authority projection
+  set to be retired and no active native repair permit, preventing earlier
+  required review or dependent repair validation from surviving into generation.
+- Every admitted post-generation semantic finding retains its original type,
+  explanation, selected evidence, subject and origin as advice. Native
+  `assessment_complete` records complete current assessment without declaring
+  the content supported. A model's positive or negative finding cannot create,
+  discharge or repair a native defect, create a mandatory Plan obligation, or
+  manufacture a clarification. Native requiredness, provenance, exact coverage,
+  authority currentness, citation/selection validity and publication gates remain
+  independently mandatory. A genuinely unresolved required decision uses the
+  existing native clarification owner; model uncertainty alone establishes none.
+- Source findings keep their closed evidence contract, including a nonblank
+  `missing_obligation` for `candidate_omission`, distinct from its explanation.
+  Source selection and field purpose bind the observation without proving its
+  meaning. Collection review assesses complete selected-member coverage; record
+  fields may jointly express conditions and results. Original sources establish
+  obligations, while claims/groups remain derived evidence. Exact/passive
+  references resolve through the canonical projector, not from display equality.
+- Pre-generation source-readiness and optional preservation review retain their
+  existing required semantics and bound loss-comparison contract in §22.1.
+  A source repair pins its original required review purpose in the native retry
+  scope. Becoming generation-ready cannot skip that review; the matching pending
+  validation remains required even when the optional preservation scan is disabled.
+  Before authoring, a positive readiness source-purpose finding requires explicit
+  nonempty original source IDs and empty canonical claims/citations/clarification
+  selections, under the approved §12 rule. It retains model-assisted source
+  authority without creating a candidate binding or authored association.
+  Post-generation advice triggers no paid localization/comparison or automatic
+  omission repair. An upstream finding retains its producer/evidence in a typed
+  outcome or an independently justified clarification; it never restarts
+  extraction, reconciliation and generation. Independently detected native
+  generation/coverage defects retain their authorized repair or blocked outcome.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
 
-The approved [ADR 0020 authored-association amendment](../decisions/0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026)
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#authored-associations)
 couples semantic support selection with the existing authoring assignments. There
 is no independent presentation-role classifier or mandatory role-prebinding gate.
 A current complete reconciled reference state with a nonempty retained group
@@ -228,29 +222,48 @@ user gap merely by having valid IDs. Shared field purposes describe derivation
 from source-backed behavior, not a demand for prewritten titles, goals or stories.
 Do not invent an actor, benefit or entity to fill a field.
 
-Record authoring binds one complete retained group and may return multiple records
+Record authoring binds one complete retained group containing at least one
+non-token claim and may return multiple records
 or none. Responses remain content-only; every admitted record inherits that group's
 complete selection and exactly one group occurrence. The shared finite native
 iteration contract in §6 fixes the population at three narrative assignments plus
-the actual retained group count and advances once per admitted assignment, even
+the native record-authoring group count and advances once per admitted assignment, even
 for an empty record array. It grants traversal only for committed progress and
 does not enlarge retry limits. Existing aggregate required families, entity
 membership, claim mapping, exact-token coverage and semantic review still apply.
 An empty collection contributes no positive coverage.
+All-preserved-token groups have no record batch, but remain in general source
+catalogues and exact evidence. Zero authorable groups returns a typed binding
+rejection. Mixed groups retain every original member and occurrence identity.
 The model-facing `record_requirements` projects those same native assembly rules:
-AC and FR are required, with entity records also required when the accepted entity
-decision requires them. Its scope is `assembled_specification`; an individual
+AC and FR are required across the assembled non-entity record batches. Entity
+records are owned by the single feature-wide entities unit, which returns the
+applicability decision, its basis and the complete entity collection together.
+A `required` decision requires at least one entity; `not_applicable` requires an
+empty collection. Each entity record explicitly selects its own eligible source
+groups, independently of the decision basis. Native code derives its full support
+and citations through the shared source association and exact-recognition owners.
+A record batch cannot author an entity: the closed schema, native admission,
+canonical revalidation and repair boundary enforce the same ownership rule.
+The feature collection participates once in canonical IDs, coverage, review and
+stored readback; its fields and records retain their actual producing origins.
+The batch presentation's scope remains `assembled_specification`; an individual
 group may remain empty, including after earlier groups have satisfied a family.
-This presentation introduces no per-group minimum or new repair permission.
+This presentation introduces no per-group minimum or per-family cardinality cap.
 
 Initial brief/story/entity responses and clarification questions select groups;
 fixed value and record repairs do not. Protocol correction preserves the initial
 catalogue and schema. Value-only repair preserves the existing authored association,
 `S`, effective evidence bounds, siblings, revision and retry identity. Changing
 group membership requires separately authorized authored-unit rebuilding, which
-this amendment does not add. An unresolved association blocks; it cannot be
-rerouted to extraction, grouping or a removed role producer. Record insertion
-requires an explicitly bound accepted occurrence, not equal claim-list matching.
+does not exist. An unresolved association blocks; it cannot be
+rerouted to extraction, grouping or a removed role producer. A missing required
+entity may be inserted only in the feature entities unit,
+using the existing applicability basis's exact selected association; it cannot
+choose a new group or borrow a writable record batch. Contradictory entities under
+`not_applicable` are removed from that collection; they are never converted into
+another content family. Coupled entity correction preserves the fixed association,
+its native effective evidence bound, siblings and retry identity.
 Upstream changes invalidate affected groups, authored associations and dependent
 review/attribution evidence. Canonical readback recomputes projections from captured
 groups and rejects inconsistency; no parallel binding store or legacy reader applies.
@@ -265,24 +278,25 @@ source associations, never inferred from headings or claim ordinals.
 
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
-- **Consolidated generation (user-directed simplification, 25 September 2026):**
-  the shipped workflow requests brief, primary story, entity applicability and
-  records as four sequential task types through one shared
+- **Consolidated generation:** the shipped workflow requests brief, primary story, feature entities and
+  source-group records as four sequential task types through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
   repair task. Protocol correction retains that active assignment and its schema.
   The primary story has its own concise prompt and uses the canonical story purpose.
-  Generation, native unit repair and reviewed omission repair share static text
+  Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
-  value, prose expresses its meaning and exact-copy references insert eligible
-  literals. Schemas remain the sole response-shape authority. Initial and native
+  value, prose expresses its meaning and types required exact values verbatim.
+  Native recognition owns exact occurrence bookkeeping; supplied passive/source
+  references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
   repair packets include earlier drafts only for dependent units: entities receive
   the brief, records receive the brief and entity decision. Brief and story requests
   receive neither sibling draft. Dependent drafts are resolved business text and
   applicability; their canonical provenance, fragment wrappers and display-span
-  bookkeeping remain native. Record-family purposes and response alternatives use
-  the same eligibility decision, including the accepted entity applicability.
+  bookkeeping remain native. Record-family purposes and response alternatives
+  use the same native unit ownership; entity applicability and records are decided
+  together in the feature entities unit. Batch records always exclude entities.
   Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
   Authoring packets resolve offered complete group requirements beside field
@@ -294,13 +308,16 @@ For each feature-brief or specification unit, the declared model operation retur
   A preserved-token occurrence retains its cited source context, including the
   source-required use and conditions of that value. Token membership alone neither
   establishes semantic entailment nor requires an empty batch. It does not assign
-  every other duty in the source to that group. No category-based skip or context
-  prohibition is introduced; semantic support remains subject to original-source
+  every other duty in the source to that group. Under ADR 0024, only groups whose
+  complete membership is preserved tokens are omitted from record scheduling;
+  this adds no context prohibition. Semantic support remains subject to original-source
   review. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
-  Exact choices expose their eligible claim occurrence, literal and source through
-  one reference-owned projection. ADR 0020 constructs a sole eligible exact-copy
-  handle natively; multiple eligible occurrences still require selection.
+  Exact-value guidance exposes authorized literal/source context through one
+  reference-owned projection; immutable native metadata retains occurrence identity
+  and current snapshot/request eligibility. Multiple same-span eligible identities
+  are ambiguity, never a model choice or catalogue-order tie breaker. Repair and
+  correction retain their original narrower scope.
   The canonical story purpose identifies an actor or system supported by the
   source, rather than requiring an invented user persona or prewritten story.
   Functional requirements express behavior and obligation; acceptance criteria
@@ -317,15 +334,13 @@ For each feature-brief or specification unit, the declared model operation retur
   Per-field validation, atomic repair, request identities and total-token accounting
   retain their existing owners. Request grouping grants no semantic repair authority.
   Original candidate indices/origins survive canonical section-order projection;
-  reviewed omission repairs resolve canonical IDs back to those original indices.
-  Record insertion kind comes from the authorized requirement, not its request slot.
+  native repair resolves canonical IDs back to those original indices.
   A record clarification must name its closed `record_kind`; other generation
   units prohibit that field. The existing clarification builder uses that family
   as its subject, preserving identities across reruns instead of merging all record
   questions into a new generic subject. This changes no clarification admission rule.
 
-- **Draft-first sequencing (user-approved simplification, 24 September 2026):**
-  complete validated references with a nonempty selectable retained group catalogue admit
+- **Draft-first sequencing:** complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a
   model review of specification fields that do not yet exist. The existing source
   review/repair route still handles blocked references or absence of selectable
@@ -349,8 +364,9 @@ For each feature-brief or specification unit, the declared model operation retur
   specification-owned requirement ledger and perform source-preservation and
   principle assessment through the existing review owners. The shared authority
   gate remains mandatory for rendering, state construction and publication.
-  Regeneration retires the prior review projection; changed references still require
-  dependent rebuilding. Drafts confer no completion or downstream authority.
+  Explicit regeneration after actual input changes retires prior assessment
+  projections. A review finding cannot initiate upstream rebuilding. Drafts
+  confer no completion or downstream authority.
 - A current required business choice genuinely missing or ambiguous in the source
   produces an `SNN` only after shared [§12.8.1 admission](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
   Uncertain interpretation, missing extraction or an unverified conflict label does
@@ -365,13 +381,15 @@ Supported content stranded behind an incorrect disposition is candidate loss, no
 missing user knowledge. Review receives the original source and must assess that
 meaning even when current eligible signals contain only a preserved token. A
 validated conflict label alone cannot justify an `SNN`. Shared clarification
-preparation in §12.7 requires a concrete missing decision; correcting an unsafe
-upstream candidate still requires an authorized target and complete rebuilding.
+preparation in §12.7 requires a concrete missing decision. Before generation,
+correcting an unsafe upstream candidate requires an authorized target and complete
+rebuilding. Post-generation semantic findings retain advisory status under
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md).
 
 ### 17.3.1 Requirement–principle consistency review
 
-**Accepted design amendment; native implementation present, full readiness pending** under
-[ADR 0015](../decisions/0015-specification-principle-review.md).
+Governed by [ADR 0015](../decisions/0015-specification-principle-review.md) as
+amended by [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
 
 After references and applicable validated answers establish business intent, compare
 that intent with the current principle selection from
@@ -389,9 +407,7 @@ specific to their existing typed purposes; the same shared review orchestration
 and each purpose's guidance serve initial review, insertion and selected repair.
 A policy finding explains the relation between business behavior and a cited policy
 passage. A source-comparison concern alone does not establish a policy conflict,
-and a citation's existence does not prove semantic support. Historical implementation
-is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review);
-[FIX01](../../fixes/FIX01.md) tracks remaining semantic validation.
+and a citation's existence does not prove semantic support.
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,
@@ -402,10 +418,11 @@ is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citati
   Native checks establish assignment coverage, citation membership, current source,
   answer and principle bindings, and closed findings. Compatibility remains
   model-assisted; a structurally valid no-conflict result is not deterministic proof.
-- A clear business requirement conflicting with policy remains intact. Retain the
-  cited conflict and affected requirement identities as a mandatory Plan-owned
-  obligation. Do not force a user to restate known intent or create a `PNN` during
-  Specify, before Plan's predecessor and `PlanInputAuthorityState` exist.
+- A clear business requirement with a model-reported policy conflict remains
+  intact. Retain the cited finding and affected identities as advice under
+  ADR 0023. It alone creates no mandatory Plan obligation or Spec clarification.
+  Do not force a user to restate known intent or create a `PNN` during Specify,
+  before Plan's predecessor and `PlanInputAuthorityState` exist.
 - A genuine business-choice gap uses the existing `SNN` route. Changing or waiving
   project policy belongs to Plan/project approval. Neither the model nor an ordinary
   clarification answer may silently amend principles or business requirements.
@@ -413,14 +430,16 @@ is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citati
   remains prohibited until every Spec clarification is resolved under the existing
   answer/authority contract; Tasks remains prohibited while any Spec or Plan
   clarification is open.
-- Completed Spec publication requires complete assessment/evidence coverage and successful
-  resolution of its own business obligations. Outstanding policy decisions are
-  explicitly handed to Plan, never marked resolved or discarded as warnings. Plan
-  revalidates and resolves every applicable obligation before publishing its output.
+- Completed Spec publication requires current native assessment bindings and
+  all native business/authority checks. Advice may be completely assessed or
+  explicitly `assessment_incomplete` with the exact unassessed set and an
+  admissible native stop. Neither disposition certifies semantic compatibility. Plan validates current project policy and
+  its own required decisions independently; a semantic finding alone cannot
+  choose that requiredness or resolve policy.
 
-Persist the assessment's provenance, exact principle selection/revision and typed
-downstream obligations through the existing canonical evidence/context owners; render
-the cited handoff in `reference-context.md`. That view is not authority. Add no
+Persist the assessment's provenance, exact principle selection/revision and
+advisory findings through the existing canonical evidence/context owners; render
+the cited advice in `reference-context.md`. That view is not authority. Add no
 parallel summary store, copied principle registry or new fixed artifact. Fresh
 readback must recover the same associations. A principle change invalidates the
 dependent assessment; the consuming gate rebuilds it under §24.5 without rewriting
@@ -432,7 +451,7 @@ may pause before policy assessment; the incomplete view is then unassessed, neve
 policy-approved. Existing execution evidence/reporting must distinguish captured
 inputs from an executed assessment. Principles cannot repair a false negative in
 source review by becoming business authority. Assess supported intent through the
-existing policy path once its prerequisites hold; retain any cited Plan obligations.
+existing policy path once its prerequisites hold; retain its cited advice.
 
 ### 17.4 Specification clarification behavior
 
@@ -442,7 +461,8 @@ existing policy path once its prerequisites hold; retain any cited Plan obligati
 - Source review assesses meaning, not whether references already contain separate
   stories, acceptance criteria or requirement headings. Known behavior must not be
   requested again merely to fill those categories. Genuine missing actors, outcomes
-  or choices must be identified precisely; candidate omissions retain their repair path.
+  or choices must be identified precisely. Post-generation omission findings
+  remain advice; independently detected native defects retain their owning path.
 - A valid specification need is deduplicated by its engine-built subject tuple.
 - If it is new, the engine allocates the next `S01` through `S99` identity and derives
   `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path.
@@ -503,8 +523,9 @@ The engine validates:
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved specification-owned conflicts and blocking open questions;
-- complete current principle-assessment coverage and exact downstream policy-obligation
-  associations under §17.3.1; policy findings cannot erase source requirements;
+- current principle-assessment bindings under §17.3.1, either complete findings
+  or a validated incomplete-advice disposition; policy findings cannot erase
+  source requirements or create downstream mandatory obligations;
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 
@@ -517,7 +538,7 @@ After validation:
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
 3. render the mandatory `reference-context.md`, including completed requirement-to-source occurrence links;
-4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/obligations within their existing canonical owners;
+4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/advice within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;
 7. stage the complete artifact set, exact workflow-artifact registry, bootstrap-authority state, feature-request state, passive-literal registry state, specification ID ledger, acknowledgement and clarification-registry states, writable clarification forms plus preservation preconditions for retained user-closed forms, specification-provenance state, canonical reference state, and next workflow-state record as one candidate output set;
@@ -544,8 +565,8 @@ first parent and is always rendered in this form:
   superseded multiline uppercase form.
 - Exact code spans may contain label-shaped text without becoming structure.
 
-- The user-approved 2026-09-11 amendment restores the original template's `Feature
-  Specification:` title prefix and omission of inapplicable sections.
+- The H1 uses the `Feature Specification:` title prefix, and inapplicable sections are
+  omitted.
 - Mandatory parents, primary story, acceptance criteria and functional requirements remain
   present; optional empty families and an empty scope parent are omitted.
 - The shared required-authority projection requires supported acceptance criteria, functional
@@ -575,6 +596,31 @@ first parent and is always rendered in this form:
 - the sidecar exists and passes when required;
 - no behavior-changing reference conflict remains unresolved;
 - no specification clarification record remains open;
-- the current §17.3.1 assessment and complete mandatory Plan-policy handoff validate;
+- the current §17.3.1 advisory assessment, its native bindings, and required
+  principle authority validate;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.
+
+### Shared authoring and diagnosis
+
+Model-assisted review distinguishes invalid additions from missing original
+meaning using the source-only finding in §12. A mixed source gap remains visible
+alongside invalid candidate content. Under ADR 0023, post-generation judgments
+alone authorize neither clarification nor content repair. Native diagnostics bind the assessed subject,
+purpose, original evidence and permitted correction scope; models never select a
+repair producer or turn candidate assertions into source requirements.
+
+Authoring and content repair use the shared typed-text wire representation in
+§7.1. Prose does not require manual segmentation. Native recognition constructs
+eligible exact occurrences from complete values in prose; explicit composition
+retains authorized passive references. Native code converts and renders admitted
+segments without adding separators or inventing an occurrence identity.
+
+Native record assembly presents required, present and unmet structural families
+from its existing policy and admitted state, without copying previous drafts into
+the request. These facts apply to the assembled specification; an individual
+group may return an empty batch. Presence does not establish semantic coverage.
+An aggregate defect does not acquire an owner from the last dispatched group.
+Repair must retain its evidence and current authorized unit; unsupported ownership
+produces an explicit diagnostic rather than an invented association. Alternative
+authoring units are evaluated under FIX05 B5; none is adopted here.

@@ -13,6 +13,6 @@ pub const Action = struct {
     };
     pub fn execute(self: Action, a: std.mem.Allocator, prior: state.Prior, snapshot: @import("../../domain/reference_snapshot.zig").Snapshot, clarifications: @import("../../domain/clarification_refresh.zig").Result) draft.Error!draft.State {
         if (clarifications != .ready) return error.InvalidIncompleteSpecification;
-        return draft.build(a, prior, snapshot, clarifications.ready, self.contracts);
+        return draft.build(a, prior, snapshot, try clarifications.ready.validateFor(a, snapshot.inputs), self.contracts);
     }
 };

@@ -15,7 +15,7 @@ const description: debug.Description = .{
     .request_step = "prepare-sample",
     .content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = "MOCK request" } },
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
-    .schema = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+    .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
     .response_mode = .prompt_only,
     .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 123 } },
     .reasoning_effort = "low",
@@ -181,7 +181,7 @@ const config_bytes =
 const run_path = "runs/unrelated-run";
 const provider_bytes = "MOCK provider catalogue read without workflow execution";
 const case_bytes =
-    \\{"schema":"spec-e2e-case/v1","id":"MOCK-case","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","evaluation_config":"fixture/evaluation-config.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
+    \\{"schema":"spec-e2e-case/v2","id":"MOCK-case","expected_outcome":"publication","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","evaluation_config":"fixture/evaluation-config.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
 ;
 
 const Sink = struct {
@@ -301,6 +301,6 @@ test "capture rejects evidence redaction and legacy descriptions instead of reco
     try write(root.dir, run_path ++ "/evidence/generation/call-000009/request.json", body);
     const path = run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log";
     const bytes = try @import("../files.zig").read(io, a, root.dir, path);
-    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v3", "model-request-debug/v2"));
-    try std.testing.expectError(error.InvalidDebugArchive, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
+    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v6", "model-request-debug/v2"));
+    try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
 }

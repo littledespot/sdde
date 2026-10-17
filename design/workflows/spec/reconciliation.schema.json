@@ -27,26 +27,6 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            },
-            "citation_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "token_id",
-            "citation_id"
-          ],
-          "additionalProperties": false
         }
       ]
     },
@@ -376,20 +356,56 @@
       "additionalProperties": false
     },
     "business_segments": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/business_segment"
-      },
-      "minItems": 1,
-      "maxItems": 4294967295
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/business_segment"
+              },
+              "minItems": 1,
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "reference_nodes": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/reference_node"
-      },
-      "minItems": 1,
-      "maxItems": 4294967295
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/reference_node"
+              },
+              "minItems": 1,
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "business_text": {
       "type": "object",

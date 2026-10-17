@@ -110,7 +110,7 @@ pub const Merge = struct {
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
     pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const progress = try support.progress(&input.step.data);
@@ -120,7 +120,6 @@ pub const Merge = struct {
             if (current != .rejected or current.rejected.candidate == null) return error.OperationExecutionFailed;
             const state = try read(selected, &input.step.data);
             const context_value = try spec.readContext(&input.step.data);
-            const permit = state.authorization.retry orelse return error.OperationExecutionFailed;
             const history = try owned.read(&input.step.data, support.history_schema, .review_history);
             const ledger = try values.read(&input.step.data, @import("model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
@@ -132,11 +131,13 @@ pub const Merge = struct {
             var candidate = try support.publish(selected, self.allocator, owner, progress, result);
             errdefer for (candidate.delta.data_replacements) |value| if (value) |allocation| values.destroy(allocation);
             try support.attachHistory(self.allocator, input.step.data, &candidate, merged.history);
-            candidate.delta.repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = switch (result) {
-                .accepted => |value| value.candidate.revision,
-                .pending => |value| value.revision,
-                .rejected => |value| value.candidate.?.revision,
-            }, .result = repair.Contract(selected).progress(state.authorization, result) } };
+            const repaired = switch (result) {
+                .accepted => |value| value.candidate,
+                .pending => |value| value,
+                .rejected => |value| value.candidate orelse return error.OperationExecutionFailed,
+            };
+            const merge = repaired.last_repair orelse return error.OperationExecutionFailed;
+            candidate.delta.repair_transition = merge.validatedTransition(repair.Contract(selected).progress(state.authorization, result)) catch return error.OperationExecutionFailed;
             for (Action.contract.invalidates) |key| candidate.delta.data_invalidations.insert(key);
             return candidate;
         };

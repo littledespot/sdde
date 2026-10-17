@@ -24,6 +24,7 @@ pub const Descriptor = union(enum) {
     request_admission: Binding,
     request_protocol: Binding,
     request_closure: Binding,
+    advisory_request_closure: Binding,
     repair_authorize: Binding,
     repair_merge: Binding,
     repair_validate: Binding,
@@ -31,6 +32,7 @@ pub const Descriptor = union(enum) {
     authority_reconcile: Binding,
     clarification_route: Binding,
     clarification_refresh: Binding,
+    advisory_completion: Binding,
 
     pub fn binding(self: Descriptor) ?Binding {
         return switch (self) {
@@ -97,6 +99,9 @@ pub const Resolution = union(enum) {
     authority_reconciled: Subject,
     diagnostic_admitted: struct { subject: Subject, evidence: DiagnosticAdmission },
     clarification_routed: struct { subject: Subject, needs: Subject },
+    /// The application proves the sealed advisory request and native stopped
+    /// assessment before proposing this narrow retirement of optional work.
+    advice_stopped: struct { subject: Subject, request: provider.ProviderOperationId, permit: ?retry.Permit = null },
 };
 pub const Change = union(enum) {
     observe: Observation,
@@ -110,6 +115,9 @@ pub const Change = union(enum) {
         repair_blocked: BlockedRepairEvidence,
     },
     seal: Observation,
+    /// The native closure owner proves an advisory inference request failed.
+    /// Its internal routing tag does not change that retained logical fact.
+    advisory_request_failed: provider.ProviderOperationId,
     resolve: Resolution,
 };
 pub const Error = std.mem.Allocator.Error || error{ InvalidOutcomeAssociation, UnresolvedOperationOutcome };
@@ -124,6 +132,7 @@ pub fn prohibiting(outcome: workflow.OutcomeTag) bool {
 const Entry = struct {
     observation: Observation,
     irreversible: bool = false,
+    deferred_advice: bool = false,
     repair_key: ?retry.Key = null,
 };
 const Association = struct { source: Subject, target: Subject };
@@ -271,6 +280,7 @@ pub const State = struct {
     /// allocation-free commit below advances both owners together.
     pub fn prepare(self: *State, descriptor: Descriptor, outcome: workflow.OutcomeTag, changes: []const Change) Error!Prepared {
         _ = std.math.add(u64, self.revision, 1) catch return error.InvalidOutcomeAssociation;
+        if (descriptor == .advisory_request_closure and (changes.len != 1 or changes[0] != .advisory_request_failed)) return error.InvalidOutcomeAssociation;
         if (changes.len == 0) return .{ .owner = self, .revision = self.revision, .entries = self.entries, .associations = self.associations, .owns_storage = false };
         var prepared: Prepared = .{ .owner = self, .revision = self.revision, .entries = .empty, .associations = .empty, .owns_storage = true };
         errdefer prepared.deinit();
@@ -313,6 +323,7 @@ fn validSubject(subject: Subject) bool {
 fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.ArrayList(Association), descriptor: Descriptor, outcome: workflow.OutcomeTag, change: Change) Error!void {
     switch (change) {
         .observe, .seal => |observation| {
+            if (descriptor == .advisory_request_closure) return error.InvalidOutcomeAssociation;
             if (!validSubject(observation.subject)) return error.InvalidOutcomeAssociation;
             if (observation.outcome != outcome) return error.InvalidOutcomeAssociation;
             if (descriptor == .independent and observation.subject != .operation) return error.InvalidOutcomeAssociation;
@@ -321,25 +332,15 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                 if (descriptor != .repair_validate or change == .seal) return error.InvalidOutcomeAssociation;
                 const permit = switch (progress) {
                     .validated => |value| if (value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
-                    .merged_validated => |value| if (value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
-                    .authorized, .merged => return error.InvalidOutcomeAssociation,
+                    .merged_validated => |value| if (value.changed and value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
+                    .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
                 };
                 if (!associated(aliases.items, observation.subject, .{ .repair = permit.key })) return error.InvalidOutcomeAssociation;
                 break :key permit.key;
             } else null;
             if (!prohibiting(observation.outcome)) return;
             if (change == .seal) {
-                if (observation.subject != .request) return error.InvalidOutcomeAssociation;
-                var exact = false;
-                for (entries.items) |*entry| {
-                    if (!requestPrefix(entry.observation.subject, observation.subject.request)) continue;
-                    if (entry.irreversible and entry.observation.outcome != observation.outcome) return error.InvalidOutcomeAssociation;
-                    if (entry.observation.outcome != observation.outcome and entry.observation.outcome != .invalid) return error.InvalidOutcomeAssociation;
-                    entry.observation.outcome = observation.outcome;
-                    entry.irreversible = true;
-                    if (entry.observation.subject.eql(observation.subject)) exact = true;
-                }
-                if (!exact) try entries.append(a, .{ .observation = .{ .subject = observation.subject, .outcome = observation.outcome }, .irreversible = true });
+                try sealRequest(a, entries, observation, false);
                 return;
             }
             const canonical_transfer = switch (descriptor) {
@@ -362,6 +363,15 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             };
             try entries.append(a, .{ .observation = .{ .subject = observation.subject, .outcome = observation.outcome }, .irreversible = change == .seal, .repair_key = repair_key });
         },
+        .advisory_request_failed => |request| {
+            if (descriptor != .advisory_request_closure or !advisoryClosureRoute(descriptor.advisory_request_closure, outcome) or
+                request.kind != .inference or request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
+            switch (request.model_request_id.purpose) {
+                .semantic_review, .atomic_repair => {},
+                .initial_generation, .context_followup, .clarification_resolution => return error.InvalidOutcomeAssociation,
+            }
+            try sealRequest(a, entries, .{ .subject = .{ .request = request }, .outcome = .failed }, true);
+        },
         .preserve => |subject| {
             if (!validSubject(subject)) return error.InvalidOutcomeAssociation;
             if (subject == .request) {
@@ -380,7 +390,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             if (descriptor != .repair_authorize or (outcome != .ok and outcome != .more) or !validSubject(value.subject) or value.subject != .native) return error.InvalidOutcomeAssociation;
             const permit = switch (value.transition) {
                 .authorized => |authorized| authorized,
-                .merged, .validated, .merged_validated => return error.InvalidOutcomeAssociation,
+                .merged, .validated, .merged_validated, .abandoned_advice => return error.InvalidOutcomeAssociation,
             };
             const target: Subject = .{ .repair = permit.key };
             if (!associated(aliases.items, value.subject, target)) try aliases.append(a, .{ .source = value.subject, .target = target });
@@ -439,12 +449,17 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             },
         },
         .resolve => |resolution| {
+            if (resolution == .advice_stopped) {
+                try stopAdvice(entries, aliases, descriptor, outcome, resolution.advice_stopped);
+                return;
+            }
             const subject: Subject = switch (resolution) {
                 .request_admitted => |value| value,
                 .repair_resolved => |value| value.subject,
                 .authority_reconciled => |value| value,
                 .diagnostic_admitted => |value| value.subject,
                 .clarification_routed => |value| value.subject,
+                .advice_stopped => unreachable,
             };
             if (!validSubject(subject) or subject == .operation) return error.InvalidOutcomeAssociation;
             switch (resolution) {
@@ -453,8 +468,8 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                     if (descriptor != .repair_validate) return error.InvalidOutcomeAssociation;
                     const permit = switch (value.transition) {
                         .validated => |progress| if (progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
-                        .merged_validated => |progress| if (progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
-                        .authorized, .merged => return error.InvalidOutcomeAssociation,
+                        .merged_validated => |progress| if (progress.changed and progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
+                        .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
                     };
                     if (!associated(aliases.items, subject, .{ .repair = permit.key })) return error.InvalidOutcomeAssociation;
                 },
@@ -469,6 +484,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                     if (descriptor != .clarification_route or !validSubject(value.needs) or value.needs != .native or
                         value.needs.native.kind != .clarification or (outcome != .ok and outcome != .needs_user)) return error.InvalidOutcomeAssociation;
                 },
+                .advice_stopped => unreachable,
             }
             var index: usize = 0;
             while (index < entries.items.len) {
@@ -485,7 +501,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                     const key = switch (resolution.repair_resolved.transition) {
                         .validated => |value| value.permit.key,
                         .merged_validated => |value| value.permit.key,
-                        .authorized, .merged => return error.InvalidOutcomeAssociation,
+                        .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
                     };
                     if (entry.repair_key == null or !std.meta.eql(entry.repair_key.?, key)) {
                         index += 1;
@@ -510,7 +526,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                 const permit = switch (resolution.repair_resolved.transition) {
                     .validated => |value| value.permit,
                     .merged_validated => |value| value.permit,
-                    .authorized, .merged => return error.InvalidOutcomeAssociation,
+                    .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
                 };
                 const repaired: Subject = .{ .repair = permit.key };
                 var alias_index: usize = 0;
@@ -520,6 +536,71 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                 }
             }
         },
+    }
+}
+
+fn sealRequest(a: std.mem.Allocator, entries: *std.ArrayList(Entry), observation: Observation, deferred_advice: bool) Error!void {
+    if (observation.subject != .request or !validSubject(observation.subject)) return error.InvalidOutcomeAssociation;
+    var exact = false;
+    for (entries.items) |*entry| {
+        if (!requestPrefix(entry.observation.subject, observation.subject.request)) continue;
+        if (entry.irreversible and (entry.observation.outcome != observation.outcome or entry.deferred_advice != deferred_advice)) return error.InvalidOutcomeAssociation;
+        if (entry.observation.outcome != observation.outcome and entry.observation.outcome != .invalid) return error.InvalidOutcomeAssociation;
+        entry.observation.outcome = observation.outcome;
+        entry.irreversible = true;
+        entry.deferred_advice = deferred_advice;
+        if (entry.observation.subject.eql(observation.subject)) exact = true;
+    }
+    if (!exact) try entries.append(a, .{ .observation = .{ .subject = observation.subject, .outcome = observation.outcome }, .irreversible = true, .deferred_advice = deferred_advice });
+}
+
+/// Distinct native witnesses retain distinct internal branches until retirement.
+pub fn advisoryClosureRoute(binding: Binding, outcome: workflow.OutcomeTag) bool {
+    if (binding.kind != .request or binding.subject != .prepared_model_request) return false;
+    return switch (binding.evidence) {
+        .model_payload_schema_result => outcome == .more,
+        .accounted_model_attempt => outcome == .blocked,
+        else => false,
+    };
+}
+
+fn stopAdvice(entries: *std.ArrayList(Entry), aliases: *std.ArrayList(Association), descriptor: Descriptor, outcome: workflow.OutcomeTag, stopped: @FieldType(Resolution, "advice_stopped")) Error!void {
+    if (descriptor != .advisory_completion or (outcome != .ok and outcome != .more) or stopped.subject != .native or
+        stopped.subject.native.kind != .candidate or !validSubject(stopped.subject) or
+        descriptor.advisory_completion.kind != .candidate or descriptor.advisory_completion.subject != stopped.subject.native.key or
+        stopped.request.kind != .inference or stopped.request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
+    switch (stopped.request.model_request_id.purpose) {
+        .semantic_review => {},
+        .atomic_repair => if (stopped.permit == null) return error.InvalidOutcomeAssociation,
+        else => return error.InvalidOutcomeAssociation,
+    }
+    if (stopped.permit) |permit| if (!associated(aliases.items, stopped.subject, .{ .repair = permit.key })) return error.InvalidOutcomeAssociation;
+    var index: usize = 0;
+    while (index < entries.items.len) {
+        const entry = entries.items[index];
+        const own_request = requestPrefix(entry.observation.subject, stopped.request);
+        const own_candidate = entry.observation.subject == .native and entry.observation.subject.native.kind == .candidate and
+            entry.observation.subject.native.key == stopped.subject.native.key and
+            associated(aliases.items, entry.observation.subject, stopped.subject);
+        const model_failure = entry.observation.outcome == .failed or entry.observation.outcome == .invalid;
+        if (own_request and model_failure and (!entry.irreversible or entry.deferred_advice)) {
+            _ = entries.orderedRemove(index);
+            continue;
+        }
+        const matching_repair = if (entry.repair_key) |key| if (stopped.permit) |permit| std.meta.eql(key, permit.key) else false else true;
+        if (own_candidate and entry.observation.outcome == .invalid and !entry.irreversible and matching_repair) {
+            _ = entries.orderedRemove(index);
+            continue;
+        }
+        index += 1;
+    }
+    if (stopped.permit) |permit| {
+        const abandoned: Subject = .{ .repair = permit.key };
+        var alias_index: usize = 0;
+        while (alias_index < aliases.items.len) {
+            const alias = aliases.items[alias_index];
+            if (alias.source.eql(abandoned) or alias.target.eql(abandoned)) _ = aliases.orderedRemove(alias_index) else alias_index += 1;
+        }
     }
 }
 
@@ -583,6 +664,10 @@ pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKe
     if (binding.result) |result| if (!contains(produces, result) and !contains(replaces, result)) return false;
     return switch (descriptor) {
         .request_decode, .request_admission, .request_protocol, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
+        .advisory_request_closure => binding.kind == .request and binding.subject == .prepared_model_request and
+            (binding.evidence == .model_payload_schema_result or binding.evidence == .accounted_model_attempt) and
+            repair_role == .none and contains(requires, .prepared_model_request) and contains(requires, .model_request_identity_ledger) and
+            contains(requires, binding.evidence) and contains(replaces, .model_request_identity_ledger),
         .repair_authorize => (binding.kind == .candidate or binding.kind == .authority) and repair_role == .authorize,
         .repair_merge => binding.kind == .candidate and (repair_role == .merge or repair_role == .merge_validate),
         .repair_validate => binding.kind == .candidate and (repair_role == .validate or repair_role == .merge_validate),
@@ -590,6 +675,9 @@ pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKe
         .authority_reconcile => binding.kind == .authority,
         .clarification_route => binding.kind != .request,
         .clarification_refresh => binding.kind == .clarification,
+        .advisory_completion => binding.kind == .candidate and repair_role == .abandon_advice and
+            contains(requires, binding.subject) and contains(requires, .prepared_model_request) and
+            contains(requires, .model_request_identity_ledger) and contains(requires, .accounted_model_attempt),
         .independent, .observe, .preserve => true,
     };
 }
@@ -599,6 +687,187 @@ fn declared(key: pipeline.DataKey, requires: []const pipeline.DataKey, optional:
 }
 fn contains(keys: []const pipeline.DataKey, key: pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, keys, key) != null;
+}
+
+test "native advisory closure seals failed authority independently of its bounded routing tag" {
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "plan" }, .obligation_cluster_id = .{ .bytes = "subjects" } } }, .review_slot_id = .{ .bytes = "advice" } } };
+    const request = try identity.createSuccessor(identity.ledger(initial), .initial, owner, .{ .workflow_id = .{ .bytes = "flow" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "review" } }, .{ .semantic_review = .{ .bytes = "advice" } });
+    defer identity.deinitOwner(request.owner);
+    const operation: provider.ProviderOperationId = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference };
+    for ([_]struct { key: pipeline.DataKey, route: workflow.OutcomeTag }{
+        .{ .key = .model_payload_schema_result, .route = .more },
+        .{ .key = .accounted_model_attempt, .route = .blocked },
+    }) |witness| {
+        const binding: Binding = .{ .kind = .request, .subject = .prepared_model_request, .evidence = witness.key };
+        const descriptor: Descriptor = .{ .advisory_request_closure = binding };
+        const change: Change = .{ .advisory_request_failed = operation };
+        var state = State.init(std.testing.allocator);
+        defer state.deinit();
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{}));
+        var closed = try state.prepare(descriptor, witness.route, &.{change});
+        defer closed.deinit();
+        try std.testing.expect(closed.compatible(.failed));
+        try std.testing.expect(!closed.compatible(.ok));
+        try std.testing.expectEqual(.failed, closed.entries.items[0].observation.outcome);
+        try std.testing.expect(closed.entries.items[0].irreversible);
+        try std.testing.expect(closed.entries.items[0].deferred_advice);
+        try state.commit(&closed);
+        for (std.enums.values(workflow.OutcomeTag)) |other| if (other != witness.route) {
+            try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, other, &.{change}));
+        };
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_closure = binding }, witness.route, &.{change}));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .observe = .{ .subject = .{ .request = operation }, .outcome = witness.route } }}));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .seal = .{ .subject = .{ .request = operation }, .outcome = .failed } }}));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = .{ .request = operation } } }}));
+        var counting = operation;
+        counting.kind = .input_token_count;
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .advisory_request_failed = counting }}));
+    }
+}
+
+test "ordinary failed closure cannot borrow deferred advisory authority" {
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "plan" }, .obligation_cluster_id = .{ .bytes = "subjects" } } }, .review_slot_id = .{ .bytes = "advice" } } };
+    const request = try identity.createSuccessor(identity.ledger(initial), .initial, owner, .{ .workflow_id = .{ .bytes = "flow" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "review" } }, .{ .semantic_review = .{ .bytes = "advice" } });
+    defer identity.deinitOwner(request.owner);
+    const required = try identity.createSuccessor(identity.ledger(initial), .initial, .workflow_step, .{ .workflow_id = .{ .bytes = "flow" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "generation" } }, .initial_generation);
+    defer identity.deinitOwner(required.owner);
+    const operation: provider.ProviderOperationId = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference };
+    const binding: Binding = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result };
+    var state = State.init(std.testing.allocator);
+    defer state.deinit();
+    var closed = try state.prepare(.{ .request_closure = binding }, .failed, &.{.{ .seal = .{ .subject = .{ .request = operation }, .outcome = .failed } }});
+    defer closed.deinit();
+    try state.commit(&closed);
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_request_closure = binding }, .more, &.{.{ .advisory_request_failed = operation }}));
+    var required_operation = operation;
+    required_operation.model_request_id = required.model_request_id;
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_request_closure = binding }, .more, &.{.{ .advisory_request_failed = required_operation }}));
+    const review_binding: Binding = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review };
+    var stopped = try state.prepare(.{ .advisory_completion = review_binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = .{ .native = .{ .kind = .candidate, .key = .specification_support_review, .generation = 1, .occurrence = 1 } }, .request = operation } } }});
+    defer stopped.deinit();
+    try std.testing.expect(stopped.compatible(.failed));
+    try std.testing.expect(!stopped.compatible(.ok));
+    try std.testing.expectEqual(@as(usize, 1), stopped.entries.items.len);
+    try std.testing.expect(!stopped.entries.items[0].deferred_advice);
+}
+
+test "native advisory completion retires only the exact failed request prefix and review candidate" {
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const review_owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "plan-state" }, .obligation_cluster_id = .{ .bytes = "business-subjects" } } }, .review_slot_id = .{ .bytes = "current-advice" } } };
+    const request = try identity.createSuccessor(identity.ledger(initial), .initial, review_owner, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "review" } }, .{ .semantic_review = .{ .bytes = "current-advice" } });
+    defer identity.deinitOwner(request.owner);
+    const binding: Binding = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .required_authority_inputs, .result = .specification_support_review };
+    const request_binding: Binding = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result };
+    const previous: Subject = .{ .native = .{ .kind = .candidate, .key = .specification_support_review, .generation = 1, .occurrence = 1 } };
+    const current: Subject = .{ .native = .{ .kind = .candidate, .key = .specification_support_review, .generation = 2, .occurrence = 2 } };
+    const first: Subject = .{ .request = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference } };
+    const second: Subject = .{ .request = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 2 }, .kind = .inference } };
+    var state = State.init(std.testing.allocator);
+    defer state.deinit();
+    var rejected = try state.prepare(.{ .observe = request_binding }, .invalid, &.{.{ .observe = .{ .subject = first, .outcome = .invalid } }});
+    defer rejected.deinit();
+    try state.commit(&rejected);
+    var sealed = try state.prepare(.{ .advisory_request_closure = request_binding }, .more, &.{.{ .advisory_request_failed = second.request }});
+    defer sealed.deinit();
+    try state.commit(&sealed);
+    var invalid = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = previous, .outcome = .invalid } }});
+    defer invalid.deinit();
+    try state.commit(&invalid);
+    var carried = try state.prepare(.{ .preserve = binding }, .ok, &.{.{ .associate = .{ .source = previous, .target = current } }});
+    defer carried.deinit();
+    try state.commit(&carried);
+    try std.testing.expect(!state.compatible(.ok));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_admission = request_binding }, .ok, &.{.{ .resolve = .{ .request_admitted = second } }}));
+    const resolution: Change = .{ .resolve = .{ .advice_stopped = .{ .subject = current, .request = second.request } } };
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .diagnostic_admission = binding }, .ok, &.{resolution}));
+    var stopped = try state.prepare(.{ .advisory_completion = binding }, .ok, &.{resolution});
+    defer stopped.deinit();
+    try std.testing.expect(stopped.compatible(.ok));
+    try std.testing.expectEqual(@as(usize, 0), stopped.entries.items.len);
+    try state.commit(&stopped);
+    try std.testing.expect(state.compatible(.ok));
+}
+
+test "advice stop preserves cancellation required work unrelated requests and native failures" {
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const review_owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "plan-state" }, .obligation_cluster_id = .{ .bytes = "business-subjects" } } }, .review_slot_id = .{ .bytes = "current-advice" } } };
+    const request = try identity.createSuccessor(identity.ledger(initial), .initial, review_owner, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "review" } }, .{ .semantic_review = .{ .bytes = "current-advice" } });
+    defer identity.deinitOwner(request.owner);
+    const mandatory = try identity.createSuccessor(identity.ledger(initial), .initial, .workflow_step, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "required" } }, .initial_generation);
+    defer identity.deinitOwner(mandatory.owner);
+    const foreign = try identity.createSuccessor(identity.ledger(initial), .initial, review_owner, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "foreign-review" } }, .{ .semantic_review = .{ .bytes = "current-advice" } });
+    defer identity.deinitOwner(foreign.owner);
+    const binding: Binding = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .required_authority_inputs };
+    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .specification_support_review, .generation = 1, .occurrence = 1 } };
+    const operation: provider.ProviderOperationId = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 2 }, .kind = .inference };
+    for ([_]Observation{
+        .{ .subject = .{ .request = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 3 }, .kind = .inference } }, .outcome = .invalid },
+        .{ .subject = .{ .request = .{ .model_request_id = foreign.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference } }, .outcome = .failed },
+        .{ .subject = .{ .request = operation }, .outcome = .cancelled },
+        .{ .subject = .{ .request = operation }, .outcome = .needs_user },
+        .{ .subject = .{ .request = operation }, .outcome = .blocked },
+        .{ .subject = subject, .outcome = .failed },
+        .{ .subject = subject, .outcome = .cancelled },
+        .{ .subject = subject, .outcome = .needs_user },
+        .{ .subject = subject, .outcome = .blocked },
+        .{ .subject = .{ .native = .{ .kind = .candidate, .key = .identified_specification_content, .generation = 2, .occurrence = 2 } }, .outcome = .invalid },
+        .{ .subject = .{ .operation = .{ .ordinal = 1 } }, .outcome = .failed },
+    }) |obstruction| {
+        var state = State.init(std.testing.allocator);
+        defer state.deinit();
+        var observed = try state.prepare(if (obstruction.subject == .operation) .independent else .{ .observe = binding }, obstruction.outcome, &.{.{ .observe = obstruction }});
+        defer observed.deinit();
+        try state.commit(&observed);
+        if (obstruction.subject == .native and !obstruction.subject.eql(subject)) {
+            var joined = try state.prepare(.{ .preserve = binding }, .ok, &.{.{ .associate = .{ .source = obstruction.subject, .target = subject } }});
+            defer joined.deinit();
+            try state.commit(&joined);
+        }
+        var stopped = try state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = operation } } }});
+        defer stopped.deinit();
+        try std.testing.expect(!stopped.compatible(.ok));
+        try std.testing.expectEqual(@as(usize, 1), stopped.entries.items.len);
+        try std.testing.expectEqualDeep(obstruction, stopped.entries.items[0].observation);
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = .{ .model_request_id = mandatory.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference } } } }}));
+        var counting = operation;
+        counting.kind = .input_token_count;
+        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = counting } } }}));
+    }
+}
+
+test "advice stop abandons only its explicit associated repair permit" {
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const review_owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .task_cluster = .{ .plan_state_id = .{ .bytes = "plan-state" }, .obligation_cluster_id = .{ .bytes = "business-subjects" } } }, .review_slot_id = .{ .bytes = "current-advice" } } };
+    const request = try identity.createSuccessor(identity.ledger(initial), .initial, review_owner, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "review-finding-repair" } }, .{ .atomic_repair = .{ .bytes = "finding-repair" } });
+    defer identity.deinitOwner(request.owner);
+    const binding: Binding = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .required_authority_inputs };
+    const subject: Subject = .{ .native = .{ .kind = .candidate, .key = .specification_support_review, .generation = 1, .occurrence = 1 } };
+    const permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 2 };
+    const operation: provider.ProviderOperationId = .{ .model_request_id = request.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference };
+    var state = State.init(std.testing.allocator);
+    defer state.deinit();
+    var invalid = try state.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = subject, .outcome = .invalid } }});
+    defer invalid.deinit();
+    try state.commit(&invalid);
+    var authorized = try state.prepare(.{ .repair_authorize = binding }, .ok, &.{.{ .authorize = .{ .subject = subject, .transition = .{ .authorized = permit } } }});
+    defer authorized.deinit();
+    try state.commit(&authorized);
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = operation } } }}));
+    var foreign = permit;
+    foreign.key.target = @splat(8);
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = operation, .permit = foreign } } }}));
+    var stopped = try state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = operation, .permit = permit } } }});
+    defer stopped.deinit();
+    try std.testing.expect(stopped.compatible(.ok));
+    try state.commit(&stopped);
+    try std.testing.expect(!state.referencesRepair(subject.native, permit.key));
 }
 
 test "sealed blocked repair preserves its exact rejection and cannot relabel other outcome classes" {
@@ -704,7 +973,8 @@ test "only exact validated repair resolution removes its associated failure" {
     unrelated.generation += 1;
     try std.testing.expect(!state.referencesRepair(unrelated, key));
     try std.testing.expect(!state.compatible(.ok));
-    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged = .{ .permit = permit, .revision_after = 2 } } } } }}));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2 } } } } }}));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged_validated = .{ .permit = permit, .changed = false, .revision_after = 2, .result = .resolved } } } } }}));
     var recurring = try state.prepare(.{ .repair_validate = binding }, .invalid, &.{});
     defer recurring.deinit();
     try std.testing.expect(!recurring.compatible(.ok));
@@ -775,7 +1045,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     var native_validation = retry.State.init(std.testing.allocator);
     defer native_validation.deinit();
     try native_validation.commit(try native_validation.prepare(.{ .authorized = child_permit }));
-    try native_validation.commit(try native_validation.prepare(.{ .merged = .{ .permit = child_permit, .revision_after = 3 } }));
+    try native_validation.commit(try native_validation.prepare(.{ .merged = .{ .permit = child_permit, .changed = true, .revision_after = 3 } }));
     try std.testing.expect(!native_validation.permitsDependentContinuation(child_permit, child_permit.key));
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{
         .{ .observe = .{ .subject = parent, .outcome = .invalid } },
@@ -790,7 +1060,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     defer authorized.deinit();
     try state.commit(&authorized);
     try native.commit(try native.prepare(.{ .authorized = parent_permit }));
-    try native.commit(try native.prepare(.{ .merged = .{ .permit = parent_permit, .revision_after = 2, .validation = .dependent_review } }));
+    try native.commit(try native.prepare(.{ .merged = .{ .permit = parent_permit, .changed = true, .revision_after = 2, .validation = .dependent_review } }));
     try native.commit(try native.prepare(.{ .authorized = child_permit }));
     var joined = try state.prepare(.{ .preserve = binding }, .ok, &.{.{ .associate = .{ .source = parent, .target = child } }});
     defer joined.deinit();
@@ -799,7 +1069,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     try std.testing.expect(!native.permitsContinuation(parent_permit, child_permit.key));
     const dependent: RepairContinuation = .{ .owner = &native, .permit = child_permit, .mode = .dependent_regeneration };
     try std.testing.expect(!state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));
-    try native.commit(try native.prepare(.{ .merged = .{ .permit = child_permit, .revision_after = 3, .validation = .dependent_review } }));
+    try native.commit(try native.prepare(.{ .merged = .{ .permit = child_permit, .changed = true, .revision_after = 3, .validation = .dependent_review } }));
     try std.testing.expect(native.permitsDependentContinuation(child_permit, parent_permit.key));
     try std.testing.expect(!native.permitsDependentContinuation(parent_permit, child_permit.key));
     try std.testing.expect(state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));

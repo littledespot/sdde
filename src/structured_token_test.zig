@@ -30,6 +30,169 @@ fn run(allocator: std.mem.Allocator, inputs: evidence.Inputs, available: tokens.
 }
 const token_only = "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}";
 
+test "native exact duty matches canonical literal bytes and treats insertions as opaque" {
+    const duty = @import("domain/exact_token_obligation.zig");
+    const nodes: []const extraction.text.BusinessSegment = &.{
+        .{ .literal = .{ .value = "Report AC" } },
+        .{ .literal = .{ .value = "" } },
+        .{ .literal = .{ .value = "TIVE; Café; Loan " } },
+        .{ .passive = .{ .passive_literal_id = .{ .ordinal = 1 } } },
+        .{ .literal = .{ .value = "renewed!" } },
+        .{ .exact_copy = .{ .claim_id = .{ .ordinal = 2 } } },
+        .{ .literal = .{ .value = "Done." } },
+    };
+    const value: extraction.text.BusinessText = .{ .segments = nodes };
+    for ([_][]const u8{ "ACTIVE", "CTIV", "Café", "renewed!", "Done." }) |bytes| try std.testing.expect(duty.containsLiteralBytes(value, bytes));
+    for ([_][]const u8{ "", "active", "AC TIVE", "Cafe\u{301}", "Loan renewed!", "renewed!Done." }) |bytes| try std.testing.expect(!duty.containsLiteralBytes(value, bytes));
+    try std.testing.expect(duty.contentRequires(.{ .business = .{ .value = value } }, "ACTIVE"));
+    try std.testing.expect(duty.contentRequires(.{ .scope_guard = .{ .value = value } }, "ACTIVE"));
+    try std.testing.expect(!duty.contentRequires(.{ .technical = .{ .value = .{ .nodes = &.{.{ .literal = .{ .value = "ACTIVE" } }} } } }, "ACTIVE"));
+}
+
+test "native business and scope token duty forbids irrelevant without choosing semantic kind" {
+    const validation = @import("domain/token_classification_validation.zig");
+    const Case = struct { source: []const u8, prose: []const u8, required: bool };
+    for ([_]Case{
+        .{ .source = "Use `ACTIVE`.", .prose = "The status is ACTIVEFUL.", .required = true },
+        .{ .source = "Display `Loan renewed!`.", .prose = "The receipt says Loan renewed! now.", .required = true },
+        .{ .source = "Use `ACTIVE`.", .prose = "The status is active.", .required = false },
+        .{ .source = "Display `Loan renewed!`.", .prose = "The receipt says Loan  renewed! now.", .required = false },
+        .{ .source = "Use `Cafe\u{301}`.", .prose = "The name is Café.", .required = false },
+    }) |case| inline for (.{ extraction.Kind.business, extraction.Kind.scope_guard, extraction.Kind.technical }) |tag| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const inputs = try inputsFor(a, case.source);
+        const available = try fixture.candidates(a, inputs);
+        try std.testing.expectEqual(@as(usize, 1), available.entries.len);
+        const chunk = inputs.chunks.entries[0];
+        const wire = try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, chunk, case.prose), &.{.{ .irrelevant = available.entries[0].id }});
+        var parsed = try parse.execute(a, .{ .entries = &.{result(inputs, chunk, wire)} });
+        const claims = try a.dupe(extraction.Proposal, parsed.entries[0].outcome.claims);
+        claims[0].content = @unionInit(extraction.ProposalContent, @tagName(tag), if (tag == .technical)
+            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = case.prose } }} }
+        else
+            extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = case.prose } }} });
+        const entries = try a.dupe(extraction.ParsedResult, parsed.entries);
+        entries[0].outcome = .{ .claims = claims };
+        parsed.entries = entries;
+        const typed = try text.check(a, inputs, parsed);
+        const checked = try validation.validate(a, inputs, available, typed);
+        if (case.required and tag != .technical) {
+            try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, checked.invalid.issues.forbidden);
+            try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, checked.invalid.choices.required_preserve);
+        } else try std.testing.expect(checked == .valid);
+        // Native duty preserves every semantic kind, including code and visual
+        // kinds; no kind is inferred from business-byte membership.
+        inline for (std.meta.tags(tokens.Kind)) |kind| {
+            var preserved = typed;
+            const preserved_entries = try a.dupe(extraction.TextValidatedResult, typed.entries);
+            preserved_entries[0].token_classifications = &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = kind } }};
+            preserved.entries = preserved_entries;
+            const accepted = (try validation.validate(a, inputs, available, preserved)).valid;
+            try std.testing.expectEqual(kind, accepted.selections[0].decision.preserve);
+        }
+    };
+}
+
+test "native token duty remains scoped to the original chunk" {
+    const validation = @import("domain/token_classification_validation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try inputsFor(a, "Example `ACTIVE`.\n" ++ "line\n" ** 65 ++ "The status is ACTIVE.\n");
+    const available = try fixture.candidates(a, inputs);
+    try std.testing.expectEqual(@as(usize, 2), inputs.chunks.entries.len);
+    const first = inputs.chunks.entries[0];
+    const second = inputs.chunks.entries[1];
+    const candidate = try text.check(a, inputs, try parse.execute(a, .{ .entries = &.{
+        result(inputs, first, try fixture.wire(a, token_only, &.{.{ .irrelevant = available.entries[0].id }})),
+        result(inputs, second, try @import("reference_extraction_test.zig").reply(a, second, "The status is ACTIVE.")),
+    } }));
+    try std.testing.expect((try validation.validate(a, inputs, available, candidate)) == .valid);
+    var foreign = candidate.entries[1];
+    foreign.scope = candidate.entries[0].scope;
+    try std.testing.expect(@import("domain/exact_token_obligation.zig").candidateRequired(foreign, available.entries[0]));
+    foreign.scope.state_id.bytes = "foreign-state";
+    try std.testing.expect(!@import("domain/exact_token_obligation.zig").candidateRequired(foreign, available.entries[0]));
+}
+
+test "stored classification replay rejects omitted native duties and forged preserved identities" {
+    const validation = @import("domain/token_classification_validation.zig");
+    const duty = @import("domain/exact_token_obligation.zig");
+    for ([_][]const u8{ "ACTIVE", "Loan renewed!" }) |bytes| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const inputs = try inputsFor(a, try std.fmt.allocPrint(a, "Display `{s}`.", .{bytes}));
+        const available = try fixture.candidates(a, inputs);
+        const chunk = inputs.chunks.entries[0];
+        const completed = try run(a, inputs, available, &.{result(inputs, chunk, try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, chunk, try std.fmt.allocPrint(a, "The displayed value is {s}.", .{bytes})), &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = .code_sample } }}))});
+        try validation.validateStored(a, inputs, completed.ledger);
+        try std.testing.expectEqual(@as(usize, 2), completed.ledger.claims.len);
+        const snapshots = @import("domain/reference_snapshot.zig");
+        const snapshot: snapshots.Snapshot = .{
+            .directory = .{ .bytes = "references" },
+            .inputs = inputs,
+            .extraction = completed.ledger,
+            .dispositions = &.{
+                .{ .claim_id = .{ .ordinal = 1 }, .disposition = .retained, .related_claim_ids = &.{} },
+                .{ .claim_id = .{ .ordinal = 2 }, .disposition = .retained, .related_claim_ids = &.{} },
+            },
+            .signals = &.{
+                .{ .id = .{ .ordinal = 1 }, .value = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = completed.ledger.claims[0].citation_ids, .content = .{ .model = completed.ledger.claims[0].content.model } } },
+                .{ .id = .{ .ordinal = 2 }, .value = .{ .claim_ids = &.{.{ .ordinal = 2 }}, .citation_ids = completed.ledger.claims[1].citation_ids, .content = .{ .preserved_token = .{ .token_id = completed.ledger.claims[1].content.preserved_token.value.id } } } },
+            },
+            .conflicts = &.{},
+            .passive_records = &.{},
+            .passive_occurrences = &.{},
+        };
+        try snapshots.validate(a, snapshot);
+        const items = try @import("domain/reference_claim_items.zig").build(a, inputs, completed.ledger);
+        try std.testing.expect(try duty.itemRequired(items, .{ .ordinal = 2 }));
+        try std.testing.expect(duty.claimRequired(completed.ledger.claims, completed.ledger.claims[1]));
+        try std.testing.expect(!(try duty.itemRequired(items, .{ .ordinal = 1 })));
+        try std.testing.expectError(error.InvalidReferenceReconciliation, duty.itemRequired(items, .{ .ordinal = 999 }));
+        for (0..7) |mode| {
+            var forged = completed.ledger;
+            const chunks = try a.dupe(extraction.ChunkResult, forged.chunks);
+            const claims = try a.dupe(extraction.Claim, forged.claims);
+            forged.chunks = chunks;
+            forged.claims = claims;
+            switch (mode) {
+                0, 1 => {
+                    // Keep every ordinary cardinality/citation join consistent:
+                    // only replaying the native candidate duty detects mode 0.
+                    forged.claims = claims[0..1];
+                    forged.citations = forged.citations[0..1];
+                    forged.next_claim_ordinal = 2;
+                    forged.next_citation_ordinal = 2;
+                    chunks[0].outcome = .{ .claims = &.{claims[0].id} };
+                    if (mode == 0) chunks[0].token_classifications = &.{.{ .irrelevant = available.entries[0].id }};
+                },
+                2 => claims[1].content.preserved_token.value.kind = .business_exact_string,
+                3 => claims[1].content.preserved_token.value.raw_value.bytes = "changed",
+                4 => claims[1].content.preserved_token.value.candidate_id.ordinal = 999,
+                5 => chunks[0].token_classifications = &.{},
+                6 => claims[1].content.preserved_token.value.downstream_obligation_id.token_id.ordinal = 999,
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidStructuredTokens, validation.validateStored(a, inputs, forged));
+            var stored = snapshot;
+            stored.extraction = forged;
+            if (mode == 0 or mode == 1) {
+                stored.dispositions = snapshot.dispositions[0..1];
+                stored.signals = snapshot.signals[0..1];
+                try std.testing.expectEqual(@as(usize, 1), stored.extraction.claims.len);
+                try std.testing.expectEqual(@as(usize, 1), stored.extraction.citations.len);
+                try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_claim_ordinal);
+                try std.testing.expectEqual(@as(u32, 2), stored.extraction.next_citation_ordinal);
+            }
+            try std.testing.expectError(error.InvalidReferenceSnapshot, snapshots.validate(a, stored));
+        }
+    }
+}
+
 test "structured Markdown preserves raw code and link destinations without interpreting their interiors" {
     const scan = @import("domain/markdown_code_spans.zig");
     const Expected = struct { form: scan.Form, bytes: []const u8 };
@@ -386,19 +549,19 @@ test "atomic classification repair preserves claims and other chunks and revalid
         const replacement: repair.Replacement = .{ .classifications = .{ .token_classifications = try fixture.classifications(a, available, first) } };
         const wire = try wire_json.encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
-        const merged = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, parsed, null);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, parsed, null);
         try std.testing.expectEqual(@as(u64, 2), merged.revision);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome, merged.entries[0].outcome);
         try std.testing.expectEqualDeep(candidate.entries[1], merged.entries[1]);
         try std.testing.expectEqual(@as(usize, 0), candidate.entries[0].token_classifications.len);
         try std.testing.expect((try validation.validate(a, inputs, available, merged)) == .valid);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = merged }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, parsed, null));
         var changed = candidate;
         changed.entries = merged.entries;
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = changed }, authorization, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = changed }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = changed }, authorization, parsed, null));
         var foreign = authorization;
         foreign.owner.reference_chunk.reference_state_id.bytes = "other-state";
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, parsed, null));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.parse(a, foreign, packet, wire));
         var wrong_id = authorization;
         wrong_id.id.bytes = "unrelated-authorization";
@@ -406,7 +569,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         for ([_][]const u8{ "\"target\":\"claims\",", "\"claims\":[],", "\"revision\":2," }) |extra| {
             try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, try std.fmt.allocPrint(a, "{{{s}{s}", .{ extra, wire[1..] })));
         }
-        const still_invalid = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null);
+        const still_invalid = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null);
         const still_rejected = (try validation.validate(a, inputs, available, still_invalid)).invalid;
         const retry = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = still_invalid }, .{ .token_classifications = still_rejected });
         try std.testing.expect(!std.mem.eql(u8, retry.id.bytes, authorization.id.bytes));

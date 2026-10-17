@@ -4,6 +4,7 @@ const provider_lifecycle = @import("provider_operation_lifecycle.zig");
 
 pub const Transition = union(enum) {
     increment_model_attempt: model_attempt.Transition,
+    advisory_model_attempt_stopped: *const @import("model_attempt_decision.zig").StopReceipt,
     reconcile_workflow_tokens: workflow_tokens.ReconciliationTransition,
     advance_provider_operation: provider_lifecycle.Transition,
 };

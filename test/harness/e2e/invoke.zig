@@ -4,8 +4,24 @@ const c = @import("contracts.zig");
 const fixture = @import("fixture.zig");
 const root = @import("../../../src/composition/root.zig");
 const values = @import("../../../src/application/pipeline_values.zig");
+const trace_module = @import("trace.zig");
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, key: ?[]const u8, store: @import("../evidence.zig").Store, report: *c.Report) !?[]const u8 {
+pub const Probe = struct {
+    physical_sends: usize = 0,
+    boundary: trace_module.Trace.Boundary = .open,
+    request_sha256: ?[32]u8 = null,
+    response_sha256: ?[32]u8 = null,
+};
+pub const Options = struct {
+    purpose: union(enum) { whole_workflow, single_exchange: *Probe },
+    experiment: ?*@import("../baseline/dispatch.zig").Gate = null,
+    capture: ?*trace_module.CaptureLog = null,
+    /// Only offline tests may replace the transport; the live CLI never supplies it.
+    transport: ?@import("../../../src/adapters/provider/bedrock_transport.zig").Port = null,
+};
+
+pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, key: ?[]const u8, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
+    if (!@import("builtin").is_test and options.transport != null) return error.TestTransportForbidden;
     var runtime: root.Runtime = undefined;
     runtime.init(io, allocator, project, .{});
     defer runtime.deinit();
@@ -33,9 +49,22 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     const snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(allocator, key);
     var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshot = snapshot });
     defer invocation.deinit();
+    var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
+    defer expected_config.deinit();
 
-    var trace = try @import("trace.zig").Trace.init(store, &invocation);
+    var trace = try trace_module.Trace.init(store, &invocation, switch (options.purpose) {
+        .whole_workflow => .whole_workflow,
+        .single_exchange => .single_exchange,
+    });
+    trace.experiment = options.experiment;
+    trace.capture = options.capture;
+    trace.expected_models = &expected_config.value().models;
+    trace.transport_override = options.transport;
     defer trace.close();
+    defer switch (options.purpose) {
+        .whole_workflow => {},
+        .single_exchange => |probe| probe.* = .{ .physical_sends = trace.physical_sends, .boundary = trace.boundary, .request_sha256 = trace.request_sha256, .response_sha256 = trace.response_sha256 },
+    };
     report.events_file = "events.jsonl";
     report.evidence_root = "evidence";
     // One production invocation. The observer forwards every selection, step
@@ -85,12 +114,16 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
         try trace.last_rejection.project(allocator, trace.calls, report);
         try trace.correlate(allocator, report);
         try trace.progress.project(allocator, report);
-        if (runner.envelope.slots[@intFromEnum(@import("../../../src/domain/pipeline.zig").DataKey.published_workflow_output)] != null) {
+        try trace.projectAdmission(allocator, report);
+        if (options.purpose == .whole_workflow and runner.envelope.slots[@intFromEnum(@import("../../../src/domain/pipeline.zig").DataKey.published_workflow_output)] != null) {
             const published = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").published_schema, bool);
             if (published.*) publication = .{ .confirmed = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").prepared_schema, @import("../../../src/domain/workflow_output.zig").Prepared) };
         }
     }
     if (trace.failure != null) return error.EvidenceCaptureFailed;
+    // The probe intentionally leaves the workflow incomplete. Its read-only
+    // provider/schema report is separate from the publication oracle.
+    if (options.purpose == .single_exchange) return null;
     const observed = try @import("oracle.zig").inspect(io, allocator, project, outcome, publication, selected.expected_artifacts, resolved);
     report.status = observed.status;
     report.missing_artifact = observed.missing_artifact;

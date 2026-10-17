@@ -7,7 +7,7 @@ const ingest = @import("reference_ingestion_test.zig").read;
 const evidence = @import("domain/reference_evidence.zig");
 
 fn context(prepared: fixture.Prepared, inputs: evidence.Inputs, index: usize) text.Context {
-    return .{ .registry = prepared.registry, .current = fixture.safety.value(prepared.owner), .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id } };
+    return .{ .registry = prepared.registry, .current = fixture.safety.value(prepared.owner), .inputs = inputs, .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .field = .spec_story };
 }
 
 test "prose punctuation never manufactures a reference and exact selections retain scope" {
@@ -19,7 +19,7 @@ test "prose punctuation never manufactures a reference and exact selections reta
     const prepared = try fixture.prepare(a, inputs);
     defer prepared.deinit();
     const ctx = context(prepared, inputs, 0);
-    var scoped: text.ScopeSetContext = .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope} };
+    var scoped: text.ScopeSetContext = .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story };
     for ([_][]const u8{ "Display the UTC date/time.", "Support input/output.", "Read src/ledger.zig.", "See https://example.test" }) |value| {
         const checked = (try fixture.validator.checkBusinessIn(a, scoped, .{ .segments = &.{.{ .literal = .{ .value = value } }} })).valid;
         try std.testing.expectEqual(@as(usize, 1), checked.value.segments.len);
@@ -97,14 +97,16 @@ test "display literal IDs and source nodes are limited to their exact extraction
     try std.testing.expectEqual(@as(usize, 2), inputs.chunks.entries.len);
     const prepared = try fixture.prepare(allocator, inputs);
     defer prepared.deinit();
-    const local: text.BusinessText = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 1 } } }} };
+    const local: text.BusinessText = .{ .segments = &.{ .{ .literal = .{ .value = "Use " } }, .{ .passive = .{ .passive_literal_id = .{ .ordinal = 1 } } } } };
     _ = try fixture.validator.business(allocator, context(prepared, inputs, 0), local);
     try std.testing.expectError(error.InvalidPassiveLiteral, fixture.validator.business(allocator, context(prepared, inputs, 1), local));
     for ([_]u32{ 0, 999 }) |ordinal| {
         try std.testing.expectError(error.InvalidPassiveLiteral, fixture.validator.business(allocator, context(prepared, inputs, 0), .{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } }} }));
     }
-    const source: text.ReferenceSemanticText = .{ .nodes = &.{.{ .source = .{ .source_id = inputs.chunks.entries[0].source_id } }} };
-    _ = try fixture.validator.reference(allocator, context(prepared, inputs, 0), source);
+    const source: text.ReferenceSemanticText = .{ .nodes = &.{ .{ .literal = .{ .value = "According to " } }, .{ .source = .{ .source_id = inputs.chunks.entries[0].source_id } } } };
+    var source_context = context(prepared, inputs, 0);
+    source_context.field = .extraction_technical;
+    _ = try fixture.validator.reference(allocator, source_context, source);
     try std.testing.expectError(error.InvalidTypedText, fixture.validator.reference(allocator, context(prepared, inputs, 0), .{ .nodes = &.{.{ .source = .{ .source_id = .{ .ordinal = 99 } } }} }));
     const successor = try fixture.prepare(allocator, inputs);
     defer successor.deinit();
@@ -142,7 +144,7 @@ test "closed extraction text shapes reject legacy strings wrong nodes and extra 
         .{ .kind = "technical", .value = "{\"nodes\":[{\"file\":{\"file_id\":1}}]}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"passive\":{\"passive_literal_id\":1,\"display_value\":\"invented\"}}]}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"literal\":{\"value\":\"ordinary\",\"approved\":true}}]}" },
-        .{ .kind = "technical", .value = "{\"segments\":[]}" },
+        .{ .kind = "technical", .value = "{\"segments\":{\"fragments\":[]}}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"literal\":{\"value\":\"ordinary\"},\"passive\":{\"passive_literal_id\":1}}]}" },
         .{ .kind = "business", .value = "null" },
     }) |case| {
@@ -179,12 +181,12 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
     const scope = context(prepared, inputs, 0).scope;
     for ([_][]const u8{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
         const field = if (std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
-        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":[\"A statement\"]}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
+        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":\"A statement\"}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
         const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = bytes } }} });
         const checked = (try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)).valid;
         try std.testing.expectEqualStrings(kind, @tagName(checked.entries[0].outcome.claims[0].content));
     }
-    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"Read source.md\"]},\"token_classifications\":[]}";
+    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read source.md\"},\"token_classifications\":[]}";
     const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = reason } }} });
     try std.testing.expect((try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)) == .valid);
 }
@@ -241,5 +243,126 @@ test "source names remain citation metadata and only body occurrences become con
         const prose: text.BusinessText = .{ .segments = &.{ .{ .literal = .{ .value = "Export " } }, .{ .passive = .{ .passive_literal_id = permitted[0].id } } } };
         _ = try fixture.validator.business(a, ctx, prose);
         try std.testing.expectEqualDeep(permitted[0], try literals.resolveCaptured(.{ .records = available.registry.records, .occurrences = available.registry.occurrences }, mentioned, &.{ctx.scope}, permitted[0].id));
+    }
+}
+
+test "every declared field rejects insertion-only prose except the explicit identity label" {
+    const exact: text.BusinessSegment = .{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } };
+    const passive: text.BusinessSegment = .{ .passive = .{ .passive_literal_id = .{ .ordinal = 1 } } };
+    const prose: text.BusinessSegment = .{ .literal = .{ .value = "The user sees " } };
+    for (std.meta.tags(text.field_policy.Field)) |field| {
+        const policy = text.field_policy.get(field);
+        const pure_exact = text.composition(text.BusinessSegment, field, &.{ exact, exact });
+        if (policy.exact_copy == .prohibited) {
+            try std.testing.expectEqual(.prohibited_exact, pure_exact.?.reason);
+            try std.testing.expectEqual(.prohibited_exact, text.composition(text.BusinessSegment, field, &.{ prose, exact }).?.reason);
+        } else if (field == .entity_name) {
+            try std.testing.expect(pure_exact == null);
+            try std.testing.expect(text.composition(text.BusinessSegment, field, &.{exact}) == null);
+        } else try std.testing.expectEqual(.reference_only, pure_exact.?.reason);
+        if (field == .entity_name) {
+            try std.testing.expect(text.composition(text.BusinessSegment, field, &.{passive}) == null);
+        } else try std.testing.expectEqual(.reference_only, text.composition(text.BusinessSegment, field, &.{passive}).?.reason);
+        try std.testing.expect(text.composition(text.BusinessSegment, field, &.{ prose, passive }) == null);
+        try std.testing.expectEqual(.empty, text.composition(text.BusinessSegment, field, &.{}).?.reason);
+        try std.testing.expectEqual(.blank, text.composition(text.BusinessSegment, field, &.{.{ .literal = .{ .value = " \t\n" } }}).?.reason);
+    }
+    inline for (.{ text.field_policy.ReferencePhase.extraction, .reconciliation }) |phase| inline for (.{ "business", "design", "technical", "validation", "implementation_assumption", "open_question", "scope_guard" }) |name| {
+        const field = text.field_policy.referenceField(phase, name);
+        const source: text.ReferenceNode = .{ .source = .{ .source_id = .{ .ordinal = 1 } } };
+        const mixed = [_]text.ReferenceNode{ .{ .literal = .{ .value = "Read the cited requirement " } }, source };
+        if (comptime std.mem.eql(u8, name, "business") or std.mem.eql(u8, name, "scope_guard")) {
+            try std.testing.expectEqual(.prohibited_source, text.composition(text.ReferenceNode, field, &.{source}).?.reason);
+            try std.testing.expectEqual(.prohibited_source, text.composition(text.ReferenceNode, field, &mixed).?.reason);
+        } else {
+            try std.testing.expectEqual(.reference_only, text.composition(text.ReferenceNode, field, &.{source}).?.reason);
+            try std.testing.expect(text.composition(text.ReferenceNode, field, &mixed) == null);
+        }
+    };
+}
+
+test "native admission and stored readback reject encoded insertion prose across fragments" {
+    const encoded = "{\"kind\":\"exact_copy\",\"claim_id\":7}";
+    for ([_][]const u8{ "A user observes the startup result.", "The source literally describes " ++ encoded ++ "." }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: reference.IdSource = .{};
+        const inputs = try reference.prepare(a, &ids, try ingest(a, "source.md", source));
+        const prepared = try fixture.prepare(a, inputs);
+        defer prepared.deinit();
+        const ctx = context(prepared, inputs, 0);
+        const segments: []const text.BusinessSegment = &.{ .{ .literal = .{ .value = "The user sees " ++ encoded[0..12] } }, .{ .literal = .{ .value = encoded[12..] } } };
+        const result = try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = segments });
+        const captured: literals.Captured = .{ .records = ctx.registry.records, .occurrences = ctx.registry.occurrences };
+        const stored_context: text.StoredContext = .{ .inputs = inputs, .passive = captured, .scopes = &.{ctx.scope}, .field = .spec_story };
+        if (std.mem.indexOf(u8, source, encoded) != null) {
+            try std.testing.expect(result == .valid);
+            try text.stored(text.BusinessSegment, a, stored_context, segments);
+        } else {
+            try std.testing.expectEqual(.embedded_insertion_syntax, result.invalid.reason);
+            try std.testing.expectEqual(@as(usize, 0), result.invalid.first_node);
+            try std.testing.expectEqual(@as(usize, 1), result.invalid.last_node);
+            try std.testing.expectError(error.InvalidTypedText, text.stored(text.BusinessSegment, a, stored_context, segments));
+        }
+        const questions = @import("domain/specification_support_evidence.zig");
+        const question_issue = try questions.questionIssueIn(a, inputs, .ambiguous, "Which value follows " ++ encoded ++ "?");
+        if (std.mem.indexOf(u8, source, encoded) != null) try std.testing.expect(question_issue == null) else try std.testing.expectEqual(.invalid_question, question_issue.?);
+        const forged: []const text.BusinessSegment = &.{.{ .literal = .{ .value = "The user sees {\"kind\":\"exact_copy\",\"claim_id\":8}" } }};
+        try std.testing.expectEqual(.embedded_insertion_syntax, (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = forged })).invalid.reason);
+        try std.testing.expectError(error.InvalidTypedText, text.stored(text.BusinessSegment, a, stored_context, forged));
+    }
+}
+
+test "NFC preserves exact source-backed wire quotations through admission and stored revalidation" {
+    const encoded = "{\"fragments\":[\"cafe\u{301}\"]}";
+    const prose = "Cafe\u{301} displays " ++ encoded ++ " beside cafe\u{301}.";
+    const canonical = "Café displays " ++ encoded ++ " beside café.";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: reference.IdSource = .{};
+    const inputs = try reference.prepare(a, &ids, try ingest(a, "unicode.md", "The source quotes " ++ encoded ++ "."));
+    const prepared = try fixture.prepare(a, inputs);
+    defer prepared.deinit();
+    const ctx = context(prepared, inputs, 0);
+    const admitted = try fixture.validator.business(a, ctx, .{ .segments = &.{ .{ .literal = .{ .value = prose[0..20] } }, .{ .literal = .{ .value = prose[20..] } } } });
+    try std.testing.expectEqual(@as(usize, 1), admitted.value.segments.len);
+    try std.testing.expectEqualStrings(canonical, admitted.value.segments[0].literal.value);
+    const stored_bytes = try std.json.Stringify.valueAlloc(a, admitted.value, .{});
+    const stored_value = try @import("domain/strict_json.zig").decode(text.BusinessText, a, stored_bytes, .{ .maximum_depth = 64 });
+    try text.stored(text.BusinessSegment, a, .{ .inputs = inputs, .passive = .{ .records = prepared.registry.records, .occurrences = prepared.registry.occurrences }, .scopes = &.{ctx.scope}, .field = .spec_story }, stored_value.segments);
+    const revalidated = try fixture.validator.business(a, ctx, stored_value);
+    try std.testing.expectEqualStrings(canonical, revalidated.value.segments[0].literal.value);
+    try std.testing.expectEqualStrings(stored_bytes, try std.json.Stringify.valueAlloc(a, revalidated.value, .{}));
+    const changed = "Café displays {\"fragments\":[\"café\"]} beside café.";
+    const issue = (try fixture.validator.checkBusinessIn(a, .{ .registry = ctx.registry, .current = ctx.current, .inputs = inputs, .scopes = &.{ctx.scope}, .field = .spec_story }, .{ .segments = &.{.{ .literal = .{ .value = changed } }} })).invalid;
+    try std.testing.expectEqual(.embedded_insertion_syntax, issue.reason);
+    // Canonical comparison also handles old rejected values. It does not turn
+    // its normalization operation into an additional admission gate.
+    const wire = @import("domain/model_text_wire.zig");
+    try std.testing.expectEqualStrings("Café {\"fragments\":[\"café\"]}", try wire.normalizeProse(a, "Cafe\u{301} " ++ encoded, &.{}, fixture.normalizer));
+}
+
+test "source-aware prose normalization propagates Unicode owner and allocation errors" {
+    const wire = @import("domain/model_text_wire.zig");
+    const fake = struct {
+        fn failed(_: std.mem.Allocator, _: []const u8, _: usize) @import("ports/unicode_normalizer.zig").Error![]u8 {
+            return error.NormalizationFailed;
+        }
+        fn exhausted(_: std.mem.Allocator, _: []const u8, _: usize) @import("ports/unicode_normalizer.zig").Error![]u8 {
+            return error.OutOfMemory;
+        }
+    };
+    try std.testing.expectError(error.InvalidNamingPolicy, wire.normalizeProse(std.testing.allocator, "Ordinary prose", &.{}, .{ .normalize_fn = fake.failed }));
+    try std.testing.expectError(error.OutOfMemory, wire.normalizeProse(std.testing.allocator, "Ordinary prose", &.{}, .{ .normalize_fn = fake.exhausted }));
+}
+
+test "composition routing includes blank native values without field metadata and preserves scalar identity repairs" {
+    for ([_]@FieldType(text.Issue, "reason"){ .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax }) |reason| {
+        try std.testing.expect((text.Issue{ .reason = reason, .first_node = 0, .last_node = 0 }).isComposition());
+    }
+    for ([_]@FieldType(text.Issue, "reason"){ .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source }) |reason| {
+        try std.testing.expect(!(text.Issue{ .reason = reason, .field = .spec_story, .first_node = 0, .last_node = 0 }).isComposition());
     }
 }

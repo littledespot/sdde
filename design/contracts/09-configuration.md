@@ -1,7 +1,7 @@
 # 9. Engine configuration
 
-Part of the [proposed design](../design.md#9-engine-configuration). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#9-engine-configuration), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
   contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
@@ -338,10 +338,9 @@ validates rows, names and categories. No model, workflow prompt or mechanical
 `toolchain.yaml` supplies another selection table.
 
 - The new engine calls this authority **principles**.
-- It fulfils the role that constitution/memory material has in the basis workflow: overarching
+- It fulfils the role constitution/memory material had in the predecessor workflow: overarching
   project policy and guidance for code, architecture, project structure, security, validation,
-  observability, and user-interface work (`prompts/sdd-plan.md:70-85`;
-  `prompts/sdd-implement.md:48-69`).
+  observability, and user-interface work.
 - Version-control workflow material remains out of scope.
 - The configured root deliberately contains two separately typed lanes: the exact
   `toolchain.yaml` project principle is mechanical policy, while Markdown principle files are
@@ -389,7 +388,7 @@ Resolution is explicit:
 5. select categories solely from the configured stage/environment/file-kind hint table and include every chunk from those files in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
 6. include the exact selected raw spans in Specify's focused requirement–principle assessment (§17.3.1), and in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; provider size errors follow the workflow's explicit outcome transitions;
 7. validate only transport facts deterministically: configured root, containment, identity, filename-to-hint mapping, UTF-8, source-capture byte/count ceilings, stable spans, registry joins, and prompt-selection coverage;
-8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations and the owning-stage authority gates. Specify retains policy findings as mandatory Plan obligations under §17.3.1; the technical stage creates or retains its clarification when resolution remains ambiguous.
+8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Under [ADR 0023](../decisions/0023-advisory-post-generation-review.md), Specify retains those post-generation findings as advice; they alone create no mandatory Plan obligation or clarification. Plan still validates current policy and resolves its native required decisions at its own gate.
 
 - Semantic principle prose is never parsed or compiled into a deterministic validator, even when
   it resembles YAML, a table, a template, or a formal rule.

@@ -1,7 +1,7 @@
 # 25. Atomic workflow execution and output
 
-Part of the [proposed design](../design.md#25-atomic-workflow-execution-and-output). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#25-atomic-workflow-execution-and-output), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 [ADR 0009](../decisions/0009-atomic-workflow-execution.md) owns this accepted rule.
 
@@ -73,6 +73,6 @@ create intermediate publication or restart checkpoints.
 - Within one execution, retries remain explicit YAML transitions with the owning operation's
   declared `retry-limit`.
 
-Logs are observations, never completion or continuation authority. This
-amendment does not authorize additional external effects or weaken command
+Logs are observations, never completion or continuation authority. This does not
+authorize additional external effects or weaken command
 safety, path authorization, candidate-only model output or secret handling.

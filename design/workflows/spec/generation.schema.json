@@ -13,12 +13,30 @@
       "additionalProperties": false
     },
     "business_value": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/business_segment"
-      },
-      "minItems": 1,
-      "maxItems": 4294967295
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/business_segment"
+              },
+              "minItems": 1,
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "business_segment": {
       "oneOf": [
@@ -40,22 +58,6 @@
           "required": [
             "kind",
             "passive_literal_id"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "claim_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "claim_id"
           ],
           "additionalProperties": false
         }
@@ -175,12 +177,20 @@
         },
         "basis": {
           "$ref": "#/$defs/authoring_value"
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/authoring_entity"
+          },
+          "maxItems": 4294967295
         }
       },
       "required": [
         "kind",
         "disposition",
-        "basis"
+        "basis",
+        "records"
       ],
       "additionalProperties": false
     },
@@ -444,9 +454,6 @@
             },
             {
               "$ref": "#/$defs/record_prohibited_behavior"
-            },
-            {
-              "$ref": "#/$defs/record_entity"
             }
           ]
         }
@@ -484,8 +491,7 @@
             "business_rule",
             "assumption",
             "non_goal",
-            "prohibited_behavior",
-            "entity"
+            "prohibited_behavior"
           ]
         }
       },
@@ -533,43 +539,6 @@
       ],
       "additionalProperties": false
     },
-    "repair_record_non_entity": {
-      "type": "object",
-      "properties": {
-        "content": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/record_acceptance_criterion"
-            },
-            {
-              "$ref": "#/$defs/record_user_visible_outcome"
-            },
-            {
-              "$ref": "#/$defs/record_edge_case"
-            },
-            {
-              "$ref": "#/$defs/record_functional_requirement"
-            },
-            {
-              "$ref": "#/$defs/record_business_rule"
-            },
-            {
-              "$ref": "#/$defs/record_assumption"
-            },
-            {
-              "$ref": "#/$defs/record_non_goal"
-            },
-            {
-              "$ref": "#/$defs/record_prohibited_behavior"
-            }
-          ]
-        }
-      },
-      "required": [
-        "content"
-      ],
-      "additionalProperties": false
-    },
     "value": {
       "type": "object",
       "properties": {
@@ -600,6 +569,27 @@
       "required": [
         "signal_ids",
         "value"
+      ],
+      "additionalProperties": false
+    },
+    "authoring_entity": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/record_entity"
+        },
+        "signal_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "minItems": 1,
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "content",
+        "signal_ids"
       ],
       "additionalProperties": false
     }

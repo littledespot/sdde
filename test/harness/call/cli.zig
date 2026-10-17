@@ -19,7 +19,7 @@ fn command(init: std.process.Init) !bool {
     if (args.len == 2 and std.mem.eql(u8, args[1], "--help")) {
         try std.Io.File.stdout().writeStreamingAll(io, "Usage: scripts/e2e-call.sh --run <captured-E2E-directory> --workflow <workflow-id> --call <positive-ordinal> --model <model-id> --reasoning-effort <effort|none> [--repeats <positive-count>]\n" ++
             "Makes one live diagnostic call per repeat (default 1), using unchanged captured input/schema. Explicit model and reasoning are validated against the retained project's provider catalogue and registered provider capabilities. Preserves temperature, response mode and output-token allowance. No retries, repair, workflow continuation, publication or rubric grading.\n" ++
-            "Requires TEST_AWS_BEARER_TOKEN_BEDROCK. The shell launcher loads .env.e2e; direct Zig invocation does not. Results: zig-out/e2e-call/<UTC-run>/report.md and report.json.\n");
+            "Live diagnostics permit only openai.gpt-oss-20b-1:0 with supported reasoning and compatible retained controls. Requires TEST_AWS_BEARER_TOKEN_BEDROCK. The shell launcher loads .env.e2e; direct Zig invocation does not. Results: zig-out/e2e-call/<UTC-run>/report.md and report.json.\n");
         return true;
     }
     const options = options_module.parse(args[1..]) catch {
@@ -29,11 +29,15 @@ fn command(init: std.process.Init) !bool {
     var captured = try @import("capture.zig").load(io, a, .cwd(), options.run, options.workflow, options.call);
     defer captured.deinit();
     const original = captured.call.description.?;
+    @import("../model_cost_policy.zig").require(.{ .bytes = original.provider }, .{ .bytes = options.model }) catch {
+        try std.Io.File.stderr().writeStreamingAll(io, "Live diagnostic model rejected by the test cost policy. Select openai.gpt-oss-20b-1:0 with supported reasoning and compatible retained controls. No API call made.\n");
+        return false;
+    };
     const binding = try binding_module.rebind(a, original, captured.provider_catalogue, options.model, options.reasoning_effort);
     var authority: binding_module.Authorization = .{ .binding = original };
     var environment: std.process.Environ.Map = .init(a);
     defer environment.deinit();
-    const key = @import("../environment.zig").credential(init.environ_map, .bedrock_invoke) catch {
+    const key = @import("../environment.zig").credential(init.environ_map, .bedrock_converse) catch {
         try std.Io.File.stderr().writeStreamingAll(io, "Set a valid TEST_AWS_BEARER_TOKEN_BEDROCK test credential; no API call made.\n");
         return false;
     };

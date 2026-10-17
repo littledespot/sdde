@@ -1,8 +1,11 @@
 Write records using the assigned requirements, brief and record-family purposes.
 Preserve all assigned obligations across the record collection.
 When supplied, record_requirements applies across the assembled specification.
+Family presence is structural; it does not establish that assigned obligations
+have been fulfilled.
 Include only supported records; optional families need no filler. Preserve each
 statement's role and obligation strength. Do not relabel positive requirements as
 assumptions or non-goals, invent conditions, or repeat records to fill sections.
 Acceptance criteria may test behavior stated by functional requirements.
-Follow the supplied entity decision.
+Entity records are authored by the feature-wide entities unit. This batch
+authors only the other record families.

@@ -58,7 +58,8 @@ pub fn main(init: std.process.Init) !void {
         .execution_rejected => |reason| {
             if (reason == .retry_limit) {
                 const failure = reason.retry_limit;
-                try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "RetryLimitExhausted: {s}; retry-limit={d}; completed executions={d}", .{ failure.operation().bytes, failure.limit.value, failure.completed_executions }));
+                try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "{s}: {s}; retry-limit={d}; completed executions={d}", .{ reason.diagnostic(), failure.operation().bytes, failure.limit.value, failure.completed_executions }));
+                if (failure.defect) |defect| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), defect, .{}));
             } else {
                 try writeFailure(init.io, reason.diagnostic());
                 if (reason == .model_capture) try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), reason.model_capture, .{}));

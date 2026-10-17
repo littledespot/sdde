@@ -8,7 +8,8 @@ pub fn prepare(allocator: std.mem.Allocator, feature: @import("feature_directory
         .needs_user => .needs_user,
         .blocked => return error.InvalidWorkflowOutput,
     };
-    const value = state.ready.value orelse return error.InvalidWorkflowOutput;
+    const value = state.ready.state.value orelse return error.InvalidWorkflowOutput;
+    _ = try state.ready.validate(allocator);
     _ = try c.validate(.{ .value = value }, feature.selector.feature_id);
     const expected = try views.render(allocator, state.ready, inputs.protected_forms);
     if (rendered.len != expected.len) return error.InvalidWorkflowOutput;

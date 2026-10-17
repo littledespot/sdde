@@ -1,5 +1,5 @@
 {
-  "schema": "evaluation-case/v1",
+  "schema": "evaluation-case/v2",
   "id": "wf-001-hello-world-node-vitest-spec",
   "sources": [
     {
@@ -7,5 +7,10 @@
       "path": "test/e2e/wf-001-hello-world/reference/stories.md"
     }
   ],
-  "rubric": "test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json"
+  "rubric": "test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json",
+  "grading_qualification": {
+    "panel": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/panel.json",
+    "review": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/human-review.json",
+    "qualification": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/qualification.json"
+  }
 }

@@ -22,26 +22,6 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            },
-            "citation_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "token_id",
-            "citation_id"
-          ],
-          "additionalProperties": false
         }
       ]
     },
@@ -176,12 +156,7 @@
       "type": "object",
       "properties": {
         "segments": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 4294967295,
-          "items": {
-            "$ref": "#/$defs/business_segment"
-          }
+          "$ref": "#/$defs/business_value"
         }
       },
       "required": [
@@ -193,12 +168,7 @@
       "type": "object",
       "properties": {
         "nodes": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 4294967295,
-          "items": {
-            "$ref": "#/$defs/reference_node"
-          }
+          "$ref": "#/$defs/reference_value"
         }
       },
       "required": [
@@ -218,12 +188,7 @@
                   "const": "business"
                 },
                 "segments": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/business_segment"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/business_value"
                 }
               },
               "required": [
@@ -239,12 +204,7 @@
                   "const": "design"
                 },
                 "nodes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/reference_node"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/reference_value"
                 }
               },
               "required": [
@@ -260,12 +220,7 @@
                   "const": "technical"
                 },
                 "nodes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/reference_node"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/reference_value"
                 }
               },
               "required": [
@@ -281,12 +236,7 @@
                   "const": "validation"
                 },
                 "nodes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/reference_node"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/reference_value"
                 }
               },
               "required": [
@@ -302,12 +252,7 @@
                   "const": "implementation_assumption"
                 },
                 "nodes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/reference_node"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/reference_value"
                 }
               },
               "required": [
@@ -323,12 +268,7 @@
                   "const": "open_question"
                 },
                 "nodes": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/reference_node"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/reference_value"
                 }
               },
               "required": [
@@ -344,12 +284,7 @@
                   "const": "scope_guard"
                 },
                 "segments": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/business_segment"
-                  },
-                  "minItems": 1,
-                  "maxItems": 4294967295
+                  "$ref": "#/$defs/business_value"
                 }
               },
               "required": [
@@ -442,6 +377,58 @@
           "additionalProperties": false
         }
       ]
+    },
+    "business_value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4294967295,
+              "items": {
+                "$ref": "#/$defs/business_segment"
+              }
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "reference_value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4294967295,
+              "items": {
+                "$ref": "#/$defs/reference_node"
+              }
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "oneOf": [
@@ -479,12 +466,7 @@
           "type": "object",
           "properties": {
             "nodes": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/reference_node"
-              },
-              "minItems": 1,
-              "maxItems": 4294967295
+              "$ref": "#/$defs/reference_value"
             }
           },
           "required": [

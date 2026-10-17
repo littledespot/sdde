@@ -10,21 +10,27 @@ pub const Error = std.mem.Allocator.Error || error{InvalidEvaluationContract};
 pub const Authorization = struct {
     binding: debug.Description,
 
-    pub fn authorize(context: *ports.Context, value: debug.Description) ports.Error!void {
+    pub fn authorize(context: *ports.Context, value: debug.Description) ports.Error!@import("../../src/domain/llm_provider_contracts.zig").BedrockRequestProfile {
         const self: *Authorization = @ptrCast(@alignCast(context));
         const expected = self.binding;
         if (!std.mem.eql(u8, value.provider, expected.provider) or !std.mem.eql(u8, value.model, expected.model) or !std.meta.eql(value.provider_config, expected.provider_config) or
             !std.meta.eql(value.controls, expected.controls) or !debug.sameOptional(value.reasoning_effort, expected.reasoning_effort) or value.response_mode != expected.response_mode or value.operation_kind != .inference) return error.ReplayUnauthorized;
+        return (validatedContract(value) catch return error.ReplayUnauthorized).bedrock_request_profile;
     }
 };
 
 pub fn validateBinding(binding: debug.Description) error{InvalidEvaluationContract}!void {
+    _ = try validatedContract(binding);
+}
+
+fn validatedContract(binding: debug.Description) error{InvalidEvaluationContract}!*const @import("../../src/domain/llm_provider_contracts.zig").ProviderModelContract {
     if (binding.provider_config != .aws_bedrock or binding.operation_kind != .inference) return error.InvalidEvaluationContract;
     const provider = identities.ProviderId.parse(binding.provider) orelse return error.InvalidEvaluationContract;
     const model = identities.ModelId.parse(binding.model) orelse return error.InvalidEvaluationContract;
     const supported = registered.registry.resolve(provider, model) orelse return error.InvalidEvaluationContract;
     if (!supported.acceptsConfig(binding.provider_config) or !supported.capabilities.supports(binding.response_mode, binding.controls) or
         !@import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(supported.supported_reasoning_efforts, binding.reasoning_effort)) return error.InvalidEvaluationContract;
+    return supported;
 }
 
 /// Retains captured content, schema, controls and response mode. The caller's

@@ -18,16 +18,30 @@ pub const Exhaustion = struct {
     operation_name_len: u8,
     limit: Limit,
     completed_executions: u64,
+    reason: Reason,
+    defect: ?Key,
 
+    pub const Reason = enum { retry_limit, unchanged_repair };
     pub const Description = struct {
         operation_instance_id: workflow.WorkflowStepId,
         retry_limit: u32,
         completed_executions: u64,
+        reason: Reason,
+        defect: ?Key,
     };
 
     pub fn init(step: workflow.WorkflowStepId, limit: Limit, completed: u64) ?Exhaustion {
         if (workflow.WorkflowStepId.parse(step.bytes) == null or completed <= limit.value) return null;
-        var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed };
+        var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed, .reason = .retry_limit, .defect = null };
+        @memcpy(result.operation_name[0..step.bytes.len], step.bytes);
+        return result;
+    }
+
+    /// An unchanged canonical repair ends the same allowance immediately. The
+    /// count remains the actual admitted executions, never the configured limit.
+    fn unchanged(step: workflow.WorkflowStepId, limit: Limit, completed: u64, key: Key) ?Exhaustion {
+        if (workflow.WorkflowStepId.parse(step.bytes) == null or completed == 0 or completed > @as(u64, limit.value) + 1) return null;
+        var result: Exhaustion = .{ .operation_name = @splat(0), .operation_name_len = @intCast(step.bytes.len), .limit = limit, .completed_executions = completed, .reason = .unchanged_repair, .defect = key };
         @memcpy(result.operation_name[0..step.bytes.len], step.bytes);
         return result;
     }
@@ -37,7 +51,7 @@ pub const Exhaustion = struct {
     }
 
     pub fn describe(self: *const Exhaustion, allocator: std.mem.Allocator) std.mem.Allocator.Error!Description {
-        return .{ .operation_instance_id = .{ .bytes = try allocator.dupe(u8, self.operation().bytes) }, .retry_limit = self.limit.value, .completed_executions = self.completed_executions };
+        return .{ .operation_instance_id = .{ .bytes = try allocator.dupe(u8, self.operation().bytes) }, .retry_limit = self.limit.value, .completed_executions = self.completed_executions, .reason = self.reason, .defect = self.defect };
     }
 };
 
@@ -99,7 +113,7 @@ pub const Observation = struct {
         allocator.free(self.assignments);
     }
 };
-pub const Role = enum { none, authorize, merge, validate, merge_validate };
+pub const Role = enum { none, authorize, merge, validate, merge_validate, abandon_advice };
 /// Native repair membership uses u32 ordinals. This representational bound also
 /// bounds the execution's distinct keys across multiple native scopes.
 pub const maximum_repair_keys: u32 = std.math.maxInt(u32);
@@ -134,6 +148,7 @@ pub fn permitsTransition(role: Role, transition: ?Transition) bool {
         .merge => value == .merged,
         .validate => value == .validated,
         .merge_validate => value == .merged_validated,
+        .abandon_advice => value == .abandoned_advice,
     };
 }
 
@@ -179,9 +194,11 @@ pub const Validation = enum { resolved, recurring };
 pub const ValidationMode = enum { native, dependent_review };
 pub const Transition = union(enum) {
     authorized: Permit,
-    merged: struct { permit: Permit, revision_after: u64, validation: ValidationMode = .native },
+    merged: struct { permit: Permit, revision_after: u64, changed: bool, validation: ValidationMode = .native },
     validated: struct { permit: Permit, revision: u64, result: Validation },
-    merged_validated: struct { permit: Permit, revision_after: u64, result: Validation },
+    merged_validated: struct { permit: Permit, revision_after: u64, changed: bool, result: Validation },
+    /// Optional advice was not assessed. This retires authorization, never a defect.
+    abandoned_advice: Permit,
 };
 pub const ProgressError = error{InvalidRepairProgress};
 pub const StateError = std.mem.Allocator.Error || ProgressError;
@@ -197,6 +214,7 @@ pub const State = struct {
     active: ?Active = null,
     deferred: std.ArrayList(Active) = .empty,
     revision: u64 = 0,
+    terminal_exhaustion: ?Exhaustion = null,
 
     const Population = struct { id: [32]u8, maximum_targets: u32, targets: u32, revision: u64 };
     const Entry = struct { key: Key, authorization: [32]u8, revision: u64 };
@@ -204,6 +222,7 @@ pub const State = struct {
     const Active = struct {
         permit: Permit,
         phase: union(enum) { authorized, merged: struct { revision: u64, validation: ValidationMode }, recurring },
+        admitted_attempt: ?usize,
     };
 
     /// Preparation may grow capacity but does not change logical state. Commit
@@ -238,6 +257,7 @@ pub const State = struct {
     /// A child may continue its exact active repair while native dependent
     /// validation suspends its parents. This query grants no resolution.
     pub fn permitsContinuation(self: *const State, current: Permit, pending: Key) bool {
+        if (self.terminal_exhaustion != null) return false;
         const active = self.active orelse return false;
         if (active.phase != .authorized or !std.meta.eql(active.permit, current)) return false;
         if (std.meta.eql(active.permit.key, pending)) return true;
@@ -251,6 +271,7 @@ pub const State = struct {
     /// Regeneration may derive current dependent candidates while this exact
     /// merged repair awaits full review. This query grants no resolution.
     pub fn permitsDependentContinuation(self: *const State, current: Permit, pending: Key) bool {
+        if (self.terminal_exhaustion != null) return false;
         const active = self.currentDependentPermit() orelse return false;
         if (!std.meta.eql(active, current)) return false;
         if (std.meta.eql(active.key, pending)) return true;
@@ -270,10 +291,14 @@ pub const State = struct {
     }
 
     fn completed(self: *const State, operation_id: workflow.WorkflowStepId, key: AttemptKey) u64 {
-        for (self.attempts.items) |attempt| {
-            if (attempt.key.eql(key) and std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) return attempt.completed;
+        return if (self.attemptIndex(operation_id, key)) |index| self.attempts.items[index].completed else 0;
+    }
+
+    fn attemptIndex(self: *const State, operation_id: workflow.WorkflowStepId, key: AttemptKey) ?usize {
+        for (self.attempts.items, 0..) |attempt, index| {
+            if (attempt.key.eql(key) and std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) return index;
         }
-        return 0;
+        return null;
     }
 
     pub fn observe(self: *const State, allocator: std.mem.Allocator, operation_id: workflow.WorkflowStepId) std.mem.Allocator.Error![]const DefectCount {
@@ -299,6 +324,25 @@ pub const State = struct {
             try result.append(allocator, .{ .request = attempt.key.assignment.record, .completed_executions = attempt.completed });
         }
         return result.toOwnedSlice(allocator);
+    }
+
+    /// Validate unchanged evidence before any candidate delta is applied. This
+    /// neither resolves the defect nor invents unused attempts or revisions.
+    pub fn unchangedExhaustion(self: *State, transition: Transition) ProgressError!?Exhaustion {
+        if (self.terminal_exhaustion != null) return error.InvalidRepairProgress;
+        const value: struct { permit: Permit, revision_after: u64 } = switch (transition) {
+            .merged => |merged| if (!merged.changed) .{ .permit = merged.permit, .revision_after = merged.revision_after } else return null,
+            .merged_validated => |merged| if (!merged.changed) .{ .permit = merged.permit, .revision_after = merged.revision_after } else return null,
+            .authorized, .validated, .abandoned_advice => return null,
+        };
+        try self.validateMerge(value.permit, value.revision_after);
+        const index = self.active.?.admitted_attempt orelse return error.InvalidRepairProgress;
+        if (index >= self.attempts.items.len) return error.InvalidRepairProgress;
+        const attempt = self.attempts.items[index];
+        if (attempt.key != .defect or !std.meta.eql(attempt.key.defect, value.permit.key)) return error.InvalidRepairProgress;
+        const result = Exhaustion.unchanged(attempt.operation_id, attempt.limit, attempt.completed, value.permit.key) orelse return error.InvalidRepairProgress;
+        self.terminal_exhaustion = result;
+        return result;
     }
 
     pub fn prepare(self: *State, transition: Transition) StateError!Prepared {
@@ -332,7 +376,7 @@ pub const State = struct {
                     self.scopes.items[scope_index].targets += 1;
                 }
                 self.scopes.items[scope_index].revision = permit.revision;
-                self.active = .{ .permit = permit, .phase = .authorized };
+                self.active = .{ .permit = permit, .phase = .authorized, .admitted_attempt = null };
             },
             .merged => |value| {
                 self.entries.items[self.entryIndex(value.permit.key).?].revision = value.revision_after;
@@ -350,6 +394,7 @@ pub const State = struct {
                 self.scopes.items[self.scopeIndex(value.permit.key.scope).?].revision = value.revision_after;
                 self.finishValidation(value.result);
             },
+            .abandoned_advice => self.active = self.deferred.pop(),
         }
         self.revision = next_revision;
     }
@@ -360,7 +405,10 @@ pub const State = struct {
         _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         const active = self.active orelse return error.InvalidRepairProgress;
         if (!std.meta.eql(active.permit, permit) or active.phase != .authorized) return error.InvalidRepairProgress;
-        return self.countAttempt(operation_id, limit, .{ .defect = permit.key });
+        const key: AttemptKey = .{ .defect = permit.key };
+        const result = try self.countAttempt(operation_id, limit, key);
+        if (result == .allowed) self.active.?.admitted_attempt = self.attemptIndex(operation_id, key) orelse return error.InvalidRepairProgress;
+        return result;
     }
 
     pub fn beginAssignmentAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, assignment: Assignment) StateError!AttemptResult {
@@ -371,6 +419,7 @@ pub const State = struct {
     }
 
     fn countAttempt(self: *State, operation_id: workflow.WorkflowStepId, limit: Limit, key: AttemptKey) StateError!AttemptResult {
+        if (self.terminal_exhaustion != null) return error.InvalidRepairProgress;
         _ = workflow.WorkflowStepId.parse(operation_id.bytes) orelse return error.InvalidRepairProgress;
         for (self.attempts.items) |*attempt| {
             if (!attempt.key.eql(key) or !std.mem.eql(u8, attempt.operation_id.bytes, operation_id.bytes)) continue;
@@ -397,6 +446,7 @@ pub const State = struct {
     }
 
     fn validateTransition(self: *const State, transition: Transition) ProgressError!void {
+        if (self.terminal_exhaustion != null) return error.InvalidRepairProgress;
         switch (transition) {
             .authorized => |permit| {
                 if (permit.revision == 0 or permit.maximum_targets == 0) return error.InvalidRepairProgress;
@@ -420,9 +470,8 @@ pub const State = struct {
                 }
             },
             .merged => |value| {
-                const active = self.active orelse return error.InvalidRepairProgress;
-                const revision_after = std.math.add(u64, value.permit.revision, 1) catch return error.InvalidRepairProgress;
-                if (active.phase != .authorized or !std.meta.eql(active.permit, value.permit) or value.revision_after != revision_after) return error.InvalidRepairProgress;
+                if (!value.changed) return error.InvalidRepairProgress;
+                try self.validateMerge(value.permit, value.revision_after);
             },
             .validated => |value| {
                 const active = self.active orelse return error.InvalidRepairProgress;
@@ -433,8 +482,18 @@ pub const State = struct {
                     .dependent_review => value.revision < merged_revision,
                 }) return error.InvalidRepairProgress;
             },
-            .merged_validated => |value| try self.validateTransition(.{ .merged = .{ .permit = value.permit, .revision_after = value.revision_after } }),
+            .merged_validated => |value| try self.validateTransition(.{ .merged = .{ .permit = value.permit, .revision_after = value.revision_after, .changed = value.changed } }),
+            .abandoned_advice => |permit| {
+                const active = self.active orelse return error.InvalidRepairProgress;
+                if (!std.meta.eql(active.permit, permit)) return error.InvalidRepairProgress;
+            },
         }
+    }
+
+    fn validateMerge(self: *const State, permit: Permit, revision_after: u64) ProgressError!void {
+        const active = self.active orelse return error.InvalidRepairProgress;
+        const expected = std.math.add(u64, permit.revision, 1) catch return error.InvalidRepairProgress;
+        if (active.phase != .authorized or !std.meta.eql(active.permit, permit) or revision_after != expected) return error.InvalidRepairProgress;
     }
 
     fn suspendsParent(self: *const State) bool {

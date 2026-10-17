@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-09-05
 - **Decision authority:** Explicit user direction
-- **Supersedes:** ADR 0008's reference-derived naming and the feature-ownership
+- **Supersedes:** ADR 0008's reference-derived naming (ADR 0008 is removed) and the feature-ownership
   registry/inventory gates in Design Sections 7.3, 13.2, 17, 24 and 25.
 
 ## Decision
@@ -61,16 +61,5 @@ Reruns follow [ADR 0009's shared replacement rule](0009-atomic-workflow-executio
 - Keep unrelated files outside the write set.
 - Follow ADR 0009 for publication and fresh reruns; add no recovery mechanism.
 
-## Implementation status
-
-- Implemented: the two-field invocation and read-only feature/reference preflight,
-  shared path validation, config-root-relative selection, archive/alias rejection, and
-  directory-key consumers.
-- The derived-name operation and naming parameters are removed.
-- Tests cover standard/custom specs roots, independent reference changes and unchanged
-  existing files.
-- Generation, registered-output replacement and write-time protection are now connected
-  through the shared writer.
-- Authenticated answer application and broader Specify acceptance remain open; [F0100
-  §3.12](../features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)
-  tracks the current boundary.
+Tests must cover standard and custom specs roots, independent reference changes and
+unchanged existing files.

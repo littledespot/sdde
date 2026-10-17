@@ -12,6 +12,6 @@ pub const Action = struct {
     };
     pub fn execute(_: Action, a: std.mem.Allocator, value: draft.State, clarifications: @import("../../domain/clarification_refresh.zig").Result) codec.Error![]const u8 {
         if (clarifications != .ready) return error.InvalidIncompleteSpecification;
-        return codec.render(a, value, clarifications.ready);
+        return codec.render(a, value, try clarifications.ready.validateFor(a, value.reference.inputs));
     }
 };

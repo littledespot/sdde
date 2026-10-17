@@ -15,6 +15,7 @@ pub const Decision = enum {
     conflicting,
     unsupported,
     candidate_omission,
+    candidate_invalid,
     inconclusive,
     not_applicable,
 
@@ -31,6 +32,8 @@ pub const Decision = enum {
     }
 };
 pub const Canonical = struct {
+    pub const model_field_projection = Value;
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
     loss: loss = .{ .unlocalized = .{} },
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
     kind: Decision,
@@ -39,6 +42,7 @@ pub const Canonical = struct {
     detail: []const u8,
     missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
+    authority_gap: ?a.AuthorityGap = null,
 };
 
 pub fn fixedClaims(required: evidence.Requirements) ?[]const r.ClaimId {
@@ -46,10 +50,22 @@ pub fn fixedClaims(required: evidence.Requirements) ?[]const r.ClaimId {
 }
 
 const Positive = struct { source_ids: []const SourceId, detail: []const u8 };
-const Question = struct { source_ids: []const SourceId, detail: []const u8, question: []const u8 };
+const Question = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+    source_ids: []const SourceId,
+    detail: []const u8,
+    question: []const u8,
+};
 const Explanation = struct { source_ids: []const SourceId, detail: []const u8 };
 const Omission = struct { source_ids: []const SourceId, detail: []const u8, missing_obligation: []const u8 };
-pub const Detail = struct { detail: []const u8, missing_obligation: ?[]const u8 = null, question: ?[]const u8 = null };
+const Invalid = struct { source_ids: []const SourceId, detail: []const u8, authority_gap: ?a.AuthorityGap };
+pub const Detail = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+    detail: []const u8,
+    missing_obligation: ?[]const u8 = null,
+    question: ?[]const u8 = null,
+    authority_gap: ?a.AuthorityGap = null,
+};
 
 /// Decode the selected correction shape without permitting a missing obligation
 /// or admitting omission-only fields into another retained finding.
@@ -57,6 +73,10 @@ pub fn decodeDetail(a_alloc: std.mem.Allocator, bytes: []const u8, decision: Dec
     if (decision == .candidate_omission) {
         const value = try codec.decode(struct { detail: []const u8, missing_obligation: []const u8 }, a_alloc, bytes);
         return .{ .detail = value.detail, .missing_obligation = value.missing_obligation };
+    }
+    if (decision == .candidate_invalid) {
+        const value = try codec.decode(struct { detail: []const u8, authority_gap: ?a.AuthorityGap }, a_alloc, bytes);
+        return .{ .detail = value.detail, .authority_gap = value.authority_gap };
     }
     if (evidence.questionRequired(decision.finding())) {
         const value = try codec.decode(struct { detail: []const u8, question: []const u8 }, a_alloc, bytes);
@@ -72,6 +92,7 @@ pub const Value = union(enum) {
     conflicting: Question,
     unsupported: Question,
     candidate_omission: Omission,
+    candidate_invalid: Invalid,
     inconclusive: Explanation,
     not_applicable: Positive,
 };
@@ -84,6 +105,9 @@ pub const Batch = struct { findings: []const BatchFinding };
 /// Resolve only subject-bound or diagnostic claims. An unlocalized negative
 /// finding may use source-only evidence, never an arbitrary eligible subset.
 fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) json.Error![]const r.ClaimId {
+    // The native pre-authoring source-purpose rule fixes an empty claim set;
+    // its model-selected source IDs are validated separately. No catalogue is
+    // promoted into a positive authored association.
     if (required.rule(kind.finding(), location).fixedClaims()) |claims| return claims;
     if (kind == .candidate_omission) return &.{};
     if (required.supported_provenance) |provenance| return provenance.claim_ids;
@@ -109,6 +133,7 @@ pub fn canonical(value: Value, required: evidence.Requirements) json.Error!Canon
         .supported, .not_applicable => |positive| .{ .kind = kind, .provenance = selected, .source_ids = positive.source_ids, .detail = positive.detail },
         .ambiguous, .conflicting, .unsupported => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .question = negative.question },
         .candidate_omission => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .missing_obligation = negative.missing_obligation, .loss = location },
+        .candidate_invalid => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .authority_gap = negative.authority_gap },
         .inconclusive => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail },
     };
 }
@@ -126,7 +151,7 @@ pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: los
 /// Production admission always decodes and validates the response again.
 pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.Requirements) json.Error![]const u8 {
     _ = required;
-    if (!evidence.validObligation(value.kind.finding(), value.missing_obligation)) return error.InvalidJsonDocument;
+    if (!evidence.validObligation(value.kind.finding(), value.missing_obligation) or (value.kind != .candidate_invalid and value.authority_gap != null)) return error.InvalidJsonDocument;
     const positive: Positive = .{ .source_ids = value.source_ids, .detail = value.detail };
     const selected: Value = switch (value.kind) {
         .supported => .{ .supported = positive },
@@ -135,12 +160,14 @@ pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.R
         .conflicting => .{ .conflicting = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .unsupported => .{ .unsupported = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .candidate_omission => .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail, .missing_obligation = value.missing_obligation.? } },
+        .candidate_invalid => .{ .candidate_invalid = .{ .source_ids = value.source_ids, .detail = value.detail, .authority_gap = value.authority_gap } },
         .inconclusive => .{ .inconclusive = .{ .source_ids = value.source_ids, .detail = value.detail } },
     };
     return codec.encode(Value, a_alloc, selected);
 }
 
 pub const Selection = struct { source_ids: []const SourceId };
+pub const InvalidSelection = struct { source_ids: []const SourceId, authority_gap_source_ids: ?[]const SourceId };
 pub fn decodeSelection(a_alloc: std.mem.Allocator, bytes: []const u8, claims: []const r.ClaimId) json.Error!struct { provenance: @import("specification.zig").Selection, source_ids: []const SourceId } {
     const selected = try codec.decode(Selection, a_alloc, bytes);
     return .{ .provenance = .{ .claim_ids = claims, .clarification_response_ids = &.{} }, .source_ids = selected.source_ids };

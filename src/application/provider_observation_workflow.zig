@@ -4,6 +4,7 @@ const pipeline = @import("../domain/pipeline.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
 const validation = @import("../domain/provider_invocation_validation.zig");
+const advice = @import("../domain/advisory_completion.zig");
 const invocation = @import("../domain/model_invocation_result.zig").For(.inference);
 const requests = @import("model_request_workflow.zig");
 const model_invocation = @import("model_invocation_workflow.zig");
@@ -15,6 +16,7 @@ pub const Outcome = union(enum) {
     validated: *const validation.Evidence,
     rejected: validation.ValidationError,
     cancelled,
+    advisory_stopped: struct { reason: advice.Reason, evidence: *const validation.Evidence },
 };
 
 /// Read-only result. Only validated complete evidence exposes a decoder input.
@@ -25,7 +27,7 @@ pub const Result = opaque {
 
     pub fn outcome(self: *const Result) Outcome {
         return switch (storage(self).outcome) {
-            .validated => |owned| .{ .validated = owned.evidence },
+            .validated => |owned| if (storage(self).advisory_stop) |reason| .{ .advisory_stopped = .{ .reason = reason, .evidence = owned.evidence } } else .{ .validated = owned.evidence },
             .rejected => |reason| .{ .rejected = reason },
             .cancelled => .cancelled,
         };
@@ -39,7 +41,7 @@ pub const Validate = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .failed, .cancelled },
+        .outcomes = &.{ .ok, .more, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .provider_invocation_validation_result } },
     };
@@ -63,6 +65,7 @@ pub const Validate = struct {
             .allocator = self.allocator,
             .request = retained_request,
             .response = retained_response,
+            .raw = response,
             .operation_id = call.operation_id,
             .outcome = if (!response.operationId().eql(call.operation_id))
                 .{ .rejected = error.ProviderInvocationAssociationInvalid }
@@ -80,6 +83,7 @@ pub const Validate = struct {
             },
         };
         errdefer owner.releaseEvidence();
+        if (owner.outcome == .validated) owner.advisory_stop = advice.invocationReason(request, response, owner.outcome.validated.evidence);
         const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| return operation_error;
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
@@ -100,6 +104,9 @@ pub fn requireCurrent(view: *const data.View, result: *const Result) operations.
     if (result.operationId().model_request_id != request.id()) return error.OperationExecutionFailed;
     switch (result.outcome()) {
         .validated => |evidence| if (evidence.request() != request.prepared() or !evidence.operationId().eql(result.operationId())) return error.OperationExecutionFailed,
+        .advisory_stopped => |stop| {
+            if (advice.invocationReason(request, storage(result).raw, stop.evidence) != stop.reason) return error.OperationExecutionFailed;
+        },
         .rejected, .cancelled => {},
     }
 }
@@ -111,6 +118,7 @@ pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTa
             .stopped, .failed => .failed,
         },
         .rejected => .failed,
+        .advisory_stopped => .more,
         .cancelled => .cancelled,
     };
 }
@@ -119,8 +127,10 @@ const Owner = struct {
     allocator: std.mem.Allocator,
     request: *data.Value,
     response: *data.Value,
+    raw: *const invocation.Result,
     operation_id: provider.ProviderOperationId,
     outcome: union(enum) { validated: validation.Owned, rejected: validation.ValidationError, cancelled },
+    advisory_stop: ?advice.Reason = null,
 
     fn view(self: *const Owner) *const Result {
         return @ptrCast(self);

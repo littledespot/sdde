@@ -71,7 +71,7 @@ pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("
         const entry = try entryAt(current, scope);
         const rejected_origin = try validation.rejectionOrigin(entry, authorization.rule.token_classifications.issues);
         const producing_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
-        return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin);
+        return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin, .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
     }
     // Citation repair needs the unchanged claim's meaning as well as source
     // choices. This is a projection of the retained candidate, not new authority.
@@ -79,18 +79,19 @@ pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("
     const content = @import("model_evidence.zig").modelContent(claim.content);
     const contextual = try packets.withContext(@TypeOf(content), a, base, "claim", content);
     defer packets.release(contextual);
-    return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" }, try claim.rejectionOrigin(authorization.rule.source_selection));
+    return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" }, try claim.rejectionOrigin(authorization.rule.source_selection), .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
 }
 
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);
 }
 
-pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!extraction.TextValidated {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!extraction.TextValidated {
+    if (!canonical.matchesInputs(facts.inputs)) return error.InvalidAtomicRepair;
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const current = facts.candidate;
     const scope = try scopeOf(authorization);
-    const merged = try atomic.checkMerge(a, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
     const entries = try a.dupe(extraction.TextValidatedResult, current.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
         switch (authorization.target) {
@@ -209,6 +210,7 @@ pub const Omission = struct {
     pub const OmissionError = Atomic.Error || loss.Error;
 
     pub fn authorize(a: std.mem.Allocator, facts: OmissionFacts) OmissionError!OmissionAuthorization {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         const selected = try loss.select(a, facts.extraction.inputs, facts.support);
         const finding = selected.finding.review.?;
         const scope = switch (selected.location) {
@@ -243,10 +245,20 @@ pub const Omission = struct {
         return .{ .state_id = .{ .bytes = auth.owner.reference_chunk.reference_state_id.bytes }, .chunk_id = .{ .bytes = auth.owner.reference_chunk.chunk_id.bytes } };
     }
     pub fn packet(a: std.mem.Allocator, facts: OmissionFacts, literals: @import("passive_literals.zig").Registry, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         try Atomic.checkDependencies(a, auth, facts);
+        var arena: std.heap.ArenaAllocator = .init(a);
+        defer arena.deinit();
+        const json = @import("model_candidate_json.zig");
+        // The old outcome is a native CAS union; both claim repairs and
+        // false-empty outcome repairs return the same complete Proposal wire.
+        const fields = switch (auth.target) {
+            .classification => json.fieldBindings(extraction.tokens.Classification, arena.allocator(), .{}),
+            .claim, .outcome => json.fieldBindings(extraction.Proposal, arena.allocator(), .{ .reference_phase = .extraction }),
+        } catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair;
         const base = try @import("reference_model_input.zig").extractionPacket(a, facts.extraction.inputs, literals, facts.extraction.candidates, try Omission.scopeOf(auth));
         defer packets.release(base);
-        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth));
+        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
     }
     fn sourceOrigin(facts: OmissionFacts, auth: OmissionAuthorization) OmissionError!?@import("model_candidate_origin.zig").Origin {
         const entry = try entryAt(facts.extraction.candidate, try Omission.scopeOf(auth));
@@ -264,11 +276,13 @@ pub const Omission = struct {
             .outcome => .{ .outcome = .{ .claim = try json.decode(extraction.Proposal, a, bytes) } },
         };
     }
-    pub fn merge(a: std.mem.Allocator, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+        try loss.requireRepairPhase(facts.support.repair_phase);
+        if (!canonical.matchesInputs(facts.extraction.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const scope = try Omission.scopeOf(auth);
         const entry = try entryAt(facts.extraction.candidate, scope);
-        const merged = try Atomic.checkMerge(a, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
+        const merged = try Atomic.checkMerge(a, canonical, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
         const entries = try a.dupe(extraction.TextValidatedResult, facts.extraction.candidate.entries);
         for (entries) |*changed| if (changed.scope.chunk_id.eql(scope.chunk_id)) {
             if (auth.target == .classification) {

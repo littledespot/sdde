@@ -59,6 +59,34 @@ pub fn recordScalar(allocator: std.mem.Allocator, context: provenance.Context, r
     return scalarInScopes(allocator, context, value, try provenance.scopesForRecord(allocator, context, record));
 }
 
+/// Render an unaccepted native candidate for diagnosis. Source selection and
+/// insertion identity are resolved by their existing owner; this grants no
+/// text admission or repaired-candidate authority.
+pub fn modelValue(allocator: std.mem.Allocator, context: provenance.Context, value: spec.Model.AttributedValue) Error!spec.Scalar {
+    const resolved = try provenance.lineageForRepair(allocator, context, value.provenance, &.{value.value});
+    return scalarInScopes(allocator, context, value.value, resolved.scopes);
+}
+
+pub fn modelRecord(allocator: std.mem.Allocator, context: provenance.Context, record: spec.Model.RecordProposal) Error!spec.Content(spec.Scalar) {
+    const resolved = try provenance.lineageForRepair(allocator, context, record.provenance, try provenance.recordValues(allocator, record.content));
+    return switch (record.content) {
+        inline else => |fields, kind| result: {
+            var rendered: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
+            inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                const value = @field(fields, field.name);
+                if (comptime field.type == spec.BusinessValue) {
+                    @field(rendered, field.name) = try scalarInScopes(allocator, context, value, resolved.scopes);
+                } else {
+                    const relationships = try allocator.alloc(spec.Scalar, value.len);
+                    for (value, relationships) |entry, *destination| destination.* = try scalarInScopes(allocator, context, entry, resolved.scopes);
+                    @field(rendered, field.name) = relationships;
+                }
+            }
+            break :result @unionInit(spec.Content(spec.Scalar), @tagName(kind), rendered);
+        },
+    };
+}
+
 fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, value: spec.BusinessValue, scopes: []const @import("reference_evidence.zig").Scope) Error!spec.Scalar {
     var bytes: std.ArrayList(u8) = .empty;
     var spans: std.ArrayList(spec.CodeSpan) = .empty;
@@ -73,7 +101,7 @@ fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, val
         .exact_copy => |selected| {
             const items = try provenance.items(context);
             const token = @import("reference_support.zig").exact(items, selected.claim_id) catch return error.InvalidSpecification;
-            if (!provenance.permitsExactKind(token.value.kind)) return error.InvalidSpecification;
+            if (!try @import("specification_exact_tokens.zig").permits(items, selected.claim_id)) return error.InvalidSpecification;
             const raw = token.value.raw_value.bytes;
             const start = bytes.items.len;
             try bytes.appendSlice(allocator, raw);

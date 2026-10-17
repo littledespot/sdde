@@ -1,0 +1,67 @@
+{
+  "schema": "grader-calibration-panel/v1",
+  "case_id": "wf-001-hello-world-node-vitest-spec",
+  "sources": [
+    {
+      "id": "stories",
+      "sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487"
+    }
+  ],
+  "rubric_sha256": "b6d887dde13e5c5287767cf646e06599ad676463cc7b54fc6907fe94b63ddca4",
+  "specimens": [
+    {
+      "id": "faithful-a",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/faithful-a.md",
+      "sha256": "ee6aad5436132be15104263b8b6214ff22c9948bb6627af1d9d1899357891b69",
+      "expected": "passed"
+    },
+    {
+      "id": "faithful-b",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/faithful-b.md",
+      "sha256": "bc6da404ac3cc3597207d4095a815b0bab5cc8a908d98aafe3ea961e8e0d7ba4",
+      "expected": "passed"
+    },
+    {
+      "id": "missing-startup",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/missing-startup.md",
+      "sha256": "6778ede67b4c3a2000ff19bb5d616fccde2db98d80894a397edfbe8d7656f0f2",
+      "expected": "failed"
+    },
+    {
+      "id": "missing-greeting",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/missing-greeting.md",
+      "sha256": "dac239712eb32c0c156b4f656a97c715bc30d5964a3795ae27f0be66219bf048",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-greeting",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/wrong-greeting.md",
+      "sha256": "851a4ca0608c5b90589d07130a15fe174b327fbb30eddb3604b454bd55011793",
+      "expected": "failed"
+    },
+    {
+      "id": "invented-scope",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/invented-scope.md",
+      "sha256": "b7f2487e98f71ca9c08716dfb405e98127a64c691bc7d5c27c0d22173d85d513",
+      "expected": "failed"
+    },
+    {
+      "id": "embedded-instructions",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/embedded-instructions.md",
+      "sha256": "12e37d83a28155531a21b1ec53ae176d35f8db8ff680869c2e243743a6a090d0",
+      "expected": "failed"
+    },
+    {
+      "id": "missing-utc",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/missing-utc.md",
+      "sha256": "3784604d2f5bc7dbee8aa885e9c74e2653d50245fef59dd59bdc244f11994977",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-timezone",
+      "path": "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/wrong-timezone.md",
+      "sha256": "b75de25ee15ab7c029bb9f182cd5a33c9c422fd411aed5944ff2e0b7d70d2ccb",
+      "expected": "failed"
+    }
+  ]
+}

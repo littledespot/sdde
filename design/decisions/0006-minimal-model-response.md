@@ -10,11 +10,8 @@
 - **Supersedes:** The metadata-bearing model response and repair-response
   examples in `design/code.md`, and F0007's requirement to echo those identities
 
-**Implementation:** Schema compilation and native request/response execution are
-implemented. [ADR 0012](0012-workflow-owned-model-request.md) records the
-request lifecycle integration; [F0100](../features/F0100-SpecWorkflow.md#implementation-status)
-tracks remaining workflow acceptance work. Implementation status does not alter
-this decision's scope.
+[ADR 0012](0012-workflow-owned-model-request.md) owns the request lifecycle that
+consumes these responses.
 
 ## Decision
 
@@ -265,9 +262,8 @@ For example, a single-target replacement response is simply:
 - Any invalid schema rejects graph construction with `WORKFLOW_GRAPH_COMPILE_INVALID`;
   no partial registry is published.
 
-- This increment implements schema compilation, not request construction, candidate
-  decoding/validation, registered native-provider schema projection or provider calls.
-- Those consumers must reuse the compiled contract rather than introducing another
+- Request construction, candidate decoding/validation and registered native-provider
+  schema projection must reuse the compiled contract rather than introduce another
   schema reader or registry.
 - Byte-identical source/tree binding and immutable ownership are preserved through
   graph/registry copies.
@@ -293,9 +289,9 @@ For example, a single-target replacement response is simply:
 - Schema compilation adds no workflow operation, hidden transition or provider support;
   it is part of the existing workflow-compilation kernel.
 
-## Approved compact wire amendment — 25 September 2026
+## Compact wire amendment — 25 September 2026
 
-The user approved FIX_002 §30. Nested alternatives may be disjoint by JSON type,
+Approved by the user. Nested alternatives may be disjoint by JSON type,
 with the same compiler proof reused by validation, diagnostics and provider
 projection. This supersedes the object-only alternatives restriction. Composition
 keeps such mixed-type values whole; unsupported decomposition rejects at compile
@@ -303,10 +299,19 @@ time. It does not infer a discriminator or a missing value.
 
 The shared candidate codec supports explicit native declarations for lossless
 single-field wrappers and scalar/array union payloads. Declared ordinal IDs encode
-as integers, literal text segments as strings, and normalized business values as
-segment arrays. Passive/source references and exact-copy token/citation selections
-stay explicit. A selected repair whose value can be scalar or array retains one
+as integers and literal text segments as strings. Under the
+[model-facing text contract](../contracts/07-domain-representations.md#model-facing-text)
+(14 October 2026), segment arrays are not a whole text wire value: ordinary prose is a string,
+while explicit composition uses a closed `{"fragments":[...]}` object.
+Passive/source references stay explicit. Under
+[ADR 0020](0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+there are no model-facing exact-copy selections: both shared response-codec directions and
+schemas exclude them, while native raw-byte recognition derives canonical exact
+nodes within current request eligibility. A selected repair whose value can be scalar or array retains one
 closed object envelope (`value`); complete workflow responses remain objects.
+Bare text arrays reject. The generic codec changes only fields explicitly
+declared as typed text and preserves their native arrays without adding separators
+or inferring reference identity; scoped exact recognition is a separate native owner.
 
 Configured result schemas remain acceptance authority. Native declarations only
 map wire representation to existing types; they neither choose evidence nor relax

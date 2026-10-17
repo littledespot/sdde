@@ -18,7 +18,7 @@ pub const Action = struct {
             !reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id) or
             !try @import("../../domain/specification.zig").sameContent(allocator, content, inputs.specification.?) or
             !try authority.validate(allocator, inputs, observations, result)) return error.InvalidSpecificationState;
-        const clarification = try state.checkClarifications(clarifications.ready);
+        const clarification = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
         const expected = try coverage.validate(allocator, context.references, inputs.brief.?, content);
         const canonical = @import("../../domain/canonical_json.zig");
         if (!std.mem.eql(u8, try canonical.encode(coverage.Coverage, allocator, expected), try canonical.encode(coverage.Coverage, allocator, accounted))) return error.InvalidSpecificationState;
@@ -34,7 +34,7 @@ pub const Action = struct {
             .coverage = accounted,
             .clarification = .{ .state_ordinal = clarification.state_ordinal, .revision = clarification.revision },
             .principle_assessment = inputs.principle_assessment orelse return error.InvalidSpecificationState,
-            .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result },
+            .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result, .advice_stop = inputs.advice_stop },
         };
         try state.validate(allocator, value, inputs.feature, self.contracts);
         return value;

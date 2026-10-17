@@ -1,95 +1,58 @@
-High-level execution flow for the Specify workflow.
-The first diagram includes the accepted, pending [ADR 0015](../decisions/0015-specification-principle-review.md)
-assessment; it is not a claim that the current YAML implements that addition.
+High-level execution flow for the Specify workflow, including the accepted
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) review policy.
+The governing design remains proposed; live quality evidence is tracked in FIX05.
 
 ```mermaid
 flowchart TD
-    START["Run sdde WORKFLOW_ID<br/>--feature FEATURE --reference SOURCE"]
-    START --> SETUP["Load project configuration and select the Specify workflow;<br/>prepare the required model provider"]
-    SETUP --> INPUTS["Validate feature and reference locations;<br/>load existing feature state and clarification answers"]
-    INPUTS --> READ["Read the selected reference material;<br/>account for every source"]
-    READ --> EXACT["Prepare eligible source-backed exact values;<br/>require complete preserve/irrelevant classifications"]
-    EXACT --> UNDERSTAND["Account for typed and preserved-token claims;<br/>reconcile within-source, cross-source and global groups"]
-    UNDERSTAND --> RECONCILED["Validate total dispositions, signals and conflict joins;<br/>retain claim meaning, citations and exact tokens"]
-    RECONCILED --> AUTH{"Shared required-authority gate:<br/>complete current support?"}
-    AUTH -->|Supported| POLICY["Review current selected principles against preserved intent;<br/>retain cited Plan-owned policy obligations"]
-    SETUP -. Canonical principle selection .-> POLICY
-    POLICY --> BRIEF["Generate the feature title, description and goal"]
-    POLICY -->|Invalid assessment evidence| BLOCKED
-    AUTH -->|Business/reference gap| CLARIFY
-    AUTH -->|Unknown ownership or policy| BLOCKED
-    BRIEF --> SPEC["Generate scenarios, outcomes, edge cases and acceptance criteria;<br/>requirements, business rules and scope;<br/>key entities when the feature involves business data"]
-    SPEC --> CHECK{"Mechanical checks, current policy assessment and shared<br/>required-authority gate pass?"}
+    START["Run configured Specify workflow<br/>with feature directory and reference selector"]
+    START --> SETUP["Load configuration, workflow and provider;<br/>validate inputs and applicable clarification answers"]
+    SETUP --> READ["Account for every source;<br/>extract exact values and reconcile claims"]
+    READ --> AUTH{"Pre-generation preservation and<br/>required source authority resolved?"}
+    AUTH -->|Yes| BRIEF["Generate brief, story and entity applicability"]
+    AUTH -->|Authorized source loss| SOURCE_REPAIR["Bounded pre-generation source repair;<br/>renew dependencies and revalidate"]
+    SOURCE_REPAIR --> AUTH
+    AUTH -->|Genuine missing business decision| CLARIFY
+    AUTH -->|Unregistered ownership or exhausted correction| BLOCKED
+    BRIEF --> RECORDS["Generate assigned records;<br/>admit prose and reconstruct eligible exact occurrences"]
+    BRIEF -->|Declared knowledge gap| CLARIFY
+    RECORDS -->|Declared knowledge gap| CLARIFY
+    RECORDS --> NATIVE{"Native shape, provenance,<br/>membership and exact coverage valid?"}
+    NATIVE -->|Authorized unit defect| REPAIR["Repair only the authorized unit;<br/>retain current bindings and bounded retries"]
+    REPAIR --> NATIVE
+    REPAIR -->|Exhausted or unsafe| BLOCKED
+    NATIVE -->|Yes| REVIEW["Assess source and selected principles by whole native unit;<br/>retain every finding as advice with its origin"]
+    SETUP -. Canonical selected principle spans .-> REVIEW
+    REVIEW --> ASSESSMENT{"Complete current assessment membership,<br/>citations and native bindings valid?"}
+    ASSESSMENT -->|Correctable metadata defect| CORRECT["Correct selected finding metadata;<br/>retain verdict, siblings and retry bounds"]
+    CORRECT --> ASSESSMENT
+    ASSESSMENT -->|Missing or stale authority; exhausted correction| BLOCKED
+    ASSESSMENT -->|Yes, including adverse advice| RENDER["Render and reparse specification and reference context;<br/>validate canonical state and captured inputs"]
+    RENDER --> PUBLISH["Replace registered outputs;<br/>workflow state written last"]
+    PUBLISH -->|All writes succeed| DONE["End ok; ready for user review and Plan gate"]
+    PUBLISH -->|Write failure or interruption| WRITEFAIL["No new successful completion;<br/>replaced files may remain; fresh invocation starts at start"]
 
-    CHECK -->|Yes| RENDER["Render and verify spec.md<br/>and reference-context.md"]
-    RENDER --> PUBLISH["Completely replace registered outputs with validated artifacts and state;<br/>preserve user-resolved clarification files"]
-    PUBLISH -->|All writes succeed| DONE["Mark the feature specified;<br/>ready for user review and then plan"]
-    PUBLISH -->|Write failure or interruption| WRITEFAIL["No new successful completion;<br/>replaced files may remain; fresh rerun from start"]
-
-    UNDERSTAND -->|Missing or conflicting meaning| CLARIFY
-    BRIEF -->|Clarification required| CLARIFY
-    SPEC -->|Clarification required| CLARIFY
-    CHECK -->|Genuine source-authority gap| CLARIFY
-    CLARIFY["Prepare the requirement, evidence and exact user decision;<br/>reuse existing questions for the same subject"]
-    CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End blocked;<br/>user direction is required"]
-    CLARIFY -->|Question can be created or refreshed| QUESTIONS["Create new forms; completely overwrite unresolved clarify/SNN.md at the same IDs;<br/>preserve user-resolved forms"]
-    QUESTIONS --> NEEDSUSER["End needs_user;<br/>publish incomplete spec and question links"]
-    NEEDSUSER -. User answers the questions and reruns the command .-> START
-
-    CHECK -->|Repairable candidate defect or supported omission| REPAIR["Repair only the authorized content<br/>within the declared retry limits"]
-    REPAIR -->|Repaired candidate| CHECK
-    REPAIR -->|Retry limit exhausted| BLOCKED
+    CLARIFY["Prepare the exact unresolved required decision;<br/>reuse subject identity and protect resolved answers"]
+    CLARIFY -->|Protected answer needs reconsideration| BLOCKED["End with typed blocked or failed outcome"]
+    CLARIFY -->|Valid writable question| QUESTIONS["Publish incomplete specification and question links"]
+    QUESTIONS --> NEEDSUSER["End needs_user"]
+    NEEDSUSER -. User answers and starts a fresh invocation .-> START
 ```
 
-- `FEATURE` is relative to `paths.specs`; `SOURCE` is relative to `paths.references`.
-- Reference material and validated answers supply the title and requirements.
-- Open SNN prevents Plan execution; open SNN/PNN prevents Tasks execution. Early
-  policy obligations retain Plan ownership and cannot replace unresolved SNN.
-- The supplied definition declares `id: spec-generation`; filenames do not
-  determine workflow identity.
+- Feature and source selectors are relative to their configured roots. The supplied
+  definition declares `id: spec-generation`; its filename does not choose identity.
+- Model review proves no semantic truth. Positive and adverse findings complete
+  the same bound advisory assessment. Neither triggers content repair, upstream
+  rebuilding, a clarification or a mandatory Plan obligation by itself.
+- Source-repair authorization, packet preparation and merge reject once generation
+  starts, even if a workflow routes directly to those operations.
+- Source repair retains its original required review purpose. Generation-ready
+  references still need that validation; active repair obligations block generation.
+- Native validation and current authority remain mandatory. A real defect uses
+  its owning deterministic validator and typed outcome.
+- Open Spec questions prevent Plan; open Spec or Plan questions prevent Tasks.
+  Plan independently validates current required project policy.
 
-[F0100](../features/F0100-SpecWorkflow.md) owns exact-value extraction,
-reconciliation, shared authority gates, content and publication contracts. Its
-implementation-status sections distinguish H-008–H-012 evidence and remaining
-work from live completion and semantic quality.
-
-The current generation YAML publishes unit-need forms or the complete validated
-specification/sidecar/state set; the pending principle assessment is not shown here:
-
-```mermaid
-flowchart LR
-    R["Captured references"] --> X["Model extraction and<br/>hierarchical reconciliation"]
-    X --> A["Shared source-authority gate"]
-    A --> G["Generate one typed unit"]
-    G --> W{"Closed response schema?"}
-    W -->|Malformed| Q["Bounded protocol correction;<br/>same request and precise schema guidance"]
-    Q --> G
-    Q -->|Exhausted| F["End failed"]
-    W -->|Valid| V{"Unit valid?"}
-    V -->|Repairable defect| P["Engine-selected replacement;<br/>bounded YAML repair"]
-    P --> V
-    V -->|Yes; more units| G
-    V -->|All units| C["Assemble, revalidate,<br/>assign IDs and account coverage"]
-    V -->|Knowledge gap| N["Refresh subject-keyed form<br/>and retain protected history"]
-    N --> O["Prepare complete clarification view/state set"]
-    O --> B["Recheck captured inputs;<br/>replace writable forms and registry"]
-    B --> U["End needs_user; no spec.md"]
-    B -->|Write failure| F
-    C --> S["Model-assisted field support<br/>and shared authority gate"]
-    S -->|Supported complete candidate| M["Project, render and reparse;<br/>prepare specification, sidecar and canonical states"]
-    S -->|Genuine source gap| N
-    S -->|Repairable candidate omission| P
-    S -->|No independent supported repair target| F
-    M --> PUB["Validate complete output and captured-input preconditions;<br/>replace registered files, workflow state last"]
-    PUB -->|All writes succeed| DONE["End ok; published specification available to evaluator"]
-    PUB -->|Write failure or interruption| FAIL["No new successful completion;<br/>replaced files may remain"]
-```
-
-- [Model request ownership](../decisions/0012-workflow-owned-model-request.md)
-  keeps protocol correction on the original request/schema and binds repair to
-  a fresh authorized request. Closed variants validate before request closure.
-- [Design §23.2](../design.md#232-workflow-reruns-and-protected-clarification-files)
-  owns rerun replacement and user-closed clarification protection.
-- [Design §25](../design.md#25-atomic-workflow-execution-and-output) owns publication:
-  failed writes may leave replaced files but cannot record new successful completion.
-- Model-assisted review does not prove semantic correctness.
+[Specify](../contracts/17-specify.md), [repair](../contracts/22-repair.md) and
+[publication](../contracts/25-publication.md) own the detailed
+contracts. Model protocol correction retains the original request and schema;
+separate authorized native repairs receive fresh bound requests.

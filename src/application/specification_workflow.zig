@@ -21,11 +21,23 @@ pub const schemas = [_]data.Schema{ session_schema, raw_schema, parsed_schema, c
 pub const SourceReadiness = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .accounted_reference_reconciliation } };
     pub const Action = @import("../actions/specification/check_specification_source_readiness.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .invalid, .failed };
+    allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
         const references = try @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
-        return .{ .outcome = context.?.action.execute(references.payload().reconciliation_accounted), .delta = .{} };
+        if (input.step.repair_permit) |permit| {
+            const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
+            var arena: std.heap.ArenaAllocator = .init(self.allocator);
+            defer arena.deinit();
+            const pending = @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => return .{ .outcome = .invalid, .delta = .{}, .diagnostic = error.InvalidRequiredAuthority },
+            };
+            if (pending == .source_readiness) return .{ .outcome = .blocked, .delta = .{} };
+        }
+        return .{ .outcome = self.action.execute(references.payload().reconciliation_accounted), .delta = .{} };
     }
 };
 
@@ -41,6 +53,18 @@ pub const Initialize = struct {
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
+        // No repaired source may be consumed before its native/dependent
+        // validation settles. A nested active child also retains its parent.
+        if (input.step.repair_permit != null) {
+            owner.rejection = error.InvalidRequiredAuthority;
+            return publish(self.allocator, session_schema, owner, .blocked);
+        }
+        // Required source review cannot survive the source-consumption boundary.
+        // Presence blocks; no model finding or absent-key lineage is authority.
+        for (@import("../domain/required_authority.zig").projection_keys) |key| if (input.step.data.contains(key)) {
+            owner.rejection = error.InvalidRequiredAuthority;
+            return publish(self.allocator, session_schema, owner, .blocked);
+        };
         const prior = owned.read(&input.step.data, @import("specification_publication_workflow.zig").prior_schema, .prior_state) catch |operation_error| return operation_error;
         const result = self.action.execute(owner.arena.allocator(), feature.feature_id, try readContext(&input.step.data), prior) catch |operation_error| return operation_error;
         owner.payload = switch (result) {
@@ -187,15 +211,7 @@ pub const ValidateCoverage = struct {
             .valid => |value| .{ .coverage = value },
             .invalid => |value| .{ .coverage_rejected = value },
         };
-        const transition = transition: {
-            const pending = current.pending_coverage_repair orelse break :transition null;
-            const active = input.step.repair_permit orelse break :transition null;
-            if (!std.meta.eql(active, pending.permit)) break :transition null;
-            break :transition @import("../domain/specification_coverage_repair.zig").coverageValidation(owner.arena.allocator(), current, try readContext(&input.step.data), content) catch |operation_error| return operation_error;
-        };
-        var output = try publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
-        output.delta.repair_transition = transition;
-        return output;
+        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
     }
 };
 

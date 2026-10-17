@@ -4,11 +4,18 @@ const extraction = @import("reference_extraction.zig");
 /// The content part and assembled response share one extraction shape owner.
 pub const Content = union(enum) {
     claims: struct { claims: []const extraction.Proposal },
-    no_feature_claim: struct { reason: extraction.text.ReferenceSemanticText },
+    no_feature_claim: struct {
+        pub const model_fields = .{ .reason = @import("text_field_policy.zig").Field.extraction_reason };
+        reason: extraction.text.ReferenceSemanticText,
+    },
 };
 pub const Response = union(std.meta.Tag(Content)) {
     claims: struct { claims: @FieldType(@FieldType(Content, "claims"), "claims"), token_classifications: []const extraction.tokens.Classification },
-    no_feature_claim: struct { reason: @FieldType(@FieldType(Content, "no_feature_claim"), "reason"), token_classifications: []const extraction.tokens.Classification },
+    no_feature_claim: struct {
+        pub const model_fields = .{ .reason = @import("text_field_policy.zig").Field.extraction_reason };
+        reason: @FieldType(@FieldType(Content, "no_feature_claim"), "reason"),
+        token_classifications: []const extraction.tokens.Classification,
+    },
 };
 
 /// Caller arena owns all decoded strings/collections; no partial value escapes.

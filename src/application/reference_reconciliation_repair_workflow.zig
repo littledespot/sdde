@@ -123,7 +123,7 @@ pub const Merge = struct {
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
     pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, state_schema, .authorized) catch |operation_error| return operation_error;
@@ -142,7 +142,7 @@ pub const Merge = struct {
         };
         owner.payload = .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), state.authorization, replacement, origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.repair_transition = .{ .merged = .{ .permit = state.authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.reconciliation_parsed.source.revision } };
+        delta.repair_transition = (owner.payload.reconciliation_parsed.source.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
         delta.data_replacements[@intFromEnum(rec.parsed_schema.key)] = values.adopt(self.allocator, rec.parsed_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };

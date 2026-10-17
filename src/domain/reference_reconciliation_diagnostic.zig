@@ -40,7 +40,7 @@ pub const Constraint = enum {
     exact_selected_token,
     no_self_relation,
     same_content_kind,
-    same_token_value,
+    native_token_disposition,
     nonconflicting_target,
     reciprocal_conflict,
     acyclic,
@@ -66,7 +66,7 @@ pub const Constraint = enum {
             .all => true,
             .content => |kind| self == .matching_claim_content or (kind == .preserved_token and self == .exact_selected_token),
             .disposition => |mode| mode == .rules and switch (self) {
-                .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
+                .no_self_relation, .same_content_kind, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
                 else => false,
             },
             .selection => |unit| switch (unit) {
@@ -120,7 +120,7 @@ pub const Constraint = enum {
             .exact_selected_token => "Preserved-token identity and exact content must match the source; native code supplies them.",
             .no_self_relation => "A claim cannot relate to itself.",
             .same_content_kind => "Duplicate and superseded targets must match the original claim's content.kind (representation) and, for model content, content.model.kind (semantic category).",
-            .same_token_value => "Duplicate tokens must have the same token kind and exact value.",
+            .native_token_disposition => "Native code retains each first exact byte value and marks later equal-byte original tokens as direct duplicates, independently of token kind. Token dispositions and relationships cannot be authored or repaired by the model.",
             .nonconflicting_target => "Duplicate and superseded targets cannot be conflicting.",
             .reciprocal_conflict => "Each selected conflict group represents mutually incompatible claims; native code expands reciprocal relationships.",
             .acyclic => "Duplicate and superseded chains must terminate without cycles.",
@@ -130,7 +130,7 @@ pub const Constraint = enum {
             .conflicting_related_claims => "Conflict membership must match the accepted incompatible claim groups.",
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
-            .token_projected => "Native code projects every nonconflicting preserved token, including after supersession.",
+            .token_projected => "Native code projects every preserved-token original, including equal-byte duplicates.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Explain every accepted conflict group; native code attaches its membership.",
         };

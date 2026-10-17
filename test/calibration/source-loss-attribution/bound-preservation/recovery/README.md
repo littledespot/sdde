@@ -45,5 +45,5 @@ comparisons, uncertainty, unsupported role loss, absent or new exact dependencie
 and equal-byte distinct occurrences. They run in the complete specification test
 step; none is skipped or weakened. Offline integration tests separately exercise
 the compiled repair workflow and invalidation. See the completion record in
-[FIX01-02](../../../../../fixes/FIX01-02.md) for validation results and the Phase 2
+[FIX01-02](../../../../../fixes/archive/FIX01-02.md) for validation results and the Phase 2
 rejection-diagnostic inventory.

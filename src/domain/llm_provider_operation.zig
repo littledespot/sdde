@@ -3,6 +3,7 @@ const binding = @import("llm_provider_binding.zig");
 const request_identity = @import("model_request_identity.zig");
 const execution_reference = @import("execution_reference.zig");
 const model_controls = @import("model_controls.zig");
+const provider_reasoning = @import("provider_reasoning.zig");
 
 pub const ProviderOperationKind = enum {
     input_token_count,
@@ -104,13 +105,25 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     response_schema: *const @import("model_result_schema.zig").Schema,
     response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
-
+    /// Native source witness for text admission; never serialized to providers.
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
+    field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
+    /// Native, nonserialized assignment provenance, retained through correction.
     pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
         return value;
     }
 
     pub fn validate(self: IdentifiedProviderNeutralModelRequest) RequestError!void {
+        if (self.exact_scope) |scope| {
+            if (!@import("model_exact_values.zig").valid(scope)) return error.InvalidProviderNeutralModelRequest;
+            if (@import("model_request_identity.zig").referenceStateForUnit(self.model_request_id.immutable_unit_owner_id)) |state| if (!state.eql(scope.reference_state)) return error.InvalidProviderNeutralModelRequest;
+        }
+        if (!@import("model_text_wire.zig").validSources(self.original_sources) or !@import("model_text_wire.zig").compatibleProseSchema(self.prose_fields, self.response_schema.root())) return error.InvalidProviderNeutralModelRequest;
+        const fields = @import("model_text_field.zig").inspectSchema(self.response_schema.root(), self.field_policies, self.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and self.exact_scope == null)) return error.InvalidProviderNeutralModelRequest;
         if (!self.model_request_id.model_operation_id.eql(self.model_operation_id) or
             !self.binding_id.operation_id.eql(self.model_operation_id) or
             !self.binding_id.isValid() or
@@ -309,6 +322,7 @@ pub const RawProviderModelResult = union(enum) {
         reason: ProviderContentDiagnostic,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
     complete: struct {
         request_id: *const request_identity.ModelRequestId,
@@ -316,6 +330,7 @@ pub const RawProviderModelResult = union(enum) {
         content: CompleteOwnedUtf8,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
     stopped: struct {
         request_id: *const request_identity.ModelRequestId,
@@ -323,12 +338,16 @@ pub const RawProviderModelResult = union(enum) {
         reason: ProviderNonCandidateStopReason,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
 
     pub fn deinit(self: *RawProviderModelResult) void {
         switch (self.*) {
-            .complete => |*value| value.content.deinit(),
-            .stopped, .rejected => {},
+            .complete => |*value| {
+                value.content.deinit();
+                if (value.reasoning) |*diagnostic| diagnostic.deinit();
+            },
+            inline .stopped, .rejected => |*value| if (value.reasoning) |*diagnostic| diagnostic.deinit(),
         }
         self.* = undefined;
     }

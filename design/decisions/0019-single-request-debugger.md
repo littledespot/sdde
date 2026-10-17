@@ -3,7 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-09-20
 - **Decision authority:** Explicit user direction for a local browser debugger served by the native executable, with exact and modified replay at a single prompt level.
-- **Amends:** ADR 0018 and design §§12, 26–28, 29 and 31. The overall design remains Proposed.
+- **Amends:** ADR 0018 and design §§12, 26–28, 29 and 31.
+- **Amended by:** [ADR 0020](0020-derived-exact-reference-lineage.md): debug
+  descriptions advance to `model-request-debug/v6` and retain the exact-occurrence scope.
 
 ## Diagnostic execution boundary
 
@@ -44,10 +46,14 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v3`
+prompt, exact validation schema and inference settings. `model-request-debug/v6`
 captures the selected schema's complete expanded projection, including named
-selections, composition parts and narrowed repair shapes, plus the optional output
-allowance under the 2026-10-10 amendment to ADR 0011. Older descriptions remain
+selections, composition parts and narrowed repair shapes; the optional output
+allowance (ADR 0011); the native original-source witness and plain-prose selectors
+used by the source-aware model-text wire validator; native wire-field bindings to
+the composition registry, so the selected schema and diagnostic replay enforce the
+same permitted insertions; and the immutable exact-occurrence scope (ADR 0020). This metadata is
+diagnostic input, not provider-visible authority. Older descriptions remain
 unchanged and reject readback; replay requires a new capture, with no compatibility
 reader. The shared schema
 compiler reconstructs selected object/tagged-union roots for diagnostic use;
@@ -85,7 +91,8 @@ requires no browser-supplied filesystem path. Missing snapshots are explicitly
 unavailable; current source files cannot substitute for historical evidence.
 Replay retains the original source snapshot. Modified input is marked as an
 override, including an exact replay of an already modified request. Immutable
-`request-replay/v4` records persist both fields; no older replay reader is added.
+`request-replay/v6` records persist both fields and the native field bindings; no
+older replay reader is added.
 
 ## Replay
 
@@ -104,6 +111,18 @@ Settings include the optional output allowance under
 [ADR 0011](0011-provider-owned-request-limits.md#optional-provider-request-output-allowance):
 replay preserves captured omission or value rather than replacing it from current
 configuration.
+
+**Converse amendment (user-directed, 15 October 2026):** Bedrock request construction,
+capture, extraction and replay use the same canonical Converse codec as production
+invocation. Current validated model registration supplies the typed reasoning
+policy; a captured model name cannot choose a codec or invent controls. Historical
+chat-format captures remain immutable inspection records and fail exact replay
+reconstruction under this serializer. There is no legacy wire reader, migration,
+fallback or automatic retargeting. New compatibility evidence requires a fresh
+authorized current-model capture. Available provider reasoning is projected as
+separate ordered diagnostic blocks (text/signature or opaque redacted content),
+including when no final answer is eligible. The debugger renders it as inert text;
+it cannot be used as candidate JSON, approval, completion or workflow evidence.
 
 Every replay creates new immutable diagnostic request/result records beneath the
 selected feature's `logs/debugger`, linked to the source run/call. The request is

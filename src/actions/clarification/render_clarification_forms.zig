@@ -10,7 +10,7 @@ pub const Action = struct {
         .produces = &.{.clarification_views},
         .side_effect = .none,
     };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, state: c.ValidatedState, inputs: c.Inputs) c.Error![]const views.View {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, state: @import("../../domain/clarification_refresh.zig").Ready, inputs: c.Inputs) c.Error![]const views.View {
         return views.render(allocator, state, inputs.protected_forms);
     }
 };

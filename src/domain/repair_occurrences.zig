@@ -42,6 +42,29 @@ pub const Set = struct {
         return .{ .values = values, .next_ordinal = next_ordinal };
     }
 
+    /// A batch reserves every identity it has assigned, including deleted ones.
+    /// Concatenation must use that span rather than its current live length.
+    pub fn reservedSpan(self: Set, length: usize) Error!u32 {
+        return (try self.next(length)) - 1;
+    }
+
+    /// Join independent occurrence owners without reusing either owner's gaps.
+    /// Left identities stay fixed; right identities move by the left's complete
+    /// reserved span. This is the same projection used by retained-batch views.
+    pub fn concatenating(self: Set, a: std.mem.Allocator, length: usize, right: Set, right_length: usize) Error!Set {
+        const offset = try self.reservedSpan(length);
+        const span = std.math.add(u32, offset, try right.reservedSpan(right_length)) catch return error.InvalidRepairOccurrence;
+        const next_ordinal = std.math.add(u32, span, 1) catch return error.InvalidRepairOccurrence;
+        const size = std.math.add(usize, length, right_length) catch return error.InvalidRepairOccurrence;
+        const values = try a.alloc(Id, size);
+        errdefer a.free(values);
+        for (values[0..length], 0..) |*value, index| value.* = try self.at(index, length);
+        for (values[length..], 0..) |*value, index| value.* = .{
+            .ordinal = std.math.add(u32, offset, (try right.at(index, right_length)).ordinal) catch return error.InvalidRepairOccurrence,
+        };
+        return .{ .values = values, .next_ordinal = next_ordinal };
+    }
+
     fn next(self: Set, length: usize) Error!u32 {
         if (self.next_ordinal != 0) {
             if (self.values.len != length) return error.InvalidRepairOccurrence;
@@ -65,4 +88,20 @@ test "deleting and inserting preserve sibling identity without reusing a deleted
     try std.testing.expectEqual(last, try inserted.at(2, 3));
     try std.testing.expectEqual(@as(u32, 4), (try inserted.at(1, 3)).ordinal);
     try std.testing.expectError(error.InvalidRepairOccurrence, inserted.at(0, 2));
+}
+
+test "concatenation preserves deleted identity gaps and reserves them for later inserts" {
+    const a = std.testing.allocator;
+    const left: Set = .{ .values = &.{.{ .ordinal = 2 }}, .next_ordinal = 4 };
+    const right: Set = .{ .values = &.{ .{ .ordinal = 1 }, .{ .ordinal = 3 } }, .next_ordinal = 5 };
+    const joined = try left.concatenating(a, 1, right, 2);
+    defer a.free(joined.values);
+    try std.testing.expectEqual(@as(u32, 3), try left.reservedSpan(1));
+    try std.testing.expectEqualDeep(&[_]Id{ .{ .ordinal = 2 }, .{ .ordinal = 4 }, .{ .ordinal = 6 } }, joined.values);
+    try std.testing.expectEqual(@as(u32, 8), joined.next_ordinal);
+    const inserted = try joined.inserting(a, 3, 3);
+    defer a.free(inserted.values);
+    try std.testing.expectEqual(@as(u32, 8), (try inserted.at(3, 4)).ordinal);
+    try std.testing.expectError(error.InvalidRepairOccurrence, left.concatenating(a, 2, right, 2));
+    try std.testing.expectError(error.InvalidRepairOccurrence, (Set{ .next_ordinal = std.math.maxInt(u32) }).concatenating(a, 0, .{}, 1));
 }

@@ -11,7 +11,84 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
-pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"This chunk contains no feature claims.\"]},\"token_classifications\":[]}";
+test "native extraction composition defects cannot authorize unit repair or change candidates" {
+    const repair = @import("domain/reference_extraction_text_repair.zig");
+    const contexts = @import("domain/reference_extraction_context.zig");
+    const atomic = @import("domain/atomic_repair.zig");
+    for ([_][]const u8{ "Display the current UTC time. Consult requirements.md.\n", "Renew eligible loans. Consult requirements.md.\n" }) |source| inline for (.{ extraction.Kind.business, extraction.Kind.technical }) |kind| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
+        const context = try text_fixture.prepare(a, inputs);
+        defer context.deinit();
+        const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
+        const bad: extraction.ProposalContent = @unionInit(extraction.ProposalContent, @tagName(kind), if (kind == .business)
+            extraction.text.BusinessText{ .segments = &.{.{ .passive = passive }} }
+        else
+            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .passive = passive }} });
+        const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+        const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .claims = &.{.{ .content = bad, .citations = &.{wholeChunk(inputs.chunks.entries[0])} }} } }} };
+        const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        try std.testing.expectEqual(.reference_only, rejection.issue.reason);
+        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
+        const before = try atomic.snapshot(extraction.Parsed, a, candidate);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, facts, rejection));
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(extraction.Parsed, a, candidate));
+        const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        try std.testing.expectEqualDeep(rejection, repeated);
+    };
+}
+
+test "shared repair progress compares canonical prose while exact CAS and native insertions remain unchanged" {
+    const atomic = @import("domain/atomic_repair.zig");
+    const text = @import("domain/typed_text.zig");
+    const source = @import("domain/specification_support_model.zig");
+    const Replacement = union(enum) { business: text.BusinessText, reference: text.ReferenceSemanticText, question: source.Detail, finding: source.Canonical };
+    const Contract = atomic.Contract(enum { subject }, Replacement, struct { source_revision: u32 }, enum { rejected });
+    const story: Replacement = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Café " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 7 } } }, .{ .literal = .{ .value = " now." } } } } };
+    const question: source.Detail = .{ .detail = "Diagnostic Café remains exact.", .question = "Which café applies?" };
+    const finding: source.Canonical = .{ .kind = .unsupported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "Diagnostic Café remains exact.", .question = "Which café applies?" };
+    for ([_]struct { old: Replacement, proposed: Replacement, changed: bool }{
+        .{ .old = story, .proposed = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Ca" } }, .{ .literal = .{ .value = "fe\u{301} " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 7 } } }, .{ .literal = .{ .value = " now." } } } } }, .changed = false },
+        .{ .old = story, .proposed = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Café " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 8 } } }, .{ .literal = .{ .value = " now." } } } } }, .changed = true },
+        .{ .old = story, .proposed = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Café " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 7 } } }, .{ .literal = .{ .value = " tomorrow." } } } } }, .changed = true },
+        .{ .old = .{ .reference = .{ .nodes = &.{ .{ .literal = .{ .value = "Café source " } }, .{ .source = .{ .source_id = .{ .ordinal = 3 } } } } } }, .proposed = .{ .reference = .{ .nodes = &.{ .{ .literal = .{ .value = "Cafe" } }, .{ .literal = .{ .value = "\u{301} source " } }, .{ .source = .{ .source_id = .{ .ordinal = 3 } } } } } }, .changed = false },
+        .{ .old = .{ .question = question }, .proposed = .{ .question = .{ .detail = question.detail, .question = "Which cafe\u{301} applies?" } }, .changed = false },
+        .{ .old = .{ .question = question }, .proposed = .{ .question = .{ .detail = "Diagnostic Cafe\u{301} remains exact.", .question = question.question } }, .changed = true },
+        .{ .old = .{ .finding = finding }, .proposed = .{ .finding = .{ .kind = finding.kind, .provenance = finding.provenance, .source_ids = finding.source_ids, .detail = finding.detail, .question = "Which cafe\u{301} applies?" } }, .changed = false },
+        .{ .old = .{ .question = .{ .detail = "Retained diagnostic.", .authority_gap = .{ .kind = .unsupported, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "Retained gap diagnostic.", .question = "Which café applies?" } } }, .proposed = .{ .question = .{ .detail = "Retained diagnostic.", .authority_gap = .{ .kind = .unsupported, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "Retained gap diagnostic.", .question = "Which cafe\u{301} applies?" } } }, .changed = false },
+        // Original literal wire spans retain their exact Unicode bytes while
+        // surrounding prose and adjacent fragments use the shared normalizer.
+        .{ .old = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Café {\"fragments\":[\"Cafe\u{301}\"]}" } }} } }, .proposed = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Cafe\u{301} {\"frag" } }, .{ .literal = .{ .value = "ments\":[\"Cafe\u{301}\"]}" } } } } }, .changed = false },
+    }) |case| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const canonical: text.CanonicalText = .{ .normalizer = text_fixture.normalizer, .original_sources = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Original {\"fragments\":[\"Cafe\u{301}\"]} source." }} };
+        const owner: @import("domain/model_request_identity.zig").ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = "subject" } } };
+        var authorization = try Contract.authorize(a, owner, 1, .subject, case.old, .{ .source_revision = 2 }, .rejected);
+        authorization.retry = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+        const merged = try Contract.checkMerge(a, canonical, owner, 1, case.old, .{ .source_revision = 2 }, authorization, case.proposed, null);
+        try std.testing.expectEqual(case.changed, merged.changed);
+        if (!case.changed) {
+            const retry = @import("domain/workflow_retry.zig");
+            for ([_]retry.Transition{ try merged.transition(.dependent_review), try merged.validatedTransition(.resolved) }) |transition| {
+                var state = retry.State.init(std.testing.allocator);
+                defer state.deinit();
+                try state.commit(try state.prepare(.{ .authorized = authorization.retry.? }));
+                _ = try state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 64 }, authorization.retry.?);
+                const exhausted = (try state.unchangedExhaustion(transition)).?;
+                try std.testing.expectEqual(.unchanged_repair, exhausted.reason);
+                try std.testing.expectEqual(@as(u64, 1), exhausted.completed_executions);
+            }
+            if (!try Contract.equal(a, case.old, case.proposed)) try std.testing.expectError(error.InvalidAtomicRepair, Contract.checkMerge(a, canonical, owner, 1, case.proposed, .{ .source_revision = 2 }, authorization, case.proposed, null));
+        }
+    }
+}
+
+pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"This chunk contains no feature claims.\"},\"token_classifications\":[]}";
 
 pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const u8) ![]const u8 {
     const claim = .{
@@ -22,7 +99,7 @@ pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const 
 }
 pub fn passiveReply(allocator: std.mem.Allocator, chunk: evidence.Chunk, ordinal: u32) ![]const u8 {
     return @import("domain/model_candidate_json.zig").encode(@import("domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{
-        .content = .{ .business = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } }} } },
+        .content = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Read " } }, .{ .passive = .{ .passive_literal_id = .{ .ordinal = ordinal } } } } } },
         .citations = &.{wholeChunk(chunk)},
     }}, .token_classifications = &.{} } });
 }
@@ -113,7 +190,7 @@ test "positive no claim evidence and valid citations are mandatory" {
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "unicode.md", "Café\r\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}")}));
-    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"  \"]},\"token_classifications\":[]}";
+    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"  \"},\"token_classifications\":[]}";
     try std.testing.expectError(error.InvalidTypedText, finish(allocator, inputs, &.{raw(inputs, 0, empty_reason)}));
     const parsed = try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "claim"))} });
     var entry = parsed.entries[0];
@@ -341,7 +418,7 @@ test "citation repair changes only the selected reference and retains exact diag
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Preserve the requirement's meaning.") != null);
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, .{ .citation = good });
         const replacement = try repair.parse(a, authorization, packet, wire);
-        const merged = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, replacement, repair_origin);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, replacement, repair_origin);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0].content, merged.entries[0].outcome.claims[0].content);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, merged.entries[0].token_classifications);
         try std.testing.expectEqualDeep(candidate.entries[1], merged.entries[1]);
@@ -352,17 +429,17 @@ test "citation repair changes only the selected reference and retains exact diag
         try std.testing.expectEqualDeep(original_origin, remaining.origin.?);
         try std.testing.expectEqualDeep(repair_origin, merged.entries[0].outcome.claims[0].citation_origins[1].?);
         const retry = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = merged }, .{ .source_selections = remaining });
-        const completed = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = merged }, retry, .{ .citation = good }, repair_origin);
+        const completed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = merged }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = merged }, retry, .{ .citation = good }, repair_origin);
         try std.testing.expect((try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, completed))) == .valid);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, replacement, repair_origin));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = merged }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, replacement, repair_origin));
         var altered = candidate;
         altered.entries = merged.entries;
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = altered }, authorization, replacement, repair_origin));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = altered }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = altered }, authorization, replacement, repair_origin));
         var foreign = authorization;
         foreign.owner.reference_chunk.reference_state_id.bytes = "different-source-state";
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, replacement, repair_origin));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, replacement, repair_origin));
         try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"first\":1,\"last\":1,\"verbatim\":\"invented\"}"));
-        const invalid_repair = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citation = bad }, repair_origin);
+        const invalid_repair = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citation = bad }, repair_origin);
         const rejected = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, invalid_repair))).invalid;
         try std.testing.expectEqualDeep(repair_origin, rejected.origin.?);
     }
@@ -394,20 +471,20 @@ test "missing citation repair is restricted to the empty collection and material
     const authorization = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, .{ .source_selections = rejection });
     try std.testing.expect(authorization.target == .missing_citations);
     try std.testing.expectEqualDeep(content_origin, rejection.origin.?);
-    const unchanged = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citations = .{ .citations = &.{} } }, repair_origin);
+    const unchanged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citations = .{ .citations = &.{} } }, repair_origin);
     const repeated = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, unchanged)).source_selections;
     try std.testing.expectEqualDeep(repair_origin, repeated.origin.?);
     try std.testing.expectEqualDeep(content_origin, unchanged.entries[0].outcome.claims[0].origin.?);
     try std.testing.expectEqualDeep(anchor, unchanged.entries[0].origin.?);
     const again = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, .{ .source_selections = repeated });
     try std.testing.expectEqualDeep(authorization.retry.?.key, again.retry.?.key);
-    const updated = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, again, .{ .citations = .{ .citations = &.{wholeChunk(inputs.chunks.entries[0])} } }, repair_origin);
+    const updated = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = unchanged }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, again, .{ .citations = .{ .citations = &.{wholeChunk(inputs.chunks.entries[0])} } }, repair_origin);
     const accepted = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, updated))).valid;
     try std.testing.expectEqualStrings(bytes, accepted.entries[0].outcome.claims[0].citations[0].verbatim.?);
     try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0].content, updated.entries[0].outcome.claims[0].content);
     try std.testing.expectEqualDeep(content_origin, updated.entries[0].outcome.claims[0].origin.?);
     try std.testing.expectEqualDeep(repair_origin, updated.entries[0].outcome.claims[0].citation_origins[0].?);
-    try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null));
+    try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null));
 }
 
 test "text repair preserves siblings and exposes remaining classification defects across content kinds" {
@@ -445,9 +522,9 @@ test "text repair preserves siblings and exposes remaining classification defect
         const authorization = try repair.authorize(a, facts, rejection);
         const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
         const replacement: repair.Replacement = if (kind == .business or kind == .scope_guard)
-            .{ .business = .{ .segments = &.{.{ .passive = passive }} } }
+            .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Consult " } }, .{ .passive = passive } } } }
         else
-            .{ .reference = .{ .nodes = &.{.{ .passive = passive }} } };
+            .{ .reference = .{ .nodes = &.{ .{ .literal = .{ .value = "Consult " } }, .{ .passive = passive } } } };
         const packet = try repair.packet(std.testing.allocator, facts, context.registry, text_fixture.safety.value(context.owner), available, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
         const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
@@ -456,7 +533,10 @@ test "text repair preserves siblings and exposes remaining classification defect
         const projected = try @import("domain/model_candidate_json.zig").decode(extraction.text.Issue, a, try std.json.Stringify.valueAlloc(a, rule.get("issue").?, .{}));
         try std.testing.expectEqualDeep(rejection.issue, projected);
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
-        const merged = try repair.merge(a, facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
+        var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const schema = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .limited(1_048_576)));
+        try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema, wire, null);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0], merged.entries[0].outcome.claims[0]);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[1].citations, merged.entries[0].outcome.claims[1].citations);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, merged.entries[0].token_classifications);
@@ -469,7 +549,7 @@ test "text repair preserves siblings and exposes remaining classification defect
         const remaining = (try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, checked)).token_classifications;
         try std.testing.expectEqualDeep(first, remaining.origin.?);
         try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{unknown}, remaining.issues.unknown);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged), authorization, replacement, correction));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged)).text.inputs), try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged), authorization, replacement, correction));
         var changed_registry = context.registry;
         const names = try a.dupe(@import("domain/path_token_grammar.zig").ReferenceName, changed_registry.grammar.reference_names);
         names[0].basename = "changed.md";
@@ -477,15 +557,16 @@ test "text repair preserves siblings and exposes remaining classification defect
         const changed_facts = try contexts.textFacts(inputs, changed_registry, text_fixture.safety.value(context.owner), candidate);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, changed_facts, rejection));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, facts, changed_registry, text_fixture.safety.value(context.owner), available, authorization));
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed_facts, authorization, replacement, correction));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (changed_facts).text.inputs), changed_facts, authorization, replacement, correction));
         const foreign_policy = try text_fixture.prepare(a, inputs);
         defer foreign_policy.deinit();
         try std.testing.expectError(error.StaleNamingPolicy, contexts.textFacts(inputs, context.registry, text_fixture.safety.value(foreign_policy.owner), candidate));
         var stale = facts;
         stale.text.policy_ids = &.{"different-policy"};
         try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, stale, rejection));
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, stale, authorization, replacement, correction));
-        const again = try repair.merge(a, facts, authorization, authorization.operation.replace, correction);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (stale).text.inputs), stale, authorization, replacement, correction));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .normalizer = text_fixture.normalizer, .original_sources = &.{} }, facts, authorization, authorization.operation.replace, correction));
+        const again = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, authorization, authorization.operation.replace, correction);
         try std.testing.expect(!again.last_repair.?.changed);
         try std.testing.expectEqual(.recurring, (try repair.progress(a, text_fixture.validator, context.registry, text_fixture.safety.value(context.owner), inputs, again)).?.validated.result);
         const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, again)).invalid;
@@ -519,7 +600,7 @@ test "no-feature-claim text repair retains native failures and immutable classif
         const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
         const authorization = try repair.authorize(a, facts, rejection);
         const replacement: repair.Replacement = .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "This source supplies background context." } }} } };
-        const fixed = try repair.merge(a, facts, authorization, replacement, null);
+        const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, authorization, replacement, null);
         const valid = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, fixed)).valid;
         try std.testing.expect(valid.entries[0].outcome == .no_feature_claim);
         try std.testing.expectEqualDeep(candidate.entries[0].token_classifications, fixed.entries[0].token_classifications);
@@ -549,7 +630,7 @@ test "constructed claim rejection retains the original source selection repair a
     try std.testing.expectEqualDeep(original, retained);
     const facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = typed };
     const authorization = try repair.authorize(a, facts, .{ .source_selections = retained });
-    const fixed = try repair.merge(a, facts, authorization, .{ .citation = wholeChunk(inputs.chunks.entries[0]) }, null);
+    const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).inputs), facts, authorization, .{ .citation = wholeChunk(inputs.chunks.entries[0]) }, null);
     try std.testing.expect((try @import("domain/reference_selection_validation.zig").validate(a, inputs, available, fixed)) == .valid);
     var corrupt = prepared;
     corrupt.entries = &.{};
@@ -585,14 +666,49 @@ test "classification repair requests retain the frozen outcome and permitted dec
         try std.testing.expectEqualStrings("irrelevant", decisions[decisions.len - 1].string);
         const replacement = try a.alloc(extraction.tokens.Classification, available.entries.len);
         for (available.entries, replacement) |item, *value| value.* = .{ .irrelevant = item.id };
-        const merged = try repair.merge(a, facts, auth, .{ .classifications = .{ .token_classifications = replacement } }, null);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).inputs), facts, auth, .{ .classifications = .{ .token_classifications = replacement } }, null);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome, merged.entries[0].outcome);
         _ = (try classifications.validate(a, inputs, available, merged)).valid;
         if (!has_claims) {
             const forbidden = try token_fixture.classifications(a, available, inputs.chunks.entries[0]);
-            const invalid = try repair.merge(a, facts, auth, .{ .classifications = .{ .token_classifications = forbidden } }, null);
+            const invalid = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).inputs), facts, auth, .{ .classifications = .{ .token_classifications = forbidden } }, null);
             try std.testing.expect((try classifications.validate(a, inputs, available, invalid)).invalid.issues.forbidden.len > 0);
         }
+    }
+}
+
+test "classification repair cannot erase a native literal-byte preservation duty" {
+    const repair = @import("domain/reference_extraction_repair.zig");
+    const classifications = @import("domain/token_classification_validation.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_][]const u8{ "ACTIVE", "Loan renewed!" }) |bytes| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", try std.fmt.allocPrint(a, "Display `{s}`.", .{bytes})));
+        const context = try text_fixture.prepare(a, inputs);
+        defer context.deinit();
+        const available = try token_fixture.candidates(a, inputs);
+        const prose = try std.fmt.allocPrint(a, "The displayed value is {s}.", .{bytes});
+        const candidate = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try reply(a, inputs.chunks.entries[0], prose))} }));
+        const rejected = (try classifications.validate(a, inputs, available, candidate)).invalid;
+        try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{available.entries[0].id}, rejected.choices.required_preserve);
+        const facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = candidate };
+        const auth = try repair.authorize(a, facts, .{ .token_classifications = rejected });
+        const packet = try repair.packet(a, inputs, context.registry, available, candidate, auth);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const required = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("required_preserve").?.array.items;
+        try std.testing.expectEqual(@as(usize, 1), required.len);
+        const canonical = try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs);
+        const forbidden = try repair.merge(a, canonical, facts, auth, .{ .classifications = .{ .token_classifications = &.{.{ .irrelevant = available.entries[0].id }} } }, null);
+        const still_invalid = (try classifications.validate(a, inputs, available, forbidden)).invalid;
+        try std.testing.expectEqualDeep(rejected.choices.required_preserve, still_invalid.issues.forbidden);
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome, forbidden.entries[0].outcome);
+        const fixed = try repair.merge(a, canonical, facts, auth, .{ .classifications = .{ .token_classifications = &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = .code_sample } }} } }, null);
+        try std.testing.expect((try classifications.validate(a, inputs, available, fixed)) == .valid);
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome, fixed.entries[0].outcome);
     }
 }
 
@@ -629,12 +745,12 @@ test "composed extraction preserves producer attribution and stable native repai
         const text_packet = try text_repair.packet(a, facts, context.registry, current, available, auth);
         defer @import("domain/model_input_packet.zig").release(text_packet);
         try std.testing.expectEqualDeep(content, text_packet.repairOrigin().?);
-        const recurring = try text_repair.merge(a, facts, auth, auth.operation.replace, corrected);
+        const recurring = try text_repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, auth, auth.operation.replace, corrected);
         const still_rejected = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, recurring)).invalid;
         const retry = try text_repair.authorize(a, try contexts.textFacts(inputs, context.registry, current, recurring), still_rejected);
         try std.testing.expectEqualDeep(auth.retry.?.key, retry.retry.?.key);
         try std.testing.expectEqualDeep(corrected, still_rejected.origin.?);
-        const fixed = try text_repair.merge(a, facts, auth, .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the required message." } }} } }, corrected);
+        const fixed = try text_repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, auth, .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the required message." } }} } }, corrected);
         const checked = (try text_fixture.validate_text.execute(a, context.registry, current, inputs, fixed)).valid;
         try std.testing.expectEqualDeep(anchor, checked.entries[0].origin.?);
         try std.testing.expectEqualDeep(corrected, checked.entries[0].outcome.claims[0].origin.?);
@@ -647,17 +763,17 @@ test "composed extraction preserves producer attribution and stable native repai
         const classification_packet = try repair.packet(a, inputs, context.registry, available, checked, authorization);
         defer @import("domain/model_input_packet.zig").release(classification_packet);
         try std.testing.expectEqualDeep(classified, classification_packet.repairOrigin().?);
-        const unchanged = try repair.merge(a, repair_facts, authorization, authorization.operation.replace, corrected);
+        const unchanged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (repair_facts).inputs), repair_facts, authorization, authorization.operation.replace, corrected);
         const repeated = (try classifications.validate(a, inputs, available, unchanged)).invalid;
         try std.testing.expectEqualDeep(corrected, repeated.origin.?);
         const again = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = unchanged }, .{ .token_classifications = repeated });
         try std.testing.expectEqualDeep(authorization.retry.?.key, again.retry.?.key);
-        const complete = try repair.merge(a, repair_facts, authorization, .{ .classifications = .{ .token_classifications = try token_fixture.classifications(a, available, inputs.chunks.entries[0]) } }, corrected);
+        const complete = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (repair_facts).inputs), repair_facts, authorization, .{ .classifications = .{ .token_classifications = try token_fixture.classifications(a, available, inputs.chunks.entries[0]) } }, corrected);
         try std.testing.expectEqualDeep(checked.entries[0].outcome, complete.entries[0].outcome);
         try std.testing.expectEqualDeep(anchor, complete.entries[0].origin.?);
         for (complete.entries[0].classification_origins) |origin| try std.testing.expectEqualDeep(corrected, origin.?);
         try std.testing.expectEqual(.complete, (try finishText(a, inputs, complete)).outcome);
-        const absent = try repair.merge(a, repair_facts, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, corrected);
+        const absent = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (repair_facts).inputs), repair_facts, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, corrected);
         const missing = (try classifications.validate(a, inputs, available, absent)).invalid;
         try std.testing.expect(missing.origin == null and missing.issues.missing.len == available.entries.len);
         const missing_auth = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = absent }, .{ .token_classifications = missing });

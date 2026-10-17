@@ -90,7 +90,7 @@ fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.
             var tags: std.array_list.Managed(std.json.Value) = .init(allocator);
             var types: std.array_list.Managed(std.json.Value) = .init(allocator);
             for (choices) |choice| {
-                if (choice.* == .object) try tags.append(.{ .string = schema.findProperty(choice.object, "kind").?.schema.constant.string }) else try types.append(.{ .string = if (schema.jsonType(choice).? == .null_value) "null" else @tagName(schema.jsonType(choice).?) });
+                if (schema.discriminator(choice)) |tag| try tags.append(.{ .string = tag }) else try types.append(.{ .string = if (schema.jsonType(choice).? == .null_value) "null" else @tagName(schema.jsonType(choice).?) });
             }
             if (tags.items.len != 0) try object.put(allocator, "kind", .{ .array = tags });
             if (types.items.len != 0) try object.put(allocator, "types", .{ .array = types });

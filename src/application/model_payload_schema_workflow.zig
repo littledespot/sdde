@@ -34,7 +34,7 @@ pub const Validate = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_envelope_result, .result = .model_payload_schema_result } },
     };
@@ -64,7 +64,7 @@ pub const Admit = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_payload_schema_result } },
     };

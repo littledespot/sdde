@@ -1,0 +1,2188 @@
+{
+  "version": "exact-value-controls/v1",
+  "diagnostic_only": true,
+  "production_policy_changed": false,
+  "boundary_policy": "pinned_lexical_without_connector_or_format",
+  "cases": [
+    {
+      "id": "hello-exact-sentence",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "The exact preserved bytes occur inside a complete sentence.",
+      "input": {
+        "prose": "Display Hello, World! on startup.",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 8,
+            "end_byte": 21
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-exact-quoted",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Quotation punctuation outside the exact bytes permits a boundary.",
+      "input": {
+        "prose": "Print \"Hello, World!\".",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 7,
+            "end_byte": 20
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-two-disjoint-occurrences",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Repeated disjoint occurrences preserve separate offsets and one lineage.",
+      "input": {
+        "prose": "Hello, World! / Hello, World!",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 0,
+            "end_byte": 13
+          },
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 16,
+            "end_byte": 29
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-case-different",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Case folding cannot manufacture an exact occurrence.",
+      "input": {
+        "prose": "Display hello, World!.",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-near-punctuation",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Changed punctuation inside the exact value is a different byte string.",
+      "input": {
+        "prose": "Display Hello, World?.",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-word-prefix",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "An alphanumeric prefix prevents a whole-value boundary.",
+      "input": {
+        "prose": "XHello, World!",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-word-suffix",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "An immediately adjacent word character after the whole value prevents a boundary.",
+      "input": {
+        "prose": "Hello, World!Again",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-truncated-value",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "A prefix of the preserved bytes is insufficient.",
+      "input": {
+        "prose": "Hello, World",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-escaped-lookalike",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Printed escape syntax is not decoded into an occurrence.",
+      "input": {
+        "prose": "Hello,\\u0020World!",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-foreign-requirement",
+      "domain": "hello_world",
+      "meaning": "affirmative",
+      "rationale": "Availability of a token does not bind it to this field requirement.",
+      "input": {
+        "prose": "Display Hello, World! on startup.",
+        "bound_requirements": [
+          {
+            "value": 99
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 8,
+            "end_byte": 21
+          }
+        ],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "hello-denial-still-only-lexical",
+      "domain": "hello_world",
+      "meaning": "denial",
+      "rationale": "Lexical equality also appears in denial; this witness cannot establish fulfillment or coverage.",
+      "input": {
+        "prose": "Do not display Hello, World!.",
+        "bound_requirements": [
+          {
+            "value": 11
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 101
+            },
+            "requirements": [
+              {
+                "value": 11
+              }
+            ],
+            "bytes": "Hello, World!"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 101
+            },
+            "start_byte": 15,
+            "end_byte": 28
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-exact-status",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "The complete status value is retained exactly.",
+      "input": {
+        "prose": "Status is PENDING_RENEWAL.",
+        "bound_requirements": [
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 202
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "PENDING_RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 202
+            },
+            "start_byte": 10,
+            "end_byte": 25
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-status-case-different",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Case-sensitive status values are not normalized.",
+      "input": {
+        "prose": "Status is pending_renewal.",
+        "bound_requirements": [
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 202
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "PENDING_RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-connector-suffix",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Unicode connector punctuation is not a permitted word boundary.",
+      "input": {
+        "prose": "PENDING_RENEWAL_OLD",
+        "bound_requirements": [
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 202
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "PENDING_RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-prefix-substring",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "ACTIVE inside another word is not an occurrence.",
+      "input": {
+        "prose": "INACTIVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-enclosed-status",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Paired punctuation around the exact status supplies boundaries.",
+      "input": {
+        "prose": "Status (ACTIVE).",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 8,
+            "end_byte": 14
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-percent-exact",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Numeric punctuation and units inside a value are exact bytes.",
+      "input": {
+        "prose": "Use rate 5.25%.",
+        "bound_requirements": [
+          {
+            "value": 23
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 203
+            },
+            "requirements": [
+              {
+                "value": 23
+              }
+            ],
+            "bytes": "5.25%"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 203
+            },
+            "start_byte": 9,
+            "end_byte": 14
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-percent-near-value",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "A numerically similar representation is not byte equality.",
+      "input": {
+        "prose": "Use rate 5.250%.",
+        "bound_requirements": [
+          {
+            "value": 23
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 203
+            },
+            "requirements": [
+              {
+                "value": 23
+              }
+            ],
+            "bytes": "5.25%"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-two-different-values",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Two independently bound values can be recognized in one field.",
+      "input": {
+        "prose": "ACTIVE / PENDING_RENEWAL",
+        "bound_requirements": [
+          {
+            "value": 21
+          },
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 202
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "PENDING_RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 0,
+            "end_byte": 6
+          },
+          {
+            "occurrence": {
+              "value": 202
+            },
+            "start_byte": 9,
+            "end_byte": 24
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-denial-still-only-lexical",
+      "domain": "loan_renewal",
+      "meaning": "denial",
+      "rationale": "The scanner must not reinterpret a denied mention as semantic coverage.",
+      "input": {
+        "prose": "Never use ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 10,
+            "end_byte": 16
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-competing-lineage",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Identical eligible bytes from two preserved occurrences cannot choose lineage.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 211
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "ambiguous",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": "competing_lineage"
+      }
+    },
+    {
+      "id": "renewal-one-eligible-one-foreign",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "A foreign occurrence is retained diagnostically without making the unique eligible occurrence ambiguous.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 212
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 7,
+            "end_byte": 13
+          }
+        ],
+        "unbound_matches": [
+          {
+            "occurrence": {
+              "value": 212
+            },
+            "start_byte": 7,
+            "end_byte": 13
+          }
+        ],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-two-bound-lineages",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "Binding both requirements still cannot choose between identical eligible lineages.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 21
+          },
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 212
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "ambiguous",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": "competing_lineage"
+      }
+    },
+    {
+      "id": "renewal-intersection-of-requirements",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "An explicit requirement intersection authorizes this exact occurrence for the field.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              },
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 7,
+            "end_byte": 13
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-no-bound-requirements",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "No binding cannot borrow the available value.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 7,
+            "end_byte": 13
+          }
+        ],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "renewal-empty-occurrence-requirements",
+      "domain": "loan_renewal",
+      "meaning": "affirmative",
+      "rationale": "An occurrence with no requirement association is observable but never eligible.",
+      "input": {
+        "prose": "Status ACTIVE.",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 7,
+            "end_byte": 13
+          }
+        ],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "technical-hyphen-nested-overlap",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "A shorter complete word and a longer value overlap; longest-match guessing is prohibited.",
+      "input": {
+        "prose": "Use ACTIVE-RENEWAL.",
+        "bound_requirements": [
+          {
+            "value": 31
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 301
+            },
+            "requirements": [
+              {
+                "value": 31
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 302
+            },
+            "requirements": [
+              {
+                "value": 31
+              }
+            ],
+            "bytes": "ACTIVE-RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "ambiguous",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": "overlapping_matches"
+      }
+    },
+    {
+      "id": "technical-ambiguity-and-independent-value",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "Disjoint unique evidence remains visible while any unresolved overlap blocks the complete field.",
+      "input": {
+        "prose": "ACTIVE / loan-42",
+        "bound_requirements": [
+          {
+            "value": 31
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 301
+            },
+            "requirements": [
+              {
+                "value": 31
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 302
+            },
+            "requirements": [
+              {
+                "value": 31
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 303
+            },
+            "requirements": [
+              {
+                "value": 31
+              }
+            ],
+            "bytes": "loan-42"
+          }
+        ]
+      },
+      "expected": {
+        "state": "ambiguous",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 303
+            },
+            "start_byte": 9,
+            "end_byte": 16
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": "competing_lineage"
+      }
+    },
+    {
+      "id": "technical-exact-api-path",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "Slashes and digits within the assigned exact value are preserved.",
+      "input": {
+        "prose": "Call /v1/renewals.",
+        "bound_requirements": [
+          {
+            "value": 32
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 304
+            },
+            "requirements": [
+              {
+                "value": 32
+              }
+            ],
+            "bytes": "/v1/renewals"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 304
+            },
+            "start_byte": 5,
+            "end_byte": 17
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "technical-path-case-different",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "A path lookalike differing in case cannot supply exact evidence.",
+      "input": {
+        "prose": "Call /V1/renewals.",
+        "bound_requirements": [
+          {
+            "value": 32
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 304
+            },
+            "requirements": [
+              {
+                "value": 32
+              }
+            ],
+            "bytes": "/v1/renewals"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "technical-nested-without-boundaries",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "The conservative pinned classifier does not treat a plus symbol as a lexical boundary.",
+      "input": {
+        "prose": "Use UTC+10:00.",
+        "bound_requirements": [
+          {
+            "value": 33
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 305
+            },
+            "requirements": [
+              {
+                "value": 33
+              }
+            ],
+            "bytes": "UTC"
+          },
+          {
+            "id": {
+              "value": 306
+            },
+            "requirements": [
+              {
+                "value": 33
+              }
+            ],
+            "bytes": "UTC+10:00"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 306
+            },
+            "start_byte": 4,
+            "end_byte": 13
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "technical-currency-symbol-not-boundary",
+      "domain": "technical",
+      "meaning": "affirmative",
+      "rationale": "A symbol is not silently treated as separating punctuation by this prototype boundary policy.",
+      "input": {
+        "prose": "$ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-composed-exact",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "Offsets are UTF-8 bytes, not scalar counts.",
+      "input": {
+        "prose": "Café is open.",
+        "bound_requirements": [
+          {
+            "value": 41
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 401
+            },
+            "requirements": [
+              {
+                "value": 41
+              }
+            ],
+            "bytes": "Café"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 401
+            },
+            "start_byte": 0,
+            "end_byte": 5
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-canonical-lookalike",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "Canonical equivalence cannot replace original exact bytes.",
+      "input": {
+        "prose": "Café is open.",
+        "bound_requirements": [
+          {
+            "value": 41
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 401
+            },
+            "requirements": [
+              {
+                "value": 41
+              }
+            ],
+            "bytes": "Café"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-decomposed-exact",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "A decomposed value matches when its exact original spelling is bound.",
+      "input": {
+        "prose": "Café is open.",
+        "bound_requirements": [
+          {
+            "value": 41
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 402
+            },
+            "requirements": [
+              {
+                "value": 41
+              }
+            ],
+            "bytes": "Café"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 402
+            },
+            "start_byte": 0,
+            "end_byte": 6
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-combining-suffix",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "An adjacent combining mark prevents a boundary after the shorter bytes.",
+      "input": {
+        "prose": "Café́",
+        "bound_requirements": [
+          {
+            "value": 41
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 401
+            },
+            "requirements": [
+              {
+                "value": 41
+              }
+            ],
+            "bytes": "Café"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-cjk-punctuation",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "CJK punctuation supplies boundaries and UTF-8 byte offsets remain exact.",
+      "input": {
+        "prose": "「東京」",
+        "bound_requirements": [
+          {
+            "value": 42
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 403
+            },
+            "requirements": [
+              {
+                "value": 42
+              }
+            ],
+            "bytes": "東京"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 403
+            },
+            "start_byte": 3,
+            "end_byte": 9
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-cjk-adjacency",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "No language-specific word segmentation is invented inside adjacent CJK letters.",
+      "input": {
+        "prose": "前東京後",
+        "bound_requirements": [
+          {
+            "value": 42
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 403
+            },
+            "requirements": [
+              {
+                "value": 42
+              }
+            ],
+            "bytes": "東京"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-no-break-space",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "Unicode spacing delimiters are recognized by the pinned classifier.",
+      "input": {
+        "prose": " ACTIVE ",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 2,
+            "end_byte": 8
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-format-adjacency",
+      "domain": "unicode",
+      "meaning": "formatting",
+      "rationale": "A Unicode format character is not a lexical boundary.",
+      "input": {
+        "prose": "ACTIVE‍",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-format-inside",
+      "domain": "unicode",
+      "meaning": "formatting",
+      "rationale": "Invisible formatting inside a value prevents exact byte equality.",
+      "input": {
+        "prose": "ACT​IVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "unicode-compatibility-lookalike",
+      "domain": "unicode",
+      "meaning": "affirmative",
+      "rationale": "Compatibility folding cannot create an exact match.",
+      "input": {
+        "prose": "ＡＣＴＩＶＥ",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "prose-tabs-and-newlines",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Existing prose permits LF/CR/tab; delimiters remain explicit.",
+      "input": {
+        "prose": "ACTIVE\tPENDING_RENEWAL\n",
+        "bound_requirements": [
+          {
+            "value": 21
+          },
+          {
+            "value": 22
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 202
+            },
+            "requirements": [
+              {
+                "value": 22
+              }
+            ],
+            "bytes": "PENDING_RENEWAL"
+          }
+        ]
+      },
+      "expected": {
+        "state": "matched",
+        "rejection": null,
+        "matches": [
+          {
+            "occurrence": {
+              "value": 201
+            },
+            "start_byte": 0,
+            "end_byte": 6
+          },
+          {
+            "occurrence": {
+              "value": 202
+            },
+            "start_byte": 7,
+            "end_byte": 22
+          }
+        ],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "prose-nul-control",
+      "domain": "invalid_input",
+      "meaning": "formatting",
+      "rationale": "Invalid prose controls reject the field before recognition.",
+      "input": {
+        "prose": "ACTIVE\u0000",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "invalid_prose",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "prose-c1-control",
+      "domain": "invalid_input",
+      "meaning": "formatting",
+      "rationale": "C1 controls cannot serve as separators.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "invalid_prose",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "empty-prose",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Empty input is observable absence, not a positive occurrence.",
+      "input": {
+        "prose": "",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "no_match",
+        "rejection": null,
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "empty-occurrence-value",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "An empty source value cannot match every position.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 51
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 501
+            },
+            "requirements": [
+              {
+                "value": 51
+              }
+            ],
+            "bytes": ""
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "empty_occurrence",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "occurrence-control-value",
+      "domain": "invalid_input",
+      "meaning": "formatting",
+      "rationale": "Invalid source-value controls reject instead of being stripped.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 51
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 501
+            },
+            "requirements": [
+              {
+                "value": 51
+              }
+            ],
+            "bytes": "ACTIVE\u0007"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "invalid_occurrence_bytes",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "zero-occurrence-id",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Occurrence identity must be nonzero.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 51
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 0
+            },
+            "requirements": [
+              {
+                "value": 51
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "invalid_occurrence_id",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "duplicate-occurrence-id",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Conflicting values cannot share an occurrence ID.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 51
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 501
+            },
+            "requirements": [
+              {
+                "value": 51
+              }
+            ],
+            "bytes": "ACTIVE"
+          },
+          {
+            "id": {
+              "value": 501
+            },
+            "requirements": [
+              {
+                "value": 51
+              }
+            ],
+            "bytes": "OTHER"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "duplicate_occurrence_id",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "zero-bound-requirement-id",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Invalid field binding identity rejects before matching.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 0
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "invalid_requirement_id",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "duplicate-bound-requirement-id",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Duplicate binding IDs reject rather than being silently deduplicated.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          },
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "duplicate_requirement_id",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    },
+    {
+      "id": "duplicate-occurrence-requirement-id",
+      "domain": "invalid_input",
+      "meaning": "affirmative",
+      "rationale": "Duplicate occurrence associations reject rather than changing eligibility.",
+      "input": {
+        "prose": "ACTIVE",
+        "bound_requirements": [
+          {
+            "value": 21
+          }
+        ],
+        "occurrences": [
+          {
+            "id": {
+              "value": 201
+            },
+            "requirements": [
+              {
+                "value": 21
+              },
+              {
+                "value": 21
+              }
+            ],
+            "bytes": "ACTIVE"
+          }
+        ]
+      },
+      "expected": {
+        "state": "rejected",
+        "rejection": "duplicate_requirement_id",
+        "matches": [],
+        "unbound_matches": [],
+        "semantic_coverage_assessed": false,
+        "ambiguity": null
+      }
+    }
+  ]
+}

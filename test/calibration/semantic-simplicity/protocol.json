@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "cohort": "small",
+  "provider": "aws-bedrock",
+  "model": "openai.gpt-oss-20b-1:0",
+  "generation_slot": "spec_generation",
+  "region": "ap-southeast-2",
+  "reasoning_effort": "low",
+  "response_mode": "native_schema",
+  "temperature": 0.1,
+  "max_output_tokens": 16384,
+  "repetitions": 3,
+  "arms": [
+    "A",
+    "C"
+  ],
+  "development_features": 8,
+  "qualification": {
+    "metric": "first_pass_fidelity",
+    "minimum_features": 8,
+    "maximum_features": 16,
+    "confidence": 0.95,
+    "precision": 0.15
+  },
+  "analysis": {
+    "method": "paired_feature_bootstrap",
+    "resamples": 10000,
+    "seed": 20261015,
+    "minimum_effect_lower_bound": 0.0,
+    "primary_brittleness": "representation_sensitivity"
+  },
+  "thresholds": {
+    "minimum_fidelity": 0.85,
+    "minimum_robust_success": 0.75,
+    "minimum_useful_completion": 0.8,
+    "maximum_material_harm": 0.05,
+    "maximum_false_gap": 0.05,
+    "minimum_effect": 0.1,
+    "minimum_brittleness_reduction": 0.1,
+    "minimum_common_original_success": 6,
+    "maximum_token_ratio": 1.25,
+    "maximum_latency_ratio": 1.5
+  },
+  "limits": {
+    "maximum_sends": 1000,
+    "maximum_actual_tokens": 2000000
+  },
+  "live_authorized": false,
+  "api": "converse"
+}

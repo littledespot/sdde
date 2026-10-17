@@ -5,7 +5,13 @@
 - **Decision authority:** Repeated explicit user direction; no further approval required
 - **Scoped amendment:** 2026-10-10, explicitly user-approved optional slot output
   allowance. Other capacity, accounting and retry boundaries remain unchanged.
-- **Amends:** Design Sections 3, 9, 12–13, 20, 24, 28 and 31; ADRs 0004–0006;
+- **B9 amendment:** 2026-10-17, explicit user approval for feature-owned entities
+  and diagnostic slot allowances of 2,048 tokens; no new cardinality caps or
+  `output_limit` correction.
+- **Advisory pool withdrawn:** 2026-10-17, by user direction; one total token limit.
+- **Transport amendment:** 2026-10-15, explicit user direction to use Bedrock
+  Converse for model switching. This replaces the previous chat wire mapping only.
+- **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
   F0001, F0005–F0007; and their samples and diagrams
 
 ## Decision
@@ -34,8 +40,8 @@
   control. Closed decoding checks positivity and native integer representability;
   the registered model contract must support the control.
 - When present, send the requested value unchanged. When absent, omit the provider
-  field and delegate its default to the provider. Bedrock `InvokeModel` maps the
-  control to `max_completion_tokens` through the shared request encoder.
+  field and delegate its default to the provider. Bedrock `Converse` maps the
+  control to `inferenceConfig.maxTokens` through the shared request encoder.
 - This is a provider-enforced requested allowance, not an engine capacity ceiling
   or a claim that the response will fit. The API still owns its supported maximum
   and any rejection or stopped-response outcome. SDDE does not predict, reserve,
@@ -46,21 +52,58 @@
   while validating them against the current binding. Current configuration cannot
   silently replace a captured allowance.
 - This amendment does not add an evaluator setting, a YAML size parameter or a
-  cumulative budget-derived allowance. Actual workflow accounting below is unchanged.
+  cumulative budget-derived allowance. It does not alter actual-usage accounting.
 
 ### Workflow token accounting
 
-- The selected workflow policy's positive `totalModelTokenBudget` is the only cumulative
-  model-consumption limit, initialized afresh for each execution.
+There is one total limit: the native workflow policy's positive
+`totalModelTokenBudget`, currently **100,000 tokens**, initialized freshly for every
+execution. It covers all model work, including post-generation source and principle
+advice, which has no pool or allowance of its own. Native advisory classification
+controls only the permitted non-budget incomplete-assessment outcome; it does not
+partition token usage.
+
 - Record actual API-reported input plus output tokens after every inference call,
-  including retries and stopped output.
-- A call may overshoot: retain its full usage, return `WorkflowTokenBudgetExceeded`, and
-  prohibit subsequent calls.
-- At exact equality the current result may proceed, but subsequent calls cannot.
-- Missing usage is not estimated or fabricated; the existing unavailable-usage outcome
-  prevents further model calls.
-- There is no pre-call token reservation, mandatory counting or budget-derived output
-  allowance.
+  including retries and stopped output, exactly once against that total.
+- For Converse, normalize input usage as `inputTokens + cacheReadInputTokens +
+  cacheWriteInputTokens` (absent optional cache counters are zero), then add
+  `outputTokens`. Check arithmetic and reported `totalTokens`; invalid usage is
+  unavailable for accounting and remains a fatal native validation failure.
+  Genuinely missing usage on otherwise valid advisory evidence may instead end
+  advice as incomplete. This follows the
+  [AWS cache accounting contract](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html).
+- Any inference call may overshoot: retain its full usage, return
+  `WorkflowTokenBudgetExceeded`, and prohibit further model calls globally.
+  The same fatal budget rule applies during required work and advice; global
+  exhaustion or overshoot cannot produce incomplete advice. At exact equality the
+  admitted current result may proceed, but no further model call may start.
+- Missing usage is never estimated or fabricated. It prohibits further model
+  calls. Missing usage during advice records incomplete advice and may continue
+  through native validation and publication; missing usage during required work
+  retains its ordinary workflow failure.
+- No pre-call token reservation, mandatory counting, capacity prediction,
+  budget-derived output allowance or per-class usage subtotal exists. Trusted association,
+  native validation, security, cancellation, deadline, logging and operational failures
+  remain blocking; incomplete advice is not a blanket failure-to-success route.
+
+### B9 runaway-output policy
+
+The per-slot provider request allowance remains the existing optional control.
+Both current diagnostic cases share the source configuration at
+`test/e2e/wf-001-hello-world/.sddtoolkit.json`, which explicitly requests **2,048**
+output tokens for `spec_generation` and `repair`. This is a diagnostic setting,
+not an engine default, provider-maximum assertion or size ceiling, and no promise
+that future assignments fit. Historical captures and frozen calibration settings
+remain unchanged and cannot acquire current binding authority by substitution.
+
+No per-family record cardinality cap is added. Under §17, entity records are
+instead authored once by the feature-wide entities unit, with independent support
+selections and native ownership checks. Other record batches cannot emit entities.
+A provider `output_limit` remains a typed non-candidate stop: partial text never
+becomes a candidate, is never salvaged, and receives no extra protocol correction.
+Mandatory work fails; advisory work records incomplete advice under its native
+assessment policy. The model binding and existing explicit protocol retry rules
+otherwise remain unchanged.
 
 ### Retry and safety boundaries
 
@@ -75,22 +118,11 @@
   keep their separate responsibilities; they cannot be repurposed as model-call size
   ceilings.
 
-## Implementation status and acceptance
+## Acceptance
 
-- Implemented across operation registration, workflow compilation, binding, request
-  construction, authorization, provider observations and decoding.
 - The typed model-slot parameter is the sole new-binding selection; ADR 0012 allows
-  consumers to retain that request through typed data dependencies.
-- Capacity fields, intersections, wire budgets and the static-capacity action/evidence
-  are removed.
-- Request construction reuses existing identity/schema/control validators, and
-  observation validation retains the exact prepared request.
-- No replacement capacity service or authority exists.
-- Native YAML request preparation is now implemented under ADR 0012, including the
-  `invoke-model` binding and unconditional post-call usage accounting.
-- Production Bedrock uses the same boundary and accounting, with no additional
-  request/response size ceilings.
-
+  consumers to retain that request through typed data dependencies. No capacity
+  field, intersection, wire budget or static-capacity service exists.
 - Fake-provider and compiler tests cover rejected retired size parameters,
   registration/preparation without capacity configuration, complete valid payloads
   beyond former byte ceilings, preserved size failures/stops and schema rejection.
@@ -98,8 +130,11 @@
   unsupported controls, exact wire projection and changed-control rejection across
   binding, authorization, correction, capture and replay. Provider maxima are not
   encoded as local capacity checks.
-- Existing accounting tests cover actual usage, overshoot, subsequent-call prohibition,
-  execution isolation and explicit-only retries.
+- Accounting tests must cover the single aggregate ledger across all inference,
+  full overshoot retention, global subsequent-call prohibition, unavailable usage,
+  execution isolation and explicit-only retries. Global-budget failures must stay
+  fatal during advice as well as required work. Native advisory continuation must
+  retain current incomplete-assessment evidence and all mandatory publication checks.
 - Architecture tests require the retired capacity fields and local size-failure variants
   to remain absent.
 - Configuration/resource capture bounds retain separate negative tests.

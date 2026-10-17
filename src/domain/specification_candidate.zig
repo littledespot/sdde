@@ -6,6 +6,28 @@ const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
 pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
 pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name, business_meaning, relationship: usize };
+pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
+    return switch (subject) {
+        .title => .spec_title,
+        .description => .spec_description,
+        .primary_goal => .spec_goal,
+        .story => .spec_story,
+        .entity_basis => .spec_entity_basis,
+        .record => error.InvalidSpecificationRepair,
+    };
+}
+pub fn recordTextField(content: g.spec.Content(g.spec.BusinessValue), selected: ValueField) Error!@import("text_field_policy.zig").Field {
+    return recordKindTextField(std.meta.activeTag(content), selected);
+}
+/// The native record tag disambiguates shared field names such as text.
+pub fn recordKindTextField(kind: g.spec.Kind, selected: ValueField) Error!@import("text_field_policy.zig").Field {
+    switch (kind) {
+        inline else => |tag| inline for (std.meta.fields(@FieldType(g.spec.Content(g.spec.BusinessValue), @tagName(tag)))) |field| {
+            if (std.mem.eql(u8, field.name, if (selected == .relationship) "relationships" else @tagName(selected))) return g.spec.textField(tag, field.name);
+        },
+    }
+    return error.InvalidSpecificationRepair;
+}
 pub const Part = union(enum) { provenance, value: ValueField };
 pub const Target = union(enum) { provenance: Subject, value: struct { subject: Subject, field: ValueField }, attributed: Subject, record: usize };
 pub const StableTarget = struct { value: Target };
@@ -70,6 +92,37 @@ pub const Origins = struct {
         next.record_occurrences = try self.record_occurrences.deleting(a, index, length);
         return next;
     }
+    /// Assemble independent admitted record batches while retaining each
+    /// field's producer. Their initial origins become record-local fallbacks;
+    /// an accepted field repair must remain more specific than that fallback.
+    pub fn appendingRecords(self: Origins, a: std.mem.Allocator, length: usize, right: Origins, right_length: usize) Error!Origins {
+        const joined = try self.record_occurrences.concatenating(a, length, right.record_occurrences, right_length);
+        errdefer a.free(joined.values);
+        var fields: std.ArrayList(FieldOrigin) = .empty;
+        errdefer fields.deinit(a);
+        try appendRecordFields(a, &fields, self, length, 0);
+        try appendRecordFields(a, &fields, right, right_length, length);
+        return .{ .fields = try fields.toOwnedSlice(a), .record_occurrences = joined };
+    }
+    fn appendRecordFields(a: std.mem.Allocator, fields: *std.ArrayList(FieldOrigin), source: Origins, length: usize, offset: usize) Error!void {
+        for (source.fields) |entry| {
+            const index = recordIndex(entry.target) orelse return error.InvalidSpecificationRepair;
+            if (index >= length) return error.InvalidSpecificationRepair;
+            var projected = entry;
+            setRecordIndex(&projected.target, std.math.add(usize, offset, index) catch return error.InvalidSpecificationRepair);
+            try fields.append(a, projected);
+        }
+        for (0..length) |index| {
+            const target: Target = .{ .record = index };
+            const explicit = for (source.fields) |entry| {
+                if (std.meta.eql(entry.target, target)) break true;
+            } else false;
+            if (!explicit) try fields.append(a, .{
+                .target = .{ .record = std.math.add(usize, offset, index) catch return error.InvalidSpecificationRepair },
+                .origin = source.initial,
+            });
+        }
+    }
     pub fn stableTarget(self: Origins, target: Target, length: usize) Error!StableTarget {
         var stable = target;
         if (recordIndex(target)) |index| setRecordIndex(&stable, (try self.record_occurrences.at(index, length)).ordinal - 1);
@@ -86,9 +139,13 @@ pub const Origins = struct {
     }
 };
 pub const GroupPolicy = union(enum) {
-    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId },
+    membership: struct { fixed_provenance: g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null },
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
+pub const EvidenceBound = struct {
+    effective: []const @import("reference_identity.zig").ClaimId,
+    citations: []const @import("reference_identity.zig").CitationId,
+};
 pub const ValueEvidenceBound = struct {
     target: StableTarget,
     explicit: []const @import("reference_identity.zig").ClaimId,
@@ -167,8 +224,9 @@ pub fn select(response: g.Response, selected: Target) Error!Replacement {
     if (response != .content) return error.InvalidSpecificationRepair;
     var content = response.content;
     if (recordIndex(selected)) |index| {
-        if (content != .records or index >= content.records.len) return error.InvalidSpecificationRepair;
-        var record = content.records[index];
+        const records = g.recordCollection(.model, content) orelse return error.InvalidSpecificationRepair;
+        if (index >= records.len) return error.InvalidSpecificationRepair;
+        var record = records[index];
         return switch (selected) {
             .record => .{ .record = record },
             .attributed => return error.InvalidSpecificationRepair,
@@ -187,7 +245,7 @@ pub fn select(response: g.Response, selected: Target) Error!Replacement {
 pub const ReadContext = union(enum) { attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
 pub fn readContext(response: g.Response, selected: Target) Error!ReadContext {
     _ = try select(response, selected);
-    if (recordIndex(selected)) |index| return .{ .record = response.content.records[index] };
+    if (recordIndex(selected)) |index| return .{ .record = (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[index] };
     var content = response.content;
     const subject = switch (selected) {
         .provenance, .attributed => |value| value,
@@ -200,8 +258,8 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
     _ = try select(response, selected);
     var result = response;
     if (recordIndex(selected)) |index| {
-        const records = try a.dupe(g.spec.Model.RecordProposal, response.content.records);
-        result.content.records = records;
+        const records = try a.dupe(g.spec.Model.RecordProposal, g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair);
+        (g.recordCollectionPtr(.model, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
         switch (selected) {
             .record => records[index] = replacement.record,
             .attributed => return error.InvalidSpecificationRepair,
@@ -232,8 +290,9 @@ pub fn attributedValue(comptime boundary: g.spec.Boundary, response: g.Responses
         if (field != .value) return error.InvalidSpecificationRepair;
         return (try attributed(boundary, &content, subject)).*;
     }
-    if (content != .records or subject.record >= content.records.len) return error.InvalidSpecificationRepair;
-    var record = content.records[subject.record];
+    const records = g.recordCollection(boundary, content) orelse return error.InvalidSpecificationRepair;
+    if (subject.record >= records.len) return error.InvalidSpecificationRepair;
+    var record = records[subject.record];
     return .{ .value = try valueField(&record.content, field), .source_group_ids = record.source_group_ids, .provenance = record.provenance };
 }
 pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, field: ValueField, value: g.spec.BusinessValue) Error!g.CanonicalResponse {
@@ -242,8 +301,8 @@ pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse
     if (subject != .record) {
         (try attributed(.canonical, &result.content, subject)).value = value;
     } else {
-        const records = try a.dupe(g.spec.RecordProposal, response.content.records);
-        result.content.records = records;
+        const records = try a.dupe(g.spec.RecordProposal, g.recordCollection(.canonical, response.content) orelse return error.InvalidSpecificationRepair);
+        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
         if (field == .relationship) {
             const relationships = try a.dupe(g.spec.BusinessValue, records[subject.record].content.entity.relationships);
             relationships[field.relationship] = value;
@@ -256,10 +315,12 @@ pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse
 pub fn replaceCanonicalProvenance(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, provenance: g.spec.Provenance) Error!g.CanonicalResponse {
     var result = response;
     if (subject == .record) {
-        if (result != .content or result.content != .records or subject.record >= result.content.records.len) return error.InvalidSpecificationRepair;
-        const records = try a.dupe(g.spec.RecordProposal, result.content.records);
+        if (result != .content) return error.InvalidSpecificationRepair;
+        const prior = g.recordCollection(.canonical, result.content) orelse return error.InvalidSpecificationRepair;
+        if (subject.record >= prior.len) return error.InvalidSpecificationRepair;
+        const records = try a.dupe(g.spec.RecordProposal, prior);
         records[subject.record].provenance = provenance;
-        result.content.records = records;
+        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
     } else (try attributed(.canonical, &result.content, subject)).provenance = provenance;
     return result;
 }

@@ -12,7 +12,7 @@ const codec = @import("../domain/model_candidate_json.zig");
 const binding = @import("../domain/specification_source_binding.zig");
 const schema_owner = @import("../domain/model_result_schema.zig");
 const root = "test/calibration/authoring-associations";
-const output = ".zig-cache/authoring-associations";
+const output = ".zig-cache/authoring-associations/v14-text";
 const captured_run = "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959";
 const captured_feature = captured_run ++ "/project/specs/hello-world";
 const parent_identity: shared.ReviewParent = .{ .run = "RUN-5603b655c6e6a7498c6980fc0d447584", .call = "request-1-inference-1" };
@@ -56,11 +56,9 @@ const Case = struct {
 };
 const File = struct { path: []const u8, sha256: []const u8, bytes: usize };
 const ParentPreparation = union(enum) { unavailable: void, ready: File };
-const Presentation = enum { current, without_required_entities };
 const Request = struct {
     unit: []const u8,
     group_id: ?u32,
-    presentation: Presentation = .current,
     packet: File,
     edit: File,
     request: File,
@@ -93,6 +91,73 @@ const Cost = struct {
     provider_stop: ?[]const u8 = null,
 };
 const CaseState = struct { context: @import("../domain/specification_provenance.zig").Context, seed: session.Session };
+const ExcludedRecordSeed = struct { seed: RecordSeed, reason: enum { preserved_tokens_only } };
+const RecordPopulation = struct {
+    case_id: []const u8,
+    historical_seed_count: usize,
+    scheduled_seed_count: usize,
+    excluded_seed_count: usize,
+    scheduled: []const RecordSeed,
+    excluded: []const ExcludedRecordSeed,
+};
+
+fn recordPopulation(a: std.mem.Allocator, example: Case, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !RecordPopulation {
+    const records = @import("../domain/reference_support.zig").records(context.references);
+    const available = try binding.catalogue(a, records, .question);
+    defer a.free(available);
+    const scheduled = try a.alloc(RecordSeed, current.record_group_count);
+    for (scheduled, 0..) |*seed, index| {
+        const assigned = (try binding.record(a, records, context.inputs, index)).records;
+        defer a.free(assigned.selection.claim_ids);
+        var found: ?RecordSeed = null;
+        for (example.record_seeds) |historical| if (historical.group_id == assigned.signal.ordinal) {
+            if (found != null) return error.InvalidCalibrationCase;
+            found = historical;
+        };
+        seed.* = found orelse return error.InvalidCalibrationCase;
+    }
+    var excluded: std.ArrayList(ExcludedRecordSeed) = .empty;
+    for (example.record_seeds, 0..) |seed, index| {
+        for (example.record_seeds[0..index]) |prior| if (prior.group_id == seed.group_id) return error.InvalidCalibrationCase;
+        const included = for (scheduled) |active| {
+            if (seed.group_id == active.group_id) break true;
+        } else false;
+        if (included) continue;
+        const active = for (available) |group| {
+            if (group.signal_id.ordinal == seed.group_id) break true;
+        } else false;
+        if (!active) return error.InvalidCalibrationCase;
+        if (!try binding.tokenOnly(records, .{ .ordinal = seed.group_id })) return error.InvalidCalibrationCase;
+        try excluded.append(a, .{ .seed = seed, .reason = .preserved_tokens_only });
+    }
+    try std.testing.expectEqual(example.record_seeds.len, scheduled.len + excluded.items.len);
+    return .{ .case_id = example.id, .historical_seed_count = example.record_seeds.len, .scheduled_seed_count = scheduled.len, .excluded_seed_count = excluded.items.len, .scheduled = scheduled, .excluded = excluded.items };
+}
+
+fn recordPopulationChecks(a: std.mem.Allocator, example: Case, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, population: RecordPopulation) !void {
+    try std.testing.expectEqual(@as(usize, 1), population.excluded.len);
+    var malformed = example;
+    const seeds = try a.dupe(RecordSeed, example.record_seeds);
+    malformed.record_seeds = seeds;
+    seeds[seeds.len - 1].group_id = 999999;
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    seeds[seeds.len - 1] = seeds[0];
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    malformed.record_seeds = &.{};
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    var inactive = context;
+    const r = @import("../domain/reference_reconciliation.zig");
+    const dispositions = try a.dupe(r.ClaimDisposition, @import("../domain/reference_support.zig").records(context.references).dispositions);
+    const excluded = population.excluded[0].seed.group_id;
+    const claims = for (context.references.records.signals) |group| {
+        if (group.id.ordinal == excluded) break group.value.claim_ids;
+    } else return error.InvalidCalibrationCase;
+    for (dispositions) |*entry| if (r.contains(r.ClaimId, claims, entry.claim_id)) {
+        entry.disposition = .superseded;
+    };
+    inactive.references.records.assignments.checked.prior.prior.dispositions = dispositions;
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, example, current, inactive));
+}
 const Observation = struct {
     trial_id: []const u8,
     status: enum { not_run, incomplete, rejected, admitted_content, admitted_clarification },
@@ -120,6 +185,7 @@ pub fn run() !void {
     var owners: std.ArrayList(shared.PreparedContext) = .empty;
     defer for (owners.items) |owner| owner.passive.deinit();
     const states = try a.alloc(CaseState, cases.len);
+    var record_populations: std.ArrayList(RecordPopulation) = .empty;
     var physical_sends: usize = 0;
     for (cases, 0..) |example, index| {
         for (cases[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.id, example.id));
@@ -131,7 +197,9 @@ pub fn run() !void {
             .ready => |ready| ready,
             .blocked => return error.InvalidCalibrationCase,
         };
-        try std.testing.expectEqual(example.record_seeds.len, current.record_group_count);
+        const population = try recordPopulation(a, example, current, prepared.context);
+        if (index == 0) try recordPopulationChecks(a, example, current, prepared.context, population);
+        try record_populations.append(a, population);
         const ids = try a.alloc(@import("../domain/reference_reconciliation.zig").SignalId, example.groups.len);
         for (example.groups, ids) |id, *group| group.* = .{ .ordinal = id };
         const selected = try binding.resolveGroups(a, @import("../domain/reference_support.zig").records(prepared.context.references), prepared.context.inputs, ids, .content);
@@ -139,7 +207,7 @@ pub fn run() !void {
         for (seeds) |seed| {
             if (index == 0 and current.completed == 1) try singletonConstructionChecks(a, schema, current, prepared.context);
             const request = try exportRequest(a, schema, example.id, current, prepared.context);
-            if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, seed)));
+            if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, prepared.context, seed)));
             try addTrials(a, &trials, example.id, request);
             for (0..2) |_| try starts.append(a, current);
             physical_sends += 2;
@@ -147,7 +215,7 @@ pub fn run() !void {
         }
         var record_requests: std.ArrayList(Request) = .empty;
         const records_start = current;
-        for (example.record_seeds) |seed| {
+        for (population.scheduled) |seed| {
             const assigned = try session.currentBinding(a, current, prepared.context);
             try std.testing.expectEqual(seed.group_id, assigned.records.signal.ordinal);
             try record_requests.append(a, try exportRequest(a, schema, example.id, current, prepared.context));
@@ -203,174 +271,27 @@ pub fn run() !void {
         .limits = .{ .cases = cases.len, .logical_trials = trials.items.len, .repetitions = 2, .physical_sends = physical_sends, .stop_at_actual_input_plus_output_tokens = 200000, .retries_corrections_repairs_model_judges_review_calls_e2e = 0 },
         .admission = "Actual response must pass its frozen schema, current native generation parse/validate/admit and record consistency. A diagnostic receipt is never native workflow origin or publication authority.",
         .downstream = "Native admitted authored associations determine the review subject and evidence. No review model calls or expected-value loss findings are prepared.",
-        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Exact captured and all modified bodies rebuilt through existing replay provider prepare; zero sends. Current compiled graph authorization is a separate required preflight." },
+        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Current Converse modified bodies rebuilt through existing replay provider prepare; zero sends. A retained request with different wire bytes is ineligible as an exact current parent. Current compiled graph authorization is a separate required preflight." },
         .dependencies = dependencies.items,
+        .record_authoring_population = record_populations.items,
         .trials = trials.items,
     }, .{});
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = preparation });
     try collect(a, output, schema, cases, states, trials.items, starts.items, preparation, parent);
 }
 
-/// Adjacent single-factor comparisons: assembled-family presentation, then
-/// shared ownership guidance. Historical controls are diagnostic data only.
-pub fn runAssemblyRequirementsComparison() !void {
-    const panel_root = root ++ "/assembly-requirements";
-    const directory = output ++ "/assembly-requirements";
-    const Panel = struct { retained_case_ids: []const []const u8, controls: []const Case };
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const strict = @import("../domain/strict_json.zig");
-    const retained = try strict.decode([]const Case, a, try shared.read(a, root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const panel = try strict.decode(Panel, a, try shared.read(a, panel_root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const old_guidance = try shared.read(a, panel_root ++ "/old-generation.context.json");
-    const current_guidance = try shared.read(a, "design/workflows/spec/generation.context.json");
-    try ownershipGuidanceChecks(a, old_guidance, current_guidance);
-    var cases: std.ArrayList(Case) = .empty;
-    for (panel.retained_case_ids) |id| {
-        const example = for (retained) |value| {
-            if (std.mem.eql(u8, value.id, id)) break value;
-        } else return error.InvalidCalibrationCase;
-        try cases.append(a, example);
-    }
-    try cases.appendSlice(a, panel.controls);
-    var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const schema = try parser.compiler().compile(a, try shared.read(a, "design/workflows/spec/generation.schema.json"));
-    try std.Io.Dir.cwd().createDirPath(std.testing.io, directory);
-    var trials: std.ArrayList(Trial) = .empty;
-    var starts: std.ArrayList(session.Session) = .empty;
-    var owners: std.ArrayList(shared.PreparedContext) = .empty;
-    defer for (owners.items) |owner| owner.passive.deinit();
-    const states = try a.alloc(CaseState, cases.items.len);
-    var physical_sends: usize = 0;
-    for (cases.items, 0..) |example, index| {
-        for (cases.items[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.id, example.id));
-        if (example.source_file) |source| try std.testing.expectEqualStrings(example.fixture.sources[0], try shared.read(a, source));
-        const prepared = try shared.prepareContext(a, example.fixture);
-        try owners.append(a, prepared);
-        var current = switch (try session.initialize(a, prepared.context.inputs.corpus.feature_id, prepared.context)) {
-            .ready => |ready| ready,
-            .blocked => return error.InvalidCalibrationCase,
-        };
-        try std.testing.expectEqual(example.record_seeds.len, current.record_group_count);
-        const ids = try a.alloc(@import("../domain/reference_reconciliation.zig").SignalId, example.groups.len);
-        for (example.groups, ids) |id, *group| group.* = .{ .ordinal = id };
-        const selected = try binding.resolveGroups(a, @import("../domain/reference_support.zig").records(prepared.context.references), prepared.context.inputs, ids, .content);
-        for (try narrativeSeeds(a, example, selected)) |seed| current = try admittedSeed(a, schema, current, prepared.context, seed);
-        const records_start = current;
-        var baseline: std.ArrayList(Request) = .empty;
-        var family: std.ArrayList(Request) = .empty;
-        var ownership: std.ArrayList(Request) = .empty;
-        for (example.record_seeds) |seed| {
-            const assigned = try session.currentBinding(a, current, prepared.context);
-            try std.testing.expectEqual(seed.group_id, assigned.records.signal.ordinal);
-            const original = try exportRequestAt(a, directory, schema, try std.fmt.allocPrint(a, "{s}-baseline", .{example.id}), current, prepared.context, .without_required_entities, old_guidance);
-            const revised = try exportRequestAt(a, directory, schema, try std.fmt.allocPrint(a, "{s}-family", .{example.id}), current, prepared.context, .current, old_guidance);
-            const clarified = try exportRequestAt(a, directory, schema, try std.fmt.allocPrint(a, "{s}-ownership", .{example.id}), current, prepared.context, .current, current_guidance);
-            try comparisonChecks(a, original, revised, example.seed.entity_disposition);
-            try ownershipComparisonChecks(a, revised, clarified, old_guidance, current_guidance);
-            try baseline.append(a, original);
-            try family.append(a, revised);
-            try ownership.append(a, clarified);
-            const records = try recordSeed(a, seed, assigned.records);
-            current = try admittedSeed(a, schema, current, prepared.context, .{ .content = .{ .records = records } });
-            physical_sends += 6;
-        }
-        for ([_]struct { name: []const u8, requests: []const Request }{ .{ .name = "baseline", .requests = baseline.items }, .{ .name = "family", .requests = family.items }, .{ .name = "ownership", .requests = ownership.items } }) |arm| for (1..3) |repeat| {
-            try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-{s}-records-{d}", .{ example.id, arm.name, repeat }), .case_id = example.id, .repetition = @intCast(repeat), .requests = arm.requests });
-            try starts.append(a, records_start);
-        };
-        states[index] = .{ .context = prepared.context, .seed = current };
-        _ = try session.assemble(a, text.validator, prepared.context, current);
-    }
-    try std.testing.expectEqual(@as(usize, 5), cases.items.len);
-    try std.testing.expectEqual(@as(usize, 30), trials.items.len);
-    try std.testing.expectEqual(@as(usize, 42), physical_sends);
-    const parent = try wirePreflight(a, directory, trials.items);
-    var dependencies: std.ArrayList(File) = .empty;
-    for ([_][]const u8{
-        root ++ "/cases.json",                                     panel_root ++ "/cases.json",                     panel_root ++ "/README.md",                             panel_root ++ "/scorecard.template.json",        panel_root ++ "/old-generation.context.json",
-        "src/test_fixtures/authoring_association_calibration.zig", "src/test_fixtures/source_loss_calibration.zig", "src/test_fixtures/calibration_temperature_policy.zig", "src/domain/specification_session.zig",          "src/domain/specification.zig",
-        "src/domain/specification_coverage.zig",                   "src/domain/specification_generation.zig",       "src/domain/specification_source_binding.zig",          "src/domain/specification_provenance.zig",       "src/domain/model_result_schema.zig",
-        "src/domain/model_schema_projection.zig",                  "src/adapters/provider/bedrock_request.zig",     "design/workflows/spec/generation.schema.json",         "design/workflows/spec/generation.context.json", "design/workflows/spec/records.prompt.md",
-    }) |path| try dependencies.append(a, try pin(a, path));
-    const preparation = try std.json.Stringify.valueAlloc(a, .{
-        .status = "offline_prepared_no_live_dispatch_authority",
-        .factor = "Baseline/family differ only by conditional entity in record_requirements.required_families; family/ownership differ only by the shared sources guidance. The middle arm is run once and reused for adjacent comparisons. All groups, sources, seeds, schema, model controls and native admission are unchanged.",
-        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = @import("calibration_temperature_policy.zig").temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
-        .limits = .{ .cases = cases.items.len, .logical_trials = trials.items.len, .repetitions = 2, .physical_sends = physical_sends, .stop_at_actual_input_plus_output_tokens = 200000, .retries_corrections_repairs_model_judges_review_calls_e2e = 0 },
-        .admission = "Same current native admission applies to all three diagnostic arms; native requirements remain aggregate, and empty individual batches are permitted.",
-        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent },
-        .dependencies = dependencies.items,
-        .trials = trials.items,
-    }, .{});
-    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = directory ++ "/preparation.json", .data = preparation });
-    try collect(a, directory, schema, cases.items, states, trials.items, starts.items, preparation, parent);
-}
-
-fn comparisonChecks(a: std.mem.Allocator, baseline: Request, candidate: Request, decision: spec.Applicability) !void {
-    const original = try shared.read(a, baseline.packet.path);
-    const revised = try shared.read(a, candidate.packet.path);
-    var body = try std.json.parseFromSliceLeaky(std.json.Value, a, revised, .{});
-    const requirements = body.object.getPtr("record_requirements").?;
-    const families = requirements.object.getPtr("required_families").?;
-    var entity_count: usize = 0;
-    var index: usize = 0;
-    while (index < families.array.items.len) {
-        if (std.mem.eql(u8, families.array.items[index].string, "entity")) {
-            entity_count += 1;
-            _ = families.array.orderedRemove(index);
-        } else index += 1;
-    }
-    try std.testing.expectEqual(@as(usize, if (decision == .required) 1 else 0), entity_count);
-    try std.testing.expectEqualStrings(original, try std.json.Stringify.valueAlloc(a, body, .{}));
-    if (decision != .required) try std.testing.expectEqualStrings(original, revised);
-    const original_edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, baseline.edit.path), .{ .maximum_depth = 64 });
-    const revised_edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, candidate.edit.path), .{ .maximum_depth = 64 });
-    try std.testing.expectEqualStrings(original_edit.schema, revised_edit.schema);
-    try std.testing.expectEqual(original_edit.content.len, revised_edit.content.len);
-    for (original_edit.content, revised_edit.content) |before, after| {
-        try std.testing.expectEqual(std.meta.activeTag(before), std.meta.activeTag(after));
-        switch (before) {
-            .guidance => |value| try std.testing.expectEqualStrings(value, after.guidance),
-            .user => |value| {
-                try std.testing.expectEqualStrings(original, value);
-                try std.testing.expectEqualStrings(revised, after.user);
-            },
-            else => return error.InvalidCalibrationContent,
-        }
-    }
-}
-
-fn ownershipGuidanceChecks(a: std.mem.Allocator, old_guidance: []const u8, current_guidance: []const u8) !void {
-    const before = try std.json.parseFromSliceLeaky(std.json.Value, a, old_guidance, .{});
-    var after = try std.json.parseFromSliceLeaky(std.json.Value, a, current_guidance, .{});
-    const old_sources = before.object.get("sources").?.string;
-    try std.testing.expect(!std.mem.eql(u8, old_sources, after.object.get("sources").?.string));
-    try after.object.put(a, "sources", .{ .string = old_sources });
-    try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, before, .{}), try std.json.Stringify.valueAlloc(a, after, .{}));
-}
-
-fn ownershipComparisonChecks(a: std.mem.Allocator, family: Request, ownership: Request, old_guidance: []const u8, current_guidance: []const u8) !void {
-    try std.testing.expectEqualStrings(family.packet.sha256, ownership.packet.sha256);
-    const before = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, family.edit.path), .{ .maximum_depth = 64 });
-    const after = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, ownership.edit.path), .{ .maximum_depth = 64 });
-    try std.testing.expectEqualStrings(before.schema, after.schema);
-    try std.testing.expectEqual(before.content.len, after.content.len);
-    try std.testing.expectEqualStrings(old_guidance, before.content[0].guidance);
-    try std.testing.expectEqualStrings(current_guidance, after.content[0].guidance);
-    for (before.content[1..], after.content[1..]) |original, revised| switch (original) {
-        .guidance => |value| try std.testing.expectEqualStrings(value, revised.guidance),
-        .user => |value| try std.testing.expectEqualStrings(value, revised.user),
-        else => return error.InvalidCalibrationContent,
-    };
-}
-
 const PreparationAccess = struct {
     expected: @import("../domain/request_debugger.zig").Description,
-    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!void {
+    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!@import("../domain/llm_provider_contracts.zig").BedrockRequestProfile {
         const self: *PreparationAccess = @ptrCast(@alignCast(context));
         if (!std.meta.eql(self.expected, supplied)) return error.ReplayUnauthorized;
+        const model = @import("../composition/provider_model_contracts.zig").registry.resolve(
+            @import("../domain/llm_provider_identity.zig").ProviderId.parse(supplied.provider) orelse return error.ReplayUnauthorized,
+            @import("../domain/llm_provider_identity.zig").ModelId.parse(supplied.model) orelse return error.ReplayUnauthorized,
+        ) orelse return error.ReplayUnauthorized;
+        if (!model.acceptsConfig(supplied.provider_config) or !model.capabilities.supports(supplied.response_mode, supplied.controls) or
+            !@import("../domain/llm_provider_contracts.zig").supportsReasoningEffort(model.supported_reasoning_efforts, supplied.reasoning_effort)) return error.ReplayUnauthorized;
+        return model.bedrock_request_profile;
     }
 };
 
@@ -383,7 +304,12 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
     const feature = try std.Io.Dir.cwd().openDir(std.testing.io, captured_feature, .{});
     defer feature.close(std.testing.io);
     var store: @import("../adapters/filesystem/request_debugger_store.zig").Store = .{ .io = std.testing.io, .feature = feature };
-    const calls = try store.load(a);
+    const calls = store.load(a) catch |err| switch (err) {
+        // Unsupported historical evidence cannot be a current replay parent.
+        // All native packet/admission probes still execute independently.
+        error.UnsupportedDebugDescriptionVersion => return .unavailable,
+        else => return err,
+    };
     var parent: ?@import("../domain/request_debugger.zig").Call = null;
     for (calls) |call| if (std.mem.eql(u8, call.run, parent_identity.run) and std.mem.eql(u8, call.id, parent_identity.call)) {
         if (parent != null) return error.AmbiguousCalibrationParent;
@@ -403,7 +329,7 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
     var clock: @import("../provider_authorization_test_fixture.zig").TestClock = .{};
     var compiler: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     var adapter: @import("../adapters/provider/request_replay.zig").Adapter = .{ .authorization = .{ .context = @ptrCast(&access), .authorize_fn = PreparationAccess.authorize }, .environment = &environment, .transport = wire.port(), .clock = clock.port(), .compiler = compiler.compiler() };
-    try std.testing.expectEqualStrings(actual.request.?, try adapter.provider().prepare(a, description));
+    const current_parent = std.mem.eql(u8, actual.request.?, try adapter.provider().prepare(a, description));
     for (trials) |trial| for (trial.requests) |request| {
         const edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, request.edit.path), .{ .maximum_depth = 64 });
         var modified = description;
@@ -413,6 +339,9 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
         try std.testing.expectEqualStrings(try shared.read(a, request.request.path), try adapter.provider().prepare(a, modified));
     };
     try std.testing.expectEqual(@as(usize, 0), wire.calls);
+    // Exact replay admission is byte-exact. An old provider protocol never
+    // becomes a current parent merely because its model/settings still match.
+    if (!current_parent) return .unavailable;
     try shared.writeAt(a, directory, "parent", "description.json", try std.json.Stringify.valueAlloc(a, description, .{}));
     return .{ .ready = try pin(a, try std.fmt.allocPrint(a, "{s}/parent.description.json", .{directory})) };
 }
@@ -430,7 +359,7 @@ fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Associa
     return .{
         .{ .content = .{ .brief = .{ .title = try attributed(a, example.seed.title, selected), .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
         .{ .content = .{ .primary_user_story = try attributed(a, example.seed.story, selected) } },
-        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected) } } },
+        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name), .business_meaning = try business(a, "MOCK Controlled business entity seed."), .relationships = &.{} } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
     };
 }
 fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBound) ![]const spec.Values(.model).RecordProposal {
@@ -438,11 +367,10 @@ fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBo
     const groups = try a.dupe(@import("../domain/reference_reconciliation.zig").SignalId, &.{assigned.signal});
     if (seed.functional_requirement) |requirement| try records.append(a, .{ .content = .{ .functional_requirement = .{ .text = try business(a, requirement) } }, .source_group_ids = groups, .provenance = assigned.selection });
     if (seed.given) |given| try records.append(a, .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, given), .when = try business(a, seed.when orelse return error.InvalidCalibrationCase), .then = try business(a, seed.then orelse return error.InvalidCalibrationCase) } }, .source_group_ids = groups, .provenance = assigned.selection });
-    if (seed.entity_name) |name| try records.append(a, .{ .content = .{ .entity = .{ .name = try business(a, name), .business_meaning = try business(a, "MOCK Controlled business entity seed."), .relationships = &.{} } }, .source_group_ids = groups, .provenance = assigned.selection });
     return records.items;
 }
 fn admittedSeed(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, proposed: g.Response) !session.Session {
-    const bytes = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, proposed));
+    const bytes = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, context, proposed));
     const checked = switch (try admitResponse(a, schema, current, context, bytes)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSeed,
@@ -469,18 +397,21 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
         .valid => |checked| try session.admit(a, current, context, checked),
         .invalid => |issue| return .{ .invalid = issue },
     };
-    if (try session.checkConsistency(a, current, checked)) |issue| return .{ .invalid = issue };
+    if (try session.checkConsistency(a, current, context, checked)) |issue| return .{ .invalid = issue };
     return .{ .valid = checked };
 }
 
 fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
-    const wire = "{\"kind\":\"primary_user_story\",\"value\":[{\"kind\":\"exact_copy\"},\" MOCK The application starts successfully and displays its greeting and UTC date and time.\"],\"signal_ids\":[1,2]}";
+    const occurrences = try @import("../domain/specification_provenance.zig").exactOccurrences(a, @import("../domain/reference_support.zig").records(context.references), null);
+    if (occurrences.len != 1) return error.InvalidCalibrationSingleton;
+    const prose = try std.fmt.allocPrint(a, "{s} MOCK The application starts successfully and displays its greeting and UTC date and time.", .{occurrences[0].bytes});
+    const wire = try codec.encode(g.ModelResponse, a, .{ .primary_user_story = .{ .value = try business(a, prose), .signal_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } } });
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,
     };
     try std.testing.expectEqual(@as(u32, 4), checked.response.content.primary_user_story.value.segments[0].exact_copy.claim_id.ordinal);
-    const echoed = "{\"kind\":\"primary_user_story\",\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":4}],\"signal_ids\":[1,2]}";
+    const echoed = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]}";
     try std.testing.expectError(error.InvalidCalibrationPayload, admitResponse(a, schema, current, context, echoed));
 }
 
@@ -564,7 +495,7 @@ fn consumeTrial(a: std.mem.Allocator, directory: []const u8, schema: *const sche
     for (trial.requests, receipts, facts.items) |request, receipt, fact| {
         const packet = try session.packet(a, current, state.context);
         defer packets.release(packet);
-        if (!std.mem.eql(u8, try presentationBody(a, packet, request.presentation), receipt.input)) return .{ .trial_id = trial.id, .status = .rejected, .received = result.received, .costs_complete = result.costs_complete, .rejection = "StaleCalibrationAssignment", .origins = origins.items, .costs = costs.items, .responses = native.items };
+        if (!std.mem.eql(u8, packet.body(), receipt.input)) return .{ .trial_id = trial.id, .status = .rejected, .received = result.received, .costs_complete = result.costs_complete, .rejection = "StaleCalibrationAssignment", .origins = origins.items, .costs = costs.items, .responses = native.items };
         if (fact.rejection) |rejection| return .{ .trial_id = trial.id, .status = .rejected, .received = result.received, .costs_complete = result.costs_complete, .rejection = rejection, .origins = origins.items, .costs = costs.items, .responses = native.items };
         const admitted = admitResponse(a, schema, current, state.context, fact.answer.?) catch |err| {
             if (err == error.OutOfMemory) return err;
@@ -612,10 +543,12 @@ fn responseFacts(a: std.mem.Allocator, receipt: Receipt) !ResponseFacts {
         return result;
     };
     defer raw.deinit();
-    const decoded = @import("../adapters/provider/bedrock_response.zig").decodeInvoke(raw.value) catch {
+    var decoded = @import("../adapters/provider/bedrock_response.zig").decodeConverse(a, raw.value, null) catch |err| {
+        if (err == error.OutOfMemory) return err;
         result.rejection = "InvalidProviderResponse";
         return result;
     };
+    defer decoded.deinit(a);
     result.cost.usage = decoded.usage;
     if (decoded.output != .text) {
         result.cost.provider_stop = switch (decoded.output) {
@@ -645,7 +578,7 @@ fn reviewPackets(a: std.mem.Allocator, context: @import("../domain/specification
     const inputs = try @import("../domain/specification_authority.zig").project(a, current.feature, context.references, candidate.content, current.units[0].?.response.content.brief);
     var projections: std.ArrayList([]const u8) = .empty;
     for (inputs.seeds) |seed| {
-        const selected = if (std.mem.eql(u8, unit_name, "brief")) seed.id.kind == .feature_intent and seed.id.unit == .feature and (seed.id.slot == .display_name or seed.id.slot == .description or seed.id.slot == .primary_goal) else if (std.mem.eql(u8, unit_name, "primary_user_story")) seed.id.kind == .feature_intent and seed.id.unit == .feature and seed.id.slot == .primary_user_story else if (std.mem.eql(u8, unit_name, "entities")) seed.id.kind == .entity_applicability else seed.id.unit == .record or (seed.id.kind == .feature_intent and seed.id.unit == .feature and @import("../domain/specification_authority.zig").collectionFamily(seed.id.slot) != null);
+        const selected = if (std.mem.eql(u8, unit_name, "brief")) seed.id.kind == .feature_intent and seed.id.unit == .feature and (seed.id.slot == .display_name or seed.id.slot == .description or seed.id.slot == .primary_goal) else if (std.mem.eql(u8, unit_name, "primary_user_story")) seed.id.kind == .feature_intent and seed.id.unit == .feature and seed.id.slot == .primary_user_story else if (std.mem.eql(u8, unit_name, "entities")) seed.id.kind == .entity_applicability or (seed.id.unit == .record and seed.id.unit.record.kind == .entity) else (seed.id.unit == .record and seed.id.unit.record.kind != .entity) or (seed.id.kind == .feature_intent and seed.id.unit == .feature and @import("../domain/specification_authority.zig").collectionFamily(seed.id.slot) != null);
         if (!selected) continue;
         const packet = try @import("../domain/specification_support.zig").Source.packetFor(a, inputs, context, .{ .finding = seed.id });
         defer packets.release(packet);
@@ -654,9 +587,9 @@ fn reviewPackets(a: std.mem.Allocator, context: @import("../domain/specification
     return projections.items;
 }
 fn exportRequest(a: std.mem.Allocator, schema: *const schema_owner.Schema, id: []const u8, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !Request {
-    return exportRequestAt(a, output, schema, id, current, context, .current, try shared.read(a, "design/workflows/spec/generation.context.json"));
+    return exportRequestAt(a, output, schema, id, current, context, try shared.read(a, "design/workflows/spec/generation.context.json"));
 }
-fn exportRequestAt(a: std.mem.Allocator, directory: []const u8, schema: *const schema_owner.Schema, id: []const u8, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, presentation: Presentation, guidance: []const u8) !Request {
+fn exportRequestAt(a: std.mem.Allocator, directory: []const u8, schema: *const schema_owner.Schema, id: []const u8, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, guidance: []const u8) !Request {
     const packet = try session.packet(a, current, context);
     defer packets.release(packet);
     const selected = try session.unit(current.completed);
@@ -668,33 +601,18 @@ fn exportRequestAt(a: std.mem.Allocator, directory: []const u8, schema: *const s
         .entities => "design/workflows/spec/entities.prompt.md",
         .records => "design/workflows/spec/records.prompt.md",
     });
-    const body = try presentationBody(a, packet, presentation);
+    const body = packet.body();
     const rendered = try shared.renderContent(a, schema, packet, &.{ .{ .guidance = guidance }, .{ .guidance = prompt }, .{ .user = body } });
     try shared.writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.packet.json", .{name}), body);
     try shared.writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.edit.json", .{name}), rendered.edit);
     try shared.writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.request.json", .{name}), rendered.request);
-    return .{ .unit = @tagName(selected), .group_id = group, .presentation = presentation, .packet = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.packet.json", .{ directory, id, name })), .edit = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.edit.json", .{ directory, id, name })), .request = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ directory, id, name })) };
+    return .{ .unit = @tagName(selected), .group_id = group, .packet = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.packet.json", .{ directory, id, name })), .edit = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.edit.json", .{ directory, id, name })), .request = try pin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ directory, id, name })) };
 }
 
-/// Diagnostic baseline only: remove the conditional family presentation while
-/// retaining current native policy, assignment, schema and admission unchanged.
-fn presentationBody(a: std.mem.Allocator, packet: *const packets.Packet, presentation: Presentation) ![]const u8 {
-    if (presentation == .current) return packet.body();
-    var body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
-    const requirements = body.object.getPtr("record_requirements") orelse return error.InvalidCalibrationAssignment;
-    const families = requirements.object.getPtr("required_families") orelse return error.InvalidCalibrationAssignment;
-    var index: usize = 0;
-    while (index < families.array.items.len) {
-        if (std.mem.eql(u8, families.array.items[index].string, "entity")) {
-            _ = families.array.orderedRemove(index);
-        } else index += 1;
-    }
-    return std.json.Stringify.valueAlloc(a, body, .{});
-}
 fn receiptChecks(a: std.mem.Allocator, request: Request, answer: []const u8) !void {
     const edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, request.edit.path), .{ .maximum_depth = 64 });
     const run_manifest: Run = .{ .schema = .@"authoring-diagnostic-run/v1", .preparation_sha256 = "MOCK preparation hash", .parent = .{ .run = "MOCK-parent", .call = "MOCK-call" } };
-    const raw = try std.json.Stringify.valueAlloc(a, .{ .choices = &.{.{ .index = 0, .message = .{ .role = "assistant", .content = answer }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 11, .completion_tokens = 7, .total_tokens = 18 } }, .{});
+    const raw = try std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = &.{.{ .text = answer }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 11, .outputTokens = 7, .totalTokens = 18 } }, .{});
     const good: Receipt = .{
         .schema = .@"authoring-diagnostic-receipt/v1",
         .trial_id = "MOCK-trial",

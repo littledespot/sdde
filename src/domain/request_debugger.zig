@@ -21,6 +21,7 @@ pub const Validation = struct {
     schema: enum { unavailable, valid, invalid } = .unavailable,
     normalization: @import("model_envelope.zig").Normalization = .none,
     model_text: ?[]const u8 = null,
+    reasoning: []const @import("provider_reasoning.zig").Block = &.{},
     parsed: ?std.json.Value = null,
     reason: ?[]const u8 = null,
     path: ?[]const u8 = null,
@@ -31,7 +32,7 @@ pub const Validation = struct {
     latency_ms: ?u32 = null,
 };
 pub const RequestRecord = struct {
-    version: enum { @"request-replay/v4" } = .@"request-replay/v4",
+    version: enum { @"request-replay/v6" } = .@"request-replay/v6",
     id: []const u8,
     run: []const u8,
     sequence: u64,

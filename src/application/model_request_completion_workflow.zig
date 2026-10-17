@@ -44,6 +44,9 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
 
 /// Sealed result association only; no second parsing, validation or token charge.
 pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!selection.Closure {
+    if (@import("workflow_model_accounting.zig").readAdvisoryStop(view)) |receipt| {
+        return @import("advisory_protocol_request_completion_workflow.zig").readCurrent(view, receipt);
+    } else |_| {}
     if (view.contains(.provider_token_count_validation_result)) return readCountClosure(view);
     const result = try payload.readCurrent(view);
     const source = result.source().source();
@@ -60,8 +63,12 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
             .ok => .accepted,
             // Explicit closure abandons invalid content; it does not assert retry exhaustion.
             .invalid, .failed => .failed,
+            .more => deferred: {
+                _ = try @import("advisory_request_completion_workflow.zig").closing(view);
+                break :deferred .failed;
+            },
             .cancelled => .cancelled,
-            .more, .needs_user, .blocked => return error.OperationExecutionFailed,
+            .needs_user, .blocked => return error.OperationExecutionFailed,
         },
         .outcome = outcome,
     };

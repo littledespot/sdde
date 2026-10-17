@@ -98,6 +98,9 @@
           "$ref": "#/$defs/candidate_omission"
         },
         {
+          "$ref": "#/$defs/candidate_invalid_preservation"
+        },
+        {
           "$ref": "#/$defs/inconclusive"
         }
       ]
@@ -120,39 +123,12 @@
           "$ref": "#/$defs/candidate_omission"
         },
         {
+          "$ref": "#/$defs/candidate_invalid"
+        },
+        {
           "$ref": "#/$defs/inconclusive"
         }
       ]
-    },
-    "record_findings": {
-      "type": "object",
-      "properties": {
-        "findings": {
-          "type": "array",
-          "minItems": 3,
-          "maxItems": 3,
-          "items": {
-            "type": "object",
-            "properties": {
-              "requirement_ordinal": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "value": {
-                "$ref": "#/$defs/finding"
-              }
-            },
-            "required": [
-              "requirement_ordinal",
-              "value"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "findings"
-      ],
-      "additionalProperties": false
     },
     "applicability_finding": {
       "oneOf": [
@@ -173,6 +149,9 @@
         },
         {
           "$ref": "#/$defs/inconclusive"
+        },
+        {
+          "$ref": "#/$defs/candidate_invalid"
         },
         {
           "$ref": "#/$defs/not_applicable"
@@ -446,12 +425,7 @@
           "const": "candidate_omission"
         },
         "source_ids": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 4294967295,
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          }
+          "$ref": "#/$defs/required_source_ids"
         },
         "detail": {
           "$ref": "#/$defs/required_detail_value"
@@ -505,6 +479,177 @@
         "kind",
         "source_ids",
         "detail"
+      ],
+      "additionalProperties": false
+    },
+    "required_source_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4294967295,
+      "items": {
+        "$ref": "#/$defs/ordinal"
+      }
+    },
+    "nullable_authority_gap": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/unsupported"
+        },
+        {
+          "$ref": "#/$defs/ambiguous"
+        },
+        {
+          "$ref": "#/$defs/conflicting"
+        }
+      ]
+    },
+    "candidate_invalid": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "candidate_invalid"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/required_source_ids"
+        },
+        "detail": {
+          "$ref": "#/$defs/required_detail_value"
+        },
+        "authority_gap": {
+          "$ref": "#/$defs/nullable_authority_gap"
+        }
+      },
+      "required": [
+        "kind",
+        "source_ids",
+        "detail",
+        "authority_gap"
+      ],
+      "additionalProperties": false
+    },
+    "candidate_invalid_preservation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "candidate_invalid"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/required_source_ids"
+        },
+        "detail": {
+          "$ref": "#/$defs/required_detail_value"
+        },
+        "authority_gap": {
+          "type": "null"
+        }
+      },
+      "required": [
+        "kind",
+        "source_ids",
+        "detail",
+        "authority_gap"
+      ],
+      "additionalProperties": false
+    },
+    "invalid_detail": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "$ref": "#/$defs/required_detail_value"
+        },
+        "authority_gap": {
+          "$ref": "#/$defs/nullable_authority_gap"
+        }
+      },
+      "required": [
+        "detail",
+        "authority_gap"
+      ],
+      "additionalProperties": false
+    },
+    "invalid_selection": {
+      "type": "object",
+      "properties": {
+        "source_ids": {
+          "$ref": "#/$defs/required_source_ids"
+        },
+        "authority_gap_source_ids": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/ordinal_list"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source_ids",
+        "authority_gap_source_ids"
+      ],
+      "additionalProperties": false
+    },
+    "assignment_findings": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "value": {
+                "$ref": "#/$defs/applicability_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "findings"
+      ],
+      "additionalProperties": false
+    },
+    "principle_assignment_findings": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "value": {
+                "$ref": "#/$defs/principle_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "findings"
       ],
       "additionalProperties": false
     }

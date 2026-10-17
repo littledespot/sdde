@@ -70,7 +70,7 @@ const parent: debug.Call = .{
 };
 const identity: debug.ReplayIdentity = .{ .id = "trial-1", .run = .{ .bytes = "MOCK-diagnostic-run" }, .sequence = 1 };
 
-const response_body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"answer\\\":\\\"MOCK answer\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
+const response_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"MOCK answer\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
 const Fixture = struct {
     wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = response_body },
@@ -131,9 +131,9 @@ test "call trial uses canonical serializer and validation with one send and immu
     try std.testing.expectEqualStrings(description.schema, fixture.request.?.description.schema);
     try std.testing.expectEqualStrings("MOCK original immutable request", parent.request.?);
     const body = try @import("../contracts.zig").decode(std.json.Value, a, fixture.request.?.body);
-    try std.testing.expectEqualStrings("high", body.object.get("reasoning_effort").?.string);
-    try std.testing.expectEqual(@as(i64, 16384), body.object.get("max_completion_tokens").?.integer);
-    try std.testing.expect(body.object.contains("response_format"));
+    try std.testing.expectEqualStrings("high", body.object.get("additionalModelRequestFields").?.object.get("reasoning_effort").?.string);
+    try std.testing.expectEqual(@as(i64, 16384), body.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
+    try std.testing.expect(body.object.contains("outputConfig"));
 }
 
 test "call trial retains output limits and transport failure without retry or false success" {
@@ -143,7 +143,7 @@ test "call trial retains output limits and transport failure without retry or fa
     var fixture: Fixture = undefined;
     try fixture.init(a);
     defer fixture.environment.deinit();
-    fixture.wire.inference_body = try std.mem.replaceOwned(u8, a, response_body, "\"stop\"", "\"length\"");
+    fixture.wire.inference_body = try std.mem.replaceOwned(u8, a, response_body, "\"end_turn\"", "\"max_tokens\"");
     const limited = trial.execute(a, std.testing.io, fixture.service(), parent, identity);
     try std.testing.expectEqual(.protocol_invalid, limited.outcome);
     try std.testing.expectEqualStrings("output_limit", limited.diagnostic.?);

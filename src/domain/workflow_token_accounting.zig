@@ -28,6 +28,11 @@ pub const ReconciliationTransition = struct {
 
 pub const BudgetStatus = enum { available, exhausted, exceeded, usage_unavailable };
 pub const AccountedOperation = struct { id: provider.ProviderOperationId, reconciliation: Reconciliation };
+pub const Snapshot = struct {
+    total_budget: TotalTokenBudget,
+    total_tokens: u128,
+    usage_unavailable: bool,
+};
 
 pub const Ledger = struct {
     allocator: std.mem.Allocator,
@@ -60,10 +65,16 @@ pub const Ledger = struct {
         return self.committed_tokens;
     }
 
+    pub fn snapshot(self: *const Ledger) Snapshot {
+        return .{ .total_budget = self.total_budget, .total_tokens = self.committed_tokens, .usage_unavailable = self.usage_unavailable };
+    }
+
     pub fn status(self: *const Ledger) BudgetStatus {
         if (self.usage_unavailable) return .usage_unavailable;
-        if (self.committed_tokens > self.total_budget.value) return .exceeded;
-        if (self.committed_tokens == self.total_budget.value) return .exhausted;
+        const limit = self.total_budget.value;
+        const total = self.committed();
+        if (total > limit) return .exceeded;
+        if (total == limit) return .exhausted;
         return .available;
     }
 

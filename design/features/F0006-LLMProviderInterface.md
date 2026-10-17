@@ -8,31 +8,15 @@ wiring, native-schema projection and shared fake/real-adapter conformance.
 [F0007](F0007-AWSBedrockProvider.md) records the Bedrock implementation using the
 existing composition boundary, runner ledgers and pinned Zig HTTP transport.
 
-**Execution amendment:** [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
-removes provider-effect persistence, durable handoff and cross-execution
-recovery. The whole workflow is atomic; an abandoned execution is never resumed.
-
-**Provider-limit amendment:** [ADR 0011](../decisions/0011-provider-owned-request-limits.md)
-removes all additional model-call size ceilings and capacity gates. Provider
-APIs report their limits; the runner accounts actual usage against the workflow
-token budget. This is accepted, not a pending configuration or approval decision.
-
-**Operation-ID amendment:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
-removes operation versioning. Runtime operations and names below use one current
-unversioned contract per operation; retired suffixes are rejected, not aliased.
-
-**Input-reuse amendment:** [ADR 0013](../decisions/0013-workflow-input-reuse.md)
-keeps captured schema source and derives compact expanded transport in the same
-compiled owner. Inference and counting use that projection. An originating
-`result-selection: input` binds the packet's typed named result view once;
-response validation and protocol retries retain it. Full evidence projections
-share citation records without changing canonical evidence or usage accounting.
-
-**Implementation:** Provider capture/decoding, registry and repository-slot
-validation, conditional bootstrap, retained workflow requests, attempt/operation
-accounting, single-use authorization, inference/counting, response validation
-and explicit lifecycle closure are connected through native YAML operations.
-Production Bedrock uses those same contracts and runner bindings.
+**Amendments:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
+(one unversioned contract per operation), [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
+(no provider-effect persistence or cross-execution recovery),
+[ADR 0011](../decisions/0011-provider-owned-request-limits.md) (provider-owned size
+limits; actual usage against the workflow budget) and
+[ADR 0013](../decisions/0013-workflow-input-reuse.md) (compact transport derived from
+the captured schema; `result-selection: input` binds the packet's named result view
+once). Production Bedrock uses the contracts below; see
+[Implementation status](#implementation-status).
 
 **Reading route:** [binding, §6](#6-providermodel-binding-and-workflow-token-accounting)
 → [lifecycle, §7](#7-operation-identity-lifecycle-and-interface)
@@ -100,7 +84,7 @@ architectural port. There is no alias or parallel gateway.
 
 ## 2. Accepted amendments
 
-These amendments are accepted and implemented. ADR 0009 withdraws their former
+These amendments are accepted. ADR 0009 withdraws their former
 provider-effect journal and cross-execution recovery requirements; lifecycle
 facts remain local to the abandoned or completed execution.
 
@@ -387,6 +371,13 @@ LLMProviderDispatch = union(enum) {
   bounds, remains in guidance and deterministic validation.
 - Unsupported modes reject without fallback.
 - Provider grammar never establishes candidate validity.
+- The compiled `BedrockRequestProfile` owns verified model-specific wire fields,
+  independently of those neutral capabilities. Luna's native profile requires
+  an additional strict-format flag and admits only omitted temperature and
+  reasoning overrides. Provider-default medium reasoning is documented in
+  [F0007](F0007-AWSBedrockProvider.md); it is not a locally supplied control or
+  evidence of semantic quality. The development live-test policy selects only
+  that exact Bedrock Luna tuple and leaves production catalogue authority separate.
 
 - Every union variant conforms directly to `LLMProviderInterface`; dispatch forwards
   exactly one operation and introduces no second port.
@@ -436,7 +427,7 @@ outcome through runner-owned child bindings:
   provider work itself.
 - ADR 0004 accepts this fixed run-preparation placement and the narrow expansion beyond
   the startup graph; the runner does not infer or sequence it by convention.
-- The implemented runner invokes F0008 once, then applies the decoder, registry builder,
+- The runner invokes F0008 once, then applies the decoder, registry builder,
   registry validator, and complete allowlist validator through their existing contracts.
 
 - The engine invocation runner invokes one composition-supplied
@@ -486,10 +477,9 @@ outcome through runner-owned child bindings:
    native generation constraints derive from it through the registered profile.
 
 Request-origin contracts declare one repository slot. Its catalogue model’s required
-`json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`),
-as amended in ADR 0012 on 2026-09-21. Unsupported native selection rejects the complete
-catalogue; workflow `response-mode` overrides reject. Under the user-approved 2026-10-11 amendment
-to §12.5, temperature is engine-owned: binding selects `0.1` when the registered
+`json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`)
+(ADR 0012). Unsupported native selection rejects the complete catalogue; workflow
+`response-mode` overrides reject. Temperature is engine-owned (§12.5): binding selects `0.1` when the registered
 model supports it, otherwise omission. Workflow `temperature` parameters reject,
 including `0.1`; neither request consumers nor retries can override the binding.
 Resources and outcomes remain in the existing concise workflow structure.
@@ -512,8 +502,8 @@ Resources and outcomes remain in the existing concise workflow structure.
   size estimates.
 - Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
   reject; do not replace them with another engine capacity limit.
-- The optional slot `maxOutputTokens` allowance follows the
-  [2026-10-10 amendment to ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
+- The optional slot `maxOutputTokens` allowance follows
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
   Its exact presence/value flows through validated slot options, binding, request
   controls and authorization, including correction, capture and replay. Omission
   adds no local default or fit check.
@@ -621,11 +611,10 @@ gate. An unfinished operation must close before another operation or attempt.
   retained request, and publishes the successor and evidence together only after
   envelope validation.
 - Removing evidence cannot erase an open operation or reset an attempt.
-- Assignment is not invocation or a lease: authorization preparation is a separate
-  implemented YAML operation; Logical-request and provider-operation invocation state
-  and the explicit `invoke-model` call and observed inference completion are
-  YAML-integrated; evidence-derived logical-request closure is YAML-integrated too;
-  authorization-derived assigned-operation termination is also YAML-integrated.
+- Assignment is not invocation or a lease: authorization preparation, logical-request
+  and provider-operation invocation state, the explicit `invoke-model` call, observed
+  inference completion, evidence-derived request closure and authorization-derived
+  termination are separate YAML operations.
 - Execution cleanup discards its in-memory records, never resumes or persists them.
 
 The applied invocation record belongs only to the current execution. No
@@ -647,12 +636,12 @@ an invocation record alone does not grant a provider capability.
   capability derivation still uses the injected port.
 - Fake-provider tests exercise the action through observation validation, decoding and
   payload schema validation.
-- Native YAML registration now invokes this same action; provider implementation binding
-  remains explicitly required.
+- Native YAML registration invokes this same action through an explicitly bound provider
+  implementation.
 
 **Count action**
 
-- `CountModelInputTokensAction` is implemented and YAML-callable.
+- `CountModelInputTokensAction` is YAML-callable.
 - It forwards the exact request, binding, applied count-operation record and single-use
   lease reference through `LLMProviderInterface.countInputTokens` once.
 - The existing port owns association/deadline checks, lease consumption and backing
@@ -686,7 +675,7 @@ an invocation record alone does not grant a provider capability.
 - Current-ledger checks reject terminal operations; one-time completion remains the
   existing lifecycle CAS's responsibility, not a second consumption ledger.
 
-**Implemented count YAML integration:** `count-model-input-tokens` consumes the
+**Count YAML integration:** `count-model-input-tokens` consumes the
 current request ledger, prepared request, applied attempt, invoked count operation
 and prepared authorization result. It calls the existing action once. Its
 `provider_token_count_result` owns the raw outcome and retains the original
@@ -896,21 +885,24 @@ RawProviderModelResult =
       bindingId,
       content: CompleteOwnedUtf8,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
   | stopped {
       requestId,
       bindingId,
       reason: ProviderNonCandidateStopReason,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
   | rejected {
       requestId,
       bindingId,
       reason: invalid_content | missing_final_text,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
 
 ProviderFailureCause =
@@ -966,12 +958,22 @@ Every terminal lifecycle fact retains delivery disposition, including
 cancellation outside `ProviderFailure`. An API request already sent cannot be
 undone; it does not make any candidate workflow output successful.
 
-- All `RawProviderModelResult` variants contain only engine-supplied identities,
-  bounded nonnegative usage, and optional bounded latency; none accepts an identity
+- All `RawProviderModelResult` variants contain engine-supplied identities,
+  validated nonnegative usage, optional validated latency and optional owned
+  reasoning diagnostics; none accepts an identity
   from the provider.
 - Only `.complete` owns UTF-8 content.
 - `.stopped` and `.rejected` contain no content member, so a missing/non-text provider output cannot be
   represented by an empty-string sentinel.
+- Each variant carries provider reasoning as
+  [owned ordered diagnostic blocks](../../src/domain/provider_reasoning.zig). Readable text, optional signatures and provider-redacted base64
+  remain separate from candidate content. Ownership transfers from adapter decoder
+  to the provider observation; its existing `deinit` releases the diagnostic on
+  complete, stopped and rejected paths. Borrowed views cannot outlive that owner.
+- Reasoning can remain available when final text is absent, malformed or stopped.
+  It supplies no validity, semantic-proof, repair, transition or completion
+  authority. The debugger renders it in its separate **Provider reasoning** card;
+  raw exchange capture retains the credential-redacted source bytes.
 
 - `.stopped` publishes no candidate to `DecodeModelEnvelopeAction`.
 - A `.complete` result is still untrusted candidate data.
@@ -991,8 +993,8 @@ undone; it does not make any candidate workflow output successful.
   delivery and no candidate.
   Raw `.rejected` preserves independently decoded usage until the shared association
   and usage validator admits it. The resulting failure retains the content diagnostic
-  and transport retry class `never`. The user-approved missing-answer amendment
-  permits only validated `missing_final_text` with known usage to enter explicit
+  and transport retry class `never`. Only validated `missing_final_text` with known
+  usage may enter explicit
   workflow protocol correction (§22.6); it creates no candidate or call permission.
   All other rejected content remains terminal. The existing runner allowance,
   authorization lifecycle and total-token budget govern any further call.
@@ -1016,7 +1018,7 @@ undone; it does not make any candidate workflow output successful.
 - It reuses the strict JSON syntax boundary with result-schema transport, accepts one
   object with optional JSON whitespace, and rejects duplicate decoded keys at every
   depth, malformed JSON, non-object roots, fences and trailing content, subject only
-  to the approved [§22.6 normalization](../contracts/22-repair.md#226-unparseable-output).
+  to the [§22.6 normalization](../contracts/22-repair.md#226-unparseable-output).
 - Parsing uses the schema profile's 64-level JSON nesting guard, not an output-byte
   ceiling.
 - Numeric lexemes remain exact; no rounding, coercion, JSON extraction, wrapper
@@ -1261,11 +1263,11 @@ F0006 does not:
     - Count and inference operations each have a distinct execution-local
       identity/lifecycle transition; no hidden retry, size preflight or count
       prerequisite exists.
-    - Native YAML accounting is implemented: retained binding, fresh epoch-bound
+    - Native YAML accounting tests cover retained binding, fresh epoch-bound
       ledgers, initial/retry classification, compiler-permitted delta application,
       sealed applied evidence, explicit retry exhaustion, cancellation, allocation
-      cleanup, and rejection of forged/stale/cross-execution associations are tested.
-    - Native assignment is also implemented for both operation kinds: exact retained
+      cleanup, and rejection of forged/stale/cross-execution associations.
+    - Native assignment tests cover both operation kinds: exact retained
       associations, immutable applied evidence, duplicate/open-operation rejection,
       compiled permission checks, cancellation and allocation cleanup.
     - YAML logical-request invocation retains that association through an exact ledger
@@ -1460,8 +1462,7 @@ Implementation evidence must cover:
 - complete cleanup on every terminal branch.
 - Concrete HTTP acceptance uses in-memory connections beneath the same send/read and
   deadline code, proving in-flight interruption, rejected partial bodies, joined cleanup
-  and no resend
-- F0007 records the implemented evidence.
+  and no resend.
 
 **Compact response**
 

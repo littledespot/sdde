@@ -1,5 +1,27 @@
 # Source-review scope presentation comparison
 
+**B2 current-contract refresh — 17 October 2026:** current exports use complete
+native source-review assignments under ADR 0023. The comparison removes only the
+per-member `assessment_scope` presentation; exact assignment membership and
+native evidence remain unchanged. Three historical field-only panels lack a
+complete native candidate and are explicitly unavailable. Alongside the same two
+B3 admission rejections, current preparation contains 10 development and nine
+reserved qualification assignments, or 76 possible diagnostic sends. No sends or
+semantic qualification are authorized or claimed. Frozen inputs and historical
+scores remain unchanged. The protocol and scorecard below retain their historical
+pre-ADR-0023 scope; their singleton assignments do not describe current dispatch.
+
+**Historical B3 refresh — 17 October 2026:** all fixture text crossed
+current native admission before canonical validation. The frozen equal-label
+inputs `d5-ready-payer-field` and `d5-ready-fr-other-occurrence` record typed
+`ambiguous_exact` rejection before review; neither an old handle nor selected
+support may choose between their competing eligible exact identities. Original
+cases, semantic expectations and historical exports remained unchanged. At that
+checkpoint, preparation accounted for all 24 inputs as 22 prepared and two rejected cases,
+yielding 88 possible panel sends rather than the historical 96 below. Generated
+native-admission records and the manifest separate these denominators. This is
+offline preparation in progress, not a frozen replacement panel or live approval.
+
 This is frozen **offline preparation**, with no live results or dispatch authority.
 The unexecuted plan is regenerated during FIX03 Phase 4 for current guidance,
 schema and the approved fixed temperature 0.1 policy. Both arms explicitly use

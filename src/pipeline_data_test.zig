@@ -338,7 +338,7 @@ test "native repair renews declared dependencies atomically while preserving sou
         delta.data_replacements[@intFromEnum(candidate.key)] = try values.create(std.testing.allocator, candidate, u32, 2);
         delta.data_invalidations = .initMany(invalidates);
         const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
-        if (scenario != 4) delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } };
+        if (scenario != 4) delta.repair_transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2, .validation = .dependent_review } };
         if ((scenario >= 1 and scenario <= 3) or scenario == 5) {
             try std.testing.expectError(if (scenario == 3) error.UndeclaredRepairTransition else error.InvalidRepairRenewal, envelope.apply(merge, &delta, .ok));
             try std.testing.expectEqual(generation, envelope.generation);

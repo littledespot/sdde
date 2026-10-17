@@ -27,6 +27,9 @@ pub const ProviderConfigSchema = enum {
 
 // Closed deployment facts; neither endpoints nor credentials are project data.
 pub const BedrockRegion = enum { @"ap-southeast-2", @"us-west-2" };
+// Model request-field projection is compiled provider knowledge. External catalogues can
+// select supported models but cannot supply an encoding implementation.
+pub const BedrockRequestProfile = enum { none, openai_oss, openai_luna };
 
 pub const ValidatedProviderConfig = union(enum) {
     empty_object,
@@ -41,6 +44,7 @@ pub const ProviderModelContract = struct {
     capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8 = &.{},
     bedrock_regions: []const BedrockRegion = &.{},
+    bedrock_request_profile: BedrockRequestProfile = .none,
 
     pub fn acceptsConfig(self: ProviderModelContract, config: ValidatedProviderConfig) bool {
         if (!@import("llm_provider_config_schema.zig").matches(self.config_schema, config)) return false;
@@ -60,6 +64,7 @@ pub const Registry = struct {
         if (self.entries.len > max_contracts) return error.InvalidProviderModelContracts;
         for (self.entries, 0..) |entry, index| {
             if ((entry.config_schema == .aws_bedrock) != (entry.bedrock_regions.len != 0)) return error.InvalidProviderModelContracts;
+            if (entry.config_schema != .aws_bedrock and entry.bedrock_request_profile != .none) return error.InvalidProviderModelContracts;
             for (entry.bedrock_regions, 0..) |region, region_index| {
                 if (std.mem.indexOfScalar(BedrockRegion, entry.bedrock_regions[0..region_index], region) != null) return error.InvalidProviderModelContracts;
             }
@@ -157,4 +162,7 @@ test "contract registry is exact unique and provider consistent" {
     conflicting.implementation_id = RegisteredProviderImplementationId.init(2).?;
     const inconsistent: Registry = .{ .entries = &.{ first, conflicting } };
     try std.testing.expectError(error.InvalidProviderModelContracts, inconsistent.validate());
+    var foreign_policy = first;
+    foreign_policy.bedrock_request_profile = .openai_luna;
+    try std.testing.expectError(error.InvalidProviderModelContracts, (Registry{ .entries = &.{foreign_policy} }).validate());
 }

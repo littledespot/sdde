@@ -18,9 +18,11 @@ pub const Output = struct {
     }
 
     pub fn save(self: Output, io: std.Io, allocator: std.mem.Allocator, report: c.Report) !void {
-        const json = try std.json.Stringify.valueAlloc(allocator, report, .{ .whitespace = .indent_2 });
+        var projection = report;
+        try @import("acceptance.zig").apply(allocator, &projection);
+        const json = try std.json.Stringify.valueAlloc(allocator, projection, .{ .whitespace = .indent_2 });
         defer allocator.free(json);
-        const markdown = try renderMarkdown(allocator, report);
+        const markdown = try renderMarkdown(allocator, projection);
         defer allocator.free(markdown);
         try self.json.writeStreamingAll(io, json);
         try self.json.sync(io);
@@ -35,6 +37,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
     defer out.deinit();
     const writer = &out.writer;
     try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
+    try writeAcceptance(allocator, writer, report);
     try writer.print("Specification publication: {s}; grading: {s}\n", .{ @tagName(report.publication_check), @tagName(report.semantic_quality) });
     if (report.status == .awaiting_clarification) try writer.print("{s}\n", .{explanation(report)});
     const project_prefix = try std.fmt.allocPrint(allocator, "{s}/{s}/project/", .{ root, run });
@@ -88,6 +91,10 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writeJsonError(writer, diagnostic);
         try writer.writeByte('\n');
     }
+    if (report.composition_error) |diagnostic| {
+        try writeCompositionError(writer, diagnostic);
+        try writer.writeByte('\n');
+    }
     if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path }) else if (report.last_model_call != null) try writer.writeAll("Model output text: unavailable; see exchange evidence.\n");
     if (report.candidate_model_output) |path| try writer.print("Candidate source output: {s}/{s}/{s}\n", .{ root, run, path });
     if (report.events_file) |path| try writer.print("Events: {s}/{s}/{s}\n", .{ root, run, path });
@@ -108,6 +115,11 @@ fn writeRetryError(writer: *std.Io.Writer, diagnostic: @import("../../../src/dom
     try std.json.Stringify.value(diagnostic, .{}, writer);
 }
 
+fn writeCompositionError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/model_text_composition.zig").Diagnostic) !void {
+    try writer.writeAll("Composition validation: ");
+    try std.json.Stringify.value(diagnostic, .{}, writer);
+}
+
 fn writeJsonError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/strict_json.zig").Diagnostic) !void {
     try writer.print("JSON error: {s}", .{@tagName(diagnostic.reason)});
     if (diagnostic.location) |position|
@@ -125,6 +137,8 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     const writer = &out.writer;
     const escape = @import("../report.zig").escape;
     try writer.print("# Spec E2E run\n\nResult: **{s}**\n\n{s}\n\n", .{ @tagName(report.status), explanation(report) });
+    try writeAcceptance(allocator, writer, report);
+    try writer.writeByte('\n');
     try writeClarifications(writer, report, "project/");
     if (report.build) |build| {
         try writer.writeAll("Executed build: ");
@@ -184,6 +198,10 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         try writeJsonError(writer, diagnostic);
         try writer.writeAll("\n\n");
     }
+    if (report.composition_error) |diagnostic| {
+        try writeCompositionError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
     if (report.last_model_output) |path| {
         try writer.print("Rejected or completed model output: [open text]({s}). This is untrusted diagnostic data.\n\n", .{path});
     } else if (report.last_model_call != null) try writer.writeAll("Model output text is unavailable; inspect the retained exchange evidence.\n\n");
@@ -234,6 +252,16 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     return out.toOwnedSlice();
 }
 
+fn writeAcceptance(allocator: std.mem.Allocator, writer: *std.Io.Writer, report: c.Report) (std.Io.Writer.Error || std.mem.Allocator.Error)!void {
+    try writer.print("Expected outcome: {s}; development acceptance: ", .{if (report.expected_outcome) |expected| @tagName(expected) else "unspecified"});
+    switch (try @import("acceptance.zig").evaluate(allocator, report)) {
+        .passed => try writer.writeAll("passed"),
+        .failed => |reason| try writer.print("failed ({s})", .{@tagName(reason)}),
+        .unresolved => |reason| try writer.print("unresolved ({s})", .{@tagName(reason)}),
+    }
+    try writer.writeByte('\n');
+}
+
 fn explanation(report: c.Report) []const u8 {
     return switch (report.status) {
         .input_invalid => "Input setup failed before workflow execution. Check the diagnostic and captured inputs. Use scripts/e2e-spec.sh to load the checkout's .env.e2e; direct Zig invocations require the TEST_EVALUATION_* settings and test credential in their environment.",
@@ -274,10 +302,18 @@ fn writeRepairs(writer: *std.Io.Writer, repairs: []const @import("../../../src/d
 }
 
 fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
-    try writer.print("Model calls: {d}. Accounted tokens: {d}", .{ report.model_calls, report.total_tokens });
-    if (report.total_token_budget) |budget| try writer.print("/{d}", .{budget});
+    try writer.print("Reconciled inference operations: {d} ({d} proven not sent). Accounted tokens: {d}", .{ report.model_calls, report.not_sent_operations, report.total_tokens });
     try writer.print("; usage complete: {}.\n\n", .{report.usage_complete});
+    if (report.admission_audit != null) try writer.print("Captured physical sends: {d}.\n\n", .{report.admission_exchanges.len});
+    if (report.token_accounting) |accounting| {
+        try writer.print("Workflow tokens: {d}/{d}. In-flight overshoots retain full usage.\n\n", .{ accounting.total_tokens, accounting.total_budget.value });
+    }
     if (report.last_model_usage) |usage| try writer.print("Last exchange usage: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
+    if (report.advisory_completion) |completion| {
+        try writer.writeAll("Native incomplete advice (does not certify semantic support): ");
+        try std.json.Stringify.value(completion, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.exchange_evidence) |exchange| {
         try writer.writeAll("Exchange evidence: ");
         try std.json.Stringify.value(exchange, .{}, writer);
@@ -288,9 +324,14 @@ fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
         try std.json.Stringify.value(rejection, .{}, writer);
         try writer.writeAll("\n\n");
     }
-    if (report.first_observed_defect) |defect| {
-        try writer.writeAll("First observed defect (chronology, not proven root cause): ");
+    if (report.first_native_rejection) |defect| {
+        try writer.writeAll("First native rejection (chronology, not proven root cause): ");
         try std.json.Stringify.value(defect, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.admission_escape) |metric| {
+        try writer.writeAll("Admission escapes (shared native composition/wire rules; downstream consumption is chronological exposure, not causal cost): ");
+        try std.json.Stringify.value(metric, .{}, writer);
         try writer.writeAll("\n\n");
     }
     if (report.last_provider_rejection) |rejection| {

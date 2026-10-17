@@ -19,9 +19,8 @@
 - Selector policy separately owns separator and segment rules.
 - Existing ASCII configuration-root policy remains unchanged.
 
-- ADR 0008's separately selected naming transform is superseded by [ADR
-  0010](0010-explicit-feature-directory.md).
-- Its removal does not remove shared NFC or change the dependency/packaging decision.
+- Feature identity uses no naming transform ([ADR 0010](0010-explicit-feature-directory.md));
+  that does not affect shared NFC or this dependency/packaging decision.
 
 - Install the dependency's MIT/Unicode license notices with the distribution.
 - Verify Unicode composition, invalid UTF-8, bounds, allocation failures, and

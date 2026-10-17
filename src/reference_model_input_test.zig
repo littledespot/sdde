@@ -28,7 +28,7 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
         const original = item;
         const scope: r.evidence.Scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
         const literal = fixture.text.registry.records[0];
-        const validation_context: r.text.Context = .{ .registry = fixture.text.registry, .current = text.safety.value(fixture.text.owner), .inputs = fixture.inputs, .scope = scope };
+        const validation_context: r.text.Context = .{ .registry = fixture.text.registry, .current = text.safety.value(fixture.text.owner), .inputs = fixture.inputs, .scope = scope, .field = .extraction_business };
         item.claim.content = .{ .model = .{ .business = try text.validator.business(a, validation_context, .{ .segments = &.{
             .{ .literal = .{ .value = "MOCK Display " } },
             .{ .passive = .{ .passive_literal_id = literal.id } },
@@ -44,7 +44,9 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
         try std.testing.expectEqual(@as(usize, 4), parsed.value.object.count());
         try std.testing.expect(!parsed.value.object.contains("citations") and !parsed.value.object.contains("location"));
 
-        item.claim.content = .{ .model = .{ .technical = try text.validator.reference(a, validation_context, .{ .nodes = &.{
+        var technical_context = validation_context;
+        technical_context.field = .extraction_technical;
+        item.claim.content = .{ .model = .{ .technical = try text.validator.reference(a, technical_context, .{ .nodes = &.{
             .{ .literal = .{ .value = "MOCK Context in " } },
             .{ .source = .{ .source_id = item.source_id } },
         } }) } };
@@ -211,6 +213,11 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
         const prior: stage.Prior = if (std.mem.eql(u8, id, "dispositions")) .{ .dispositions = global } else if (std.mem.eql(u8, id, "signals")) .{ .signals = dispositions } else .{ .conflicts = signals };
         const selected = try stage.packet(allocator, prior, fixture.inputs, fixture.text.registry);
         defer packets.release(selected);
+        try std.testing.expectEqual(fixture.inputs.corpus.sources.len, selected.originalSources().len);
+        for (fixture.inputs.corpus.sources, selected.originalSources()) |original, retained| {
+            try std.testing.expectEqualDeep(original.id, retained.source_id);
+            try std.testing.expectEqualStrings(original.bytes, retained.bytes);
+        }
         const parsed = try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{});
         defer parsed.deinit();
         try std.testing.expect(!parsed.value.object.contains("summary_purpose"));
@@ -224,7 +231,10 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
         const assignment = parsed.value.object.get("assignment").?.object;
         try std.testing.expectEqual(!std.mem.eql(u8, id, "conflicts"), assignment.contains("summaries"));
         const encoded_rules = try std.json.Stringify.valueAlloc(a, assignment.get("constraints").?, .{});
-        if (std.mem.eql(u8, id, "dispositions")) try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "reciprocal_conflict") != null);
+        if (std.mem.eql(u8, id, "dispositions")) {
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "reciprocal_conflict") != null);
+            try checkSemanticAssignment(a, selected, global.items, null);
+        }
         if (std.mem.eql(u8, id, "signals")) {
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "retained_claim_covered") != null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Every retained claim must appear") == null);
@@ -294,7 +304,7 @@ test "signal assignments exclude conflicting semantic members while retaining th
     }
 }
 
-test "token-only summary assignments are empty while native construction preserves every occurrence" {
+test "token-only semantic assignments are empty while native construction preserves every occurrence" {
     for ([_][]const u8{ "Display `Hello!` and `Goodbye!`.\n", "Display `Loan renewed!` and `Receipt saved!`.\n" }) |source_text| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -324,6 +334,24 @@ test "token-only summary assignments are empty while native construction preserv
             try std.testing.expectEqual(.preserved_token, std.meta.activeTag(statement.content));
             try std.testing.expect(native.source.at(.{ .statement = i }, .record) == null);
         }
+        const stage = @import("domain/reference_reconciliation_stage.zig");
+        const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, extracted, 2), fixture.context());
+        const disposition_packet = try stage.packet(a, .{ .dispositions = global }, fixture.inputs, fixture.text.registry);
+        defer packets.release(disposition_packet);
+        try checkSemanticAssignment(a, disposition_packet, global.items, null);
+        const schema = @import("domain/model_result_schema.zig");
+        var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+        const narrowed = try schema.restrict(a, resource.select(disposition_packet.resultDefinition().?).?, disposition_packet.excludedVariants(), disposition_packet.integerChoices());
+        defer narrowed.release();
+        const check = @import("model_payload_schema_test.zig").checkDocument;
+        const empty = "{\"claim_dispositions\":[],\"conflict_groups\":[]}";
+        try check(narrowed.selected().modelBytes(), .{ .bytes = empty });
+        try check(narrowed.selected().modelBytes(), .{ .bytes = "{\"claim_dispositions\":[{}],\"conflict_groups\":[]}", .rejection = .array_length, .path = "/claim_dispositions" });
+        try check(narrowed.selected().modelBytes(), .{ .bytes = "{\"claim_dispositions\":[],\"conflict_groups\":[{\"claim_ids\":[1,2]}]}", .rejection = .array_length, .path = "/conflict_groups" });
+        const collected = try stage.collect(a, .{ .dispositions = global }, disposition_packet, empty, .{ .request = .{ .value = 55 }, .attempt = .{ .value = 1 } });
+        try std.testing.expectEqual(@as(usize, 2), (try reconciliation.validate_dispositions.execute(a, collected)).valid.dispositions.len);
+        for (collected.proposal.global.claim_dispositions, 0..) |_, i| try std.testing.expect(collected.source.at(.{ .disposition = i }, .record) == null);
     }
 }
 
@@ -334,25 +362,22 @@ test "shared text choice refresh retains unrelated restrictions and replaces sta
     defer packets.release(fixed);
     const scoped = try packets.withIntegerChoices(std.testing.allocator, fixed, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "selection" }, .allowed = &.{3} }});
     defer packets.release(scoped);
-    const first = try input.withTextChoices(std.testing.allocator, scoped, &.{7}, &.{});
+    const first = try input.withTextChoices(std.testing.allocator, scoped, &.{7});
     defer packets.release(first);
-    try std.testing.expectEqual(@as(usize, 2), first.excludedVariants().len);
+    try std.testing.expectEqual(@as(usize, 1), first.excludedVariants().len);
     try std.testing.expectEqualStrings("source", first.excludedVariants()[0].kind);
-    try std.testing.expectEqualStrings("exact_copy", first.excludedVariants()[1].kind);
-    const second = try input.withTextChoices(std.testing.allocator, first, &.{}, &.{2});
+    const second = try input.withTextChoices(std.testing.allocator, first, &.{});
     defer packets.release(second);
     try std.testing.expectEqual(@as(usize, 2), second.excludedVariants().len);
     try std.testing.expectEqualStrings("source", second.excludedVariants()[0].kind);
     try std.testing.expectEqualStrings("passive", second.excludedVariants()[1].kind);
-    try std.testing.expectEqual(@as(usize, 2), second.integerChoices().len);
+    try std.testing.expectEqual(@as(usize, 1), second.integerChoices().len);
     try std.testing.expectEqualDeep(scoped.integerChoices()[0], second.integerChoices()[0]);
-    try std.testing.expectEqualStrings("exact_copy", second.integerChoices()[1].target.tagged.kind);
-    try std.testing.expectEqualDeep(&[_]i64{2}, second.integerChoices()[1].allowed);
-    const third = try input.withTextChoices(std.testing.allocator, second, &.{9}, &.{4});
+    const third = try input.withTextChoices(std.testing.allocator, second, &.{9});
     defer packets.release(third);
     try std.testing.expectEqualDeep(scoped.integerChoices()[0], third.integerChoices()[0]);
     try std.testing.expectEqualDeep(&[_]i64{9}, third.integerChoices()[1].allowed);
-    try std.testing.expectEqualDeep(&[_]i64{4}, third.integerChoices()[2].allowed);
+    try std.testing.expectEqual(@as(usize, 2), third.integerChoices().len);
 }
 
 test "summary and signal schemas restrict semantic claim choices while retaining native token evidence" {
@@ -388,7 +413,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
             const selected = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
             defer selected.release();
             for ([_]r.ClaimId{ semantic, token, .{ .ordinal = 999 } }, 0..) |claim, index| {
-                const bytes = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK authored meaning\"]}}}}}}]}}", .{ field, claim.ordinal });
+                const bytes = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":\"MOCK authored meaning\"}}}}}}]}}", .{ field, claim.ordinal });
                 try check(selected.selected().modelBytes(), .{ .bytes = bytes, .rejection = if (index == 0) null else .enum_mismatch, .path = if (index == 0) null else if (packet == summary_packet) "/statements/0/claim_ids/0" else "/signals/0/claim_ids/0" });
             }
             const selected_json = (try std.json.parseFromSlice(std.json.Value, a, selected.selected().modelBytes(), .{})).value.object;
@@ -406,7 +431,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
         const selected = try schema.restrict(std.testing.allocator, schemas.select(disposition_packet.resultDefinition().?).?, disposition_packet.excludedVariants(), disposition_packet.integerChoices());
         defer selected.release();
         const choices = @import("domain/reference_conflict_groups.zig");
-        for ([_]r.ClaimId{ semantic, .{ .ordinal = 999 } }, 0..) |claim, index| {
+        for ([_]r.ClaimId{ semantic, token, .{ .ordinal = 999 } }, 0..) |claim, index| {
             const bytes = try codec.encode(choices.Selection, a, .{ .claim_dispositions = &.{.{ .claim_id = claim, .disposition = .{ .retained = .{} } }}, .conflict_groups = &.{} });
             try check(selected.selected().modelBytes(), .{ .bytes = bytes, .rejection = if (index == 0) null else .enum_mismatch, .path = if (index == 0) null else "/claim_dispositions/0/claim_id" });
         }
@@ -441,6 +466,7 @@ test "semantic category projection follows native claim kinds and retains cross-
         .current = text.safety.value(fixture.text.owner),
         .inputs = fixture.inputs,
         .scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = entries[1].claim.chunk_id },
+        .field = .extraction_technical,
     }, .{ .nodes = &.{.{ .literal = .{ .value = "MOCK Deliver notices using the configured queue." } }} }) } };
     items.entries = entries;
     const members = [_]r.ClaimId{ entries[0].claim.id, entries[1].claim.id };
@@ -661,8 +687,8 @@ test "every reference content kind projects validated text into the shared model
         const model = parsed.value.object.get("model").?.object;
         try std.testing.expectEqualStrings(@tagName(kind), model.get("kind").?.string);
         try std.testing.expect(model.get("value") == null);
-        const nodes = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.array.items;
-        try std.testing.expectEqualStrings("A librarian renews a loan.", nodes[0].string);
+        const prose = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.string;
+        try std.testing.expectEqualStrings("A librarian renews a loan.", prose);
     }
 }
 test "extraction collection rejects missing duplicate foreign and out of order scope" {
@@ -777,5 +803,74 @@ fn packetContextPrecision(allocator: std.mem.Allocator) !void {
         try std.testing.expectEqualDeep(base.unit(), derived.unit());
         try std.testing.expectEqualDeep(base.purpose(), derived.purpose());
         try std.testing.expectEqualStrings(base.resultDefinition().?.bytes, derived.resultDefinition().?.bytes);
+    }
+}
+
+test "reconciliation phase recreation retains native source exceptions through request preparation and decoding" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const r = reconciliation.r;
+    const json = @import("domain/model_candidate_json.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    const Invocation = @import("provider_invocation_test_fixture.zig").Fixture;
+    const encoded = "{\"kind\":\"source\",\"source_id\":1}";
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &.{
+        "MOCK Show the grammar object " ++ encoded ++ ".\n",
+        "MOCK Hide the grammar object " ++ encoded ++ ".\n",
+        "MOCK Retain help describing " ++ encoded ++ ".\n",
+    });
+    defer fixture.deinit();
+    const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var candidate: r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = try reconciliation.global(a, global) } };
+    const dispositions = try a.dupe(r.ClaimDispositionProposal, candidate.proposal.global.claim_dispositions);
+    dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
+    dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
+    candidate.proposal.global.claim_dispositions = dispositions;
+    candidate.proposal.global.conflict_groups = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id } }};
+    candidate.proposal.global.signals = candidate.proposal.global.signals[2..3];
+    const accepted = (try reconciliation.validate_dispositions.execute(a, candidate)).valid;
+    candidate.phase = .signals;
+    const checked_signals = (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, candidate)).valid, fixture.context())).valid;
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const resource = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+    for ([_]stage.Prior{ .{ .signals = accepted }, .{ .conflicts = checked_signals } }) |prior| {
+        const packet = try stage.packet(std.testing.allocator, prior, fixture.inputs, fixture.text.registry);
+        defer packets.release(packet);
+        try std.testing.expectEqual(fixture.inputs.corpus.sources.len, packet.originalSources().len);
+        for (fixture.inputs.corpus.sources, packet.originalSources()) |original, retained| {
+            try std.testing.expectEqualDeep(original.id, retained.source_id);
+            try std.testing.expectEqualStrings(original.bytes, retained.bytes);
+        }
+        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies());
+        defer selected.release();
+        const response: stage.Response = if (prior == .signals)
+            .{ .signals = .{ .signals = &.{.{ .claim_ids = &.{dispositions[2].claim_id}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Retain help describing " ++ encoded ++ "." } }} } } } }} } }
+        else
+            .{ .conflicts = .{ .conflicts = &.{.{ .group_id = .{ .ordinal = 1 }, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "MOCK Source rules for " ++ encoded ++ " conflict." } }} } }} } };
+        const bytes = try json.encodeSelected(stage.Response, a, response);
+        for ([_]bool{ true, false }) |retain_source| {
+            var invoked: Invocation = undefined;
+            try invoked.initWithFieldPolicies(selected.selected().modelBytes(), if (retain_source) packet.originalSources() else &.{}, packet.proseFields(), packet.fieldPolicies());
+            defer invoked.deinit();
+            invoked.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 5, .output_tokens = 3 } };
+            var observed = try invoked.response();
+            defer observed.deinit();
+            var validated = try (@import("actions/model/validate_provider_invocation_observation.zig").Action{}).execute(std.testing.allocator, invoked.call, &observed);
+            defer validated.deinit();
+            var diagnostic: ?envelope.Diagnostic = null;
+            defer if (diagnostic) |value| value.deinit(std.testing.allocator);
+            if (retain_source) {
+                var decoded = try (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+                defer decoded.deinit();
+                try std.testing.expect(diagnostic == null);
+                try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(envelope.value(decoded.candidate.json()), invoked.prepared.request.response_schema.root()) == null);
+            } else {
+                try std.testing.expectError(error.InvalidModelEnvelope, (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+                try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
+            }
+        }
     }
 }

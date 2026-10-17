@@ -1,5 +1,14 @@
 # Assembly requirements and ownership comparisons
 
+**Historical experiment, superseded by B9 on 17 October 2026.** Entity records
+now belong to the feature-wide entities unit; record batches reject them. The
+conditional entity-family comparison and its active preparation runner have been
+retired. Current schema, ownership, repair and readback regressions cover that
+replacement contract. Retained experiment inputs, labels, frozen payloads and
+results remain historical evidence. The instructions below describe the earlier
+experiment; the current test command no longer prepares these comparison arms
+or authorizes new calls.
+
 This records-only diagnostic contains two adjacent single-factor comparisons,
 sharing their middle arm instead of sending it twice:
 
@@ -66,7 +75,7 @@ proves family/ownership have identical packet and schema bytes and differ only
 by the `sources` string in the static guidance; all other guidance is unchanged.
 Generated packets,
 complete debugger edits, provider bodies, ancestry preflight and preparation
-manifest are beneath `.zig-cache/authoring-associations/assembly-requirements/`.
+manifest are beneath `.zig-cache/authoring-associations/v14-text/assembly-requirements/`.
 Freeze those bytes after offline verification; dependency changes require a new
 preparation and approval. Do not edit a generated packet. Interpret the two
 adjacent comparisons separately; baseline/ownership changes two factors and

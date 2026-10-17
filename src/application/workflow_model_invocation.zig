@@ -31,6 +31,16 @@ pub fn reconcile(accounting: *token_runner.Runner, revision: tokens.Revision, ca
         error.WorkflowTokenBudgetExceeded => return .{ .token_budget = error.WorkflowTokenBudgetExceeded },
         else => return .{ .operation_failed = err },
     };
+    if (observed == .candidate) {
+        const candidate = observed.candidate;
+        const retained = values.read(&.{ .slots = candidate.delta.data_writes }, invocation.schema, result.Result) catch return .authority;
+        const original = retained.outcome() orelse return .authority;
+        const stop: ?@import("../domain/model_invocation_result.zig").AccountingStop = if (rejection != null) null else switch (original.*) {
+            .observation => if (resolution == .unavailable) .usage_unavailable else null,
+            .cancelled, .allocation_failed, .logging_blocked_before_send => null,
+        };
+        retained.reconcileAccounting(stop) catch return .authority;
+    }
     return rejection;
 }
 

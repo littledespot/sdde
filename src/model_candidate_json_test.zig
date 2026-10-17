@@ -1,5 +1,8 @@
 const std = @import("std");
 const codec = @import("domain/model_candidate_json.zig");
+test {
+    _ = @import("model_text_field_test.zig");
+}
 const Choice = union(enum) {
     count: struct { amount: u32 },
     note: struct { text: []const u8 },
@@ -15,12 +18,12 @@ test "reconciliation rejects the observed native union response and accepts the 
     const check = @import("model_payload_schema_test.zig").checkDocument;
     const prefix = "{\"statements\":[{\"claim_ids\":[1],\"content\":";
     for ([_][]const u8{
-        "{\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}",
+        "{\"model\":{\"kind\":\"business\",\"segments\":\"Display the greeting.\"}}",
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }), .rejection = .missing_required_property, .path = "/statements/0/content/kind" });
     for ([_][]const u8{
-        "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}",
+        "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"Display the greeting.\"}}",
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }) });
-    try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}}]}", .unknown_property, "/statements/0/local_key");
+    try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"Display the greeting.\"}}}]}", .unknown_property, "/statements/0/local_key");
 }
 
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
@@ -65,29 +68,131 @@ test "compact candidate encoding and decoding release every failed allocation" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, roundTrip, .{});
 }
 
+test "model codec rejects every declared engine derived variant without changing persistence" {
+    const Node = union(enum) {
+        pub const model_inline = .{ .prose = "bytes" };
+        pub const model_derived_nodes = .{ .computed = {} };
+        prose: struct { bytes: []const u8 },
+        reference: struct { id: u32 },
+        computed: struct { id: u32 },
+    };
+    const Packet = struct {
+        pub const model_text = "text";
+        text: []const Node,
+        nested: []const Node,
+    };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const plain = "{\"text\":\"MOCK exact bytes belong in prose.\",\"nested\":[]}";
+    try std.testing.expectEqualStrings(plain, try codec.encode(Packet, a, try codec.decode(Packet, a, plain)));
+    for ([_][]const u8{
+        "{\"text\":{\"fragments\":[\"MOCK prose \",{\"kind\":\"computed\",\"id\":7}]},\"nested\":[]}",
+        "{\"text\":\"MOCK prose\",\"nested\":[{\"kind\":\"computed\",\"id\":7}]}",
+    }) |wire| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Packet, a, wire));
+    const canonical: Packet = .{ .text = &.{.{ .computed = .{ .id = 7 } }}, .nested = &.{} };
+    try std.testing.expectError(error.InvalidJsonDocument, codec.encode(Packet, a, canonical));
+    const persisted = try std.json.Stringify.valueAlloc(a, canonical, .{});
+    const restored = try @import("domain/strict_json.zig").decode(Packet, a, persisted, .{ .maximum_depth = 16 });
+    try std.testing.expectEqualDeep(canonical, restored);
+    const native_evidence = try codec.encodeEvidence(Packet, a, canonical);
+    try std.testing.expectEqualStrings("{\"text\":{\"fragments\":[{\"id\":7,\"kind\":\"computed\"}]},\"nested\":[]}", native_evidence);
+    try std.testing.expectEqualStrings(native_evidence, try codec.encodeEvidence(Packet, a, restored));
+    try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Packet, a, native_evidence));
+}
+
+test "business model values reject exact copy objects with and without echoed IDs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const spec = @import("domain/specification.zig");
+    for ([_][]const u8{
+        "{\"value\":{\"fragments\":[{\"kind\":\"exact_copy\"}]}}",
+        "{\"value\":{\"fragments\":[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7}]}}",
+        "{\"value\":[{\"exact_copy\":{\"claim_id\":{\"ordinal\":7}}}]}",
+    }) |wire| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(spec.BusinessValue, a, wire));
+    const canonical: spec.BusinessValue = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 7 } } }} };
+    try std.testing.expectError(error.InvalidJsonDocument, codec.encode(spec.BusinessValue, a, canonical));
+    const persisted = try std.json.Stringify.valueAlloc(a, canonical, .{});
+    try std.testing.expectEqualDeep(canonical, try @import("domain/strict_json.zig").decode(spec.BusinessValue, a, persisted, .{ .maximum_depth = 16 }));
+    const native_evidence = try codec.encodeEvidence(spec.BusinessValue, a, canonical);
+    try std.testing.expectEqualStrings("{\"value\":{\"fragments\":[{\"claim_id\":7,\"kind\":\"exact_copy\"}]}}", native_evidence);
+    try std.testing.expectError(error.InvalidJsonDocument, codec.decode(spec.BusinessValue, a, native_evidence));
+}
+
+const TextNode = union(enum) {
+    pub const model_inline = .{ .prose = "bytes" };
+    prose: struct { bytes: []const u8 },
+    reference: struct { id: u32 },
+};
+const TextPacket = struct {
+    pub const model_text = "text";
+    text: []const TextNode,
+    collection: []const TextNode,
+};
+
+test "declared text fields preserve native nodes while separating prose and explicit composition" {
+    try textRoundTrip(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, textRoundTrip, .{});
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "[]",                                                              "[\"MOCK old text array\"]",                               "\"\"",                                              "null",                                         "false",
+        "{\"fragments\":[]}",                                              "{\"fragments\":[\"\"]}",                                  "{\"fragments\":\"MOCK prose\"}",                    "{\"fragments\":[\"MOCK prose\"],\"extra\":0}", "{\"fragments\":[\"MOCK prose\"],\"fragments\":[\"MOCK duplicate\"]}",
+        "{\"fragments\":[{\"kind\":\"reference\",\"id\":7,\"extra\":0}]}", "{\"fragments\":[{\"kind\":\"reference\",\"id\":\"7\"}]}", "{\"fragments\":[{\"kind\":\"unknown\",\"id\":7}]}",
+    }) |value| {
+        const bytes = try std.mem.concat(a, u8, &.{ "{\"text\":", value, ",\"collection\":[]}" });
+        try std.testing.expectError(error.InvalidJsonDocument, codec.decode(TextPacket, a, bytes));
+    }
+}
+
+fn textRoundTrip(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const examples = [_][]const u8{
+        "{\"text\":\"MOCK Loan has a deadline.\",\"collection\":[\"MOCK independent item\"]}",
+        "{\"text\":{\"fragments\":[\"MOCK before \",{\"id\":7,\"kind\":\"reference\"},\" after.\"]},\"collection\":[]}",
+        "{\"text\":{\"fragments\":[\"MOCK Loan\",\"has\",\"Deadline\"]},\"collection\":[]}",
+    };
+    for (examples) |wire| {
+        const decoded = try codec.decode(TextPacket, a, wire);
+        try std.testing.expectEqualStrings(wire, try codec.encode(TextPacket, a, decoded));
+        const persisted = try std.json.Stringify.valueAlloc(a, decoded, .{});
+        try std.testing.expectEqualDeep(decoded, try @import("domain/strict_json.zig").decode(TextPacket, a, persisted, .{ .maximum_depth = 16 }));
+        try std.testing.expect(std.mem.indexOf(u8, persisted, "\"text\":[") != null);
+        try std.testing.expect(std.mem.indexOf(u8, persisted, "fragments") == null);
+    }
+    const joined = try codec.decode(TextPacket, a, examples[2]);
+    try std.testing.expectEqualStrings("MOCK Loan", joined.text[0].prose.bytes);
+    try std.testing.expectEqualStrings("has", joined.text[1].prose.bytes);
+    try std.testing.expectEqualStrings("Deadline", joined.text[2].prose.bytes);
+}
+
 // Independent wire fixtures: these values are authored from the contracts, never
 // synthesized from schema nodes or encoded by the codec being tested.
 const response_wire = struct {
     const id = "7";
     const provenance = "{\"claim_ids\":[" ++ id ++ "],\"clarification_response_ids\":[]}";
-    const segments = "[\"Display the status\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]";
-    const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
+    const segments = "{\"fragments\":[\"Display the status\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]}";
+    const nodes = "{\"fragments\":[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]}";
     const normalized = segments;
-    const exact = "[{\"kind\":\"exact_copy\",\"claim_id\":" ++ id ++ "}]";
+    const plain = "\"Display the required exact value verbatim.\"";
     const attributed = "{\"signal_ids\":[" ++ id ++ "],\"value\":" ++ normalized ++ "}";
     const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
     const records = .{
-        .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ exact ++ "}" },
+        .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ plain ++ "}" },
         .{ "user_visible_outcome", "{\"kind\":\"user_visible_outcome\",\"text\":" ++ normalized ++ "}" },
-        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ ",\"expected_outcome\":" ++ exact ++ "}" },
+        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ ",\"expected_outcome\":" ++ plain ++ "}" },
         .{ "functional_requirement", "{\"kind\":\"functional_requirement\",\"text\":" ++ normalized ++ "}" },
-        .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ exact ++ "}" },
+        .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ plain ++ "}" },
         .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
         .{ "non_goal", "{\"kind\":\"non_goal\",\"text\":" ++ normalized ++ "}" },
         .{ "prohibited_behavior", "{\"kind\":\"prohibited_behavior\",\"text\":" ++ normalized ++ "}" },
-        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ ",\"business_meaning\":" ++ normalized ++ ",\"relationships\":[" ++ exact ++ "]}" },
+        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ ",\"business_meaning\":" ++ normalized ++ ",\"relationships\":[" ++ plain ++ "]}" },
     };
 };
 
@@ -107,22 +212,24 @@ test "independent wire cases cover every selected specification result and neste
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.exact ++ "}");
-    try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.plain ++ "}");
+    try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ ",\"records\":[]}");
     inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
     // with native validation covered by specification_generation_test.
     try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
     inline for (response_wire.records) |record| {
         const bytes = "{\"content\":" ++ record[1] ++ "}";
-        try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
+        if (comptime std.mem.eql(u8, record[0], "entity")) {
+            try candidateSchemaCase("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}", .unknown_variant, "/records/0/content/kind");
+            try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"required\",\"basis\":" ++ response_wire.attributed ++ ",\"records\":[{\"signal_ids\":[" ++ response_wire.id ++ "],\"content\":" ++ record[1] ++ "}]}");
+        } else try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
-        try checkCandidate("generation", "records", need);
+        if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
         try candidateSchemaCase("generation", "primary_user_story", need, .unknown_property, "/record_kind");
         if (comptime std.mem.eql(u8, record[0], "acceptance_criterion") or std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
-        if (comptime !std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_non_entity", bytes);
     }
-    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
+    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
     try checkCandidate("support", "selection", "{\"source_ids\":[]}");
@@ -160,6 +267,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
         .eligible_claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } },
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
         .candidate_bound = true,
     };
@@ -183,6 +291,7 @@ test "D1 source variants require questions only for gaps in focused findings" {
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
         .candidate_bound = false,
     };
@@ -235,34 +344,34 @@ test "selected source and reconciliation repairs conform to their native respons
 }
 
 test "required text and citation presence follows native rules in initial and selected schemas" {
-    const claim = "{\"content\":{\"kind\":\"business\",\"segments\":[\"Requirement\"]},\"citations\":[" ++ response_wire.selection ++ "]}";
+    const claim = "{\"content\":{\"kind\":\"business\",\"segments\":\"Requirement\"},\"citations\":[" ++ response_wire.selection ++ "]}";
     try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[" ++ claim ++ "],\"token_classifications\":[]}");
-    try candidateSchemaCase("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"segments\":[\"Requirement\"]},\"citations\":[]}],\"token_classifications\":[]}", .array_length, "/claims/0/citations");
+    try candidateSchemaCase("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"segments\":\"Requirement\"},\"citations\":[]}],\"token_classifications\":[]}", .array_length, "/claims/0/citations");
     try candidateSchemaCase("extraction", "citation_replacement", "{\"citations\":[]}", .array_length, "/citations");
     inline for (.{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
         const field = if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
         const prefix = "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"" ++ kind ++ "\",\"" ++ field ++ "\":";
-        try candidateSchemaCase("extraction", null, prefix ++ "[]},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .array_length, "/claims/0/content/" ++ field);
-        try candidateSchemaCase("extraction", null, prefix ++ "[\"\"]},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .string_length, "/claims/0/content/" ++ field ++ "/0");
+        try candidateSchemaCase("extraction", null, prefix ++ "{\"fragments\":[]}},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .array_length, "/claims/0/content/" ++ field ++ "/fragments");
+        try candidateSchemaCase("extraction", null, prefix ++ "\"\"},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .string_length, "/claims/0/content/" ++ field);
     }
-    try candidateSchemaCase("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[]},\"token_classifications\":[]}", .array_length, "/reason/nodes");
-    try candidateSchemaCase("extraction", "business_text_replacement", "{\"segments\":[\"\"]}", .string_length, "/segments/0");
-    try candidateSchemaCase("extraction", "reference_text_replacement", "{\"nodes\":[\"\"]}", .string_length, "/nodes/0");
+    try candidateSchemaCase("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":{\"fragments\":[]}},\"token_classifications\":[]}", .array_length, "/reason/nodes/fragments");
+    try candidateSchemaCase("extraction", "business_text_replacement", "{\"segments\":\"\"}", .string_length, "/segments");
+    try candidateSchemaCase("extraction", "reference_text_replacement", "{\"nodes\":\"\"}", .string_length, "/nodes");
 
     try checkCandidate("reconciliation", "summary", "{\"statements\":[]}");
     try checkCandidate("reconciliation", "dispositions_assignment", "{\"claim_dispositions\":[],\"conflict_groups\":[]}");
     try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}]}", .array_length, "/statements/0/claim_ids");
-    try candidateSchemaCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"An observable result.\"]}}}]}", .array_length, "/signals/0/claim_ids");
+    try candidateSchemaCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"An observable result.\"}}}]}", .array_length, "/signals/0/claim_ids");
     try candidateSchemaCase("reconciliation", "repair_selection", "{\"claim_ids\":[]}", .array_length, "/claim_ids");
     inline for (.{ .{ "business_text", "segments" }, .{ "reference_text", "nodes" } }) |case| {
-        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":[]}", .array_length, "/" ++ case[1]);
-        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":[\"\"]}", .string_length, "/" ++ case[1] ++ "/0");
+        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":{\"fragments\":[]}}", .array_length, "/" ++ case[1] ++ "/fragments");
+        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":\"\"}", .string_length, "/" ++ case[1]);
     }
 
-    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
-    try candidateSchemaCase("generation", "value", "{\"value\":[]}", .array_length, "/value");
-    try candidateSchemaCase("generation", "value", "{\"value\":[\"\"]}", .string_length, "/value/0");
-    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":[]}", .array_length, "/value");
+    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
+    try candidateSchemaCase("generation", "value", "{\"value\":{\"fragments\":[]}}", .array_length, "/value/fragments");
+    try candidateSchemaCase("generation", "value", "{\"value\":\"\"}", .string_length, "/value");
+    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":{\"fragments\":[]}}", .array_length, "/value/fragments");
 
     const review_prefix = "{\"kind\":\"";
     const review_tail = "\",\"source_ids\":[],\"detail\":\"\"}";
@@ -296,19 +405,34 @@ test "provider schema projections retain expressible collection minima" {
             const bytes = try @import("domain/model_schema_projection.zig").render(a, selected, profile);
             const projected = (try std.json.parseFromSlice(std.json.Value, a, bytes, .{})).value;
             const field = projected.object.get("properties").?.object.get(case[2]).?.object;
-            try std.testing.expectEqual(@as(i64, 1), field.get("minItems").?.integer);
+            const array = if (comptime std.mem.eql(u8, case[0], "extraction")) field else blk: {
+                const alternatives = field.get(if (profile == .complete) "oneOf" else "anyOf").?.array.items;
+                break :blk alternatives[1].object.get("properties").?.object.get("fragments").?.object;
+            };
+            try std.testing.expectEqual(@as(i64, 1), array.get("minItems").?.integer);
         }
     }
 }
 
-test "business values use one segment shape for prose and exact references" {
-    const value = "[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7},\" with UTC date/time.\"]";
+test "business values distinguish ordinary prose from explicit fragment composition" {
+    const value = "{\"fragments\":[\"Display \",{\"kind\":\"passive\",\"passive_literal_id\":7},\" with UTC date/time.\"]}";
+    try checkCandidate("generation", "value", "{\"value\":\"MOCK Display the status.\"}");
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
     try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ value ++ "}");
     try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}", .missing_required_property, "/signal_ids");
     try candidateCase("generation", "value", "{\"signal_ids\":[7],\"value\":" ++ value ++ "}", .unknown_property, "/signal_ids");
-    try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .type_mismatch, "/value");
-    try candidateCase("generation", "value", "{\"value\":[{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}]}", .unknown_property, "/value/0/token_id");
+    try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .unknown_property, "/value/kind");
+    for ([_][]const u8{
+        "{\"kind\":\"exact_copy\"}",
+        "{\"kind\":\"exact_copy\",\"claim_id\":7}",
+        "{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}",
+    }) |insertion| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.mem.concat(arena.allocator(), u8, &.{ "{\"value\":{\"fragments\":[", insertion, "]}}" });
+        try candidateCase("generation", "value", bytes, .unknown_variant, "/value/fragments/0/kind");
+    }
+    try candidateCase("generation", "value", "{\"value\":[\"MOCK legacy array\"]}", .type_mismatch, "/value");
 }
 
 test "focused review evidence shapes follow native minima without excluding source-only diagnoses" {
@@ -324,6 +448,7 @@ test "focused review evidence shapes follow native minima without excluding sour
         .eligible_claim_ids = &.{.{ .ordinal = 7 }},
         .eligible_source_ids = &.{.{ .ordinal = 7 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = null,
         .candidate_bound = false,
     };
@@ -437,7 +562,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     }
     try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
     try candidateCase("support", null, "{\"kind\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
-    try candidateCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"An observable result.\"]}}}]}", .unknown_property, "/signals/0/citation_ids");
+    try candidateCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"An observable result.\"}}}]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}", .unknown_property, "/conflicts/0/citation_ids");
     try candidateCase("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/resolution");
 }
@@ -448,11 +573,11 @@ test "independent multi-record proposals retain siblings and all disposition var
     ;
     try checkCandidate("reconciliation", "dispositions_assignment", dispositions);
     const statements =
-        \\{"statements":[{"claim_ids":[7],"content":{"kind":"model","model":{"kind":"business","segments":["Confirm a booking."]}}},{"claim_ids":[9],"content":{"kind":"model","model":{"kind":"business","segments":["Issue a renewal receipt."]}}}]}
+        \\{"statements":[{"claim_ids":[7],"content":{"kind":"model","model":{"kind":"business","segments":"Confirm a booking."}}},{"claim_ids":[9],"content":{"kind":"model","model":{"kind":"business","segments":"Issue a renewal receipt."}}}]}
     ;
     try checkCandidate("reconciliation", "summary", statements);
     const records =
-        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":["Confirm a booking."]}},{"content":{"kind":"functional_requirement","text":["Issue a receipt."]}}]}
+        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":"Confirm a booking."}},{"content":{"kind":"functional_requirement","text":"Issue a receipt."}}]}
     ;
     try checkCandidate("generation", "records", records);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -583,20 +708,30 @@ test "native singleton fields reconstruct by bound occurrence without changing r
     try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSingletonFields, .{});
 }
 fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
-    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{41}, .singleton = .construct }};
-    const raw = "{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\"},\" and \",{\"kind\":\"exact_copy\"}]}";
+    const Node = union(enum) {
+        pub const model_inline = .{ .literal = "value" };
+        literal: struct { value: []const u8 },
+        reference: struct { id: u32 },
+    };
+    const Value = struct {
+        pub const model_scalar = "segments";
+        pub const model_text = "segments";
+        segments: []const Node,
+    };
+    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "reference", .field = "id" } }, .allowed = &.{41}, .singleton = .construct }};
+    const raw = "{\"value\":{\"fragments\":[\"MOCK surrounding narrative \",{\"kind\":\"reference\"},\" and \",{\"kind\":\"reference\"}]}}";
     const complete = try codec.constructBound(allocator, raw, &choices);
     defer allocator.free(complete);
-    try std.testing.expectEqualStrings("{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\",\"claim_id\":41},\" and \",{\"kind\":\"exact_copy\",\"claim_id\":41}]}", complete);
-    try std.testing.expect(std.mem.indexOf(u8, raw, "claim_id") == null);
+    try std.testing.expectEqualStrings("{\"value\":{\"fragments\":[\"MOCK surrounding narrative \",{\"kind\":\"reference\",\"id\":41},\" and \",{\"kind\":\"reference\",\"id\":41}]}}", complete);
+    try std.testing.expect(std.mem.indexOf(u8, raw, "id") == null);
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
-    const parsed = try codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), complete);
-    try std.testing.expectEqual(@as(u32, 41), parsed.segments[1].exact_copy.claim_id.ordinal);
-    try std.testing.expectEqual(@as(u32, 41), parsed.segments[3].exact_copy.claim_id.ordinal);
+    const parsed = try codec.decode(Value, arena.allocator(), complete);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[1].reference.id);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[3].reference.id);
     for ([_][]const u8{
-        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":41}]}",
-        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":42}]}",
+        "{\"value\":{\"fragments\":[{\"kind\":\"reference\",\"id\":41}]}}",
+        "{\"value\":{\"fragments\":[{\"kind\":\"reference\",\"id\":42}]}}",
     }) |echo| {
         if (codec.constructBound(allocator, echo, &choices)) |unexpected| {
             allocator.free(unexpected);
@@ -610,12 +745,12 @@ fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
     different[0].allowed = &.{42};
     const alternate = try codec.constructBound(allocator, raw, &different);
     defer allocator.free(alternate);
-    try std.testing.expect(std.mem.indexOf(u8, alternate, "\"claim_id\":42") != null);
+    try std.testing.expect(std.mem.indexOf(u8, alternate, "\"id\":42") != null);
     different[0].allowed = &.{ 41, 42 };
     const undecided = try codec.constructBound(allocator, raw, &different);
     defer allocator.free(undecided);
     try std.testing.expectEqualStrings(raw, undecided);
-    if (codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), undecided)) |_| {
+    if (codec.decode(Value, arena.allocator(), undecided)) |_| {
         return error.TestUnexpectedSuccess;
     } else |err| {
         if (err == error.OutOfMemory) return err;

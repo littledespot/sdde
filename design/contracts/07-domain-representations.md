@@ -1,7 +1,7 @@
 # 7. Core domain representations
 
-Part of the [proposed design](../design.md#7-core-domain-representations). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#7-core-domain-representations), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Markdown is a presentation format, not the internal source of truth while a stage is running. The engine uses typed intermediate representations (IRs) and renders Markdown only after validation.
 
@@ -9,23 +9,22 @@ Markdown is a presentation format, not the internal source of truth while a stag
 
 [View the Shared domain types sample](../code.md#shared-domain-types).
 
-#### Approved typed-content amendment — 25 September 2026
+#### Typed content
 
-The user approved implementation of the shared typed-content recommendations. This
-amends invariant 18 and the prose restrictions in §§11, 12, 16, 17, 22 and 23; it does
-not change operational path authorization or the overall Proposed design status.
+This amends invariant 18 and the prose restrictions in §§11, 12, 16, 17, 22 and 23
+(user-approved, 25 September 2026); it does not change operational path authorization.
 
 - Content separates ordinary prose, exact source values and explicit references.
   Prose is normalized inert text; punctuation alone establishes neither reference
   identity nor intent. Semantic grounding remains with existing review owners.
-- Business values are ordered segments: prose strings, `passive` registry IDs and
-  `exact_copy` selections. [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
-  replaces each post-ledger exact token/citation pair with one preserved-token
-  claim handle in model and canonical content at the coordinated format cutover.
-  Exact copies can appear within a sentence.
-  The former whole-value exact-copy union is removed, without a dual reader.
-- Exact selections resolve through the current source evidence and the field's
-  bound explicit support plus derived lineage. They carry no model-authored
+- Canonical business values are ordered segments: prose strings, `passive`
+  registry IDs and engine-derived `exact_copy` occurrences.
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) binds each
+  post-ledger exact occurrence to one preserved-token claim handle. Model content
+  contains no exact selections; prose may contain a verbatim value within a
+  sentence and native code recognizes it.
+- Exact occurrences resolve through current native request eligibility and source
+  evidence; derived lineage may extend unchanged explicit support. They carry no model-authored
   replacement bytes. Passive references retain filename/path/URI kinds and
   source occurrences in their existing registry. Source references keep their
   separate source identity.
@@ -71,6 +70,51 @@ not change operational path authorization or the overall Proposed design status.
   Markdown files are review views only.
 - The specification remains authoritative as editable Markdown and is reparsed into
   `SpecificationIR` at the plan boundary.
+
+#### Model-facing text
+
+Declared business and reference text fields use a string for ordinary prose or
+a closed `{"fragments":[...]}` object for explicit composition around typed
+insertions. Each fragment is an existing prose string or an allowed typed
+passive/source reference; there is no exact-copy alternative. A collection
+contains separate complete values; it is not an implicit fragment list. Bare text
+arrays reject.
+
+The shared candidate codec converts these two declared wire shapes into the same
+native segment/node arrays. Encoding a single prose node emits a string; explicit
+composition preserves node order and reference identity. No separator is inserted,
+and the codec never infers an occurrence ID from display text. Initial output,
+correction and authorized repair share this conversion. Canonical persistence,
+text validation, provenance, renderer bytes and editable readback retain their
+existing contracts. Other arrays and undeclared fields are unaffected.
+
+#### Composition admission
+
+The [field-composition contract](text-field-composition.md) defines a closed
+per-field prose/insertion policy, source-aware rejection of encoded insertion
+syntax inside prose, coverage eligibility and shared no-progress exhaustion.
+Insertion-only values in prose-required fields reject, and exact-copy coverage
+counts only obligation-bearing fields. The same owners enforce initial output,
+correction, every repair and stored readback. Prose infers neither semantic quality
+nor operational authority.
+
+#### Native exact values
+
+Under the [native exact-value policy](text-field-composition.md#native-exact-values),
+immutable current native request eligibility may add recognized exact dependencies
+`E` beyond selected support `S`, while `S` remains fixed, and recognition uses
+contextual complete-value delimiters. Raw decoded UTF-8 is matched before NFC;
+neither case folding nor punctuation/whitespace repair creates a match. Actual
+field edges, pinned Unicode whitespace and balanced wrapper/terminal context
+delimit values; reference-adjacent literal-run edges are opaque. Competing
+lineages or overlapping eligible spans reject the whole field.
+
+The model-response codec and schemas admit prose plus allowed passive/source
+references, never `exact_copy`. Canonical exact nodes and field roles remain;
+native recognition, lineage, repair bounds, coverage and readback share the
+existing owners. Eligibility proves current occurrence authority, not semantic
+support or correct use. Model prose, source-group selection and canonical exact
+lineage therefore remain distinct typed states.
 
 ### 7.2 Stage IRs
 

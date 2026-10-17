@@ -16,11 +16,17 @@ pub const Generation = struct {
     execution_id: ?[]const u8,
     models: []const GenerationModel,
 };
+pub const GradingQualificationPaths = struct {
+    panel: []const u8,
+    review: []const u8,
+    qualification: []const u8,
+};
 pub const Case = struct {
     schema: []const u8,
     id: []const u8,
     sources: []const Source,
     rubric: []const u8,
+    grading_qualification: GradingQualificationPaths,
 };
 pub const Anchor = struct { score: u16, description: []const u8 };
 pub const Criterion = struct {
@@ -30,6 +36,9 @@ pub const Criterion = struct {
     weight: u16,
     anchors: []const Anchor,
     allow_not_applicable: bool,
+    /// Null marks a noncritical criterion. A critical minimum cannot be waived
+    /// through not-applicable scoring.
+    minimum_acceptable_score: ?u16,
 };
 pub const Rubric = struct {
     schema: []const u8,
@@ -60,8 +69,9 @@ pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8)
 }
 pub fn parseCase(allocator: std.mem.Allocator, bytes: []const u8) Error!Case {
     const value = try decode(Case, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "evaluation-case/v1") or !id(value.id) or value.sources.len == 0) return error.InvalidEvaluationContract;
+    if (!std.mem.eql(u8, value.schema, "evaluation-case/v2") or !id(value.id) or value.sources.len == 0) return error.InvalidEvaluationContract;
     try path(value.rubric);
+    inline for (std.meta.fields(GradingQualificationPaths)) |field| try path(@field(value.grading_qualification, field.name));
     for (value.sources, 0..) |source, index| {
         if (!id(source.id) or std.mem.eql(u8, source.id, "specification")) return error.InvalidEvaluationContract;
         try path(source.path);
@@ -73,7 +83,7 @@ pub fn parseCase(allocator: std.mem.Allocator, bytes: []const u8) Error!Case {
 }
 pub fn parseRubric(allocator: std.mem.Allocator, bytes: []const u8) Error!Rubric {
     const value = try decode(Rubric, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "evaluation-rubric/v1") or !id(value.id) or value.revision == 0 or
+    if (!std.mem.eql(u8, value.schema, "evaluation-rubric/v2") or !id(value.id) or value.revision == 0 or
         value.minimum_score >= value.maximum_score or value.criteria.len == 0) return error.InvalidEvaluationContract;
     if (value.pass_threshold_percent) |threshold| {
         if (!std.math.isFinite(threshold) or threshold < 0 or threshold > 100) return error.InvalidEvaluationContract;
@@ -81,6 +91,9 @@ pub fn parseRubric(allocator: std.mem.Allocator, bytes: []const u8) Error!Rubric
     for (value.criteria, 0..) |criterion, index| {
         if (!id(criterion.id) or !text(criterion.description) or !text(criterion.evidence) or criterion.weight == 0 or
             criterion.anchors.len != @as(usize, value.maximum_score) - value.minimum_score + 1) return error.InvalidEvaluationContract;
+        if (criterion.minimum_acceptable_score) |minimum| {
+            if (minimum < value.minimum_score or minimum > value.maximum_score or criterion.allow_not_applicable) return error.InvalidEvaluationContract;
+        }
         for (value.criteria[0..index]) |prior| if (std.mem.eql(u8, prior.id, criterion.id)) return error.InvalidEvaluationContract;
         for (criterion.anchors, 0..) |anchor, offset| {
             if (anchor.score != @as(usize, value.minimum_score) + offset or !text(anchor.description)) return error.InvalidEvaluationContract;

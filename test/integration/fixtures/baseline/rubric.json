@@ -1,0 +1,58 @@
+{
+  "schema": "evaluation-rubric/v2",
+  "id": "semantic-simplicity-native-publication",
+  "revision": 1,
+  "minimum_score": 0,
+  "maximum_score": 1,
+  "pass_threshold_percent": 100,
+  "criteria": [
+    {
+      "id": "complete-source-meaning",
+      "description": "The complete published specification preserves every required behavior, condition, exception, negation, actor, outcome and necessary scenario supported by all supplied original sources. Judge the whole specification and all complementary record families, not extracted-claim counts or one selected field. Harmless paraphrases and source-supported alternative scenarios are acceptable.",
+      "evidence": "Quote the original source duties and corresponding published behavior. Identify any material absence or contradiction, including restrictions that disappear across records.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "minimum_acceptable_score": null,
+      "anchors": [
+        { "score": 0, "description": "At least one material source duty, condition, restriction, exception, actor, outcome or necessary scenario is absent or contradicted." },
+        { "score": 1, "description": "All required source meaning is preserved across the complete publication without material loss." }
+      ]
+    },
+    {
+      "id": "supported-associations-and-values",
+      "description": "Each substantive requirement has the correct source support and business role. Exact literals, quantities, units, meaningful ordering and thresholds retain their source meaning. A citation's existence alone does not establish semantic support.",
+      "evidence": "Quote source and specification spans for exact values, roles and associations; identify any wrong support, changed value or role inversion.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "minimum_acceptable_score": null,
+      "anchors": [
+        { "score": 0, "description": "A material association, value, unit, threshold, role or meaningful ordering is incorrect or unsupported." },
+        { "score": 1, "description": "Material associations, values, roles and ordering remain supported by the original sources." }
+      ]
+    },
+    {
+      "id": "no-material-invention",
+      "description": "The publication adds no unsupported behavior, restriction, data obligation, platform, permission, policy or scope commitment. Inventions disguised as assumptions or non-goals remain errors. Do not demand filler or records that the sources do not require.",
+      "evidence": "Compare representative substantive claims with the original sources. Quote every discovered material unsupported addition, or cite representative grounded claims and explain why no material invention was found.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "minimum_acceptable_score": null,
+      "anchors": [
+        { "score": 0, "description": "The publication introduces at least one material unsupported commitment." },
+        { "score": 1, "description": "The publication remains proportionate to supported source meaning without material invention." }
+      ]
+    },
+    {
+      "id": "resolved-and-testable-business-output",
+      "description": "The published business behavior is coherent and testable. No necessary decision is silently invented, falsely declared missing, or left unresolved in a supposedly complete output. Do not reward technical implementation prescriptions unsupported by the sources. Source gap/conflict cases are scored separately for their required clarification outcome rather than as useful completions.",
+      "evidence": "Quote acceptance conditions and any ambiguous, contradictory, unresolved or falsely missing decision. Relate those judgments to the original sources.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "minimum_acceptable_score": null,
+      "anchors": [
+        { "score": 0, "description": "A material ambiguity, contradiction, unresolved necessary decision or false source gap prevents use as a complete business specification." },
+        { "score": 1, "description": "Supported business behavior is coherent, testable and complete with respect to necessary source decisions." }
+      ]
+    }
+  ]
+}

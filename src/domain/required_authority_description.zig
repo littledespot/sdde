@@ -12,7 +12,7 @@ pub const SourceReviewScope = struct {
     instruction: []const u8,
 };
 
-pub fn sourceReviewScope(id: a.Id, subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
+pub fn sourceReviewScope(subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
     return .{ .instruction = switch (subject) {
         .candidate_field => |field| if (field.record != null)
             "Assess subject.text for its assigned field purpose within subject.record. Sibling fields may supply joint conditions and results; each field need not repeat the whole flow."
@@ -20,12 +20,13 @@ pub fn sourceReviewScope(id: a.Id, subject: @import("specification_review_subjec
             "Assess the behavior or decision expressed by subject.text for its assigned purpose, including its qualifying triggers, conditions, negation and obligation strength. Unrelated feature duties belong to their collection assessments.",
         .collection => "Assess the selected records together for complete source-required coverage of the assigned collection purpose, including obligations absent from current claims or associations. Surrounding context cannot replace missing selected records.",
         .entity_applicability => "Assess the entity disposition and its explanation together for their assigned purpose. Other feature behavior remains in force and is checked by its own field and collection assignments.",
-        .source_preservation => if (id.unit == .source)
-            "Assess extraction and reconciliation against the complete assigned original source, including meaning with no surviving claim. Current candidate associations do not limit this assignment."
-        else
-            "Assess whether original sources establish the assigned business purpose before authoring. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
-        .reference_signal => "Assess the selected signal's represented meaning against its original sources, preserving its conditions and obligations. Selected claims identify candidate evidence, not source truth.",
-        .candidate_support => "Assess whether original sources establish the assigned business purpose. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
+        .source_preservation => "Assess whether original sources establish the assigned business purpose before authoring. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
+        .reference => |reference| switch (reference) {
+            .source => "Assess extraction and reconciliation against the complete assigned original source, including meaning with no surviving claim. Current candidate associations do not limit this assignment.",
+            .signal => "Assess the selected signal's represented meaning against its original sources, preserving its own conditions and obligations. An exact value retains its cited source-required use and conditions; it does not assign other source duties to that signal. Selected claims identify candidate evidence, not source truth. Generated fields and collections have their own assessments.",
+            .token => "Assess the selected exact token and its source-required use and conditions against the original source. This assignment does not require the token to express other source obligations or assess generated fields and collections. Matching bytes or citations alone do not establish support.",
+            .conflict => "Assess the selected conflict and its participating meanings against their original sources. Establish whether those original meanings are incompatible; a candidate conflict label or explanation is not source truth. Preserve the assigned conflict's conditions and unresolved meaning without assessing unrelated generated fields or collections.",
+        },
     } };
 }
 

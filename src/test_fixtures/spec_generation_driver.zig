@@ -16,6 +16,13 @@ pub const Fault = struct {
     }
 };
 pub const Driver = struct {
+    pub const AdviceProjection = @FieldType(@import("../domain/model_input_packet.zig").AdvisoryAssessment, "projection");
+    pub const ProtocolAdvice = struct {
+        request: *const @import("../domain/model_request_identity.zig").ModelRequestId,
+        origin: @import("../domain/model_candidate_origin.zig").Origin,
+        exhaustion: @import("../domain/workflow_retry.zig").Exhaustion,
+        repair: bool,
+    };
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
     finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
@@ -26,6 +33,8 @@ pub const Driver = struct {
     applicability: ?@import("spec_generation_responses.zig").Applicability = null,
     principle_calls: usize = 0,
     initial_source_review_calls: usize = 0,
+    dependent_source_review_calls: usize = 0,
+    source_only_readiness_evidence: usize = 0,
     candidate_review_calls: usize = 0,
     record_batch_calls: usize = 0,
     record_batch_requests: usize = 0,
@@ -33,6 +42,9 @@ pub const Driver = struct {
     uncertain_loss_calls: usize = 0,
     admitted_losses: std.EnumArray(std.meta.Tag(@import("../domain/source_omission.zig").Location), usize) = .initFill(0),
     generation_calls: usize = 0,
+    generation_at_review: ?@import("../domain/atomic_repair.zig").Snapshot = null,
+    generation_calls_at_review: usize = 0,
+    references_at_review: ?@import("../domain/atomic_repair.zig").Snapshot = null,
     carried_summaries: usize = 0,
     measurement_prefix: ?[]const u8 = null,
     source_gaps: bool = false,
@@ -41,19 +53,12 @@ pub const Driver = struct {
     evidence_fault: @FieldType(@import("spec_generation_responses.zig").Options, "evidence_fault") = null,
     candidate_omissions: @FieldType(@import("spec_generation_responses.zig").Options, "candidate_omissions") = null,
     story_omission: @FieldType(@import("spec_generation_responses.zig").Options, "story_omission") = null,
-    loss_control: ?@import("spec_generation_responses.zig").LossControl = null,
+    advisory_control: ?@import("spec_generation_responses.zig").AdvisoryControl = null,
     record_review: ?@import("spec_generation_responses.zig").RecordReviewControl = null,
-    record_losses: [3]?RecordLoss = @splat(null),
-    record_loss_count: usize = 0,
     record_middle_repaired: bool = false,
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
     support_merges: usize = 0,
-    omission_repair_calls: usize = 0,
-    omission_merges: usize = 0,
-    unchanged_omission_merges: usize = 0,
-    omission_resolutions: usize = 0,
-    omission_keys: [2]?@import("../domain/workflow_retry.zig").Key = @splat(null),
     text_fault: bool = false,
     failed_text_repair: bool = false,
     text_repair_calls: usize = 0,
@@ -97,11 +102,14 @@ pub const Driver = struct {
     fault_requests: usize = 0,
     fault_request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null,
     rejected_operation: ?[]const u8 = null,
-    pub const RecordLoss = struct {
-        requirement: @import("../domain/required_authority.zig").Id,
-        review_origin: @import("../domain/model_candidate_origin.zig").Origin,
-        comparison_origin: @import("../domain/model_candidate_origin.zig").Origin,
-    };
+    protocol_advice: std.EnumArray(AdviceProjection, ?ProtocolAdvice) = .initFill(null),
+    pub fn expectsProtocolAdvice(self: *const Driver) bool {
+        if (self.fault) |fault| if (fault.stage == .support or fault.stage == .candidate_review) {
+            if (fault.repetition == .persistent or fault.shape == .review_dropped or fault.shape == .review_changed) return true;
+        };
+        return self.support_fault == .question_exhaust or self.support_fault == .question_evidence_exhaust or
+            self.support_fault == .question_evidence_alternating or self.evidence_fault == .empty_correction;
+    }
     pub fn run(self: *Driver) @import("../domain/run_outcome.zig").Outcome {
         return @import("../application/workflow_engine_orchestrator.zig").run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step, .finalize = finalize } });
     }
@@ -111,22 +119,45 @@ pub const Driver = struct {
     }
     pub fn verifyDispositionSequence(self: *Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
         const exhausted = self.disposition_sequence == .exhaust;
+        var assertion: []const u8 = "repair-count";
+        errdefer std.debug.print("disposition-sequence assertion={s} mode={s}\n", .{ assertion, if (exhausted) "exhaust" else "recover" });
         try std.testing.expectEqual(@as(usize, if (exhausted) 2 else 1), self.reconciliation_repair_calls);
-        // Invalid relation targets and token selections fail protocol admission;
+        // Self-referential relations and native token selectors fail protocol admission;
         // the successful case merges only its authorized missing disposition.
+        assertion = "merge-count";
         try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), self.reconciliation_merges);
         try std.testing.expectEqual(@as(usize, 0), self.unchanged_reconciliation_merges);
         const ledger = self.runner.tokenLedger();
         try std.testing.expectEqual(self.calls, ledger.accounted_operations.items.len);
         try std.testing.expectEqual(@as(u128, self.calls) * (self.fake.invocation_plan.complete.input_tokens + self.fake.invocation_plan.complete.output_tokens), ledger.committed());
+        var disposition_corrections: usize = 0;
+        var signal_corrections: usize = 0;
+        assertion = "initial-reference-correction-attempt";
+        for (ledger.accounted_operations.items) |operation| {
+            if (operation.id.model_request_id.purpose != .initial_generation or operation.id.model_attempt_ordinal.value == 1) continue;
+            const owner = operation.id.model_request_id.immutable_unit_owner_id;
+            if (owner != .reference_global) continue;
+            if (operation.id.model_attempt_ordinal.value != 2) std.debug.print("disposition-sequence unexpected-correction slot={s} attempt={d}\n", .{ owner.reference_global.unit_slot_id.bytes, operation.id.model_attempt_ordinal.value });
+            try std.testing.expectEqual(@as(u32, 2), operation.id.model_attempt_ordinal.value);
+            if (std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-dispositions-") != null) disposition_corrections += 1;
+            if (std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-signals-") != null) signal_corrections += 1;
+        }
+        assertion = "initial-disposition-correction-count";
+        try std.testing.expectEqual(@as(usize, 1), disposition_corrections);
+        assertion = "initial-signal-correction-count";
+        try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), signal_corrections);
         const view: data.View = .{ .slots = self.runner.envelope.slots };
         const identities = try @import("../application/pipeline_values.zig").read(&view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const observations = try @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view);
+        assertion = "repair-observation-count";
         try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), observations.len);
         if (!exhausted) {
+            assertion = "repair-observation-revision";
+            if (observations[0].revision_after != 2) std.debug.print("disposition-sequence repair-observation before={d} after={d} changed={}\n", .{ observations[0].revision_before, observations[0].revision_after, observations[0].changed });
             try std.testing.expectEqual(@as(u64, 2), observations[0].revision_after);
+            assertion = "repair-observation-origin";
             var matches: usize = 0;
             for (ledger.accounted_operations.items) |operation| if (observations[0].origin.?.matches(identities, operation.id)) {
                 try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
@@ -135,6 +166,7 @@ pub const Driver = struct {
             try std.testing.expectEqual(@as(usize, 1), matches);
         }
         if (exhausted) {
+            assertion = "exhaustion-calls-and-phase";
             try std.testing.expectEqual(@as(usize, 7), self.calls);
             const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
             const parsed = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.parsed_schema, .reconciliation_parsed);
@@ -160,6 +192,7 @@ pub const Driver = struct {
             try std.testing.expectEqualDeep(parsed.payload().reconciliation_parsed.source.at(.dispositions, .record), rejected.origin);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
         } else {
+            assertion = "recovery-currentness-and-publication";
             const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
             const accepted = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.accounted_schema, .reconciliation_accounted);
             try std.testing.expectEqual(.complete, accepted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.phase);
@@ -189,7 +222,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .loss_control = self.loss_control, .record_review = self.record_review, .omission_merges = self.omission_merges, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             std.testing.expectEqualStrings(if (current_request.id().purpose == .atomic_repair) "repair" else "spec_generation", current_request.prepared().?.binding_id.slot_id.bytes) catch unreachable;
@@ -202,7 +235,7 @@ pub const Driver = struct {
                     .compiled_steps = self.runner.selected.graph.authority.steps.len,
                     .content = parts,
                     .schema = current_request.prepared().?.response_schema.modelBytes(),
-                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference) catch unreachable,
+                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable,
                     .composition = if (current_request.part()) |part| .{
                         .part = part.plan.parts()[part.part].id.bytes,
                         .canonical_schema = part.plan.completeSchema().modelBytes(),
@@ -250,7 +283,7 @@ pub const Driver = struct {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
                 const loss = std.mem.eql(u8, packet.resultDefinition().?.bytes, "preservation_comparisons");
-                const policy = std.mem.eql(u8, packet.resultDefinition().?.bytes, "principle_finding");
+                const policy = std.mem.eql(u8, packet.resultDefinition().?.bytes, "principle_assignment_findings");
                 assertReviewPrompt(arena.allocator(), current_request.prepared().?, if (loss) "design/workflows/spec/support-loss.prompt.md" else if (policy) "design/workflows/spec/principle.prompt.md" else "design/workflows/spec/support.prompt.md") catch unreachable;
                 if (loss) {
                     self.loss_calls += 1;
@@ -275,21 +308,31 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(expected.selected().modelBytes(), current_request.prepared().?.response_schema.modelBytes()) catch unreachable;
                 } else if (policy) {
                     self.principle_calls += 1;
-                    std.testing.expect(input.value.object.get("subject").? == .object and input.value.object.contains("task") and !input.value.object.contains("requirements")) catch unreachable;
+                    assertAssignmentReviewRequest(.principles, arena.allocator(), &view, input.value, (std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable).value) catch unreachable;
                     std.testing.expect(input.value.object.get("principles").?.array.items.len != 0) catch unreachable;
-                    const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
-                    const properties = schema.value.object.get("properties").?.object;
-                    std.testing.expectEqual(@as(usize, 3), properties.count()) catch unreachable;
-                    std.testing.expect(properties.contains("decision") and properties.contains("citations") and properties.contains("detail")) catch unreachable;
                 } else {
                     var permits_applicability = false;
                     if (authorityInputs(&view).specification == null) {
                         const references = (@import("../application/specification_workflow.zig").readContext(&view) catch unreachable).references;
-                        if (authorityInputs(&view).projection != .source_preservation) std.testing.expect(!@import("../domain/specification_provenance.zig").generationReady(references)) catch unreachable;
+                        const native_inputs = authorityInputs(&view);
+                        const pending = if (self.runner.repair_retry.currentPermit()) |permit| @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, native_inputs.feature, @import("../domain/reference_support.zig").records(references).items.state_id) catch unreachable else null;
+                        if (pending) |projection| {
+                            std.testing.expectEqual(projection, native_inputs.projection) catch unreachable;
+                            self.dependent_source_review_calls += 1;
+                        }
+                        if (native_inputs.projection != .source_preservation) std.testing.expect(!@import("../domain/specification_provenance.zig").generationReady(references) or pending == .source_readiness) catch unreachable;
+                        std.testing.expect(!view.contains(.specification_generation_session) and !view.contains(.identified_specification_content)) catch unreachable;
                         self.initial_source_review_calls += 1;
                     } else {
                         std.testing.expect(self.generation_calls != 0) catch unreachable;
                         self.candidate_review_calls += 1;
+                        if (self.generation_at_review == null) {
+                            const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
+                            self.generation_at_review = @import("../domain/atomic_repair.zig").snapshot(@TypeOf(session), arena.allocator(), session) catch unreachable;
+                            self.generation_calls_at_review = self.generation_calls;
+                            const references = (@import("../application/specification_workflow.zig").readContext(&view) catch unreachable).references;
+                            self.references_at_review = @import("../domain/atomic_repair.zig").snapshot(@TypeOf(references), arena.allocator(), references) catch unreachable;
+                        }
                     }
                     for (input.value.object.get("requirements").?.array.items) |requirement| {
                         permits_applicability = permits_applicability or requirement.object.contains("permitted_not_applicable");
@@ -297,10 +340,12 @@ pub const Driver = struct {
                         std.testing.expect(!requirement.object.contains("kind") and !requirement.object.contains("slot") and !requirement.object.contains("unit")) catch unreachable;
                     }
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
-                    if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings")) {
-                        assertRecordReviewRequest(arena.allocator(), &view, input.value, schema.value) catch unreachable;
-                        self.record_batch_calls += 1;
-                        if (attempt == 1) self.record_batch_requests += 1;
+                    if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "assignment_findings")) {
+                        assertAssignmentReviewRequest(.source, arena.allocator(), &view, input.value, schema.value) catch unreachable;
+                        if (input.value.object.get("record")) |record| if (std.mem.eql(u8, record.object.get("id").?.object.get("kind").?.string, "acceptance_criterion")) {
+                            self.record_batch_calls += 1;
+                            if (attempt == 1) self.record_batch_requests += 1;
+                        };
                     } else {
                         std.testing.expectEqual(@as(usize, 1), input.value.object.get("requirements").?.array.items.len) catch unreachable;
                         assertReviewShape(schema.value, permits_applicability, authorityInputs(&view).projection == .source_preservation) catch unreachable;
@@ -310,9 +355,8 @@ pub const Driver = struct {
             if (current_request.id().purpose == .atomic_repair) {
                 if (view.contains(.source_omission_repair)) self.source_repair_calls += 1;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review) self.support_repair_calls += 1;
-                if (view.contains(@import("../application/specification_omission_repair_workflow.zig").schema.key)) self.omission_repair_calls += 1;
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                assertRepairRequest(arena.allocator(), current_request.prepared().?, packet) catch unreachable;
+                assertRepairRequest(arena.allocator(), current_request, packet, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review and std.mem.startsWith(u8, current_request.id().immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) self.principle_repair_calls += 1;
             }
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
@@ -367,7 +411,7 @@ pub const Driver = struct {
                 if (matches_stage and (fault.shape == .review_empty_claims or fault.shape == .review_empty_applicability) and attempt > 1) {
                     const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
                     const path = correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string;
-                    const forbidden_applicability = fault.shape == .review_empty_applicability and authorityInputs(&view).specification != null;
+                    const forbidden_applicability = fault.shape == .review_empty_applicability and authorityInputs(&view).specification != null and std.mem.indexOf(u8, body, "\"findings\"") == null;
                     std.testing.expect(std.mem.endsWith(u8, path, if (forbidden_applicability) "/kind" else if (std.mem.indexOf(u8, body, "\"provenance\"") == null) "/provenance" else "/provenance/claim_ids")) catch unreachable;
                     if (forbidden_applicability) std.testing.expectEqualStrings("unknown_variant", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("reason").?.string) catch unreachable;
                     const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
@@ -378,7 +422,8 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
                     const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
                     const path = correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string;
-                    const expected_path = if (fault.shape == .review_forbidden) "/provenance" else if (fault.shape == .review_moving and attempt % 2 == 1) "/detail" else "/question";
+                    const suffix = if (fault.shape == .review_forbidden) "/provenance" else if (fault.shape == .review_moving and attempt % 2 == 1) "/detail" else "/question";
+                    const expected_path = std.fmt.allocPrint(arena.allocator(), "{s}{s}", .{ if (std.mem.indexOf(u8, body, "\"findings\"") != null) "/findings/0/value" else "", suffix }) catch unreachable;
                     std.testing.expectEqualStrings(expected_path, path) catch unreachable;
                     const repeated = attempt > 2 and fault.shape != .review_moving;
                     std.testing.expectEqual(@as(usize, @intFromBool(repeated)), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch unreachable;
@@ -431,10 +476,11 @@ pub const Driver = struct {
         const values = @import("../application/pipeline_values.zig");
         var before_merge: data.View = .{};
         defer for (before_merge.slots) |value| if (value) |retained| values.destroy(retained);
-        var semantic_parent: ?@import("../domain/workflow_retry.zig").Permit = null;
+        var summary_check_before: ?SummaryCheckSnapshot = null;
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
-            if ((self.candidate_omissions != null or self.story_omission == .recover or self.record_review == .two_omissions) and std.mem.eql(u8, entry.operation_id.bytes, "apply-specification-support")) semantic_parent = self.runner.repair_retry.currentPermit();
-            const keys: []const @import("../domain/pipeline.zig").DataKey = if (sourceMergeContract(entry.operation_id.bytes) != null) &.{.source_omission_repair} else if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) &.{ .specification_support_review, .specification_support_repair } else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-omission-repair")) &.{.specification_omission_repair} else if ((self.summary_sequence != null or self.global_sequence != null) and std.mem.eql(u8, entry.operation_id.bytes, "merge-reference-reconciliation-repair")) &.{.parsed_reference_reconciliation} else &.{};
+            if (std.mem.eql(u8, entry.operation_id.bytes, "initialize-specification-generation")) std.testing.expect(self.runner.repair_retry.currentPermit() == null) catch unreachable;
+            if (std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse")) summary_check_before = SummaryCheckSnapshot.capture(arena.allocator(), self) catch unreachable;
+            const keys: []const @import("../domain/pipeline.zig").DataKey = if (sourceMergeContract(entry.operation_id.bytes) != null) &.{.source_omission_repair} else if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) &.{ .specification_support_review, .specification_support_repair } else if ((self.summary_sequence != null or self.global_sequence != null) and std.mem.eql(u8, entry.operation_id.bytes, "merge-reference-reconciliation-repair")) &.{.parsed_reference_reconciliation} else &.{};
             for (keys) |key| {
                 const index = @intFromEnum(key);
                 before_merge.slots[index] = values.retain(self.runner.envelope.slots[index].?) catch unreachable;
@@ -442,11 +488,37 @@ pub const Driver = struct {
         };
         const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "complete-advisory-protocol-request") and result == .outcome and result.outcome == .blocked) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            const receipt = @import("../application/workflow_model_accounting.zig").readAdvisoryStop(&view) catch unreachable;
+            const facts = @import("../application/advisory_request_completion_workflow.zig").read(&view) catch unreachable;
+            const projection = facts.request.packet().?.advisoryAssessment().?.projection;
+            std.testing.expect(self.protocol_advice.get(projection) == null) catch unreachable;
+            self.protocol_advice.set(projection, .{ .request = facts.request.id(), .origin = facts.origin.?, .exhaustion = receipt.exhaustion(), .repair = facts.request.packet().?.repairPermit() != null });
+        };
         // A native candidate rejection is an applied invalid outcome, whereas
         // operational failure is Applied.rejected. Observe both at the same
         // operation boundary without changing the production transition.
         if (result == .rejected or result.status() == .invalid) for (self.runner.selected.graph.authority.steps) |entry| {
             if (std.mem.eql(u8, entry.id.bytes, id.bytes)) self.rejected_operation = entry.operation_id.bytes;
+        };
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "apply-specification-support") and result.status() == .ok) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            const inputs = authorityInputs(&view);
+            if (inputs.projection != .source_readiness or inputs.specification != null or inputs.brief != null) continue;
+            std.testing.expectEqual(@as(usize, 0), inputs.candidates.len) catch unreachable;
+            for (inputs.evidence) |evidence| {
+                if (evidence.requirement.kind != .feature_intent or evidence.requirement.unit != .feature or evidence.finding != .supported) continue;
+                std.testing.expectEqual(.model_assisted, evidence.method) catch unreachable;
+                std.testing.expect(evidence.resolution == .existing_authority) catch unreachable;
+                std.testing.expectEqualDeep(@import("../domain/required_authority.zig").Authority{ .reference = inputs.references.?.items.state_id }, evidence.resolution.existing_authority) catch unreachable;
+                const review = evidence.review.?;
+                std.testing.expect(review.source_ids.len != 0) catch unreachable;
+                std.testing.expectEqual(@as(usize, 0), review.provenance.claim_ids.len) catch unreachable;
+                std.testing.expectEqual(@as(usize, 0), review.provenance.citation_ids.len) catch unreachable;
+                std.testing.expectEqual(@as(usize, 0), review.provenance.clarification_response_ids.len) catch unreachable;
+                self.source_only_readiness_evidence += 1;
+            }
         };
         if (before_merge.contains(.source_omission_repair) and (result.status() == .ok or result.status() == .more)) for (self.runner.selected.graph.authority.steps) |entry| {
             if (!std.mem.eql(u8, entry.id.bytes, id.bytes)) continue;
@@ -476,44 +548,21 @@ pub const Driver = struct {
                 self.carried_summaries += 1;
             }
         };
-        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse") and result.status() == .more) {
-            const view: data.View = .{ .slots = self.runner.envelope.slots };
-            std.testing.expect(!view.contains(.parsed_reference_reconciliation)) catch unreachable;
+        if (summary_check_before) |before| if (result.status() == .ok or result.status() == .more) {
+            // The eligibility decision has no delta. Regeneration can retain
+            // an earlier captured parse until its producer replaces it; this
+            // check neither clears that evidence nor starts model work.
+            before.assertUnchanged(arena.allocator(), self) catch unreachable;
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "build-reference-reconciliation-summary") and result.status() == .ok) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             for (@import("../actions/reference/build_reference_reconciliation_summary.zig").Action.contract.invalidates) |key| std.testing.expect(!view.contains(key)) catch unreachable;
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) {
-            const admitted = assertLossAdmission(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch |err| std.debug.panic("scripted loss admission rejected: {s}; source_loss={any}, candidate_omissions={any}, story_omission={any}, loss_control={any}", .{ @errorName(err), self.source_loss, self.candidate_omissions, self.story_omission, self.loss_control });
+            const admitted = assertLossAdmission(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch |err| std.debug.panic("scripted loss admission rejected: {s}; source_loss={any}, candidate_omissions={any}, story_omission={any}, advisory_control={any}", .{ @errorName(err), self.source_loss, self.candidate_omissions, self.story_omission, self.advisory_control });
             self.admitted_losses.getPtr(std.meta.activeTag(admitted.location)).* += 1;
             if (admitted.uncertain) self.uncertain_loss_calls += 1;
-            if (self.record_review == .two_omissions) {
-                std.testing.expect(self.record_loss_count < self.record_losses.len) catch unreachable;
-                self.record_losses[self.record_loss_count] = admitted.record;
-                self.record_loss_count += 1;
-            }
         };
-        if (semantic_parent) |parent| {
-            std.testing.expectEqual(.ok, result.status()) catch unreachable;
-            std.testing.expect(self.runner.repair_retry.currentPermit() == null) catch unreachable;
-            std.testing.expectEqualDeep(self.omission_keys[self.omission_resolutions].?, parent.key) catch unreachable;
-            self.omission_resolutions += 1;
-        }
-        if (before_merge.contains(.specification_omission_repair) and result.status() == .ok) {
-            const permit = assertOmissionMerge(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch unreachable;
-            const authorization = (@import("../application/specification_values.zig").storage.read(&before_merge, @import("../application/specification_omission_repair_workflow.zig").schema, .omission_repair) catch unreachable).authorization;
-            const session = @import("../application/specification_workflow.zig").readSession(&.{ .slots = self.runner.envelope.slots }) catch unreachable;
-            if (!session.units[authorization.target.unit].?.last_repair.?.changed) self.unchanged_omission_merges += 1;
-            if (self.story_omission != null) {
-                if (self.omission_keys[0]) |key| std.testing.expectEqualDeep(key, permit.key) catch unreachable;
-                self.omission_keys[0] = permit.key;
-            } else {
-                for (self.omission_keys[0..self.omission_merges]) |key| std.testing.expect(!std.meta.eql(key.?, permit.key)) catch unreachable;
-                self.omission_keys[self.omission_merges] = permit.key;
-            }
-            self.omission_merges += 1;
-        }
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action.contract.id) and result.status() == .ok) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const parsed = @import("../application/reference_extraction_workflow.zig").read(&view, @import("../application/reference_reconciliation_workflow.zig").parsed_schema, .reconciliation_parsed) catch unreachable;
@@ -599,7 +648,67 @@ pub const Driver = struct {
             },
             else => {},
         };
+        if (self.generation_at_review) |before| {
+            const session = @import("../application/specification_workflow.zig").readSession(&.{ .slots = self.runner.envelope.slots }) catch unreachable;
+            const after = @import("../domain/atomic_repair.zig").snapshot(@TypeOf(session), arena.allocator(), session) catch unreachable;
+            std.testing.expectEqualDeep(before, after) catch unreachable;
+            std.testing.expectEqual(self.generation_calls_at_review, self.generation_calls) catch unreachable;
+            const references = (@import("../application/specification_workflow.zig").readContext(&.{ .slots = self.runner.envelope.slots }) catch unreachable).references;
+            std.testing.expectEqualDeep(self.references_at_review.?, @import("../domain/atomic_repair.zig").snapshot(@TypeOf(references), arena.allocator(), references) catch unreachable) catch unreachable;
+        }
         return result;
+    }
+};
+
+/// Snapshot the read-only eligibility boundary before invoking it. Slot handles
+/// are copied, the complete current input is hashed, and mutable accounting is
+/// projected to scalar revisions so comparisons cannot share an updated view.
+const SummaryCheckSnapshot = struct {
+    slots: []const ?*data.Value,
+    input: @import("../domain/atomic_repair.zig").Snapshot,
+    token_revision: u64,
+    tokens: u128,
+    token_operations: usize,
+    fake_calls: usize,
+    accounting: ?Accounting,
+
+    const Accounting = struct { request_revision: u64, requests: usize, attempt_revision: u64, operation_revision: u64 };
+
+    fn capture(a: std.mem.Allocator, driver: *Driver) !SummaryCheckSnapshot {
+        const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
+        const extraction = @import("../application/reference_extraction_workflow.zig");
+        const view: data.View = .{ .slots = driver.runner.envelope.slots };
+        const input = (try extraction.read(&view, reconciliation.input_schema, .reconciliation_input)).payload().reconciliation_input;
+        const tokens = driver.runner.tokenLedger();
+        const accounting: ?Accounting = if (driver.runner.model_accounting) |state| account: {
+            const requests_ledger = @import("../domain/model_request_identity.zig").ledger(state.requests);
+            break :account .{
+                .request_revision = requests_ledger.revision().value,
+                .requests = requests_ledger.recordCount(),
+                .attempt_revision = @import("../domain/model_attempt_accounting.zig").accounting(state.attempts).revision().value,
+                .operation_revision = state.current_operations.revision().value,
+            };
+        } else null;
+        return .{
+            .slots = try a.dupe(?*data.Value, &driver.runner.envelope.slots),
+            .input = try @import("../domain/atomic_repair.zig").snapshot(@import("../domain/reference_reconciliation.zig").Input, a, input),
+            .token_revision = tokens.revision().value,
+            .tokens = tokens.committed(),
+            .token_operations = tokens.accounted_operations.items.len,
+            .fake_calls = driver.fake.invocation_call_count,
+            .accounting = accounting,
+        };
+    }
+
+    fn assertUnchanged(self: SummaryCheckSnapshot, a: std.mem.Allocator, driver: *Driver) !void {
+        const after = try capture(a, driver);
+        try std.testing.expectEqualDeep(self.slots, after.slots);
+        try std.testing.expectEqualDeep(self.input, after.input);
+        try std.testing.expectEqual(self.token_revision, after.token_revision);
+        try std.testing.expectEqual(self.tokens, after.tokens);
+        try std.testing.expectEqual(self.token_operations, after.token_operations);
+        try std.testing.expectEqual(self.fake_calls, after.fake_calls);
+        try std.testing.expectEqualDeep(self.accounting, after.accounting);
     }
 };
 
@@ -655,23 +764,40 @@ fn assertGenerationContext(a: std.mem.Allocator, request: *const @import("../dom
     try std.testing.expectEqual(@as(usize, 1), count);
 }
 
-fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet) !void {
+fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/model_request_handoff.zig").Request, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockRequestProfile) !void {
+    const request = current.prepared().?;
+    // Presentation is model-facing data. The exact native packet remains the
+    // independent authorization/schema/evidence association throughout retries.
+    try std.testing.expect(current.packet().? == packet);
+    try std.testing.expect(@import("../domain/model_request_identity.zig").unitOwnerEql(packet.unit(), current.id().immutable_unit_owner_id));
+    try std.testing.expectEqualStrings(packet.purpose().atomic_repair.bytes, current.id().purpose.atomic_repair.bytes);
+    try std.testing.expectEqualDeep(packet.originalSources(), request.original_sources);
+    try std.testing.expect(@import("../domain/model_exact_values.zig").same(packet.exactScope(), request.exact_scope));
+    try std.testing.expectEqualDeep(packet.fieldPolicies(), request.field_policies);
     // Exercise the real provider serializer, without making a network call.
-    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference);
+    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy);
     const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
-    const user = decoded.value.object.get("messages").?.array.items[1].object.get("content").?.array.items[0].object.get("text").?.string;
-    try std.testing.expectEqualStrings(packet.body(), user);
+    const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
+    try std.testing.expectEqualStrings(current.input().?, user);
+    var prepared_users: usize = 0;
+    for (request.content) |part| if (part == .user) {
+        try std.testing.expectEqualStrings(current.input().?, part.user);
+        prepared_users += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), prepared_users);
     const input = try std.json.parseFromSlice(std.json.Value, a, user, .{});
     const repair = input.value.object.get("repair").?.object;
+    const native = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
+    try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, native.object.get("repair").?, .{}), try std.json.Stringify.valueAlloc(a, input.value.object.get("repair").?, .{}));
     if (request.model_request_id.immutable_unit_owner_id == .specification_unit) try assertGenerationContext(a, request);
     try std.testing.expect(!repair.contains("expected"));
+    const rule = repair.get("rule").?.object;
     try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
     if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
-        const rule = repair.get("rule").?.object;
         if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence") and rule.get("evidence_rule").?.object.contains("minimum")) {
-            const current = rule.get("finding").?.object.get("kind").?.string;
+            const decision = rule.get("finding").?.object.get("kind").?.string;
             const minimum = rule.get("evidence_rule").?.object.get("minimum").?.string;
-            if (std.mem.eql(u8, current, "supported") or std.mem.eql(u8, current, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
+            if (std.mem.eql(u8, decision, "supported") or std.mem.eql(u8, decision, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
             try std.testing.expect(rule.contains("evidence_issue"));
         }
     }
@@ -695,7 +821,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, prompt_path, a, .unlimited);
     var schema_found = false;
     var instruction_found = false;
-    for (decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part| {
+    for (decoded.value.object.get("system").?.array.items) |part| {
         const value = part.object.get("text").?.string;
         schema_found = schema_found or std.mem.eql(u8, value, request.response_schema.modelBytes());
         instruction_found = instruction_found or std.mem.eql(u8, value, configured);
@@ -703,48 +829,61 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     try std.testing.expect(schema_found and instruction_found);
 }
 
-fn assertRecordReviewRequest(allocator: std.mem.Allocator, view: *const data.View, input: std.json.Value, schema: std.json.Value) !void {
-    const support = @import("../domain/specification_support.zig").Source;
+fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specification_support.zig").Purpose, allocator: std.mem.Allocator, view: *const data.View, input: std.json.Value, schema: std.json.Value) !void {
+    const support = @import("../domain/specification_support.zig").Contract(purpose);
     const workflow_review = @import("../application/specification_support_workflow.zig");
-    const inputs = authorityInputs(view);
-    const context = try @import("../application/specification_workflow.zig").readContext(view);
-    const first = try support.nextSubject(allocator, inputs, try workflow_review.prior(.source, try workflow_review.progress(view)));
+    const progress = try workflow_review.progress(view);
+    const inputs = try workflow_review.inputs(view, progress);
+    const first = try support.nextSubject(allocator, inputs, try workflow_review.prior(purpose, progress));
     const assigned = try support.assignmentSubjects(allocator, inputs, first);
-    try std.testing.expectEqual(@as(usize, 3), assigned.len);
-    try std.testing.expect(first.unit == .record and first.unit.record.kind == .acceptance_criterion);
     const requirements = input.object.get("requirements").?.array.items;
     try std.testing.expectEqual(assigned.len, requirements.len);
-    try std.testing.expect(!input.object.contains("subject") and !input.object.contains("assessment_scope"));
-    const record = input.object.get("record").?.object;
-    try std.testing.expectEqual(first.unit.record.ordinal, record.get("id").?.object.get("ordinal").?.integer);
-    try std.testing.expectEqualStrings("acceptance_criterion", record.get("id").?.object.get("kind").?.string);
+    try std.testing.expect(!input.object.contains("subject") and !input.object.contains("assessment_scope") and !input.object.contains("task"));
     const ledger = try @import("../domain/required_authority.zig").build(allocator, inputs);
-    for (assigned, requirements, [_]@import("../domain/required_authority.zig").Slot{ .given, .when, .then }) |id, requirement, slot| {
-        try std.testing.expectEqual(slot, id.slot);
-        try std.testing.expectEqualDeep(first.unit, id.unit);
+    if (purpose == .principles) {
+        // One selected corpus owns exactly the complete requirement set. This
+        // checks membership as well as the reduced number of model requests.
+        try std.testing.expectEqual(ledger.requirements.len, assigned.len);
+        const context = inputs.principle_context.?;
+        const guidance = try @import("../domain/principle_registry.zig").guidance(allocator, context.registry, context.selection);
+        try std.testing.expectEqualStrings(try @import("../domain/model_candidate_json.zig").encodeEvidence(@TypeOf(guidance), allocator, guidance), try std.json.Stringify.valueAlloc(allocator, input.object.get("principles").?, .{}));
+    }
+    const owner = try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, first);
+    for (assigned, requirements) |id, requirement| {
+        try std.testing.expectEqualDeep(owner, try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, id));
         const ordinal = for (ledger.requirements, 0..) |native, index| {
             if (std.meta.eql(native.seed.id, id)) break index + 1;
         } else return error.InvalidFixture;
         try std.testing.expectEqual(@as(i64, @intCast(ordinal)), requirement.object.get("ordinal").?.integer);
-        try std.testing.expect(requirement.object.contains("task") and requirement.object.contains("evidence") and requirement.object.contains("assessment_scope") and requirement.object.contains("evidence_rules"));
-        var expected = try @import("../domain/specification_review_subject.zig").project(allocator, inputs, context, id);
-        try std.testing.expect(expected == .candidate_field and expected.candidate_field.record != null);
-        const expected_record = try @import("../domain/model_candidate_json.zig").encode(@TypeOf(expected.candidate_field.record.?), allocator, expected.candidate_field.record.?);
-        try std.testing.expectEqualStrings(expected_record, try std.json.Stringify.valueAlloc(allocator, input.object.get("record").?, .{}));
-        expected.candidate_field.record = null;
-        const expected_subject = try @import("../domain/model_candidate_json.zig").encode(@TypeOf(expected), allocator, expected);
-        try std.testing.expectEqualStrings(expected_subject, try std.json.Stringify.valueAlloc(allocator, requirement.object.get("subject").?, .{}));
+        try std.testing.expect(requirement.object.contains("task") and requirement.object.contains("subject"));
+        if (purpose == .source) {
+            try std.testing.expect(requirement.object.contains("evidence") and requirement.object.contains("assessment_scope") and requirement.object.contains("evidence_rules"));
+        }
+        const subject = requirement.object.get("subject").?.object;
+        if (purpose == .source) try std.testing.expect(!subject.contains("record"));
+        if (purpose == .principles) try std.testing.expect(!subject.contains("context"));
     }
-    const finding_schema = schema.object.get("properties").?.object.get("findings").?.object.get("items").?.object;
+    const properties = schema.object.get("properties").?.object;
+    try std.testing.expectEqual(@as(usize, 1), properties.count());
+    const finding_schema = properties.get("findings").?.object.get("items").?.object;
     try std.testing.expect(finding_schema.get("properties").?.object.contains("requirement_ordinal"));
-    try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, false, false);
+    if (purpose == .source) {
+        // Generic units share the closed eight-variant value schema; native
+        // member admission still enforces applicability for each assigned subject.
+        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, true, false);
+    } else {
+        const value = finding_schema.get("properties").?.object.get("value").?.object.get("properties").?.object;
+        try std.testing.expectEqual(@as(usize, 3), value.count());
+        try std.testing.expect(value.contains("decision") and value.contains("citations") and value.contains("detail"));
+    }
 }
 
 fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (preservation) 3 else if (permits_applicability) 7 else 6), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 4 else if (permits_applicability) 8 else 7), variants.len);
     var has_inconclusive = false;
     var has_not_applicable = false;
+    var has_candidate_invalid = false;
     for (variants) |variant| {
         const properties = variant.object.get("properties").?.object;
         const tag = properties.get("kind").?.object.get("const").?.string;
@@ -752,8 +891,31 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
         if (preservation) try std.testing.expect(@import("../domain/source_preservation.zig").permits(decision.finding()) and decision != .not_applicable);
         try std.testing.expect(!properties.contains("provenance"));
-        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission) 4 else 3), properties.count());
+        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission or decision == .candidate_invalid) 4 else 3), properties.count());
         try std.testing.expectEqual(decision == .candidate_omission, properties.contains("missing_obligation"));
+        try std.testing.expectEqual(decision == .candidate_invalid, properties.contains("authority_gap"));
+        if (decision == .candidate_invalid) {
+            const declared_gap = properties.get("authority_gap").?.object;
+            if (preservation) {
+                try std.testing.expectEqualStrings("null", declared_gap.get("type").?.string);
+                try std.testing.expectEqual(@as(usize, 1), declared_gap.count());
+            } else {
+                const gaps = declared_gap.get("oneOf").?.array.items;
+                try std.testing.expect(gaps.len > 1);
+                var nullable = false;
+                for (gaps) |choice| {
+                    const type_name = choice.object.get("type").?.string;
+                    if (std.mem.eql(u8, type_name, "null")) {
+                        try std.testing.expect(!nullable);
+                        nullable = true;
+                    } else {
+                        try std.testing.expectEqualStrings("object", type_name);
+                        try std.testing.expectEqual(false, choice.object.get("additionalProperties").?.bool);
+                    }
+                }
+                try std.testing.expect(nullable);
+            }
+        }
         try std.testing.expect(!properties.contains("decision"));
         try std.testing.expectEqual(gap, properties.contains("question"));
         try std.testing.expect(!properties.contains("loss"));
@@ -761,8 +923,10 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         try std.testing.expectEqual(properties.count(), required.len);
         has_inconclusive = has_inconclusive or decision == .inconclusive;
         has_not_applicable = has_not_applicable or decision == .not_applicable;
+        has_candidate_invalid = has_candidate_invalid or decision == .candidate_invalid;
     }
     try std.testing.expect(has_inconclusive);
+    try std.testing.expect(has_candidate_invalid);
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
 }
 
@@ -774,7 +938,7 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
     defer parsed.deinit();
     if (shape == .review_empty_claims or shape == .review_empty_applicability) {
         const kind = "supported";
-        const value = &parsed.value.object;
+        const value = reviewValue(&parsed.value);
         if (!std.mem.eql(u8, value.get("kind").?.string, kind)) return error.InvalidFixture;
         if (shape == .review_empty_applicability) try value.put(allocator, "kind", .{ .string = "not_applicable" });
         if (value.getPtr("provenance")) |selected| {
@@ -787,7 +951,7 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if ((Fault{ .stage = .support, .shape = shape }).reviewShape()) {
-        const value = &parsed.value.object;
+        const value = reviewValue(&parsed.value);
         if (shape == .review_dropped and attempt > 1) {
             var sources = std.json.Value{ .array = .init(allocator) };
             try sources.array.append(.{ .integer = 999999 });
@@ -810,6 +974,10 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
     }
     return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
 }
+fn reviewValue(value: *std.json.Value) *std.json.ObjectMap {
+    if (value.object.getPtr("findings")) |findings| return &findings.array.items[0].object.getPtr("value").?.object;
+    return &value.object;
+}
 fn emptyNested(value: *std.json.Value, root: bool) bool {
     switch (value.*) {
         .object => |*object| {
@@ -819,6 +987,15 @@ fn emptyNested(value: *std.json.Value, root: bool) bool {
                 return true;
             }
             for (object.values()) |*child| if (emptyNested(child, false)) return true;
+            if (root) for (object.values()) |*child| switch (child.*) {
+                .object, .array => {},
+                else => {
+                    // Preserve existing aggregate faults first. A selected
+                    // scalar prose repair has no child aggregate to corrupt.
+                    child.* = .{ .object = .{} };
+                    return true;
+                },
+            };
         },
         .array => |*array| {
             for (array.items) |*child| if (emptyNested(child, false)) return true;
@@ -840,8 +1017,6 @@ fn sourceMergeContract(id: []const u8) ?@import("../domain/pipeline.zig").NodeCo
     inline for (.{
         @import("../actions/reference/merge_source_extraction_repair.zig").Action,
         @import("../actions/reference/merge_source_reconciliation_repair.zig").Action,
-        @import("../actions/reference/merge_upstream_extraction_repair.zig").Action,
-        @import("../actions/reference/merge_upstream_reconciliation_repair.zig").Action,
     }) |Action| if (std.mem.eql(u8, id, Action.contract.id)) return Action.contract;
     return null;
 }
@@ -879,7 +1054,7 @@ fn assertLossRequest(allocator: std.mem.Allocator, view: *const data.View, paylo
 
 // Re-admit the retained evidence through the production owner and verify that
 // collecting it changes only the assigned finding through native loss binding.
-fn assertLossAdmission(allocator: std.mem.Allocator, before: *const data.View, after: *const data.View) !struct { location: @import("../domain/source_omission.zig").Location, uncertain: bool, record: Driver.RecordLoss } {
+fn assertLossAdmission(allocator: std.mem.Allocator, before: *const data.View, after: *const data.View) !struct { location: @import("../domain/source_omission.zig").Location, uncertain: bool } {
     const support = @import("../domain/specification_support.zig").Source;
     const owner = @import("../domain/source_omission.zig").comparisons;
     const owned = @import("../application/required_authority_values.zig");
@@ -924,45 +1099,9 @@ fn assertLossAdmission(allocator: std.mem.Allocator, before: *const data.View, a
         }
         try std.testing.expectEqualDeep(expected, next);
     }
-    return .{ .location = location, .record = .{ .requirement = ledger.requirements[index].seed.id, .review_origin = prior.origins[index].?, .comparison_origin = proof.origin.? }, .uncertain = for (proof.response.assessments) |assessment| {
+    return .{ .location = location, .uncertain = for (proof.response.assessments) |assessment| {
         if (assessment.result != .uncertain) break false;
     } else true };
-}
-
-fn assertOmissionMerge(allocator: std.mem.Allocator, before: *const data.View, after: *const data.View) !@import("../domain/workflow_retry.zig").Permit {
-    const spec_workflow = @import("../application/specification_workflow.zig");
-    const state = try @import("../application/specification_values.zig").storage.read(before, @import("../application/specification_omission_repair_workflow.zig").schema, .omission_repair);
-    const authorization = state.authorization;
-    const prior = authorization.dependencies.session;
-    const current = try spec_workflow.readSession(after);
-    for (@import("../actions/specification/merge_specification_omission_repair.zig").Action.contract.invalidates) |key| try std.testing.expect(!after.contains(key));
-    try std.testing.expectEqual(prior.revision + 1, current.revision);
-    for (prior.units, current.units, 0..) |old, next, index| {
-        if (index != authorization.target.unit) {
-            try std.testing.expectEqualDeep(old, next);
-        } else {
-            switch (authorization.target.part) {
-                .record => {
-                    try std.testing.expectEqual(old.?.response.content.records.len + 1, next.?.response.content.records.len);
-                    try std.testing.expectEqualDeep(old.?.response.content.records, next.?.response.content.records[0..old.?.response.content.records.len]);
-                },
-                .value => |field| {
-                    const candidates = @import("../domain/specification_candidate.zig");
-                    const previous = try candidates.attributedValue(.canonical, old.?.response, field.subject, field.field);
-                    const updated = try candidates.attributedValue(.canonical, next.?.response, field.subject, field.field);
-                    try std.testing.expectEqualDeep(previous.provenance, updated.provenance);
-                    // Reconstruct only the authorized replacement; any sibling
-                    // mutation in this unit must fail this comparison as well.
-                    try std.testing.expectEqualDeep(try candidates.replaceCanonicalValue(allocator, old.?.response, field.subject, field.field, updated.value), next.?.response);
-                },
-            }
-            try std.testing.expectEqualDeep(authorization.retry.?, next.?.last_repair.?.retry.?);
-        }
-    }
-    const context = try spec_workflow.readContext(after);
-    const full = try @import("../domain/specification_session.zig").assemble(allocator, @import("reference_text.zig").validator, context, current);
-    _ = try @import("../domain/specification_coverage.zig").validate(allocator, context.references, current.units[0].?.response.content.brief, full.content);
-    return authorization.retry.?;
 }
 
 fn assertReviewPrompt(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, path: []const u8) !void {

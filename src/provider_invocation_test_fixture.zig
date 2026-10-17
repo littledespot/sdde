@@ -21,14 +21,36 @@ pub const Fixture = struct {
     }
 
     pub fn initWithSchema(self: *Fixture, schema_bytes: ?[]const u8) !void {
-        return self.initialize(schema_bytes, null);
+        return self.initialize(schema_bytes, null, &.{}, &.{}, &.{}, null);
     }
 
     pub fn initWithCompiledSchema(self: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema) !void {
-        return self.initialize(null, selected);
+        return self.initialize(null, selected, &.{}, &.{}, &.{}, null);
     }
 
-    fn initialize(self: *Fixture, schema_bytes: ?[]const u8, selected: ?*const @import("domain/model_result_schema.zig").Schema) !void {
+    pub fn initWithOriginalSources(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText) !void {
+        return self.initialize(schema_bytes, null, sources, &.{}, &.{}, null);
+    }
+
+    pub fn initWithProseFields(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText, fields: []const @import("domain/model_text_wire.zig").ProseField) !void {
+        return self.initialize(schema_bytes, null, sources, fields, &.{}, null);
+    }
+
+    pub fn initWithFieldPolicies(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText, prose: []const @import("domain/model_text_wire.zig").ProseField, fields: []const @import("domain/model_text_field.zig").Binding) !void {
+        return self.initialize(schema_bytes, null, sources, prose, fields, null);
+    }
+
+    pub fn initWithCompiledFieldPolicies(self: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema, fields: []const @import("domain/model_text_field.zig").Binding) !void {
+        return self.initialize(null, selected, &.{}, &.{}, fields, null);
+    }
+
+    /// Independently supplied native facts for offline production admission.
+    /// This does not upgrade a historical description or grant real dispatch.
+    pub fn initWithNativeTextContext(self: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema, sources: []const @import("domain/model_text_wire.zig").SourceText, prose: []const @import("domain/model_text_wire.zig").ProseField, fields: []const @import("domain/model_text_field.zig").Binding, exact_scope: @import("domain/model_exact_values.zig").Scope) !void {
+        return self.initialize(null, selected, sources, prose, fields, exact_scope);
+    }
+
+    fn initialize(self: *Fixture, schema_bytes: ?[]const u8, selected: ?*const @import("domain/model_result_schema.zig").Schema, sources: []const @import("domain/model_text_wire.zig").SourceText, fields: []const @import("domain/model_text_wire.zig").ProseField, policies: []const @import("domain/model_text_field.zig").Binding, exact_scope: ?@import("domain/model_exact_values.zig").Scope) !void {
         try self.base.init(std.testing.allocator);
         errdefer self.base.deinit();
         if (schema_bytes) |bytes| {
@@ -36,6 +58,12 @@ pub const Fixture = struct {
             self.base.request.response_schema = try adapter.compiler().compile(self.base.schema_arena.allocator(), bytes);
         }
         if (selected) |compiled| self.base.request.response_schema = compiled;
+        self.base.request.original_sources = sources;
+        self.base.request.prose_fields = fields;
+        self.base.request.field_policies = policies;
+        // This generic synthetic fixture has no retained reference occurrences.
+        // Its explicit empty native scope is test data, never catalogue inference.
+        self.base.request.exact_scope = exact_scope orelse .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
         self.resource = .{ .id = .{ .bytes = "result" }, .content = .{ .result_schema = self.base.request.response_schema } };
         const source = try self.requestSource();
         self.prepared = try (build_request.Action{}).execute(std.testing.allocator, source, self.base.request.content);
@@ -68,6 +96,10 @@ pub const Fixture = struct {
             .request_schema_id = self.base.request.request_schema_id,
             .model_visible_input_id = self.base.request.model_visible_input_id,
             .result_resource = &self.resource,
+            .original_sources = self.base.request.original_sources,
+            .prose_fields = self.base.request.prose_fields,
+            .field_policies = self.base.request.field_policies,
+            .exact_scope = self.base.request.exact_scope,
         };
     }
 };

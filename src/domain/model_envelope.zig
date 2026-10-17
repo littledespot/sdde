@@ -5,7 +5,33 @@ const json = @import("strict_json.zig");
 
 pub const Rejection = error{InvalidModelEnvelope};
 pub const Error = Rejection || std.mem.Allocator.Error;
-pub const Diagnostic = json.Diagnostic;
+pub const SyntaxDiagnostic = json.Diagnostic;
+pub const Diagnostic = union(enum) {
+    decoder: SyntaxDiagnostic,
+    composition: @import("model_text_composition.zig").Diagnostic,
+    pub fn deinit(self: Diagnostic, a: std.mem.Allocator) void {
+        switch (self) {
+            inline else => |detail| detail.deinit(a),
+        }
+    }
+    pub fn copy(self: Diagnostic, a: std.mem.Allocator) std.mem.Allocator.Error!Diagnostic {
+        return switch (self) {
+            inline else => |detail, tag| @unionInit(Diagnostic, @tagName(tag), try detail.copy(a)),
+        };
+    }
+    pub fn eql(self: Diagnostic, other: Diagnostic) bool {
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
+        return switch (self) {
+            inline else => |detail, tag| detail.eql(@field(other, @tagName(tag))),
+        };
+    }
+    pub fn label(self: Diagnostic) []const u8 {
+        return switch (self) {
+            .decoder => |detail| @tagName(detail.reason),
+            .composition => "ModelTextComposition",
+        };
+    }
+};
 
 pub const Normalization = enum {
     none,
@@ -26,9 +52,9 @@ pub const Document = struct {
     }
 };
 
-pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnostic: ?*?Diagnostic) Error!Document {
+pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnostic: ?*?SyntaxDiagnostic) Error!Document {
     if (diagnostic) |out| out.* = null;
-    var original: ?Diagnostic = null;
+    var original: ?SyntaxDiagnostic = null;
     defer if (original) |failure| failure.deinit(allocator);
     var prefix: ?OpeningPrefix = null;
     const parsed = json.parse(allocator, content, .{ .maximum_depth = schema.max_json_depth }, false, &original) catch |err| recovered: {
@@ -126,7 +152,7 @@ pub const Array = opaque {
     }
 };
 
-/// Decoder-produced syntax evidence only, never schema validity or authority
+/// Decoder-produced syntax and mechanical composition evidence, never schema validity or authority
 /// to execute, repair or commit. Correlation stays in the original evidence.
 pub const Candidate = opaque {
     pub fn association(self: *const Candidate) *const invocation.Evidence {
@@ -175,8 +201,20 @@ const Storage = struct {
 
 pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, diagnostic: ?*?Diagnostic) Error!Owned {
     const association = complete.association();
-    var document = try parseContent(allocator, complete.content(), diagnostic);
+    if (diagnostic) |out| out.* = null;
+    var syntax: ?SyntaxDiagnostic = null;
+    var document = parseContent(allocator, complete.content(), &syntax) catch |err| {
+        if (syntax) |failure| {
+            if (diagnostic) |out| out.* = .{ .decoder = failure } else failure.deinit(allocator);
+        }
+        return err;
+    };
     errdefer document.deinit();
+    const request = association.request();
+    if (try @import("model_text_composition.zig").check(allocator, document.parsed.value, request.field_policies, request.prose_fields, request.original_sources, .{ .exact_scope = request.exact_scope })) |failure| {
+        if (diagnostic) |out| out.* = .{ .composition = failure } else failure.deinit(allocator);
+        return error.InvalidModelEnvelope;
+    }
     const state = try allocator.create(Storage);
     state.* = .{ .association = association, .parsed = document.parsed, .normalization = document.normalization, .content = document.content };
     return .{ .allocator = allocator, .candidate = @ptrCast(state) };

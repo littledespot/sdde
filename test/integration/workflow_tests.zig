@@ -1023,7 +1023,7 @@ const ReferenceReconciliationTestProducer = struct {
         if (result.payload().reconciliation_accounted.outcome != .complete) return error.OperationExecutionFailed;
         const authority = @import("../../src/application/required_authority_workflow.zig");
         const ledger = @import("../../src/application/required_authority_values.zig").read(&input.step.data, authority.ledger_schema, .ledger) catch return error.OperationExecutionFailed;
-        if (ledger.requirements.len < 3 or ledger.inputs.projection != .specification or ledger.inputs.evidence.len != 0) return error.OperationExecutionFailed;
+        if (ledger.requirements.len < 3 or ledger.inputs.projection != .source_readiness or ledger.inputs.evidence.len != 0) return error.OperationExecutionFailed;
         if (!ledger.inputs.references.?.items.state_id.eql(result.payload().reconciliation_accounted.records.assignments.checked.prior.prior.input.progress.plan.layout.items.state_id)) return error.OperationExecutionFailed;
         context.?.observed += 1;
         return .{ .outcome = .ok, .delta = .{} };
@@ -1149,31 +1149,31 @@ test "configured source preservation reviews before generation and repairs throu
     try testSpecificationWorkflows(.source_preservation);
 }
 
-test "configured native summary reuse advances a fresh validated plan after upstream regeneration" {
+test "configured native summary reuse advances a fresh validated plan after pre-generation source repair" {
     try testSpecificationWorkflows(.reuse_regeneration);
 }
 
-test "configured story omission retains unaffected review origins and publishes after complete dependent review" {
-    try testSpecificationWorkflows(.story_recovery);
+test "configured story omission remains advice without content repair or regenerated review" {
+    try testSpecificationWorkflows(.story_missing);
 }
 
-test "configured invalid story omission repair rejects without publication" {
-    try testSpecificationWorkflows(.story_invalid);
+test "configured false story omission cannot rewrite already complete candidate content" {
+    try testSpecificationWorkflows(.story_false_positive);
 }
 
-test "configured recurring story omission retains its repair identity and exhausts without publication" {
-    try testSpecificationWorkflows(.story_recurrence);
+test "configured multiple semantic omissions preserve generation and bounded assignment origins" {
+    try testSpecificationWorkflows(.story_multiple);
 }
 
-test "configured complete omission comparisons retain uncertainty deny unsupported repair and propagate false candidate findings" {
+test "configured post-generation semantic findings remain advice without localization repair or clarification" {
     try testSpecificationWorkflows(.finding_controls);
 }
 
-test "configured acceptance criterion batch localizes separate omissions and repairs one invalid finding" {
+test "configured acceptance criterion batch retains separate advice and repairs only invalid finding data" {
     try testSpecificationWorkflows(.record_reviews);
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, reuse_regeneration, story_recovery, story_invalid, story_recurrence, finding_controls, record_reviews }) !void {
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, reuse_regeneration, story_missing, story_false_positive, story_multiple, finding_controls, record_reviews }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
@@ -1242,7 +1242,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     const preservation_start = membership_start + 8;
     const story_start = preservation_start + 3;
     const finding_start = story_start + 6;
-    const finding_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").LossControl);
+    const finding_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").AdvisoryControl);
     const record_start = finding_start + finding_controls.len;
     const record_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").RecordReviewControl);
     var costs: [record_start + record_controls.len]?timing.Sample = @splat(null);
@@ -1250,9 +1250,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .existing => 0,
         .source_preservation => preservation_start,
         .reuse_regeneration => preservation_start + 1,
-        .story_recovery => story_start,
-        .story_invalid => story_start + 2,
-        .story_recurrence => story_start + 4,
+        .story_missing => story_start,
+        .story_false_positive => story_start + 2,
+        .story_multiple => story_start + 4,
         .finding_controls => finding_start,
         .record_reviews => record_start,
     };
@@ -1260,9 +1260,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .existing => preservation_start,
         .source_preservation => story_start,
         .reuse_regeneration => preservation_start + 2,
-        .story_recovery => story_start + 2,
-        .story_invalid => story_start + 4,
-        .story_recurrence => finding_start,
+        .story_missing => story_start + 2,
+        .story_false_positive => story_start + 4,
+        .story_multiple => finding_start,
         .finding_controls => record_start,
         .record_reviews => costs.len,
     };
@@ -1270,6 +1270,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     for (case_range_begin..case_range_end) |scenario| {
         var cost = timing.Timer.start(io, &costs[scenario]);
         defer cost.finish();
+        var assertion_context: []const u8 = "setup";
+        errdefer |err| std.debug.print("specification-generation scenario {d} failed in {s}/{s}: {s}\n", .{ scenario, @tagName(cost.phase), assertion_context, @errorName(err) });
         const principle_fault = if (scenario >= principle_start and scenario < membership_start) principle_faults[(scenario - principle_start) % principle_faults.len] else null;
         const applicability = if (scenario >= applicability_start and scenario < principle_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
@@ -1313,7 +1315,10 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
-        if (membership_scenario and (scenario - membership_start) % 4 >= 2) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A borrower renews a loan and sees its return deadline. Display `Loan renewed!`.\n" });
+        if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
+            "MOCK Track library loans and display their return deadlines.\n"
+        else
+            "MOCK Track customer invoices and display the outstanding balance.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (candidate_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario) "A visitor sees the current UTC date and time on startup. Display `Hello, World!`.\n" else if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
         if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
@@ -1348,7 +1353,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             },
             else => {},
         };
-        if (story_scenario or finding_control != null) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (if (finding_control) |control| control != .uncertain else (scenario - story_start) % 2 == 0)
+        if (story_scenario or finding_control != null) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (if (finding_control) |control| control != .inconclusive else (scenario - story_start) % 2 == 0)
             "MOCK visitor sees the current UTC date and time on startup. Display `MOCK Hello!`.\n"
         else
             "MOCK librarian renews an eligible loan and sees the new return deadline. Display `MOCK Renewed!`.\n" });
@@ -1424,9 +1429,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
         if (story_scenario) {
             driver.story_omission = switch (workflow_cases) {
-                .story_recovery => .recover,
-                .story_invalid => .invalid_repair,
-                .story_recurrence => .recurring,
+                .story_missing => .missing,
+                .story_false_positive => .false_positive,
+                .story_multiple => .multiple,
                 else => unreachable,
             };
             // The existing fixture shares this source-backed text between
@@ -1438,9 +1443,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             driver.brief_text = .{ "MOCK required behavior", behavior, behavior };
         }
         if (finding_control) |control| {
-            driver.loss_control = control;
-            driver.story_omission = .recover;
-            const behavior = if (control == .uncertain)
+            driver.advisory_control = control;
+            driver.story_omission = .false_positive;
+            const behavior = if (control == .inconclusive)
                 "MOCK librarian renews an eligible loan and sees the new return deadline and confirmation."
             else
                 "MOCK visitor sees the current UTC date and time on startup and a greeting.";
@@ -1555,6 +1560,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         cost.enter(.execution);
         if (membership_scenario) {
+            // This positive/retry matrix has one business group. Feature-wide
+            // entities own their applicability and records; record batches cannot
+            // repair entity membership. Native deletion needs no model response.
             driver.contradict_entities = true;
             if (scenario < membership_start + 2) driver.measurement_prefix = if (scenario == membership_start) ".zig-cache/membership-extra" else ".zig-cache/membership-missing";
             driver.failed_repair = scenario >= membership_start + 4;
@@ -1562,6 +1570,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         const result = driver.run();
         cost.enter(.assertions);
+        assertion_context = "workflow-outcome";
         if (workflow_cases == .reuse_regeneration) {
             try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
             try std.testing.expectEqual(@as(usize, 2), driver.carried_summaries);
@@ -1575,14 +1584,11 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
-        const review_scope_attack = fault != null and (fault.?.shape == .review_dropped or fault.?.shape == .review_changed);
-        const expected: workflow.OutcomeTag = if (finding_control) |control| (if (control == .unbound_association) .invalid else .ok) else if (story_scenario) (if (driver.story_omission == .recover) .ok else .failed) else if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
-            .no_entities, .entities => .ok,
-            .unjustified, .missing_decision, .missing_text => .needs_user,
-            .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .classification) .invalid else if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (candidate_omission or extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        const protocol_advice = driver.expectsProtocolAdvice();
+        const expected: workflow.OutcomeTag = if (protocol_advice or finding_control != null or story_scenario) .ok else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (candidate_omission or extraction_omission or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (protocol_advice) try verifyAdvisoryPublication(.protocol_incomplete, io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
         if (scenario == 0) {
             try std.testing.expectEqual(@as(usize, 1), driver.carried_summaries);
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
@@ -1619,18 +1625,24 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (membership_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            if (driver.failed_repair and !driver.entities_required) {
-                // The fixed not_applicable decision excludes entity records
-                // before native membership repair. A persistent contrary
-                // response exhausts the bounded protocol correction.
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                try std.testing.expect(!view.contains(.identified_specification_content));
-                try std.testing.expect(!view.contains(.clarification_needs));
-                try std.testing.expect(!view.contains(.published_workflow_output));
-            } else if (driver.failed_repair) {
+            const current = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            try std.testing.expectEqual(@as(usize, 1), current.record_group_count);
+            if (driver.failed_repair and driver.entities_required) {
+                const entity_index = @import("../../src/domain/specification_session.zig").entities_index;
+                try std.testing.expect(current.units[entity_index] == null);
+                try std.testing.expectEqual(entity_index, current.completed);
+                const parsed = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_workflow.zig").parsed_schema, .parsed);
+                try std.testing.expect(parsed.response == .content and parsed.response.content == .entities);
+                try std.testing.expectEqual(.required, parsed.response.content.entities.disposition);
+                try std.testing.expectEqual(@as(usize, 1), parsed.response.content.entities.basis.source_group_ids.len);
+                try std.testing.expectEqual(@as(usize, 1), parsed.response.content.entities.records.len);
+                const inserted = parsed.last_repair orelse return error.MissingNativeEntityInsertion;
+                try std.testing.expectEqual(.insert, inserted.operation);
+                try std.testing.expect(inserted.changed);
                 const rejected = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
-                // Membership was corrected, but the replacement's blank text
-                // still fails within the original bounded record assignment.
+                try std.testing.expectEqual(.entities, rejected.issue.unit);
+                // Membership was corrected, but the insertion's invalid scalar
+                // still fails within the feature entity owner's bounded repair.
                 try std.testing.expect(rejected.issue.membership == null);
                 try std.testing.expectEqual(.typed_text, rejected.issue.rule);
                 try std.testing.expect(rejected.issue.text_issue != null);
@@ -1643,11 +1655,33 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             } else {
                 try std.testing.expect(view.contains(.published_workflow_output));
                 try std.testing.expect(driver.candidate_review_calls > 0);
+                const entities = current.units[@import("../../src/domain/specification_session.zig").entities_index] orelse return error.MissingAdmittedEntityUnit;
+                try std.testing.expectEqual(@as(usize, 1), entities.response.content.entities.basis.source_group_ids.len);
+                if (!driver.entities_required) {
+                    const deleted = entities.last_repair orelse return error.MissingNativeEntityDeletion;
+                    try std.testing.expectEqual(.delete, deleted.operation);
+                    try std.testing.expect(deleted.changed);
+                    try std.testing.expectEqual(deleted.revision_before + 1, deleted.revision_after);
+                    try std.testing.expect(deleted.origin == null);
+                    try std.testing.expect(entities.origins.initial != null);
+                    try std.testing.expectEqual(@as(usize, 0), entities.origins.fields.len);
+                    try std.testing.expectEqual(.not_applicable, entities.response.content.entities.disposition);
+                    try std.testing.expectEqual(@as(usize, 0), entities.response.content.entities.records.len);
+                    try std.testing.expectEqualDeep(current.units[0].?.response.content.brief.title, entities.response.content.entities.basis);
+                    var owner_arena: std.heap.ArenaAllocator = .init(allocator);
+                    defer owner_arena.deinit();
+                    const owner = try @import("../../src/domain/specification_session.zig").ownerFor(owner_arena.allocator(), current, @import("../../src/domain/specification_session.zig").entities_index);
+                    try std.testing.expect(@import("../../src/domain/model_request_identity.zig").unitOwnerEql(owner, deleted.owner));
+                    // The model-only failure flag has no effect on a native
+                    // deletion: no atomic replacement request is sent.
+                    for (runner.tokenLedger().accounted_operations.items) |operation| try std.testing.expect(operation.id.model_request_id.purpose != .atomic_repair);
+                    try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                }
                 var readback: std.heap.ArenaAllocator = .init(allocator);
                 defer readback.deinit();
                 const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
                 const state = @import("../../src/domain/specification_state.zig");
-                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+                var restored = (try state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified() orelse return error.MissingPublishedSpecification;
                 restored.content.entities.disposition = if (driver.entities_required) .not_applicable else .required;
                 try std.testing.expectError(error.InvalidSpecificationState, state.validate(readback.allocator(), restored, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
             }
@@ -1657,6 +1691,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         // Production event evidence is independent of the driver's observations.
         // A pre-write intent row never substitutes for the returned publication result.
         {
+            assertion_context = "production-events";
             const paths = @import("../../src/domain/workflow_artifact_registry.zig").bindFeatureLogSinkAdapter(@import("../../src/domain/workflow_artifact_registry.zig").registry(logging.artifact_owner.?), @import("../../src/domain/feature_log_binding.zig").binding(logging.binding_owner.?)).?;
             const path = try std.fmt.allocPrint(allocator, "{s}/{s}/0001.log", .{ paths.specs_root_path, paths.event_binding_path });
             defer allocator.free(path);
@@ -1675,15 +1710,21 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             try std.testing.expect(std.mem.indexOf(u8, logged, "segment_trailer|") != null);
             try std.testing.expect(logging.finalized and boot.ready.logs.lifecycle.active == null);
         }
+        assertion_context = "stage-specific-evidence";
         if (principle_fault) |mode| {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const failed = mode == .repeated or mode == .alternating;
-            const expected_repairs: usize = if (failed) 2 else driver.principle_calls - 1;
+            const expected_repairs: usize = if (mode == .repeated) 1 else if (failed) 2 else recovered: {
+                const published = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_publication_workflow.zig").state_schema, .publication_state);
+                // The fixture cites each finding ordinal as a chunk ID; only
+                // the first is real. Batching does not forgive invalid members.
+                break :recovered published.principle_assessment.evidence.len - 1;
+            };
+            const expected_merges: usize = if (mode == .repeated) 0 else expected_repairs;
             try std.testing.expectEqual(expected_repairs, driver.principle_repair_calls);
-            // Each schema-valid response reaches native merge. Exhaustion prevents
-            // a third model attempt for the unresolved evidence assignment.
-            if (driver.support_merges != expected_repairs) std.debug.print("principle {s}: calls={d}, merges={d}, expected repairs={d}, terminal={any}\n", .{ @tagName(mode), driver.principle_repair_calls, driver.support_merges, expected_repairs, result });
-            try std.testing.expectEqual(expected_repairs, driver.support_merges);
+            // Canonically unchanged evidence ends the allowance immediately;
+            // alternating changed invalid evidence retains its numeric bound.
+            try std.testing.expectEqual(expected_merges, driver.support_merges);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
             for (runner.tokenLedger().accounted_operations.items) |operation| try std.testing.expectEqual(@as(u32, 1), operation.id.model_attempt_ordinal.value);
@@ -1691,8 +1732,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 try std.testing.expect(!view.contains(.specification_publication_state));
                 const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?;
-                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-                try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
+                try std.testing.expectEqual(@as(u64, if (mode == .repeated) 1 else 2), result.execution_rejected.retry_limit.completed_executions);
+                try std.testing.expectEqual(@as(u32, if (mode == .repeated) 2 else 1), result.execution_rejected.retry_limit.limit.value);
+                try std.testing.expectEqual(@as(@import("../../src/domain/workflow_retry.zig").Exhaustion.Reason, if (mode == .repeated) .unchanged_repair else .retry_limit), result.execution_rejected.retry_limit.reason);
                 const rejection = diagnostic.principle_review;
                 const selected = rejection.selected().?;
                 try std.testing.expectEqual(.invalid_principle_citation, selected.evidence.?.issue);
@@ -1700,7 +1742,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(selected.ordinal.?, selected.evidence.?.citation.?.diagnostic.rejected);
                 const retained = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .principle_support)).result.rejected.candidate.?;
                 try std.testing.expectEqual(retained.revision, selected.revision);
-                try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + driver.support_merges)), selected.revision);
+                try std.testing.expectEqual(@as(u64, @intCast(driver.principle_calls + driver.support_merges)), selected.revision);
                 try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             }
@@ -1722,9 +1764,17 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 if (requirement.unit == .record and requirement.unit.record.kind == .acceptance_criterion and requirement.slot == .given) record_batches += 1;
             }
             try std.testing.expectEqual(record_batches, driver.record_batch_requests);
-            // Source AC duties remain separate evidence entries while one
-            // current-record request carries the three field findings.
-            const logical_reviews = published.review.evidence.len + policy.evidence.len - record_batches * 2;
+            // Source review retains its complete subject assignments. The
+            // selected principle corpus assesses all business subjects once;
+            // reference duties keep their separate native owners.
+            var reference_reviews: usize = 0;
+            for (published.review.evidence) |evidence| switch (evidence.requirement.unit) {
+                .feature, .record => {},
+                .source, .signal, .token, .conflict => reference_reviews += 1,
+                .decision => return error.InvalidReviewFixture,
+            };
+            const principle_assignments: usize = @intFromBool(policy.selection.chunks.len != 0);
+            const logical_reviews = 6 + published.content.records.len + reference_reviews + principle_assignments;
             try std.testing.expect(logical_reviews > 2);
             try std.testing.expectEqual(if (scenario == 0) logical_reviews + driver.support_merges else @as(usize, 0), driver.fault_requests);
             try std.testing.expectEqual(driver.fault_requests, driver.fault_calls);
@@ -1734,9 +1784,11 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             const origins = try allocator.alloc(*const request_identity.ModelRequestId, logical_reviews);
             defer allocator.free(origins);
             var origin_count: usize = 0;
+            var principle_origin_count: usize = 0;
             for (runner.tokenLedger().accounted_operations.items) |operation| {
                 const request = operation.id.model_request_id;
                 if (request.purpose != .semantic_review or operation.id.model_attempt_ordinal.value != 1) continue;
+                if (std.mem.startsWith(u8, request.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) principle_origin_count += 1;
                 for (origins[0..origin_count]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, request.immutable_unit_owner_id.semantic_review.review_slot_id.bytes));
                 try std.testing.expect(origin_count < origins.len);
                 origins[origin_count] = request;
@@ -1746,14 +1798,24 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(.accepted, request_ledger.record(request).?.terminal_reason.?);
             }
             try std.testing.expectEqual(logical_reviews, origin_count);
+            try std.testing.expectEqual(principle_assignments, principle_origin_count);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
             try std.testing.expect(policy.evidence.len != 0);
-            try std.testing.expectEqual(@as(@FieldType(@import("../../src/domain/required_authority.zig").Result, "continuation"), if (scenario == 1) .needs_user else .all_resolved), policy.result.continuation);
-            if (scenario == 1) try std.testing.expectEqual(.plan, policy.result.entries[0].outcome.clarification_required.owner);
+            try std.testing.expectEqual(.all_resolved, policy.result.continuation);
+            for (policy.result.entries) |entry| try std.testing.expect(entry.outcome == .assessment_complete and entry.candidate_defect == null);
+            if (scenario == 1) try std.testing.expectEqual(.conflicting, policy.evidence[0].finding);
             const sidecar = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_publication_workflow.zig").reference_schema, .reference_context);
-            try std.testing.expect(std.mem.indexOf(u8, sidecar, "Policy Obligations for Plan") != null);
-            if (scenario == 1) try std.testing.expect(std.mem.indexOf(u8, sidecar, "POLICY-1") != null);
+            try std.testing.expect(std.mem.indexOf(u8, sidecar, "Advisory Principle Findings") != null);
+            try std.testing.expect(std.mem.indexOf(u8, sidecar, "Policy Obligations for Plan") == null);
+            try std.testing.expect(std.mem.indexOf(u8, sidecar, "POLICY-1") == null);
+            if (scenario == 1) {
+                var escaped = std.Io.Writer.Allocating.init(allocator);
+                defer escaped.deinit();
+                try @import("../../src/domain/specification_markdown.zig").literal(&escaped.writer, policy.evidence[0].review.?.detail);
+                try std.testing.expect(std.mem.indexOf(u8, sidecar, escaped.written()) != null);
+                try std.testing.expect(std.mem.indexOf(u8, sidecar, "**REVIEW-1**") != null);
+            } else try std.testing.expect(std.mem.indexOf(u8, sidecar, "No adverse principle findings recorded.") != null);
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
@@ -1761,86 +1823,96 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (applicability) |mode| {
             const samples = @import("../../src/test_fixtures/spec_generation_responses.zig");
-            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            // Every selected text/evidence merge also passes the driver's sibling
-            // and origin checks. No semantic reassessment is authorized here.
+            // Only the invalid question scalar or foreign principle citation is
+            // corrected. The semantic applicability finding cannot change the
+            // native generation decision or manufacture a clarification.
             try std.testing.expectEqual(@as(usize, if (mode == .missing_text or mode == .no_entities) 1 else 0), driver.support_merges);
+            try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
             var readback: std.heap.ArenaAllocator = .init(allocator);
             defer readback.deinit();
             const a = readback.allocator();
-            if (mode == .inconclusive) {
-                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
-            } else {
-                const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
-                const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-                const reference = if (restored.specified()) |state| state.reference else restored.value.pending.reference;
-                try std.testing.expectEqual(@as(usize, 0), reference.conflicts.len);
-                const published = try project.dir.readFileAlloc(io, "requirements/current/chosen/spec.md", a, .limited(8_388_608));
-                try std.testing.expectEqualStrings(mode.source(other_applicability), reference.inputs.corpus.sources[0].bytes);
-                var expected_source: std.Io.Writer.Allocating = .init(a);
-                try @import("../../src/domain/specification_markdown.zig").literal(&expected_source.writer, mode.source(other_applicability));
-                try std.testing.expect(std.mem.indexOf(u8, published, expected_source.written()) != null);
-                if (restored.specified()) |state| {
-                    try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
-                    try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
-                    try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
-                    try std.testing.expectEqual(@as(@TypeOf(state.content.entities.disposition), if (mode == .entities) .required else .not_applicable), state.content.entities.disposition);
-                    if (mode == .no_entities) {
-                        try std.testing.expect(driver.principle_calls > 0);
-                        try std.testing.expect(state.principle_assessment.evidence.len > 0);
-                        try std.testing.expectEqual(.needs_user, state.principle_assessment.result.continuation);
-                        try std.testing.expectEqual(.plan, state.principle_assessment.result.entries[0].outcome.clarification_required.owner);
-                    }
-                } else {
-                    try std.testing.expectEqual(@as(usize, 1), restored.value.pending.open_clarifications.len);
-                    try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
-                    const reviewed = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
-                    try std.testing.expectEqualDeep(reviewed.origin, reviewed.origins[0]);
-                    const identities = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                    var supported: usize = 0;
-                    for (reviewed.review.entries, reviewed.origins) |finding, origin| if (finding.value.kind == .supported) {
-                        supported += 1;
-                        try std.testing.expect(origin != null);
-                        var matches: usize = 0;
-                        for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.?.matches(identities, operation.id)) {
-                            try std.testing.expect(operation.id.model_request_id.purpose == .semantic_review);
-                            matches += 1;
-                        };
-                        try std.testing.expectEqual(@as(usize, 1), matches);
-                    };
-                    try std.testing.expectEqual(reviewed.review.entries.len - 1, supported);
-                    const persisted = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", a, .limited(8_388_608));
-                    const clarification = @import("../../src/domain/clarification_inputs.zig");
-                    const state = try clarification.validate(.{ .value = try @import("../../src/domain/strict_json.zig").decode(clarification.State, a, persisted, .{ .maximum_bytes = clarification.max_state_bytes, .maximum_depth = 64 }) }, .{ .bytes = "chosen" });
-                    const bound = try @import("../../src/domain/incomplete_specification.zig").bindClarifications(restored.value.pending, state);
-                    try std.testing.expectEqual(@as(usize, 1), bound.records.len);
-                    try std.testing.expectEqual(@as(usize, 0), bound.responses.len);
-                    try std.testing.expectEqual(.open, bound.records[0].status);
-                    const form = try project.dir.readFileAlloc(io, "requirements/current/chosen/clarify/S01.md", a, .limited(16_384));
-                    if (mode == .unjustified) {
-                        // D1 repairs the missing question, not its meaning. This
-                        // retained failure guards against claiming semantic proof.
-                        try std.testing.expect(std.mem.startsWith(u8, bound.records[0].question, "Does the application involve any business entities or data? Please answer Yes or No."));
-                        try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
-                        var corrected: usize = 0;
-                        for (runner.tokenLedger().accounted_operations.items) |call| if (call.id.model_attempt_ordinal.value > 1) {
-                            corrected += 1;
-                        };
-                        try std.testing.expectEqual(@as(usize, 1), corrected);
-                    } else {
-                        try std.testing.expect(std.mem.startsWith(u8, bound.records[0].question, samples.applicability_question));
-                        try std.testing.expect(std.mem.startsWith(u8, bound.records[0].why_required, samples.applicability_detail));
-                        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, form, samples.applicability_detail));
-                        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, form, mode.source(other_applicability)));
-                    }
-                }
+            const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
+            const restored = try @import("../../src/domain/specification_state.zig").parse(a, saved, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            const state = restored.specified() orelse return error.ExpectedSpecifiedState;
+            const reference = state.reference;
+            try std.testing.expectEqual(@as(usize, 0), reference.conflicts.len);
+            const published = try project.dir.readFileAlloc(io, "requirements/current/chosen/spec.md", a, .limited(8_388_608));
+            assertion_context = "applicability original source and rendered content";
+            try std.testing.expectEqualStrings(mode.source(other_applicability), reference.inputs.corpus.sources[0].bytes);
+            var expected_source: std.Io.Writer.Allocating = .init(a);
+            try @import("../../src/domain/specification_markdown.zig").literal(&expected_source.writer, mode.source(other_applicability));
+            try std.testing.expect(std.mem.indexOf(u8, published, expected_source.written()) != null);
+            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
+            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
+            try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
+            try std.testing.expectEqual(@as(@TypeOf(state.content.entities.disposition), if (mode == .entities) .required else .not_applicable), state.content.entities.disposition);
+            const finding = for (state.review.evidence) |evidence| {
+                if (evidence.requirement.kind == .entity_applicability) break evidence;
+            } else return error.MissingApplicabilityAssessment;
+            try std.testing.expectEqual(@as(@TypeOf(finding.finding), switch (mode) {
+                .no_entities, .entities => .supported,
+                .unjustified => .unsupported,
+                .missing_decision, .missing_text => .ambiguous,
+                .inconclusive => .inconclusive,
+            }), finding.finding);
+            const entry = for (state.review.result.entries) |result_entry| {
+                if (result_entry.requirement.kind == .entity_applicability) break result_entry;
+            } else return error.MissingApplicabilityAssessment;
+            try std.testing.expect(entry.outcome == .assessment_complete and entry.candidate_defect == null);
+            const detail = finding.review orelse return error.MissingApplicabilityAssessment;
+            if (mode == .unjustified) {
+                // The missing question is still corrected as invalid review
+                // data. Its semantic claim remains advice after admission.
+                try std.testing.expect(std.mem.startsWith(u8, detail.question.?, "Does the application involve any business entities or data? Please answer Yes or No."));
+                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
+                var corrected: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |call| if (call.id.model_attempt_ordinal.value > 1) {
+                    corrected += 1;
+                };
+                try std.testing.expectEqual(@as(usize, 1), corrected);
+            } else if (mode == .missing_decision or mode == .missing_text) {
+                try std.testing.expectEqualStrings(samples.applicability_question, detail.question.?);
+                try std.testing.expectEqualStrings(samples.applicability_detail, detail.detail);
             }
+            assertion_context = "applicability configured principle assessment";
+            const principles = @import("../../src/domain/principle_registry.zig");
+            const live_registry = try @import("../../src/application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/principle_workflow.zig").registry_schema, principles.Registry);
+            try std.testing.expect(try principles.equal(a, live_registry.*, state.principle_assessment.registry));
+            try std.testing.expectEqualDeep(try principles.select(a, live_registry.*, .{ .stage = .spec, .environment = null, .fileKind = null }), state.principle_assessment.selection);
+            const assessment = @import("../../src/domain/principle_assessment.zig");
+            const business_inputs = try @import("../../src/application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+            const business = try assessment.businessInput(a, business_inputs);
+            try std.testing.expectEqualDeep(try assessment.subjects(a, business), state.principle_assessment.requirements);
+            const projected_assessment = try assessment.project(a, .{ .business = business, .registry = live_registry.*, .selection = state.principle_assessment.selection });
+            // Only this mode installs a core principle; other_applicability
+            // changes its text, not whether the registry has selected content.
+            if (mode == .no_entities) {
+                try std.testing.expect(state.principle_assessment.registry.sources.len > 0);
+                try std.testing.expect(state.principle_assessment.registry.chunks.len > 0);
+                try std.testing.expect(state.principle_assessment.selection.chunks.len > 0);
+                try std.testing.expect(driver.principle_calls > 0);
+                try std.testing.expect(state.principle_assessment.evidence.len > 0);
+                try std.testing.expectEqual(.conflicting, state.principle_assessment.evidence[0].finding);
+            } else {
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.registry.sources.len);
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.registry.chunks.len);
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.selection.chunks.len);
+                try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
+                try std.testing.expectEqual(@as(usize, 0), projected_assessment.seeds.len);
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.evidence.len);
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.candidates.len);
+                try std.testing.expectEqual(@as(usize, 0), state.principle_assessment.result.entries.len);
+            }
+            try std.testing.expectEqual(.all_resolved, state.principle_assessment.result.continuation);
+            for (state.principle_assessment.result.entries) |policy_entry| try std.testing.expect(policy_entry.outcome == .assessment_complete and policy_entry.candidate_defect == null);
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/clarify/S01.md", .{}));
         }
-        if (scenario == 3) try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
+        if (scenario == 3) {
+            try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+            try std.testing.expect(driver.principle_calls > 0);
+        }
         if (disposition_scenario) {
             try driver.verifyDispositionSequence(result);
             if (expected == .ok) {
@@ -1848,105 +1920,74 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 defer readback.deinit();
                 const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
                 const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
-                try std.testing.expectEqual(@as(usize, 2), state.reference.dispositions.len);
-                try std.testing.expectEqual(@as(usize, 2), state.reference.signals.len);
+                // Two semantic repair subjects plus the native token remain
+                // fully accounted after the semantic-only disposition repair.
+                try std.testing.expectEqual(@as(usize, 3), state.reference.extraction.claims.len);
+                try std.testing.expectEqual(@as(usize, 3), state.reference.dispositions.len);
+                try std.testing.expectEqual(@as(usize, 3), state.reference.signals.len);
+                try std.testing.expectEqual(@as(usize, 1), state.coverage.obligations.len);
+                try std.testing.expect(state.coverage.obligations[0].exact_targets.len > 0);
                 try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
             } else try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
         }
         if (source_repair_scenario) {
-            try std.testing.expectEqual(@as(usize, 0), driver.admitted_losses.get(.candidate));
-            try std.testing.expectEqual(@as(usize, 0), driver.omission_repair_calls);
-            const owner: std.meta.Tag(@import("../../src/domain/source_omission.zig").Location) = switch (driver.source_loss.?) {
-                .empty, .partial => .extraction_claim,
-                .classification => .unlocalized,
-                .signal, .unchanged => .reconciliation_signal,
-                .false_conflict, .unchanged_conflict => .reconciliation_conflict,
-                .false_conflict_questions => .unlocalized,
+            const pre_generation = switch (driver.source_loss.?) {
+                .empty, .false_conflict, .unchanged_conflict, .false_conflict_questions => true,
+                .partial, .classification, .signal, .unchanged => false,
             };
-            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(owner));
-            if (driver.source_loss == .false_conflict_questions) try std.testing.expectEqual(@as(usize, 0), driver.loss_calls) else try std.testing.expect(driver.loss_calls > 0);
-            if (driver.source_loss == .false_conflict_questions) {
-                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.support_merges);
-                try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
+            if (pre_generation) {
+                const questions = driver.source_loss == .false_conflict_questions;
+                try std.testing.expectEqual(@as(usize, if (questions) 0 else 1), driver.source_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.admitted_losses.get(.candidate));
+                if (questions) {
+                    try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.support_merges + driver.support_repair_calls);
+                    try std.testing.expectEqual(@as(usize, 0), driver.generation_calls);
+                } else {
+                    try std.testing.expect(driver.loss_calls > 0);
+                    try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(if (driver.source_loss == .empty) .extraction_claim else .reconciliation_conflict));
+                }
                 const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
-            }
-            try std.testing.expectEqual(@as(usize, if (driver.source_loss == .false_conflict_questions or driver.source_loss == .classification) 0 else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) 2 else 1), driver.source_repair_calls);
-            if (driver.source_loss == .classification) {
-                // The joint collection cannot distinguish claim loss from an
-                // irrelevant token classification. Phase 0 forbids choosing a
-                // repairable culprit without a uniquely bound comparison.
-                try std.testing.expectEqual(@as(usize, 0), driver.classification_repair_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
-                try std.testing.expectEqual(driver.loss_calls, driver.uncertain_loss_calls);
+                if (driver.source_loss == .unchanged_conflict) {
+                    try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                    try std.testing.expectEqual(.unchanged_repair, result.execution_rejected.retry_limit.reason);
+                    try std.testing.expectEqual(@as(u64, 1), result.execution_rejected.retry_limit.completed_executions);
+                    try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+                } else if (driver.source_loss == .empty) {
+                    try std.testing.expectEqual(@as(usize, 1), driver.classification_repair_calls);
+                    try std.testing.expect(driver.classification_failure_origin == null);
+                    try std.testing.expect(driver.dependent_source_review_calls > 0);
+                    try std.testing.expect(driver.source_only_readiness_evidence > 0);
+                    try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                    try std.testing.expect(view.contains(.published_workflow_output));
+                } else if (driver.source_loss == .false_conflict) {
+                    try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_repair_calls);
+                    try std.testing.expect(driver.dependent_source_review_calls > 0);
+                    try std.testing.expect(driver.source_only_readiness_evidence > 0);
+                    try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                    const references = (try @import("../../src/application/specification_workflow.zig").readContext(&view)).references.records;
+                    try std.testing.expectEqual(@as(usize, 0), references.conflicts.len);
+                    try std.testing.expect(view.contains(.published_workflow_output));
+                }
+                if (expected == .failed) {
+                    try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
+                    try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                }
+            } else {
+                // These coherent, natively admitted references reached generation.
+                // A later semantic attribution cannot restart their producer.
+                try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+                try std.testing.expectEqual(@as(usize, 0), driver.classification_repair_calls + driver.reconciliation_repair_calls);
                 const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                const owned = @import("../../src/application/required_authority_values.zig");
-                const reviewed = try owned.read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support);
-                try std.testing.expect(reviewed == .accepted);
-                const finding = for (reviewed.accepted.candidate.review.entries) |entry| {
-                    if (entry.value.kind == .candidate_omission) break entry.value;
-                } else return error.MissingOmissionFinding;
-                try std.testing.expect(finding.loss == .unlocalized);
-                for (finding.preservation.?.response.assessments) |assessment| try std.testing.expectEqual(.uncertain, assessment.result);
-                // A candidate exists, but a reference-signal subject is not an
-                // independently repairable candidate slot. Uncertainty does
-                // not supply an upstream owner or a fallback local target.
-                const denied = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_omission_repair_workflow.zig").schema, .omission_rejected);
-                try std.testing.expectEqual(@as(usize, 1), denied.targets.len);
-                try std.testing.expectEqual(.unsupported_target, denied.targets[0].reason);
-                try std.testing.expect(denied.targets[0].requirement.unit == .signal and denied.targets[0].target == null);
-                try std.testing.expectEqualDeep(finding.loss, denied.targets[0].owner.?);
-                try std.testing.expectEqualDeep(finding.preservation.?.origin, denied.targets[0].comparison_origin);
-                try std.testing.expect(!view.contains(.source_omission_repair));
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                try std.testing.expect(!view.contains(.published_workflow_output));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            }
-            if (driver.source_loss == .empty) {
-                // Retiring the no-feature outcome clears its forced choices.
-                // The existing classification repair gate supplies fresh semantics.
-                try std.testing.expectEqual(@as(usize, 1), driver.classification_repair_calls);
-                try std.testing.expect(driver.classification_failure_origin == null);
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.published_workflow_output)] != null);
+                const reviewed = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+                var omissions: usize = 0;
+                for (reviewed.review.entries) |finding| if (finding.value.kind == .candidate_omission) {
+                    omissions += 1;
+                    try std.testing.expect(finding.value.preservation == null and finding.value.loss == .unlocalized);
+                };
+                try std.testing.expect(omissions > 0);
             }
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) {
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            }
-            if (driver.source_loss == .false_conflict or driver.source_loss == .partial) {
-                var readback: std.heap.ArenaAllocator = .init(allocator);
-                defer readback.deinit();
-                const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
-                if (driver.source_loss == .false_conflict) {
-                    try std.testing.expectEqual(@as(usize, 3), state.reference.dispositions.len);
-                    try std.testing.expectEqual(@as(usize, 3), state.reference.signals.len);
-                    try std.testing.expectEqual(@as(usize, 0), state.reference.conflicts.len);
-                    try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
-                    try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
-                    // One atomic edit repairs the false conflict. Restored
-                    // groups rebuild without two additional coverage edits.
-                    try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_repair_calls);
-                } else {
-                    var requirements: usize = 0;
-                    var outcomes: usize = 0;
-                    for (state.content.records) |record| switch (record.proposal.content) {
-                        .functional_requirement => requirements += 1,
-                        .user_visible_outcome => outcomes += 1,
-                        else => {},
-                    };
-                    try std.testing.expectEqual(@as(usize, 2), requirements);
-                    try std.testing.expectEqual(@as(usize, 0), outcomes);
-                }
-                try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
-            }
         }
         if (extraction_omission) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
@@ -1964,60 +2005,47 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             try std.testing.expectEqualDeep(diagnostic, copied);
             try std.testing.expect(driver.initial_source_review_calls > 0);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);
+            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
         }
         if (source_gaps) {
-            // Reproduce the semantic failure, not a genuine source gap: the fake
-            // reviewer requests seven missing fields despite supplied intent.
-            // This protects observed routing/accounting, not prompt effectiveness.
+            // A model-invented source gap after generation remains visible advice.
+            try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?.support_findings;
+            const reviewed = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+            const inputs = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            const ledger = try @import("../../src/domain/required_authority.zig").build(arena.allocator(), inputs);
             var negative: usize = 0;
-            for (diagnostic.evidence) |entry| if (entry.requirement.kind == .feature_intent and entry.requirement.unit == .feature) {
-                try std.testing.expectEqual(.unsupported, entry.finding);
+            for (reviewed.review.entries) |entry| {
+                const id = ledger.requirements[entry.requirement_ordinal - 1].seed.id;
+                if (id.kind != .feature_intent or id.unit != .feature) continue;
+                try std.testing.expectEqual(.unsupported, entry.value.kind);
                 negative += 1;
-            };
+            }
             try std.testing.expectEqual(@as(usize, 7), negative);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            // A pending specification does not establish completed specification authority.
-            try std.testing.expect(!view.contains(.specification_publication_state));
-            try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
-            const needs = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/clarification_refresh_workflow.zig").needs_schema, @import("../../src/domain/clarification_refresh.zig").Needs);
-            for (needs.entries, 0..) |need, index| {
-                try std.testing.expect(std.mem.indexOf(u8, need.question, "Current source evidence") != null);
-                try std.testing.expect(!std.mem.eql(u8, need.question, need.why_required));
-                for (needs.entries[0..index]) |earlier| try std.testing.expect(!std.mem.eql(u8, earlier.question, need.question));
-            }
         }
         if (evidence_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expect(!view.contains(.specification_publication_state));
             if (driver.evidence_fault == .recover) {
-                const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?;
-                // Protocol correction preserves every negative verdict, including
-                // the generated record fields now present at review time.
-                for (diagnostic.support_findings.evidence) |entry| {
-                    const expected_finding: @TypeOf(entry.finding) = if (entry.requirement.kind == .entity_applicability or entry.requirement.unit == .token)
-                        .supported
-                    else
-                        .unsupported;
-                    try std.testing.expectEqual(expected_finding, entry.finding);
-                    if (entry.requirement.kind == .entity_applicability) try std.testing.expectEqual(.no_business_data, entry.resolution.not_applicable);
+                try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+                const reviewed = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+                for (reviewed.review.entries, reviewed.origins) |entry, origin| {
+                    try std.testing.expect(origin != null);
+                    try std.testing.expect(entry.value.kind == .supported or entry.value.kind == .unsupported);
                 }
             } else {
                 const review_progress = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support);
-                try std.testing.expect(review_progress == .pending);
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-                try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
-                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expect(review_progress == .accepted);
+                try std.testing.expectEqual(.protocol_exhausted, review_progress.accepted.inputs.advice_stop.?.reason);
+                try std.testing.expectEqual(@as(u64, 2), driver.protocol_advice.get(.source).?.exhaustion.completed_executions);
+                try std.testing.expectEqual(@as(u32, 1), driver.protocol_advice.get(.source).?.exhaustion.limit.value);
             }
         }
         if (fault != null and fault.?.reviewShape()) {
@@ -2039,9 +2067,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             if (exhausted) {
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expect(protocol_advice);
+                const accepted = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted;
+                try std.testing.expectEqual(.protocol_exhausted, accepted.inputs.advice_stop.?.reason);
             } else {
                 const accepted = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted;
                 try std.testing.expectEqual(@as(u32, 2), accepted.candidate.origin.?.attempt.value);
@@ -2168,20 +2196,21 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (protocol_text_scenario) {
             try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
-            try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);
-            try std.testing.expectEqual(@as(usize, if (scenario == protocol_text_start + 1) 1 else 0), driver.unchanged_reconciliation_merges);
+            try std.testing.expectEqual(@as(usize, if (scenario == protocol_text_start + 1) 0 else 1), driver.reconciliation_merges);
+            try std.testing.expectEqual(@as(usize, 0), driver.unchanged_reconciliation_merges);
             if (scenario == protocol_text_start + 1) {
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?.reconciliation;
-                try std.testing.expectEqual(@as(u64, 2), diagnostic.revision);
-                try std.testing.expectEqual(@as(u32, 2), diagnostic.origin.?.attempt.value);
+                try std.testing.expectEqual(.unchanged_repair, result.execution_rejected.retry_limit.reason);
+                try std.testing.expectEqual(@as(u64, 1), result.execution_rejected.retry_limit.completed_executions);
+                try std.testing.expectEqual(@as(u64, 1), diagnostic.revision);
+                try std.testing.expectEqual(@as(u32, 1), diagnostic.origin.?.attempt.value);
                 try std.testing.expectEqual(.invalid_scalar, diagnostic.issue.expected.text_issue.reason);
                 var observations: std.heap.ArenaAllocator = .init(allocator);
                 defer observations.deinit();
                 const merges = try @import("../../src/application/candidate_repair_observations.zig").read(observations.allocator(), &.{ .slots = runner.envelope.slots });
-                try std.testing.expectEqual(@as(usize, 1), merges.len);
-                try std.testing.expect(!merges[0].changed);
-                try std.testing.expectEqualDeep(diagnostic.origin, merges[0].origin);
+                try std.testing.expectEqual(@as(usize, 0), merges.len);
+                try std.testing.expect(runner.repair_retry.currentPermit() != null);
             }
         }
 
@@ -2224,9 +2253,20 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
             const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
             if (driver.failed_text_repair) {
-                try std.testing.expectEqual(@as(usize, 2), driver.text_repair_calls);
+                try std.testing.expectEqual(@as(usize, 1), driver.text_repair_calls);
+                try std.testing.expectEqual(.unchanged_repair, result.execution_rejected.retry_limit.reason);
+                try std.testing.expectEqual(@as(u64, 1), result.execution_rejected.retry_limit.completed_executions);
                 try std.testing.expect(diagnostic == .extraction_text);
                 try std.testing.expectEqual(.invalid_scalar, diagnostic.extraction_text.issue.reason);
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                const extraction = @import("../../src/application/reference_extraction_workflow.zig");
+                const retained = (try extraction.read(&view, extraction.parsed_schema, .parsed)).payload().parsed;
+                try std.testing.expectEqual(diagnostic.extraction_text.revision, retained.revision);
+                try std.testing.expect(retained.last_repair == null);
+                try std.testing.expect(runner.repair_retry.currentPermit() != null);
+                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
             } else {
                 try std.testing.expect(diagnostic == .reconciliation);
                 try std.testing.expectEqual(@as(u64, 1), diagnostic.reconciliation.revision);
@@ -2234,13 +2274,15 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
                 try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
+                // Self/foreign relation IDs fail protocol admission, so even
+                // the repeated response consumes the numeric correction bound.
+                try std.testing.expectEqual(.retry_limit, result.execution_rejected.retry_limit.reason);
             }
             const origin = diagnostic.origin().?;
             const identities = try @import("../../src/application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
             var matches: usize = 0;
             for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation.id)) {
-                const purpose: std.meta.Tag(@TypeOf(operation.id.model_request_id.purpose)) = if (repeated_scenario) .initial_generation else .atomic_repair;
-                try std.testing.expectEqual(purpose, std.meta.activeTag(operation.id.model_request_id.purpose));
+                try std.testing.expectEqual(.initial_generation, std.meta.activeTag(operation.id.model_request_id.purpose));
                 matches += 1;
             };
             try std.testing.expectEqual(@as(usize, 1), matches);
@@ -2249,9 +2291,13 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             // Missing citations are rejected by the complete schema and
             // corrected as a whole response. Unknown ranges still reach the
             // native scoped-selection repair boundary.
-            try std.testing.expectEqual(@as(usize, if (driver.citation_fault == .missing) 0 else 2), driver.citation_repair_calls);
-            const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
+            try std.testing.expectEqual(@as(usize, if (driver.citation_fault == .missing) 0 else if (driver.failed_citation_repair) 1 else 2), driver.citation_repair_calls);
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view);
             if (driver.failed_citation_repair) {
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                try std.testing.expectEqual(.unchanged_repair, result.execution_rejected.retry_limit.reason);
+                try std.testing.expectEqual(@as(u64, 1), result.execution_rejected.retry_limit.completed_executions);
                 try std.testing.expect(diagnostic != null and diagnostic.? == .source_selections);
                 const rejected = diagnostic.?.source_selections;
                 try std.testing.expectEqual(.unknown_selection, rejected.issue.reason);
@@ -2263,20 +2309,77 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 var matching: usize = 0;
                 const identities = try @import("../../src/application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
                 for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation.id)) {
-                    try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
+                    try std.testing.expect(operation.id.model_request_id.purpose == .initial_generation);
                     matching += 1;
                 };
                 try std.testing.expectEqual(@as(usize, 1), matching);
+                const extraction = @import("../../src/application/reference_extraction_workflow.zig");
+                const retained_text = (try extraction.read(&view, extraction.text_schema, .text_validated)).payload().text_validated;
+                try std.testing.expectEqual(rejected.revision, retained_text.revision);
+                try std.testing.expect(retained_text.last_repair == null);
+                try std.testing.expect(runner.repair_retry.currentPermit() != null);
+                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
             } else try std.testing.expect(diagnostic == null);
         }
         if (classification_scenario) {
-            try std.testing.expectEqual(@as(usize, if (scenario == classification_repair_start) 1 else 2), driver.classification_repair_calls);
-            const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
+            assertion_context = "classification-send-count";
+            try std.testing.expectEqual(@as(usize, if (driver.malformed_classification_repair_once) 2 else 1), driver.classification_repair_calls);
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const diagnostic = try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view);
             if (driver.failed_classification_repair) {
+                assertion_context = "classification-native-candidate";
+                const extraction = @import("../../src/application/reference_extraction_workflow.zig");
+                const retained = (try extraction.read(&view, extraction.text_schema, .text_validated)).payload().text_validated;
+                errdefer std.debug.print("classification-failure result={s}/{s} reason={s} completed={d} sends={d} diagnostic={s} missing={d} origin_null={} revision={d} last_repair={} permit={} published={} clarifications={}\n", .{
+                    @tagName(result),
+                    if (result == .execution_rejected) @tagName(result.execution_rejected) else "none",
+                    if (result == .execution_rejected and result.execution_rejected == .retry_limit) @tagName(result.execution_rejected.retry_limit.reason) else "none",
+                    if (result == .execution_rejected and result.execution_rejected == .retry_limit) result.execution_rejected.retry_limit.completed_executions else 0,
+                    driver.classification_repair_calls,
+                    if (diagnostic) |value| @tagName(value) else "none",
+                    if (diagnostic != null and diagnostic.? == .token_classifications) diagnostic.?.token_classifications.issues.missing.len else 0,
+                    diagnostic != null and diagnostic.? == .token_classifications and diagnostic.?.token_classifications.origin == null,
+                    retained.revision,
+                    retained.last_repair != null,
+                    runner.repair_retry.currentPermit() != null,
+                    view.contains(.published_workflow_output),
+                    view.contains(.clarification_needs),
+                });
+                // Repeating the rejected empty classifications exhausts the
+                // active defect without applying a candidate or new revision.
+                assertion_context = "classification-unchanged-outcome";
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                try std.testing.expectEqual(.unchanged_repair, result.execution_rejected.retry_limit.reason);
+                try std.testing.expectEqual(@as(u64, 1), result.execution_rejected.retry_limit.completed_executions);
+                assertion_context = "classification-diagnostic-kind";
                 try std.testing.expect(diagnostic != null and diagnostic.? == .token_classifications);
+                assertion_context = "classification-missing-entry";
                 try std.testing.expect(diagnostic.?.token_classifications.issues.missing.len != 0);
+                // Missing entries have no producer; the separate original
+                // collection receipt remains unchanged and is never rebased.
+                assertion_context = "classification-missing-origin";
+                try std.testing.expect(diagnostic.?.token_classifications.origin == null);
+                try std.testing.expectEqual(diagnostic.?.token_classifications.revision, retained.revision);
+                assertion_context = "classification-no-applied-repair";
+                try std.testing.expect(retained.last_repair == null);
+                var retained_collections: usize = 0;
+                for (retained.entries) |entry| if (entry.scope.chunk_id.eql(diagnostic.?.token_classifications.scope.chunk_id)) {
+                    try std.testing.expectEqual(@as(usize, 0), entry.token_classifications.len);
+                    try std.testing.expectEqualDeep(driver.classification_original_origin, if (entry.producers) |producers| producers.classifications else entry.origin);
+                    retained_collections += 1;
+                };
+                try std.testing.expectEqual(@as(usize, 1), retained_collections);
+                assertion_context = "classification-active-permit";
+                try std.testing.expect(runner.repair_retry.currentPermit() != null);
+                assertion_context = "classification-no-publication";
+                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
             } else try std.testing.expect(diagnostic == null);
         }
+        assertion_context = "later-stage-evidence";
         if (driver.repeated_provenance_fault and fault != null) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const ledger = runner.tokenLedger();
@@ -2325,7 +2428,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             },
             .persistent => {
-                const exhausted = result.execution_rejected.retry_limit;
+                const exhausted = if (protocol_advice) driver.protocol_advice.get(.source).?.exhaustion else result.execution_rejected.retry_limit;
                 var matched = false;
                 for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
                     try std.testing.expectEqualStrings("advance-model-attempt-accounting", step.operation_id.bytes);
@@ -2396,22 +2499,29 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             _ = try @import("../../src/domain/specification_markdown.zig").parse(arena.allocator(), rendered);
             try std.testing.expect((try @import("../../src/application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/specification_rendering_workflow.zig").validated_schema, bool)).*);
         }
-        if (driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) {
+        if (driver.support_fault == .inconclusive) try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+        if (fault != null and fault.?.shape == .inconclusive) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
-            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
+            try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
         }
         if (support_scenario) {
+            assertion_context = "support-applied-merges";
+            errdefer std.debug.print("support-failure fault={s} applied={d} physical={d} reason={s} limit={d} completed={d}\n", .{
+                @tagName(driver.support_fault.?),
+                driver.support_merges,
+                driver.support_repair_calls,
+                if (result == .execution_rejected and result.execution_rejected == .retry_limit) @tagName(result.execution_rejected.retry_limit.reason) else "none",
+                if (result == .execution_rejected and result.execution_rejected == .retry_limit) result.execution_rejected.retry_limit.limit.value else 0,
+                if (result == .execution_rejected and result.execution_rejected == .retry_limit) result.execution_rejected.retry_limit.completed_executions else 0,
+            });
             const merges: usize = switch (driver.support_fault.?) {
                 .foreign_sources, .foreign_source_single => 0,
                 .question_recover, .question_native_exhaust => 2,
                 .question_exhaust, .inconclusive, .missing_detail => 0,
                 .question_evidence_recover, .question_evidence_alternating, .question_evidence_exhaust => 4,
-                .question_mixed_exhaust => 1,
+                .question_mixed_exhaust => 0,
             };
             try std.testing.expectEqual(merges, driver.support_merges);
             const retry_observations = try runner.retryObservations(allocator);
@@ -2419,20 +2529,24 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 for (retry_observations) |observation| observation.deinit(allocator);
                 allocator.free(retry_observations);
             }
-            var recorded_merges: u64 = 0;
+            var admitted_merge_attempts: u64 = 0;
             for (retry_observations) |observation| for (graph.authority.steps) |step| {
                 if (!std.mem.eql(u8, step.id.bytes, observation.step) or !std.mem.eql(u8, step.operation_id.bytes, "merge-specification-support-repair")) continue;
                 try std.testing.expectEqual(.repair, observation.scope);
                 try std.testing.expectEqual(@as(u64, 0), observation.operation_executions);
-                for (observation.defects) |defect| recorded_merges += defect.completed_executions;
+                for (observation.defects) |defect| admitted_merge_attempts += defect.completed_executions;
             };
-            try std.testing.expectEqual(@as(u64, merges), recorded_merges);
+            // An unchanged admitted repair consumes the existing allowance,
+            // but its discarded delta does not count as an applied merge.
+            assertion_context = "support-admitted-merge-attempts";
+            try std.testing.expectEqual(@as(u64, merges + @intFromBool(driver.support_fault == .question_mixed_exhaust)), admitted_merge_attempts);
             const calls: usize = switch (driver.support_fault.?) {
                 .question_recover => 4,
                 .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => 4,
                 .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => 2,
                 else => merges,
             };
+            assertion_context = "support-physical-repair-calls";
             try std.testing.expectEqual(calls, driver.support_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
@@ -2461,39 +2575,76 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                         try std.testing.expect(current == .accepted);
                         try project.dir.access(io, "requirements/current/chosen/spec.md", .{});
                     } else {
-                        try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                        try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-                        try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
-                        // The next foreign source selection never enters native
-                        // review; previously admitted verdicts and origins stay fixed.
-                        try std.testing.expect(current == .pending);
-                        try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
-                        try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                        try std.testing.expect(protocol_advice);
+                        const exhausted = driver.protocol_advice.get(.source).?.exhaustion;
+                        try std.testing.expectEqual(@as(u64, 2), exhausted.completed_executions);
+                        try std.testing.expectEqual(@as(u32, 1), exhausted.limit.value);
+                        // Foreign wire evidence never enters native review. The
+                        // valid prefix and its original origins remain retained.
+                        try std.testing.expect(current == .accepted);
+                        try std.testing.expectEqual(.protocol_exhausted, current.accepted.inputs.advice_stop.?.reason);
                     }
                 },
                 .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
                     const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                    const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?;
                     if (driver.support_fault == .question_recover) {
-                        try std.testing.expect(diagnostic == .support_findings);
-                        for (diagnostic.support_findings.evidence[0..2]) |finding| {
-                            try std.testing.expectEqual(.unsupported, finding.finding);
-                            try std.testing.expectEqualStrings("What duration applies? State the duration and starting event.", finding.review.?.question.?);
+                        try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+                        const reviewed = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+                        for (reviewed.review.entries[0..2]) |finding| {
+                            try std.testing.expectEqual(.unsupported, finding.value.kind);
+                            try std.testing.expectEqualStrings("What duration applies? State the duration and starting event.", finding.value.question.?);
                         }
-                        for (diagnostic.support_findings.origins[2..]) |origin| try std.testing.expect(origin != null);
-                        try project.dir.access(io, "requirements/current/chosen/spec.md", .{});
+                    } else if (driver.support_fault == .question_exhaust) {
+                        try std.testing.expect(protocol_advice);
+                        const stopped = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted;
+                        try std.testing.expectEqual(.protocol_exhausted, stopped.inputs.advice_stop.?.reason);
+                        try std.testing.expectEqual(@as(usize, 0), stopped.candidate.review.entries.len);
+                        try std.testing.expect(driver.protocol_advice.get(.source).?.repair);
                     } else {
+                        const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?;
                         try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                        try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-                        try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
+                        try std.testing.expect(driver.protocol_advice.get(.source) == null);
+                        const unchanged = driver.support_fault == .question_mixed_exhaust;
+                        assertion_context = "support-exhaustion-count";
+                        try std.testing.expectEqual(@as(u64, if (unchanged) 1 else 2), result.execution_rejected.retry_limit.completed_executions);
+                        assertion_context = "support-exhaustion-reason";
+                        try std.testing.expectEqual(@as(@import("../../src/domain/workflow_retry.zig").Exhaustion.Reason, if (unchanged) .unchanged_repair else .retry_limit), result.execution_rejected.retry_limit.reason);
+                        // The unchanged merge exhausts its own repair limit of
+                        // two. Native invalid finding data can also exhaust the
+                        // model-request allowance; it supplies no sealed model-
+                        // protocol stop receipt. Neither invents used attempts.
+                        assertion_context = "support-exhaustion-owner-limit";
+                        const exhausted = result.execution_rejected.retry_limit;
+                        try std.testing.expectEqual(@as(u32, if (unchanged) 2 else 1), exhausted.limit.value);
+                        var bound_owners: usize = 0;
+                        for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
+                            const authority = step.retry_authority.?;
+                            try std.testing.expectEqual(exhausted.limit.value, authority.limit.value);
+                            try std.testing.expectEqual(@as(@import("../../src/domain/workflow_retry.zig").Scope, if (unchanged) .repair else .model_request), authority.scope);
+                            if (unchanged) try std.testing.expectEqualStrings("merge-specification-support-repair", step.operation_id.bytes);
+                            bound_owners += 1;
+                        };
+                        try std.testing.expectEqual(@as(usize, 1), bound_owners);
+                        assertion_context = "support-retained-diagnostic";
                         try std.testing.expect(diagnostic == .support);
                         const issues = diagnostic.support.diagnostics;
-                        try std.testing.expectEqual(@as(usize, 1), issues.len);
-                        try std.testing.expectEqual(.invalid_question, issues[0].issue);
+                        // The whole brief assignment retains both invalid member
+                        // questions; a narrow repair cannot discard its sibling.
+                        try std.testing.expectEqual(@as(usize, 2), issues.len);
+                        for (issues, 1..) |issue, ordinal| {
+                            try std.testing.expectEqual(.invalid_question, issue.issue);
+                            try std.testing.expectEqual(@as(u32, @intCast(ordinal)), issue.ordinal.?);
+                        }
                         const retained = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).rejected.candidate.?;
                         const support_workflow = @import("../../src/application/specification_support_workflow.zig");
                         const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
                         try std.testing.expectEqual(@as(u64, @intCast(try sourceReviewAssignments(allocator, inputs, retained) + merges)), issues[0].revision);
+                        if (unchanged) {
+                            // Preserve the exact native scalar fault and its retained
+                            // no-progress authority; composition defects use protocol correction.
+                            try std.testing.expectEqualStrings("Invalid scalar\x01", retained.review.entries[0].value.question.?);
+                            try std.testing.expect(runner.repair_retry.currentPermit() != null);
+                        }
                         for (retained.origins[1..]) |origin| try std.testing.expect(origin != null);
                         try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
@@ -2502,243 +2653,115 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 else => {},
             }
             if (driver.support_fault == .missing_detail) {
-                const diagnostic = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
-                try std.testing.expect(diagnostic == .support_findings);
-                try std.testing.expectEqual(.ambiguous, diagnostic.support_findings.evidence[0].finding);
-                try std.testing.expect(diagnostic.support_findings.origins[0] != null);
-                // The empty detail is corrected as a complete response before
-                // native support repair; the final finding keeps that origin.
-                try std.testing.expectEqualDeep(diagnostic.support_findings.origin.?, diagnostic.support_findings.origins[0].?);
-                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.support_merges);
+                try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                const candidate = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+                try std.testing.expectEqual(.ambiguous, candidate.review.entries[0].value.kind);
+                try std.testing.expect(candidate.origins[0] != null);
+                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
             }
         }
-        if (story_scenario) {
+        if (story_scenario or finding_control != null or record_control != null or candidate_omission) {
+            if (!candidate_omission) try verifyAdvisorySpecification(io, allocator, project.dir, &runner, &driver, boot.ready.workflows.registry().contractSource());
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-            try std.testing.expect(driver.loss_calls > 0);
-            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
-            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
-            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            // Repaired output must traverse full authority, rendering and stored
-            // state validation; a successful merge alone is not publication.
-            if (driver.story_omission == .recover) {
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_repair_calls);
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_merges);
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_resolutions);
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                try std.testing.expect(view.contains(.published_workflow_output));
-                var readback: std.heap.ArenaAllocator = .init(allocator);
-                defer readback.deinit();
-                const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const persisted = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
-                try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
-                try std.testing.expectEqualDeep(session.units[1].?.response.content.primary_user_story, persisted.content.primary_user_story);
-                try verifyRetainedStoryReviews(allocator, &runner, driver.candidate_review_calls, persisted);
-                const context = try @import("../../src/application/specification_workflow.zig").readContext(&view);
-                const rendered_story = try @import("../../src/domain/specification_projection.zig").scalar(readback.allocator(), context, persisted.content.primary_user_story);
-                const obligation = if ((scenario - story_start) % 2 == 0) "current UTC date and time" else "new return deadline";
-                const literal = if ((scenario - story_start) % 2 == 0) "MOCK Hello!" else "MOCK Renewed!";
-                try std.testing.expect(std.mem.indexOf(u8, rendered_story.bytes, obligation) != null);
-                try std.testing.expect(std.mem.indexOf(u8, rendered_story.bytes, literal) != null);
-                try std.testing.expect(std.mem.indexOf(u8, rendered_story.bytes, "kind exact_copy") == null);
-                try project.dir.access(io, "requirements/current/chosen/spec.md", .{});
-            } else {
-                try std.testing.expectEqual(@as(usize, 0), driver.omission_resolutions);
-                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
-                if (driver.story_omission == .invalid_repair) {
-                    // Protocol-valid whitespace drops the authorized exact
-                    // reference: merge rejects without granting another repair.
-                    try std.testing.expect(result == .execution_rejected and result.execution_rejected == .operation_failed);
-                    try std.testing.expectEqual(error.InvalidReferenceReconciliation, result.execution_rejected.operation_failed);
-                    try std.testing.expectEqualStrings("merge-specification-omission-repair", driver.rejected_operation.?);
-                    try std.testing.expectEqual(@as(usize, 0), driver.omission_merges);
-                    try std.testing.expectEqual(@as(usize, 1), driver.omission_repair_calls);
-                    try std.testing.expect(session.units[1].?.last_repair == null);
-                } else {
-                    try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                    const exhausted = result.execution_rejected.retry_limit;
-                    try std.testing.expectEqual(@as(u64, exhausted.limit.value) + 1, exhausted.completed_executions);
-                    try std.testing.expect(driver.omission_merges > 1);
-                    try std.testing.expect(driver.candidate_review_calls > driver.omission_merges);
-                    try std.testing.expectEqualDeep(driver.omission_keys[0].?, session.units[1].?.last_repair.?.retry.?.key);
-                    const inputs = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
-                    const story: @import("../../src/domain/required_authority.zig").Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story };
-                    const slot = try @import("../../src/domain/specification_support.zig").reviewSlot(allocator, inputs, story);
-                    defer allocator.free(slot);
-                    var story_requests: usize = 0;
-                    for (runner.tokenLedger().accounted_operations.items) |operation| {
-                        const request = operation.id.model_request_id;
-                        if (request.purpose != .semantic_review or operation.id.model_attempt_ordinal.value != 1) continue;
-                        if (std.mem.eql(u8, request.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, slot)) story_requests += 1;
-                    }
-                    // Negative evidence is reassessed on every repaired candidate;
-                    // receipt retention cannot resolve an unchanged omission.
-                    try std.testing.expectEqual(driver.omission_merges + 1, story_requests);
+            const current = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support);
+            try std.testing.expect(current == .accepted);
+            const candidate = current.accepted.candidate;
+            try std.testing.expect(candidate.pending_localization == null);
+            var omissions: usize = 0;
+            for (candidate.review.entries, candidate.origins) |finding, origin| {
+                try std.testing.expect(origin != null);
+                if (finding.value.kind == .candidate_omission) {
+                    omissions += 1;
+                    try std.testing.expect(finding.value.preservation == null);
+                    try std.testing.expect(finding.value.loss == .unlocalized);
                 }
             }
-        }
-        if (finding_control) |control| {
-            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            try std.testing.expectEqual(@as(usize, 1), driver.loss_calls);
-            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
-            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls + driver.support_repair_calls);
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            if (control != .unbound_association) {
-                // Unresolved attribution grants no upstream rebuilding, while
-                // independently authorized exact candidate-local checks remain
-                // available. A false finding can likewise reach this owner;
-                // native checks do not detect the mock's semantic falsity.
-                try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(if (control == .uncertain) .unlocalized else .candidate));
-                try std.testing.expectEqual(@as(usize, @intFromBool(control == .uncertain)), driver.uncertain_loss_calls);
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_repair_calls);
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_merges);
-                try std.testing.expectEqual(@as(usize, @intFromBool(control == .false_candidate)), driver.unchanged_omission_merges);
-                try std.testing.expectEqual(@as(usize, 1), driver.omission_resolutions);
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                try std.testing.expect(view.contains(.published_workflow_output));
-                var readback: std.heap.ArenaAllocator = .init(allocator);
-                defer readback.deinit();
-                const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-                const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-                if (restored.value != .specified) std.debug.print("finding control {s} persisted stage: {s}\n", .{ @tagName(control), @tagName(restored.value) });
-                try std.testing.expect(restored.value == .specified);
-                const persisted = restored.specified().?;
-                const published_candidate = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
-                try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
-                try std.testing.expectEqualDeep(published_candidate.primary_user_story, persisted.content.primary_user_story);
-            } else {
-                try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.source_association));
-                try std.testing.expectEqual(@as(usize, 0), driver.omission_repair_calls + driver.omission_merges + driver.omission_resolutions);
-                const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-                try std.testing.expect(session.units[1] != null);
-                try std.testing.expect(session.units[1].?.last_repair == null);
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                const reviewed = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support);
-                try std.testing.expect(reviewed == .accepted);
-                const finding = for (reviewed.accepted.candidate.review.entries) |entry| {
-                    if (entry.value.kind == .candidate_omission) break entry.value;
-                } else return error.MissingOmissionFinding;
-                const proof = finding.preservation.?;
-                try std.testing.expect(proof.origin != null);
-                // Typed attribution is retained even though this producer has
-                // no accepted recovery permission. It cannot create a model
-                // repair request or a publication candidate.
-                try std.testing.expectEqualDeep(@import("../../src/domain/required_authority.zig").Id{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }, finding.loss.source_association);
-                const denied = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_omission_repair_workflow.zig").schema, .omission_rejected);
-                try std.testing.expect(!view.contains(.source_omission_repair));
-                try std.testing.expectEqual(@as(usize, 1), denied.targets.len);
-                try std.testing.expectEqual(.unsupported_owner, denied.targets[0].reason);
-                try std.testing.expectEqualDeep(finding.loss, denied.targets[0].owner.?);
-                try std.testing.expectEqualDeep(proof.origin, denied.targets[0].comparison_origin);
-                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
-            }
-        }
-        if (record_control) |control| {
-            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
-            try std.testing.expect(runner.repair_retry.currentPermit() == null);
-            try std.testing.expect(view.contains(.published_workflow_output));
-            switch (control) {
+            if (story_scenario or candidate_omission or driver.advisory_control == .false_omission or driver.advisory_control == .unbound_association or driver.record_review == .two_omissions) try std.testing.expect(omissions > 0);
+            if (record_control) |control| switch (control) {
                 .two_omissions => {
-                    try std.testing.expectEqual(@as(usize, 3), driver.record_batch_calls);
-                    try std.testing.expectEqual(@as(usize, 3), driver.loss_calls);
-                    try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
+                    try std.testing.expectEqual(@as(usize, 2), omissions);
+                    try std.testing.expectEqual(@as(usize, 1), driver.record_batch_requests);
                     try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
-                    try std.testing.expectEqual(@as(usize, 2), driver.omission_repair_calls);
-                    try std.testing.expectEqual(@as(usize, 2), driver.omission_merges);
-                    try std.testing.expectEqual(@as(usize, 2), driver.omission_resolutions);
-                    try std.testing.expectEqual(@as(usize, 3), driver.record_loss_count);
-                    const first = driver.record_losses[0].?;
-                    const second = driver.record_losses[1].?;
-                    const reassessed = driver.record_losses[2].?;
-                    try std.testing.expectEqual(.given, first.requirement.slot);
-                    try std.testing.expectEqual(.then, second.requirement.slot);
-                    try std.testing.expectEqualDeep(first.requirement.unit, second.requirement.unit);
-                    try std.testing.expectEqualDeep(first.review_origin, second.review_origin);
-                    try std.testing.expect(first.comparison_origin.request.value != second.comparison_origin.request.value);
-                    try std.testing.expectEqualDeep(second.requirement, reassessed.requirement);
-                    try std.testing.expect(reassessed.review_origin.request.value != second.review_origin.request.value);
+                    var same_record_origin: ?@import("../../src/domain/model_candidate_origin.zig").Origin = null;
+                    for (candidate.review.entries, candidate.origins) |finding, origin| if (finding.value.kind == .candidate_omission) {
+                        if (same_record_origin) |first| try std.testing.expectEqualDeep(first, origin.?) else same_record_origin = origin;
+                    };
+                    const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+                    var content_arena: std.heap.ArenaAllocator = .init(allocator);
+                    defer content_arena.deinit();
+                    const content = try @import("../../src/domain/specification_session.zig").assemble(content_arena.allocator(), @import("../../src/test_fixtures/reference_text.zig").validator, try @import("../../src/application/specification_workflow.zig").readContext(&view), session);
+                    const criterion = for (content.content.records) |record| {
+                        if (record.id.kind == .acceptance_criterion and record.id.ordinal == 1) break record.proposal.content.acceptance_criterion;
+                    } else return error.MissingAcceptanceCriterion;
+                    try std.testing.expectEqualStrings("A librarian holds a loan.", criterion.given.segments[0].literal.value);
+                    try std.testing.expectEqualStrings("Renewal is requested.", criterion.when.segments[0].literal.value);
                 },
                 .invalid_middle => {
-                    try std.testing.expectEqual(@as(usize, 1), driver.record_batch_calls);
-                    try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.omission_repair_calls + driver.omission_merges);
+                    try std.testing.expectEqual(@as(usize, 1), driver.record_batch_requests);
                     try std.testing.expectEqual(@as(usize, 1), driver.support_repair_calls);
                     try std.testing.expectEqual(@as(usize, 1), driver.support_merges);
                     try std.testing.expect(driver.record_middle_repaired);
                 },
-            }
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            var readback: std.heap.ArenaAllocator = .init(allocator);
-            defer readback.deinit();
-            const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-            const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-            try std.testing.expect(restored.specified() != null);
-            const persisted = restored.specified().?;
-            try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
-            for (persisted.review.result.entries) |entry| try std.testing.expect(entry.candidate_defect == null);
-            if (control == .two_omissions) {
-                const criterion = for (persisted.content.records) |record| {
-                    if (record.id.kind == .acceptance_criterion and record.id.ordinal == 1) break record.proposal.content.acceptance_criterion;
-                } else return error.MissingAcceptanceCriterion;
-                try std.testing.expectEqualStrings("An eligible loan has no reservation.", criterion.given.segments[0].literal.value);
-                try std.testing.expectEqualStrings("Renewal is requested.", criterion.when.segments[0].literal.value);
-                try std.testing.expectEqualStrings("The return deadline is extended by seven days.", criterion.then.segments[0].literal.value);
-            }
-        }
-        if (driver.candidate_omissions) |omissions| {
-            const count: usize = if (omissions == .functional) 1 else 2;
-            // An empty authored family has no admitted supporting occurrence.
-            // Its offered catalogue cannot silently become insertion authority.
-            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.source_association));
-            try std.testing.expectEqual(count, driver.loss_calls);
-            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls + driver.omission_repair_calls + driver.omission_merges + driver.omission_resolutions);
-            try std.testing.expect(runner.repair_retry.currentPermit() == null);
-            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            try std.testing.expectEqualStrings("authorize-specification-omission-repair", driver.rejected_operation.?);
-            const denied = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_omission_repair_workflow.zig").schema, .omission_rejected);
-            try std.testing.expectEqual(count, denied.targets.len);
-            for (denied.targets) |target| {
-                try std.testing.expectEqual(.unsupported_owner, target.reason);
-                try std.testing.expect(target.owner.? == .source_association);
-                try std.testing.expectEqualDeep(target.requirement, target.owner.?.source_association);
-                try std.testing.expect(target.requirement.unit == .feature);
-                try std.testing.expect(target.requirement.slot == .functional_requirements or target.requirement.slot == .acceptance_criteria);
-                try std.testing.expect(target.finding_origin != null and target.comparison_origin != null);
-            }
-            try std.testing.expect(!view.contains(.source_omission_repair) and !view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
-            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            const corrected_initial_review = scenario == omission_scenario + 2;
-            try std.testing.expectEqual(@as(usize, @intFromBool(corrected_initial_review)), driver.fault_calls);
-            if (corrected_initial_review) {
-                const request = driver.fault_request.?;
-                var attempts: usize = 0;
-                var same_site_requests: usize = 0;
-                var same_site_attempts: usize = 0;
-                for (runner.tokenLedger().accounted_operations.items) |operation| {
-                    if (operation.id.model_request_id == request) {
-                        attempts += 1;
-                        try std.testing.expectEqual(attempts, operation.id.model_attempt_ordinal.value);
-                    }
-                    if (operation.id.model_request_id.model_operation_id.eql(request.model_operation_id)) {
-                        same_site_attempts += 1;
-                        if (operation.id.model_attempt_ordinal.value == 1) same_site_requests += 1;
+            };
+            if (candidate_omission) {
+                // These controls omit entire mandatory record families. Their
+                // semantic findings are complete advice, while the independent
+                // native collection floor still prevents publication.
+                assertion_context = "native mandatory-family omission";
+                const authority = @import("../../src/domain/required_authority.zig");
+                const owned = @import("../../src/application/required_authority_values.zig");
+                const wiring = @import("../../src/application/required_authority_workflow.zig");
+                const inputs = try owned.read(&view, wiring.inputs_schema, .inputs);
+                const decision = try owned.read(&view, wiring.result_schema, .result);
+                const both_families = scenario != omission_scenario;
+                const missing_slots: []const authority.Slot = if (both_families) &.{ .acceptance_criteria, .functional_requirements } else &.{.functional_requirements};
+                const expected_gaps = missing_slots.len;
+                try std.testing.expectEqual(.specification, inputs.projection);
+                try std.testing.expectEqual(.invalid, decision.continuation);
+                try std.testing.expectEqual(expected_gaps, inputs.forced_gaps.len);
+                for (inputs.forced_gaps, missing_slots) |gap, slot| {
+                    try std.testing.expectEqual(.candidate, gap.subject);
+                    try std.testing.expectEqual(.missing, gap.reason);
+                    try std.testing.expectEqualDeep(authority.Id{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }, gap.requirement);
+                }
+                var native_defects: usize = 0;
+                for (decision.entries) |entry| {
+                    try std.testing.expect(entry.outcome == .assessment_complete);
+                    const missing = entry.requirement.unit == .feature and (entry.requirement.slot == .functional_requirements or (both_families and entry.requirement.slot == .acceptance_criteria));
+                    try std.testing.expectEqual(missing, entry.candidate_defect != null);
+                    if (entry.candidate_defect) |defect| {
+                        native_defects += 1;
+                        try std.testing.expectEqualDeep(authority.CandidateDefect{ .reason = .missing_content, .support = null }, defect);
                     }
                 }
-                try std.testing.expectEqual(@as(usize, 2), attempts);
-                try std.testing.expect(same_site_requests > 1);
-                try std.testing.expectEqual(same_site_requests + 1, same_site_attempts);
+                try std.testing.expectEqual(expected_gaps, native_defects);
+                const content = inputs.specification.?;
+                const spec = @import("../../src/domain/specification.zig");
+                try std.testing.expect(!spec.hasRecords(content, .functional_requirement));
+                try std.testing.expectEqual(!both_families, spec.hasRecords(content, .acceptance_criterion));
+                try std.testing.expect(driver.generation_at_review != null and driver.references_at_review != null);
+                try std.testing.expectEqual(driver.generation_calls_at_review, driver.generation_calls);
+                try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.source_repair_calls + driver.support_repair_calls + driver.support_merges);
+                try std.testing.expectEqual(@as(usize, 0), driver.classification_repair_calls + driver.reconciliation_repair_calls);
+                try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+                for (session.units) |unit| if (unit) |accepted| try std.testing.expect(accepted.last_repair == null);
+                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs) and !view.contains(.source_omission_repair));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+                try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+                try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
+                const corrected_initial_review = scenario == omission_scenario + 2;
+                try std.testing.expectEqual(@as(usize, @intFromBool(corrected_initial_review)), driver.fault_calls);
+                if (corrected_initial_review) {
+                    var attempts: usize = 0;
+                    for (runner.tokenLedger().accounted_operations.items) |operation| if (operation.id.model_request_id == driver.fault_request.?) {
+                        attempts += 1;
+                        try std.testing.expectEqual(attempts, operation.id.model_attempt_ordinal.value);
+                    };
+                    try std.testing.expectEqual(@as(usize, 2), attempts);
+                }
             }
         }
         if (expected == .needs_user) {
@@ -2841,7 +2864,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(@import("../../src/domain/workflow_gate.zig").Rejection.stale_authority, runner.envelope.checkGate(@import("../../src/application/required_authority_workflow.zig").gate_contract).?);
             }
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-        if (workflow_cases == .story_recovery) try verifyReviewHistoryOwnerRelease(allocator, &runner, &runner_active);
+        if (workflow_cases == .story_missing) try verifyReviewHistoryOwnerRelease(allocator, &runner, &runner_active);
         cost.passed();
     }
 }
@@ -2907,88 +2930,105 @@ fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflo
     try std.testing.expectEqual(3 + groups, actual);
 }
 
-fn verifyRetainedStoryReviews(allocator: std.mem.Allocator, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, calls: usize, persisted: @import("../../src/domain/specification_state.zig").State) !void {
-    const authority = @import("../../src/domain/required_authority.zig");
-    const source = @import("../../src/domain/specification_support.zig").Source;
-    const identity = @import("../../src/domain/model_request_identity.zig");
-    const Origin = @import("../../src/domain/model_candidate_origin.zig").Origin;
-    const owned = @import("../../src/application/required_authority_values.zig");
-    const values = @import("../../src/application/pipeline_values.zig");
-    const requests = @import("../../src/application/model_request_workflow.zig");
-    const review = @import("../../src/application/specification_support_workflow.zig");
+fn verifyAdvisorySpecification(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, driver: *@import("../../src/test_fixtures/spec_generation_driver.zig").Driver, contracts: @import("../../src/ports/workflow_contract_source.zig").Source) !void {
+    return verifyAdvisoryPublication(.complete, io, allocator, project, runner, driver, contracts);
+}
+
+fn verifyAdvisoryPublication(comptime completion: enum { complete, protocol_incomplete }, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, driver: *@import("../../src/test_fixtures/spec_generation_driver.zig").Driver, contracts: @import("../../src/ports/workflow_contract_source.zig").Source) !void {
+    var check: []const u8 = "native operation counts";
+    errdefer std.debug.print("advisory publication check failed: {s}\n", .{check});
     const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-    const inputs = try owned.read(&view, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
-    const context = try @import("../../src/application/specification_workflow.zig").readContext(&view);
-    const history = try owned.read(&view, review.history_schema, .review_history);
-    const identities = try values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger);
-    // The retained path has no provider attempt or newly assigned request ID.
-    try std.testing.expectEqual(runner.tokenLedger().accounted_operations.items.len, identities.recordCount());
+    try std.testing.expect(driver.generation_at_review != null);
+    try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.source_repair_calls);
+    try std.testing.expectEqual(driver.generation_calls_at_review, driver.generation_calls);
+    try expectAuthoringCatalogueCalls(runner, driver.generation_calls);
+    try std.testing.expect(runner.repair_retry.currentPermit() == null);
+    try std.testing.expect(view.contains(.published_workflow_output));
+    try std.testing.expect(!view.contains(.source_omission_repair));
+    const needs = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/clarification_refresh_workflow.zig").needs_schema, @import("../../src/domain/clarification_refresh.zig").Needs);
+    try std.testing.expectEqual(@as(usize, 0), needs.entries.len);
+    check = "unchanged generation and accounting";
+    const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+    for (session.units) |unit| if (unit) |accepted| try std.testing.expect(accepted.last_repair == null);
+    try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+    try std.testing.expectEqual(@as(u128, driver.calls) * (driver.fake.invocation_plan.complete.input_tokens + driver.fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const ledger = try authority.build(a, inputs);
-    try std.testing.expectEqual(ledger.requirements.len, inputs.review_origins.len);
-    try std.testing.expectEqual(ledger.requirements.len, inputs.evidence.len);
-    try std.testing.expectEqualDeep(inputs.evidence, persisted.review.evidence);
-    try source.validateStored(a, inputs, context.inputs);
-    var assignments: usize = 0;
-    var refreshed: usize = 0;
-    var retained: usize = 0;
-    var index: usize = 0;
-    while (index < ledger.requirements.len) {
-        const id = ledger.requirements[index].seed.id;
-        const scope = source.assignmentScope(inputs, id);
-        const subjects = if (scope == .record) try source.assignmentSubjects(a, inputs, id) else try a.dupe(authority.Id, &.{id});
-        const packet = try source.packetFor(allocator, inputs, context, scope);
-        defer @import("../../src/domain/model_input_packet.zig").release(packet);
-        const subject = try @import("../../src/domain/specification_review_subject.zig").project(a, inputs, context, id);
-        // Broad assignments received the edited story as context. Focused fields
-        // and unchanged record batches retain their complete original requests.
-        const changed = switch (subject) {
-            .candidate_field => |field| field.slot == .primary_user_story,
-            .collection, .entity_applicability, .candidate_support => true,
-            .source_preservation, .reference_signal => false,
-        };
-        var first: ?Origin = null;
-        var last: ?Origin = null;
-        var actual_calls: usize = 0;
-        for (runner.tokenLedger().accounted_operations.items) |operation| {
-            const request = operation.id.model_request_id;
-            if (request.purpose != .semantic_review or !identity.unitOwnerEql(request.immutable_unit_owner_id, packet.unit())) continue;
-            try std.testing.expectEqual(@as(u32, 1), operation.id.model_attempt_ordinal.value);
-            try std.testing.expect(request.stage_run_epoch_id.eql(identities.stageRunEpochId()));
-            try std.testing.expectEqual(.accepted, identities.record(request).?.terminal_reason.?);
-            const origin = Origin.from(identities, operation.id).?;
-            if (first == null) first = origin;
-            last = origin;
-            actual_calls += 1;
-        }
-        try std.testing.expectEqual(@as(usize, if (changed) 2 else 1), actual_calls);
-        for (subjects, index..) |assigned, ordinal| {
-            try std.testing.expectEqualDeep(assigned, inputs.evidence[ordinal].requirement);
-            try std.testing.expectEqual(.model_assisted, inputs.evidence[ordinal].method);
-            try std.testing.expectEqualDeep(last.?, inputs.review_origins[ordinal].?);
-            if (!changed) {
-                try std.testing.expectEqualDeep(first.?, inputs.review_origins[ordinal].?);
-                const receipt = for (history.receipts) |receipt| {
-                    if (!std.meta.eql(receipt.origin, first.?)) continue;
-                    const contains = for (receipt.subjects) |seed| {
-                        if (std.meta.eql(seed.id, assigned)) break true;
-                    } else false;
-                    if (!contains) continue;
-                    break receipt;
-                } else return error.MissingRetainedReviewReceipt;
-                try std.testing.expect(receipt.request.id().stage_run_epoch_id.eql(identities.stageRunEpochId()));
-                try std.testing.expectEqualStrings(packet.body(), receipt.request.packet().?.body());
+    check = "canonical persisted advisory review";
+    const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
+    const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
+    try std.testing.expect(restored.specified() != null);
+    const persisted = restored.specified().?;
+    try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
+    for (persisted.review.result.entries) |entry| {
+        try std.testing.expect(entry.candidate_defect == null);
+        if (completion == .complete) try std.testing.expect(entry.outcome == .assessment_complete) else try std.testing.expect(entry.outcome == .assessment_complete or entry.outcome == .assessment_incomplete);
+    }
+    if (completion == .protocol_incomplete) {
+        check = "native bounded protocol stop and persisted incomplete assessment";
+        try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
+        const identities = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+        var stops: usize = 0;
+        inline for (std.meta.tags(@TypeOf(driver.*).AdviceProjection)) |projection| {
+            if (driver.protocol_advice.get(projection)) |proof| {
+                stops += 1;
+                const stop = if (projection == .source) persisted.review.advice_stop.? else persisted.principle_assessment.advice_stop.?;
+                const result = if (projection == .source) persisted.review.result else persisted.principle_assessment.result;
+                try std.testing.expectEqual(.protocol_exhausted, stop.reason);
+                try std.testing.expectEqualDeep(proof.origin, stop.origin.?);
+                try std.testing.expectEqual(persisted.review.candidate_revision, stop.candidate_revision);
+                try std.testing.expect(stop.unassessed.len > 0);
+                var incomplete: usize = 0;
+                for (result.entries) |entry| if (entry.outcome == .assessment_incomplete) {
+                    incomplete += 1;
+                    try std.testing.expectEqual(.protocol_exhausted, entry.outcome.assessment_incomplete.reason);
+                    try std.testing.expectEqualDeep(proof.origin, entry.outcome.assessment_incomplete.origin.?);
+                };
+                try std.testing.expectEqual(stop.unassessed.len, incomplete);
+                const closed = identities.record(proof.request).?;
+                try std.testing.expectEqual(.terminal, closed.status);
+                try std.testing.expectEqual(.failed, closed.terminal_reason.?);
+                var calls: u32 = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| if (operation.id.model_request_id == proof.request) {
+                    calls += 1;
+                    try std.testing.expectEqual(calls, operation.id.model_attempt_ordinal.value);
+                };
+                try std.testing.expectEqual(proof.exhaustion.limit.value + 1, calls);
+                try std.testing.expectEqual(proof.exhaustion.completed_executions, calls);
+                try std.testing.expectEqual(proof.origin.attempt.value, calls);
+                try std.testing.expectEqual(calls, @import("../../src/domain/model_attempt_accounting.zig").accounting(runner.model_accounting.?.attempts).attemptsReserved(proof.request));
+                var owner: usize = 0;
+                for (runner.selected.graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, proof.exhaustion.operation().bytes)) {
+                    owner += 1;
+                    try std.testing.expectEqualStrings("advance-model-attempt-accounting", step.operation_id.bytes);
+                    try std.testing.expectEqual(.model_request, step.retry_authority.?.scope);
+                    try std.testing.expectEqual(proof.exhaustion.limit.value, step.retry_authority.?.limit.value);
+                };
+                try std.testing.expectEqual(@as(usize, 1), owner);
+                if (proof.repair) try std.testing.expect(!view.contains(.specification_support_repair));
             }
         }
-        if (changed) refreshed += 1 else retained += 1;
-        assignments += 1;
-        index += subjects.len;
+        try std.testing.expect(stops > 0);
+        try std.testing.expect(persisted.coverage.obligations.len > 0);
+        for (persisted.coverage.obligations) |obligation| try std.testing.expect(obligation.exact_targets.len > 0);
+        const accounting = runner.tokenLedger().snapshot();
+        const cost = driver.fake.invocation_plan.complete.input_tokens + driver.fake.invocation_plan.complete.output_tokens;
+        var actual: u128 = 0;
+        for (runner.tokenLedger().accounted_operations.items) |operation| {
+            try std.testing.expect(operation.reconciliation == .exact_usage);
+            try std.testing.expectEqual(cost, operation.reconciliation.exact_usage.total_tokens);
+            actual += operation.reconciliation.exact_usage.total_tokens;
+        }
+        try std.testing.expectEqual(actual, accounting.total_tokens);
     }
-    try std.testing.expect(retained > 0 and refreshed > 0);
-    try std.testing.expectEqual(assignments + refreshed, calls);
-    try std.testing.expect(calls < 2 * assignments);
+    const published = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
+    try std.testing.expectEqualDeep(published, persisted.content);
+    check = "no manufactured persisted clarification";
+    const clarifications = @import("../../src/domain/clarification_inputs.zig");
+    const clarification_bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", a, .limited(8_388_608));
+    const clarification_state = try clarifications.validate(.{ .value = try @import("../../src/domain/strict_json.zig").decode(clarifications.State, a, clarification_bytes, .{ .maximum_bytes = clarifications.max_state_bytes, .maximum_depth = 64 }) }, .{ .bytes = "chosen" });
+    try std.testing.expectEqual(@as(usize, 0), clarification_state.value.?.records.len);
 }
 
 fn verifyReviewHistoryOwnerRelease(allocator: std.mem.Allocator, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, runner_active: *bool) !void {
@@ -3053,19 +3093,17 @@ fn sourceReviewAssignments(allocator: std.mem.Allocator, inputs: @import("../../
     defer arena.deinit();
     const scratch = arena.allocator();
     const ledger = try authority.build(scratch, inputs);
-    var assignments = candidate.review.entries.len;
-    for (candidate.review.entries) |finding| {
+    var assignments: usize = 0;
+    var index: usize = 0;
+    while (index < candidate.review.entries.len) {
+        const finding = candidate.review.entries[index];
         try std.testing.expect(finding.requirement_ordinal > 0 and finding.requirement_ordinal <= ledger.requirements.len);
         const id = ledger.requirements[finding.requirement_ordinal - 1].seed.id;
-        if (source.assignmentScope(inputs, id) != .record) continue;
-        const subjects = try source.assignmentSubjects(scratch, inputs, id);
-        for (subjects) |subject| {
-            const present = for (candidate.review.entries) |member| {
-                if (std.meta.eql(ledger.requirements[member.requirement_ordinal - 1].seed.id, subject)) break true;
-            } else false;
-            try std.testing.expect(present);
-        }
-        assignments -= subjects.len - 1;
+        const subjects = if (source.assignmentScope(inputs, id) == .assignment) try source.assignmentSubjects(scratch, inputs, id) else try scratch.dupe(authority.Id, &.{id});
+        try std.testing.expect(index + subjects.len <= candidate.review.entries.len);
+        for (subjects, candidate.review.entries[index..][0..subjects.len]) |subject, member| try std.testing.expectEqualDeep(subject, ledger.requirements[member.requirement_ordinal - 1].seed.id);
+        index += subjects.len;
+        assignments += 1;
     }
     return assignments;
 }
@@ -3286,7 +3324,7 @@ test "clarification publication refreshes stable paths and protects concurrent c
             const inputs = try (@import("../../src/actions/clarification/validate_clarification_forms.zig").Action{ .parser = parser.formParser() }).execute(a, state, captured);
             const record = fixture.record(name);
             const need: refresh.Need = .{ .stage = c.Id.parse(name).?.stage, .subject = record.subject, .authority = record.authority, .question = record.question, .why_required = record.why_required, .answer_schema = record.answer_schema };
-            const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need} });
+            const next = try refresh.refresh(a, inputs, .{ .feature = selected.feature_id, .entries = &.{need}, .original_sources = &.{} });
             const views = try @import("../../src/domain/clarification_views.zig").render(a, next, inputs.protected_forms);
             const prepared = try (@import("../../src/actions/clarification/prepare_clarification_output.zig").Action{}).execute(a, observed, paths, captured, inputs, .{ .ready = next }, views);
             const form_path = try std.mem.concat(a, u8, &.{ selected.project_relative_path, "/clarify/", name, ".md" });
@@ -3305,9 +3343,9 @@ test "clarification publication refreshes stable paths and protects concurrent c
             } else {
                 try writer.publish(a, prepared);
                 try std.testing.expectEqualStrings(views[0].content.replace, try project.dir.readFileAlloc(io, form_path, a, .limited(c.max_form_bytes)));
-                try std.testing.expectEqualStrings(name, next.value.?.records[0].id);
-                try std.testing.expectEqual(@as(usize, 1), next.value.?.records.len);
-                const old = next.value.?;
+                try std.testing.expectEqualStrings(name, next.state.value.?.records[0].id);
+                try std.testing.expectEqual(@as(usize, 1), next.state.value.?.records.len);
+                const old = next.state.value.?;
                 try project.dir.writeFile(io, .{ .sub_path = form_path, .data = try forms.render(a, old.records[0], fixture.binding(old, old.records[0]), .open, "An unsubmitted long draft that will disappear completely on rerun." ** 8) });
             }
             try std.testing.expectError(error.FileNotFound, project.dir.openFile(io, paths.get(.specification).project_relative, .{}));

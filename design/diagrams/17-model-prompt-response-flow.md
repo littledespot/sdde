@@ -53,12 +53,11 @@ flowchart TD
     Accounting -->|No| Exhausted["Stop with owning limit and count<br/>retain JSON or schema error and all attempts"]
 ```
 
-[Request guidance](../reference-notes/model-request-guidance.md) details input
-projection, source selections, protocol correction, repair and provider modes.
-The Specify E2E case currently selects `prompt-only`.
+The Specify E2E cases select native JSON Schema mode (`json: true`).
 
 Owners: [response contract](../decisions/0006-minimal-model-response.md),
 [workflow request ownership](../decisions/0012-workflow-owned-model-request.md),
-[universal framing](../decisions/0014-universal-response-format-guidance.md).
+[universal framing](../decisions/0014-universal-response-format-guidance.md),
+[protocol correction](../contracts/22-repair.md#226-unparseable-output).
 Shape validation yields a candidate; source location and model review do not
 prove semantic support or authorize publication.

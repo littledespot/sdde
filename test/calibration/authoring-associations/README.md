@@ -58,7 +58,7 @@ zig build test-specification-generation --summary all -j2
 ```
 
 Official generated packets, edits, provider requests, seed probes and
-`preparation.json` are written beneath `.zig-cache/authoring-associations/`.
+`preparation.json` are written beneath `.zig-cache/authoring-associations/v14-text/`.
 Freeze those exact bytes into an isolated run directory after offline checks and
 review every manifest pin before requesting approval. Later changes to dependencies
 require regeneration and a fresh frozen plan. Do not edit generated projections.
@@ -91,7 +91,7 @@ loss request substitutes for discovering a real defect.
 
 The same offline test is also the concrete receipt-admission entry point. After
 an approved replay, place this closed run manifest at
-`.zig-cache/authoring-associations/live-run.json`, using the SHA-256 of the
+`.zig-cache/authoring-associations/v14-text/live-run.json`, using the SHA-256 of the
 frozen `preparation.json` and the authentic selected parent:
 
 ```json

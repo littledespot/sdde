@@ -4,8 +4,8 @@ const c = @import("clarification_inputs.zig");
 const form = @import("clarification_form.zig");
 pub const View = struct { id: c.Id, content: union(enum) { replace: []const u8, retain: []const u8 } };
 
-pub fn render(allocator: std.mem.Allocator, state: c.ValidatedState, protected: []const c.FormCapture) c.Error![]const View {
-    const current = state.value orelse return error.InvalidClarificationInput;
+pub fn render(allocator: std.mem.Allocator, state: @import("clarification_refresh.zig").Ready, protected: []const c.FormCapture) c.Error![]const View {
+    const current = (try state.validate(allocator)).value.?;
     const views = try allocator.alloc(View, current.records.len);
     var retained: usize = 0;
     for (current.records, views) |record, *view| {

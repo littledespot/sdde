@@ -126,6 +126,11 @@ fn restrictedStorage(value: *const Restricted) *RestrictedStorage {
 }
 
 pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice) Error!*Restricted {
+    return restrictFieldPolicies(allocator, canonical, excluded, integer_choices, &.{});
+}
+
+/// Native field semantics add only restrictions to the existing generic schema.
+pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice, field_policies: []const @import("model_text_field.zig").Binding) Error!*Restricted {
     const owned = try allocator.create(RestrictedStorage);
     errdefer allocator.destroy(owned);
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -147,6 +152,7 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
         };
     }
     var root = try restrictNode(arena.allocator(), canonical.root(), excluded);
+    if (field_policies.len != 0) root = (try @import("model_text_field.zig").project(arena.allocator(), root, field_policies, true)).root;
     for (integer_choices) |entry| {
         if (entry.definition) |id| {
             const current = storage(canonical).definition_id orelse return invalid();
@@ -232,7 +238,10 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
 
 const Narrowed = struct { node: *const Node, matched: bool };
 fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64, collection: @FieldType(IntegerChoice, "collection")) Error!Narrowed {
-    if (target == .path and target.path.len == 0) {
+    if (target == .path and target.path.len == 0 and node.* != .one_of) {
+        // A nullable field keeps its explicit absence alternative. The selector
+        // still has to match and constrain an integer-bearing sibling below.
+        if (jsonType(node) == .null_value) return .{ .node = node, .matched = false };
         if (node.* != .integer and node.* != .integer_enumeration and (node.* != .array or (node.array.items.* != .integer and node.array.items.* != .integer_enumeration))) return invalid();
         if (collection == .unique_subset and node.* != .array) return invalid();
         const values = allowed orelse return .{ .node = node, .matched = true };
@@ -513,9 +522,10 @@ const Compiler = struct {
             for (variants.array.items, choices, 0..) |value, *choice, index| {
                 choice.* = try self.node(value, depth + 1);
                 const shape = jsonType(choice.*) orelse return invalid();
-                const tag = if (shape == .object) try variantKind(choice.*) else null;
                 for (choices[0..index]) |prior| if (shape == jsonType(prior).?) {
-                    if (shape != .object or std.mem.eql(u8, tag.?, try variantKind(prior))) return invalid();
+                    // Distinct JSON types already select one branch. Objects
+                    // need disjoint tags only when another object competes.
+                    if (shape != .object or std.mem.eql(u8, try variantKind(choice.*), try variantKind(prior))) return invalid();
                 };
             }
             result.* = .{ .one_of = choices };
@@ -673,10 +683,15 @@ fn objectResult(node: *const Node) bool {
 }
 
 fn variantKind(node: *const Node) Error![]const u8 {
-    if (node.* != .object) return invalid();
-    const property = findProperty(node.object, "kind") orelse return invalid();
-    if (!property.required or property.schema.* != .constant or property.schema.constant != .string or
-        property.schema.constant.string.len == 0) return invalid();
+    return discriminator(node) orelse return invalid();
+}
+
+/// Optional object discriminator. A sole object in a type-disjoint alternative
+/// set needs none; competing object variants are compiler-checked to have one.
+pub fn discriminator(node: *const Node) ?[]const u8 {
+    if (node.* != .object) return null;
+    const property = findProperty(node.object, "kind") orelse return null;
+    if (!property.required or property.schema.* != .constant or property.schema.constant != .string or property.schema.constant.string.len == 0) return null;
     return property.schema.constant.string;
 }
 

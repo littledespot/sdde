@@ -1,7 +1,7 @@
 # 11. Filename and path validation algorithm
 
-Part of the [proposed design](../design.md#11-filename-and-path-validation-algorithm). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#11-filename-and-path-validation-algorithm), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Workflow artifacts and project files use two separate policy domains:
 
@@ -55,16 +55,17 @@ For every model-returned path-like field, the engine executes these checks in or
   payloads, import/resource resolution, context selectors, URI fetching, and every
   filesystem/network adapter.
 - Business specification fields cannot carry operational file/source nodes.
-- An exact-copy value resolves only through the current snapshot's token/citation registry; the
-  model cannot inline arbitrary bytes or emit a textual marker and claim that it was
-  engine-rendered.
+- An exact-copy value resolves only through the current snapshot's token/citation registry.
+  Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
+  model prose supplies raw bytes; only scoped native recognition may derive an exact
+  occurrence. Model assertions or textual markers cannot grant that authority.
 - Renderers resolve valid nodes and tokens to engine-controlled display labels/bytes.
 
 - The shared source scanner discovers candidate filenames, paths and URIs from
   captured source evidence; it never establishes semantic intent or operational
   authority. Ordinary model prose is not rejected solely for matching that lexer.
-- Explicit passive/source/exact selections still require current, correctly scoped
-  evidence. Unknown, stale and cross-scope selections reject through their native
+- Explicit passive/source selections and native-derived exact occurrences require current, correctly scoped
+  evidence. Unknown, stale and cross-scope references reject through their native
   owners and existing repair lifecycle.
 - No prose or display node is promoted to an actionable path. Operational uses
   must independently pass the path/file-ID and capability rules above.
@@ -90,7 +91,7 @@ No model-authored filename or path is written to `spec.md`, `plan.md`, `tasks.md
 
 | Stage | Model representation | Deterministic authority before rendering/writing |
 | --- | --- | --- |
-| Specify | Inert prose plus scoped passive and exact-value selections; no operational project path | Registry/token evidence validation and semantic business-boundary review |
+| Specify | Inert prose with permitted passive references; native code recognizes scoped exact values; no operational project path | Registry/token evidence validation and semantic business-boundary review |
 | Plan | Existing `fileId`; an allowed `pathIntentOptionId` plus semantic `nameSourceId`, followed by an engine-generated `pathCandidateId` for a new file; raw create-path only under explicit disabled-by-default fallback | Exact option membership/capability subset, versioned name transform, full preset kind/root/name/extension/placement rules, active-host-plus-target portability, collision/containment, path-candidate registry, and plan-file grant |
 | Tasks | Approved read/write `fileId`s and capabilities only | Exact `PlanState.fileGrants`, sole file registry, task-unit scope, and graph/coverage validation |
 | Implement | Approved `fileId`/copy `sourceId`/operation-intent ID only | Plan grant ∩ task scope ∩ current preset/global capability, descriptor/no-follow target state, and content reference validation |

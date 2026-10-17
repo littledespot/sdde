@@ -784,7 +784,7 @@ test "runner rejects incomplete dependency renewal without committing repair pro
             var delta: pipeline.NodeDelta = .{};
             delta.data_replacements[@intFromEnum(candidate.key)] = values.create(std.testing.allocator, candidate, u32, 2) catch return error.OperationExecutionFailed;
             delta.data_invalidations = .initMany(input.step.step.invalidates);
-            delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } };
+            delta.repair_transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2, .validation = .dependent_review } };
             return .{ .outcome = .ok, .delta = delta };
         }
     };
@@ -850,6 +850,108 @@ test "runner rejects incomplete dependency renewal without committing repair pro
             try std.testing.expect(runner.envelope.slots[@intFromEnum(candidate.key)] == original);
         }
     }
+}
+
+test "unchanged repairs exhaust before delta application and cannot follow recovery or publication" {
+    const values = @import("application/pipeline_values.zig");
+    const retry = @import("domain/workflow_retry.zig");
+    const candidate = comptime values.schema(.model_input_packet, u32, 1, 32).captured().recorded();
+    const dependent = comptime values.schema(.model_payload_schema_result, u32, 1, 32).captured().recorded();
+    const permit: retry.Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+    const Merge = struct {
+        calls: usize = 0,
+        combined: bool,
+        foreign: bool,
+        fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+            const self = context.?;
+            self.calls += 1;
+            var bound_permit = permit;
+            if (self.foreign) bound_permit.authorization[0] ^= 1;
+            var delta: pipeline.NodeDelta = .{};
+            delta.data_replacements[@intFromEnum(candidate.key)] = values.create(std.testing.allocator, candidate, u32, 1) catch return error.OutOfMemory;
+            delta.data_invalidations = .initMany(input.step.step.invalidates);
+            delta.repair_transition = if (self.combined)
+                .{ .merged_validated = .{ .permit = bound_permit, .revision_after = 2, .changed = false, .result = .resolved } }
+            else
+                .{ .merged = .{ .permit = bound_permit, .revision_after = 2, .changed = false, .validation = .dependent_review } };
+            return .{ .outcome = .ok, .delta = delta };
+        }
+    };
+    const AllowanceOwner = enum { merge, account, absent };
+    for ([_]bool{ false, true }) |combined| for ([_]bool{ false, true }) |foreign| for (std.enums.values(AllowanceOwner)) |allowance_owner| {
+        var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
+        steps[1].id = .{ .bytes = "recovery" };
+        for (&steps) |*step| {
+            step.requires = &.{candidate.key};
+            step.replaces = &.{candidate.key};
+            step.invalidates = &.{dependent.key};
+            step.repair_role = if (combined) .merge_validate else .merge;
+            step.retry_authority = if (allowance_owner == .merge) .{ .workflow_id = .{ .bytes = "arbitrary-workflow" }, .workflow_version = 1, .operation_instance_id = step.id, .limit = .{ .value = 5 }, .scope = .repair } else null;
+        }
+        const transitions = [_]workflow.Transition{
+            .{ .from = steps[0].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+            .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
+            .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .needs_user } },
+        };
+        var graph = try testGraph();
+        graph.authority.steps = &steps;
+        graph.authority.transitions = &transitions;
+        graph.authority.data_schemas = &.{ candidate, dependent };
+        var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+        var registry = testRegistry(&control);
+        registry.data_schemas = graph.authority.data_schemas;
+        var merge: Merge = .{ .combined = combined, .foreign = foreign };
+        control.entries[1].binding = operation_bindings.bind(Merge, &merge, Merge.invoke);
+        control.entries[1].contract.requires = steps[0].requires;
+        control.entries[1].contract.replaces = steps[0].replaces;
+        control.entries[1].contract.invalidates = steps[0].invalidates;
+        control.entries[1].contract.repair_role = steps[0].repair_role;
+        control.entries[1].contract.retry_limit = if (allowance_owner == .merge) .{ .maximum = 5, .scope = .repair } else null;
+        control.entries[1].contract.parameters = if (allowance_owner == .merge) &retry_parameters else &.{};
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var delta: pipeline.NodeDelta = .{};
+        defer runner.envelope.discard(&delta);
+        delta.data_writes[@intFromEnum(candidate.key)] = try values.create(std.testing.allocator, candidate, u32, 1);
+        try runner.envelope.apply(.{ .id = "test.candidate", .kind = .action, .requires = &.{}, .produces = &.{candidate.key}, .side_effect = .none }, &delta, .ok);
+        delta.data_writes[@intFromEnum(dependent.key)] = try values.create(std.testing.allocator, dependent, u32, 2);
+        try runner.envelope.apply(.{ .id = "test.dependent", .kind = .action, .requires = &.{candidate.key}, .produces = &.{dependent.key}, .side_effect = .none }, &delta, .ok);
+        try runner.repair_retry.commit(try runner.repair_retry.prepare(.{ .authorized = permit }));
+        if (allowance_owner == .account) {
+            _ = try runner.repair_retry.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, permit);
+            _ = try runner.repair_retry.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, permit);
+        }
+        const original = runner.envelope.slots[@intFromEnum(candidate.key)];
+        const history_count = runner.envelope.records.items.len;
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        try std.testing.expectEqual(.failed, result.executionStatus().?);
+        try std.testing.expectEqual(@as(usize, 1), merge.calls);
+        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+        try std.testing.expectEqual(history_count, runner.envelope.records.items.len);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(candidate.key)] == original);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(dependent.key)] != null);
+        try std.testing.expectEqual(@as(u64, 1), runner.repair_retry.currentPermit().?.revision);
+        try std.testing.expect(runner.last_effects == null);
+        if (foreign or allowance_owner == .absent) {
+            try std.testing.expectEqual(.authority, result.execution_rejected);
+            try std.testing.expect(runner.repair_retry.terminal_exhaustion == null);
+        } else {
+            const exhausted = result.execution_rejected.retry_limit;
+            try std.testing.expectEqual(.unchanged_repair, exhausted.reason);
+            try std.testing.expectEqual(@as(u64, if (allowance_owner == .merge) 1 else 2), exhausted.completed_executions);
+            const bounded_owner = if (allowance_owner == .merge) steps[0].id else @as(workflow.WorkflowStepId, .{ .bytes = "account" });
+            try std.testing.expectEqualStrings(bounded_owner.bytes, exhausted.operation().bytes);
+            try std.testing.expectEqual(@as(u32, if (allowance_owner == .merge) 5 else 3), exhausted.limit.value);
+            try std.testing.expectEqualDeep(permit.key, exhausted.defect.?);
+            try std.testing.expectEqualStrings("RepairNoProgress", result.execution_rejected.diagnostic());
+            const again = runner.bindings().invokeStep(steps[1].id);
+            try std.testing.expectEqualDeep(result.execution_rejected, again.rejected);
+            try std.testing.expectEqual(@as(usize, 1), merge.calls);
+            try std.testing.expectEqual(exhausted.completed_executions, runner.repair_retry.completedAttempts(bounded_owner, permit.key));
+        }
+    };
 }
 
 const TestEngineBindings = struct {

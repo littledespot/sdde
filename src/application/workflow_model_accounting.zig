@@ -6,12 +6,29 @@ const values = @import("pipeline_values.zig");
 const data = @import("../domain/pipeline_data.zig");
 const provider = @import("../domain/llm_provider_operation.zig");
 const leases = @import("provider_authorization_lease_table.zig");
+const decisions = @import("../domain/model_attempt_decision.zig");
 
-pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedAttempt, 1, null).captured();
+pub const schema = values.schema(.accounted_model_attempt, decisions.Decision, 2, null).captured();
 pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null).captured();
 pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null).captured();
 pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null).captured();
-pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error;
+pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || decisions.Error;
+
+pub fn readAttempt(view: *const data.View) values.Error!*const accounting.AccountedAttempt {
+    const decision = try values.read(view, schema, decisions.Decision);
+    return switch (decision.outcome()) {
+        .admitted => |value| value,
+        .advisory_stopped => error.DataSchemaMismatch,
+    };
+}
+
+pub fn readAdvisoryStop(view: *const data.View) values.Error!*const decisions.StopReceipt {
+    const decision = try values.read(view, schema, decisions.Decision);
+    return switch (decision.outcome()) {
+        .advisory_stopped => |value| value,
+        .admitted => error.DataSchemaMismatch,
+    };
+}
 
 /// Expected terminal facts retain their exact applied source, not a second record.
 pub const Completion = struct {
@@ -80,8 +97,10 @@ pub const State = struct {
         errdefer accounting.deinitOwner(successor);
         try identity.retainOwner(retained);
         errdefer identity.deinitOwner(retained);
-        owner.* = .{ .allocator = self.allocator, .attempts = successor, .requests = retained };
-        const value = try values.adopt(self.allocator, schema, accounting.AccountedAttempt, RetainedAttempt, owner, RetainedAttempt.get, RetainedAttempt.destroy, null);
+        const decision = try decisions.admitted(self.allocator, accounting.latestAttempt(successor));
+        errdefer decision.deinit();
+        owner.* = .{ .allocator = self.allocator, .attempts = successor, .requests = retained, .decision = decision };
+        const value = try values.adopt(self.allocator, schema, decisions.Decision, RetainedAttempt, owner, RetainedAttempt.get, RetainedAttempt.destroy, null);
         return .{ .successor = .{ .attempts = successor }, .requests = retained, .value = value };
     }
 
@@ -222,12 +241,14 @@ const RetainedAttempt = struct {
     allocator: std.mem.Allocator,
     attempts: *accounting.Owner,
     requests: *identity.Owner,
+    decision: decisions.Owned,
 
-    fn get(self: *const RetainedAttempt) *const accounting.AccountedAttempt {
-        return accounting.latestAttempt(self.attempts);
+    fn get(self: *const RetainedAttempt) *const decisions.Decision {
+        return self.decision.decision;
     }
 
     fn destroy(self: *RetainedAttempt) void {
+        self.decision.deinit();
         accounting.deinitOwner(self.attempts);
         identity.deinitOwner(self.requests);
         self.allocator.destroy(self);

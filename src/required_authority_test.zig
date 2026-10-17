@@ -39,6 +39,13 @@ pub fn fixture(allocator: std.mem.Allocator, kind: a.Kind) !a.Inputs {
     candidates[0] = .{ .id = candidate, .requirement = seeds[0].id };
     return .{ .feature = .{ .bytes = "hello-world" }, .detected_at = .spec, .authorities = &sources, .seeds = seeds, .evidence = evidence, .candidates = candidates };
 }
+
+fn clarificationSources(allocator: std.mem.Allocator) !@import("domain/reference_evidence.zig").Inputs {
+    var identities: @import("reference_evidence_test.zig").IdSource = .{};
+    const captured = try @import("reference_ingestion_test.zig").read(allocator, "delivery.md", "Deliver a confirmation; its deadline and delivery mechanism are undecided.\n");
+    return @import("reference_evidence_test.zig").prepare(allocator, &identities, captured);
+}
+
 pub fn observe(allocator: std.mem.Allocator, inputs: a.Inputs) !a.Observations {
     const entries = try allocator.alloc(a.Observation, inputs.seeds.len);
     for (inputs.seeds, entries) |seed, *entry| {
@@ -213,8 +220,12 @@ test "Specify projects registered native fields and complete reference obligatio
     const value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} };
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
     const attributed: spec.AttributedValue = .{ .value = value, .source_group_ids = &.{accounted.records.signals[0].id}, .provenance = provenance };
+    const brief: spec.Brief = .{ .title = attributed, .description = attributed, .primary_goal = attributed };
     var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };
-    const empty = try project.execute(allocator, before.feature, accounted, content, null);
+    try std.testing.expectEqual(.source_readiness, before.projection);
+    try std.testing.expectError(error.InvalidRequiredAuthority, project.execute(allocator, before.feature, accounted, content, null));
+    const empty = try project.execute(allocator, before.feature, accounted, content, brief);
+    try std.testing.expectEqual(.specification, empty.projection);
     try std.testing.expectEqual(before.seeds.len, empty.seeds.len);
     const records = try allocator.alloc(spec.IdentifiedRecord, @typeInfo(spec.Kind).@"enum".fields.len);
     inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
@@ -225,7 +236,7 @@ test "Specify projects registered native fields and complete reference obligatio
         records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .source_group_ids = attributed.source_group_ids, .provenance = provenance } };
     }
     content.records = records;
-    const after = try project.execute(allocator, before.feature, accounted, content, null);
+    const after = try project.execute(allocator, before.feature, accounted, content, brief);
     try std.testing.expectEqual(before.seeds.len + 15, after.seeds.len);
     const ledger = try build.execute(allocator, after);
     try std.testing.expectEqual(after.seeds.len, ledger.requirements.len);
@@ -411,15 +422,75 @@ test "source-backed omissions stay invalid across registered owners and source g
     }
 }
 
+test "invalid candidate content retains genuine authority gaps without authorizing omission repair or clarification" {
+    const needs = @import("domain/required_authority_clarifications.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source_inputs = try clarificationSources(allocator);
+    for ([_]a.Kind{ .feature_intent, .entity_applicability }) |kind| {
+        var inputs = try fixture(allocator, kind);
+        inputs.feature = source_inputs.corpus.feature_id;
+        var proof = inputs.evidence[0];
+        proof.finding = .candidate_invalid;
+        proof.resolution = .{ .existing_authority = source };
+        proof.review = .{
+            .detail = "MOCK candidate invents an additional approval requirement.",
+            .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
+            .source_ids = &.{.{ .ordinal = 1 }},
+        };
+        for ([_]?a.AuthorityGap.GapKind{ null, .unsupported, .ambiguous, .conflicting }) |gap_kind| {
+            proof.review.?.authority_gap = if (gap_kind) |selected| .{
+                .kind = selected,
+                .source_ids = &.{},
+                .detail = "MOCK source leaves the delivery deadline unresolved.",
+                .question = "MOCK which delivery deadline applies? Supply the date and timezone.",
+            } else null;
+            inputs.evidence = &.{proof};
+            const observations = try observe(allocator, inputs);
+            const result = try run(allocator, inputs);
+            try std.testing.expectEqual(.invalid, result.continuation);
+            const entry = result.entries[0];
+            try std.testing.expectEqual(.invalid_content, entry.candidate_defect.?.reason);
+            try std.testing.expect(entry.candidate_defect.?.support == null);
+            if (gap_kind) |selected| {
+                try std.testing.expectEqual(@as(a.GapReason, switch (selected) {
+                    .unsupported => .unsupported,
+                    .ambiguous => .ambiguous,
+                    .conflicting => .conflicting,
+                }), entry.outcome.clarification_required.reason);
+                try std.testing.expectEqualStrings("MOCK which delivery deadline applies? Supply the date and timezone.", inputs.evidence[0].review.?.authority_gap.?.question);
+            } else try std.testing.expectEqual(.resolved_exactly_one, std.meta.activeTag(entry.outcome));
+            try std.testing.expect(!try a.validate(allocator, inputs, observations, result));
+            try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, result, id(kind))) == null);
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, observations, result));
+            // Persisting a separately supported omission cannot turn the invalid
+            // assertion into authorized omission recovery.
+            var omission = proof;
+            omission.id.ordinal = 2;
+            omission.finding = .candidate_omission;
+            omission.review.?.authority_gap = null;
+            for ([_]bool{ false, true }) |reverse| {
+                inputs.evidence = if (reverse) &.{ omission, proof } else &.{ proof, omission };
+                const both = try run(allocator, inputs);
+                try std.testing.expectEqual(.invalid_content, both.entries[0].candidate_defect.?.reason);
+                try std.testing.expect((try a.supportedOmission(allocator, inputs, try observe(allocator, inputs), both, id(kind))) == null);
+            }
+        }
+    }
+}
+
 test "authority clarification subjects preserve earliest owner and remain stable across finding order and wording" {
     const conversion = @import("domain/required_authority_clarifications.zig");
     const refresh = @import("domain/clarification_refresh.zig");
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+    const source_inputs = try clarificationSources(allocator);
     const one = try fixture(allocator, .feature_intent);
     const two = try fixture(allocator, .design_decision);
     var inputs = one;
+    inputs.feature = source_inputs.corpus.feature_id;
     inputs.detected_at = .tasks;
     inputs.seeds = try allocator.dupe(a.Seed, &.{ one.seeds[0], two.seeds[0] });
     const proofs = try allocator.dupe(a.Evidence, &.{ one.evidence[0], two.evidence[0] });
@@ -432,7 +503,7 @@ test "authority clarification subjects preserve earliest owner and remain stable
     proofs[1].review.?.question = "Which delivery mechanism should implement the deadline? Name the mechanism.";
     inputs.evidence = proofs;
     inputs.candidates = &.{};
-    const needs = try conversion.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    const needs = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs));
     try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
     try std.testing.expectEqual(.spec, needs.entries[0].stage);
     try std.testing.expectEqual(.plan, needs.entries[1].stage);
@@ -446,13 +517,13 @@ test "authority clarification subjects preserve earliest owner and remain stable
     const changed = try allocator.dupe(a.Evidence, &.{ proofs[1], proofs[0] });
     changed[0].review.?.detail = "Specify the applicable delivery deadline.";
     inputs.evidence = changed;
-    const again = try conversion.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs));
-    const second = try refresh.refresh(allocator, .{ .state = .{ .value = first.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
-    for (first.value.?.records, second.value.?.records) |before, after| {
+    const again = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    const second = try refresh.refresh(allocator, .{ .state = .{ .value = first.state.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
+    for (first.state.value.?.records, second.state.value.?.records) |before, after| {
         try std.testing.expect(c.sameSubject(before.subject, after.subject));
         try std.testing.expectEqualStrings(before.id, after.id);
     }
-    try std.testing.expectError(error.ProtectedClarification, refresh.refresh(allocator, .{ .state = .{ .value = first.value }, .submissions = &.{}, .protected_forms = &.{.{ .id = c.Id.parse(first.value.?.records[0].id).?, .bytes = "protected" }} }, again));
+    try std.testing.expectError(error.ProtectedClarification, refresh.refresh(allocator, .{ .state = .{ .value = first.state.value }, .submissions = &.{}, .protected_forms = &.{.{ .id = c.Id.parse(first.state.value.?.records[0].id).?, .bytes = "protected" }} }, again));
 }
 
 test "current contradictory assessments fail while genuine missing decisions retain their questions" {
@@ -460,8 +531,10 @@ test "current contradictory assessments fail while genuine missing decisions ret
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+    const source_inputs = try clarificationSources(allocator);
     for ([_]a.Kind{ .feature_intent, .design_decision, .executable_decomposition }) |kind| {
         var inputs = try fixture(allocator, kind);
+        inputs.feature = source_inputs.corpus.feature_id;
         var negative = inputs.evidence[0];
         negative.finding = .unsupported;
         negative.resolution = .{ .existing_authority = source };
@@ -470,7 +543,7 @@ test "current contradictory assessments fail while genuine missing decisions ret
         inputs.evidence = &.{negative};
         const gap = try run(allocator, inputs);
         try std.testing.expectEqual(.needs_user, gap.continuation);
-        _ = try needs.build(allocator, inputs, try observe(allocator, inputs), gap);
+        _ = try needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), gap);
         var positive = negative;
         positive.id.ordinal = 2;
         positive.finding = .supported;
@@ -481,11 +554,11 @@ test "current contradictory assessments fail while genuine missing decisions ret
             const inconclusive = try run(allocator, inputs);
             try std.testing.expectEqual(.invalid, inconclusive.continuation);
             try std.testing.expectEqual(.inconclusive_review, inconclusive.entries[0].candidate_defect.?.reason);
-            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, inputs, try observe(allocator, inputs), inconclusive));
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), inconclusive));
         }
         // A vague negative with no question cannot gain one from a descriptor.
         negative.review = null;
         inputs.evidence = &.{negative};
-        try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs)));
+        try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs)));
     }
 }

@@ -56,14 +56,14 @@ test "reconciliation repair definitions admit only the natively selected payload
     const schema = try parser.compiler().compile(a, bytes);
     try std.testing.expect(schema.select(.{ .bytes = "repair_content" }) == null);
     for ([_][2][]const u8{
-        .{ "business_text", "{\"segments\":[\"Display a greeting.\"]}" },
-        .{ "reference_text", "{\"nodes\":[{\"kind\":\"source\",\"source_id\":1}]}" },
+        .{ "business_text", "{\"segments\":\"Display a greeting.\"}" },
+        .{ "reference_text", "{\"nodes\":{\"fragments\":[{\"kind\":\"source\",\"source_id\":1}]}}" },
     }) |example| {
         const selected = schema.select(.{ .bytes = example[0] }).?;
         try checkDocument(selected.modelBytes(), .{ .bytes = example[1] });
         for ([_][]const u8{
             "{\"kind\":\"preserved_token\",\"token_id\":1}",
-            "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[]}}",
+            "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":{\"fragments\":[]}}}",
             "{\"current_value\":{}}",
         }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property, .path = if (std.mem.startsWith(u8, invalid, "{\"kind\"")) "/kind" else "/current_value" });
     }
@@ -122,14 +122,17 @@ test "loss protocol correction preserves the complete selected contract in both 
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = source.*;
             request.response_guidance_mode = mode;
-            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference), .{});
+            // This synthetic request probes the registered OpenAI Bedrock wire
+            // policy; its fake provider identity remains test-only lineage.
+            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss), .{});
             var occurrences: usize = 0;
-            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
+            for (wire.value.object.get("system").?.array.items) |part|
                 occurrences += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, selected.modelBytes()));
             try std.testing.expectEqual(@as(usize, 1), occurrences);
-            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
             if (mode == .native_schema) {
-                const shape = wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?;
+                const schema_text = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+                const shape = (try std.json.parseFromSlice(std.json.Value, a, schema_text, .{})).value;
                 try std.testing.expect(!shape.object.get("additionalProperties").?.bool);
                 const assessment = shape.object.get("properties").?.object.get("assessments").?.object.get("items").?;
                 try std.testing.expect(!assessment.object.get("additionalProperties").?.bool);
@@ -155,7 +158,9 @@ test "child requirements stay inside selected definitions parts and repair schem
     const repair_schema = generation.select(.{ .bytes = "attributed_value" }).?;
     for ([_]*const @import("domain/model_result_schema.zig").Schema{ selected, try plan.selectSchema(0, &.{}), repair_schema }) |schema| {
         var fixture: Fixture = undefined;
-        try fixture.initWithCompiledSchema(schema);
+        if (schema == repair_schema) {
+            try fixture.initWithCompiledFieldPolicies(schema, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "value" }} }});
+        } else try fixture.initWithCompiledSchema(schema);
         defer fixture.deinit();
         fixture.fake.invocation_plan.complete.content = "{\"foreign\":true}";
         var response = try fixture.response();
@@ -183,12 +188,12 @@ test "child requirements stay inside selected definitions parts and repair schem
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = retry.request.*;
             request.response_guidance_mode = mode;
-            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference);
+            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss);
             const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
             var count: usize = 0;
-            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
+            for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
             try std.testing.expectEqual(@as(usize, 1), count);
-            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
         }
     }
 }
@@ -322,8 +327,8 @@ test "correction locators resolve escaped names root alternatives and selected d
     const compiled = try parser.compiler().compile(a, bytes);
     const selected = compiled.select(.{ .bytes = "summary" }).?;
     const cases = [_]Case{
-        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
-        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
+        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":{\"fragments\":[]}}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
+        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":{\"fragments\":[]}}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
     };
     for (cases) |case| try checkDocument(selected.modelBytes(), case);
     const projection = @import("domain/model_schema_projection.zig");
@@ -428,7 +433,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
             // Retry-owned content retains task guidance only; serialization adds framing.
             for (request.content) |part| try std.testing.expect(std.mem.indexOf(u8, part.bytes(), framing) == null);
             for ([_]provider.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
-                const bytes = try encoding.encode(std.testing.allocator, request, kind);
+                const bytes = try encoding.encode(std.testing.allocator, request, kind, .openai_oss);
                 defer std.testing.allocator.free(bytes);
                 const decoded_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
                 defer std.testing.allocator.free(decoded_body);
@@ -436,7 +441,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
                 var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, decoded_body, .{ .maximum_depth = 64 }, false, null);
                 defer parsed.deinit();
                 const root = parsed.value;
-                const system = root.object.get("messages").?.array.items[0].object.get("content").?.array.items;
+                const system = root.object.get("system").?.array.items;
                 try std.testing.expectEqualStrings(framing, system[system.len - 2].object.get("text").?.string);
                 try std.testing.expectEqualStrings(request.response_schema.modelBytes(), system[system.len - 1].object.get("text").?.string);
             }
@@ -445,11 +450,19 @@ test "unrelated schemas retain one universal framing instruction across initial 
 }
 
 test "fake provider through decode and schema validation retains only existing candidate authority" {
-    try checkDocument(empty, .{ .bytes = "{}" });
+    {
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(empty);
+        defer fixture.deinit();
+        try checkFixture(&fixture, .{ .bytes = "{}" });
+    }
     const schema =
         \\{"type":"object","properties":{"status":{"enum":["completed"]},"requestId":{"type":"string","maxLength":32},"values":{"type":"array","minItems":1,"maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2}},"optional":{"type":"boolean"}},"required":["status","requestId","values"],"additionalProperties":false}
     ;
-    try checkDocument(schema, .{ .bytes = "{\"status\":\"completed\",\"requestId\":\"model-only\",\"values\":[1.0,2e0]}" });
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(schema);
+    defer fixture.deinit();
+    try checkFixture(&fixture, .{ .bytes = "{\"status\":\"completed\",\"requestId\":\"model-only\",\"values\":[1.0,2e0]}" });
 }
 
 test "complete model payloads beyond former byte ceilings still use their exact schema" {
@@ -676,17 +689,61 @@ fn checkField(field: []const u8, cases: []const Case) !void {
 }
 
 pub fn checkDocument(contract: []const u8, case: Case) !void {
-    var fixture: Fixture = undefined;
-    try fixture.initWithSchema(contract);
-    defer fixture.deinit();
-    try checkFixture(&fixture, case);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    try checkCompiled(try compiler.compiler().compile(arena.allocator(), contract), case);
 }
 
 pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").Schema, case: Case) !void {
-    var fixture: Fixture = undefined;
-    try fixture.initWithCompiledSchema(contract);
-    defer fixture.deinit();
-    try checkFixture(&fixture, case);
+    // These helpers test structural schema semantics. Native request admission
+    // separately requires the producer's explicit semantic field bindings.
+    var parsed = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, case.bytes, null);
+    defer parsed.deinit();
+    const result = validation.validateValue(@import("domain/model_envelope.zig").value(&parsed.parsed.value), contract.root());
+    if (case.rejection) |reason| {
+        try std.testing.expect(result != null);
+        try std.testing.expectEqual(reason, result.?.reason);
+        if (case.path) |path| {
+            const description = try result.?.describe(std.testing.allocator);
+            defer std.testing.allocator.free(description.path);
+            try std.testing.expectEqualStrings(path, description.path);
+        }
+    } else try std.testing.expect(result == null);
+}
+
+test "provider schema rejection proofs and protocol corrections retain every diagnostic kind" {
+    const ProtocolCase = struct { field: []const u8, value: []const u8, rejection: ?validation.Rejection = null, path: []const u8 = "/value" };
+    for ([_]ProtocolCase{
+        .{ .field = text, .value = "\"ok\"" },
+        .{ .field = text, .value = "0", .rejection = .type_mismatch },
+        .{ .field = text, .value = "\"long\"", .rejection = .string_length },
+        .{ .field = "{\"type\":\"integer\",\"minimum\":1,\"maximum\":2}", .value = "3", .rejection = .integer_range },
+        .{ .field = "{\"type\":\"array\",\"minItems\":1,\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}", .value = "[]", .rejection = .array_length },
+        .{ .field = "{\"const\":1}", .value = "2", .rejection = .constant_mismatch },
+        .{ .field = "{\"enum\":[\"yes\",\"no\"]}", .value = "\"other\"", .rejection = .enum_mismatch },
+        .{ .field = variants, .value = "{\"kind\":\"other\"}", .rejection = .unknown_variant, .path = "/value/kind" },
+        .{ .field = variants, .value = "{\"kind\":0}", .rejection = .type_mismatch, .path = "/value/kind" },
+    }) |case| {
+        const contract = try std.fmt.allocPrint(std.testing.allocator, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{case.field});
+        defer std.testing.allocator.free(contract);
+        const bytes = try std.fmt.allocPrint(std.testing.allocator, "{{\"value\":{s}}}", .{case.value});
+        defer std.testing.allocator.free(bytes);
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        try checkFixture(&fixture, .{ .bytes = bytes, .rejection = case.rejection, .path = case.path });
+    }
+    const contract = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"boolean\"}},\"required\":[\"value\"],\"additionalProperties\":false}";
+    for ([_]Case{
+        .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/value" },
+        .{ .bytes = "{\"value\":true,\"extra\":false}", .rejection = .unknown_property, .path = "/extra" },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        try checkFixture(&fixture, case);
+    }
 }
 
 fn checkFixture(fixture: *Fixture, case: Case) !void {
@@ -731,10 +788,10 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const projected = try projection.value(a, result.invalid.expected, .complete);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, located, .{}));
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, try projection.outline(a, result.invalid.expected), .{}), try std.json.Stringify.valueAlloc(a, expected.get("shape").?, .{}));
-            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .openai_oss);
             const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             var occurrences: usize = 0;
-            for (request.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
+            for (request.value.object.get("system").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
             try std.testing.expectEqual(@as(usize, 3), guidance.value.object.count());

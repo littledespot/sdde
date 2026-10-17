@@ -1,7 +1,7 @@
 # 27. Observability
 
-Part of the [proposed design](../design.md#27-observability). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#27-observability), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - The runner constructs one pure `WorkflowLog` binding from the selected compiled workflow's
   registry-validated four-character shortcode.
@@ -71,7 +71,7 @@ keep their registered `debug` severity and the configured event threshold.
 
 ### Complete execution evidence
 
-The user-directed completeness requirement applies to successful and failed work:
+Completeness applies to successful and failed work:
 retain every executed operation's outcome, JSON/schema rejection, correction attempt,
 native repair, retry exhaustion, token-accounting result and terminal disposition.
 An earlier error remains inspectable after recovery. Capture every available model
@@ -87,7 +87,7 @@ response bodies to reconstruct facts. Capture/serialization/append/flush failure
 remain an explicit terminal failure, with the existing emergency diagnostic when the
 file sink is unusable. Never claim a complete record after a logging failure.
 
-**Publication finalization (user-approved R39 contract):** retain ADR 0018 and
+**Publication finalization:** retain ADR 0018 and
 §25.1's close-before-write barrier. `publication.prepared` records the validated
 intended `ok`/`needs_user` outcome; it is not a successful write. Actual publication
 results remain in the terminal result and harness report. Non-publication terminal
@@ -95,7 +95,6 @@ outcomes are recorded before close. Close failure prevents publication, repeated
 finalization preserves failure, and no event is appended after close. The feature
 stream starts at activation after preflight; pre-activation errors use the existing
 terminal/emergency path. No second sink or completion authority is introduced.
-See the [approval record](../../fixes/archive/IMP_001.md#r39-logging-finalization-decision).
 
 The runner projects action starts/outcomes, model attempts and reconciled usage,
 protocol/schema admission and current native rejection evidence. `retry.admitted`
@@ -105,8 +104,7 @@ operation's newly produced diagnostic evidence, avoiding stale-failure attributi
 The [§22.6 normalization](22-repair.md#226-unparseable-output) emits one warning
 `model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE` for the
 two-byte opening artifact or `REMOVED_REPEATED_FIELD_PREFIX` for the opening
-artifact repeating the object's first member name, including the approved
-string-value opener.
+artifact repeating the object's first member name, including the string-value opener.
 Both are emitted only after strict syntax failure and successful remainder parsing.
 Correlation identifies the original request/attempt, whose raw response stays intact. Emit this when
 decoding succeeds even if subsequent schema validation fails; a separate schema
@@ -142,3 +140,12 @@ origin remains unchanged. Native invalid-comparison diagnostics identify that
 comparison attempt; unresolved ownership and known unsupported repair remain
 distinct from invalid evidence. Origins are observations, never evidence authority
 or a requirement for log replay during readback.
+
+The execution snapshot records the single `totalModelTokenBudget`, aggregate
+actual tokens and unavailable-usage state. Every inference is charged once,
+including retries and stopped output, with no per-class pool or subtotal (ADR 0011).
+A global budget rejection remains
+fatal and cannot be reported as incomplete advice. An eligible non-budget advisory stop
+retains the original provider result and failed request; explicit incomplete advice
+records its current assignment suffix, reason, revision and producing origin when
+sent. Exhausted protocol correction records no new attempt or operation.

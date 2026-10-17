@@ -7,8 +7,8 @@ pub const Action = struct {
     pub fn execute(self: Action, allocator: std.mem.Allocator, current: @import("../../domain/specification_session.zig").Session, context: @import("../../domain/specification_provenance.zig").Context, proposed: @import("../../domain/specification_candidate.zig").Candidate) @import("../../domain/specification_session.zig").Error!@import("../../domain/specification_candidate.zig").Result {
         const session = @import("../../domain/specification_session.zig");
         if (proposed.revision == 0 or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
-        var result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
-        if (result == .valid) if (try session.checkConsistency(allocator, current, result.valid)) |issue| {
+        var result = try g.validateCandidate(allocator, self.validator, context, try session.unit(current.completed), proposed);
+        if (result == .valid) if (try session.checkConsistency(allocator, current, context, result.valid)) |issue| {
             result = .{ .invalid = issue };
         };
         @import("../../domain/specification_repair.zig").retainGroupTarget(proposed, &result) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;

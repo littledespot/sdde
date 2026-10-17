@@ -1,7 +1,7 @@
 # 28. Testing strategy
 
-Part of the [proposed design](../design.md#28-testing-strategy). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#28-testing-strategy), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Automated unit, integration, fault-injection, harness and packaging checks must
 make no live LLM calls. Native model connections are disabled in test binaries;
@@ -100,6 +100,27 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
     allowed/disallowed `not_applicable`, unknown ownership and downstream discovery
     of an upstream-owned gap.
   - Require the same closed outcomes and routing semantics in every domain.
+  - Under ADR 0023, retain positive and adverse post-generation findings with
+    `assessment_complete` candidate bindings. Neither finding type can discharge
+    a native forced gap, create clarification authority or authorize repair.
+  - Reject incomplete, duplicate, foreign and stale whole-unit source/principle
+    assignments before append. Reject forged supported resolutions, deterministic
+    methods or candidate bindings on persisted advisory findings.
+  - Preserve pre-generation source repair while rejecting authorization, packet
+    construction and merge after any generation session/content exists, including
+    retained permits and direct custom-workflow operation bindings.
+  - After a repair makes references generation-ready, require the original
+    readiness/preservation validation purpose even with optional preservation
+    disabled. Reject foreign/stale scope, removed-target progress and advisory
+    closure. Block initialization with an active repair or a child suspending it;
+    accept settled native validation with retired review projections.
+  - Through the production schema/decoder/admission path, accept positive native
+    readiness source-purpose evidence with explicit nonempty original source IDs
+    and empty canonical provenance across zero/one/multiple eligible catalogues.
+    Reject empty/duplicate/foreign/stale sources and forged canonical claims or
+    citations; stored roundtrip retains the same model-assisted authority without
+    creating a candidate or authored association. Preserve all candidate-bound
+    missing-provenance and exact reference/preservation evidence controls.
 - task unknown dependency, cycle, phase violation, read/write conflict, and exclusive command;
 - patch scope, patch failure, unexpected file changes, and evidence predicates;
 - create/update/replace/copy/delete expected-state rules and copy-source authorization;
@@ -109,16 +130,17 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
   - Supply current selected spans to the focused Spec policy assessment (§17.3.1),
     keeping extraction, source-preservation and business generation authority separate.
   - Cover the UTC/greeting conflict and unrelated privacy/retention constraints:
-    preserve clear requirements, cite mandatory Plan obligations and resolve them only
-    at the owning gate. Genuine business gaps remain SNN; source loss remains a defect.
-  - Reject omitted/foreign/stale assessment evidence and lost downstream obligations.
+    preserve clear requirements and retain cited advisory findings. Review alone
+    creates no mandatory Plan obligation or Spec question; Plan independently
+    validates its current required policy. Genuine native business gaps remain SNN.
+  - Reject omitted/foreign/stale assessment evidence and altered advisory bindings.
     Changed principles refresh dependent assessments and approvals without rewriting
     business intent. Empty/unrelated principles invent neither requirements nor questions.
   - Prove no Spec-to-PNN predecessor cycle, no policy approval inferred from review,
     and no old no-conflict result certifying Plan's current policy compliance.
   - Distinguish principle capture from assessment execution on a source-gap pause;
     do not report an unexecuted assessment as passed. Preserve supported business
-    intent where selected principles conflict; route policy obligations to their owner.
+    intent where selected principles conflict and retain the original cited advice.
   - Include requirements supported only by validated answers and authenticated Spec
     edits; their current bindings and policy assessment cannot be skipped on rerun.
 - **Clarifications:**
@@ -127,8 +149,8 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
   - Require exact complete conflict-set/view projection.
   - Reject stale answers; exercise authority/user resolution on rerun.
   - An open Spec clarification prevents all planning/model work; an open Spec or
-    Plan clarification prevents all task-generation/model work. Test policy-obligation
-    handoffs alongside open questions and reject attempts to relabel or drop those
+    Plan clarification prevents all task-generation/model work. Test advisory
+    principle handoffs alongside open questions and reject attempts to relabel or drop those
     questions. Closed file status without current validated resolution cannot pass.
   - Both need producers prepare identifiable subjects, current evidence and exact user
     decisions through §12.7. Identical review text for different S/P/T subjects must
@@ -464,8 +486,9 @@ for integration/fault-injection evidence. They are not E2E results:
 
 ### 28.8 Model-conformance comparisons
 
-Assess the [request-guidance proposals](../reference-notes/model-request-guidance.md#proposed-conformance-improvements--20-september-2026)
-through existing request capture, provider binding, validators and the harness.
+Assess request-guidance changes (assignment-specific instructions, correction
+guidance, model or response-mode choice, further response decomposition) through
+existing request capture, provider binding, validators and the harness.
 Scripted fault/recovery tests establish enforcement, sibling/provenance preservation,
 dependency freshness and exact accounting; they do not establish live reliability.
 
@@ -506,8 +529,8 @@ that inject a correct diagnosis do not establish complete recovery.
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |
 | Inconclusive or malformed need | Existing bounded correction only where authorized; exhaustion or no safe correction fails with no new spec/forms, including when other valid questions exist |
-| Optional applicability | No-conflict preserved source → unjustified negative → D1 question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
-| Approved D1 | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
+| Optional applicability | No-conflict preserved source → unjustified negative → question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
+| Source finding variants | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
 | Freshness and publication | Source/policy/answer changes rebuild affected evidence; pending readback does not trust question prose; protected forms survive; logs/report distinguish error, incomplete publication and completed scoring |
 
 Include unrelated business domains and cases with no surviving positive business
@@ -524,7 +547,7 @@ claim universal semantic correctness or successful E2E from fake-provider tests.
 
 ### Bound preservation lifecycle verification
 
-Offline tests supply semantic labels to prove §22.1 assignment, admission, native
+Offline tests supply semantic labels to prove §22.1's pre-generation assignment, admission, native
 attribution, correction, exact repair scope, origin retention, currentness and
 readback mechanics. Cover inherited absence, joint evidence, empty collections,
 role defects without repair permission, distinct occurrences and stale facts.
@@ -538,7 +561,5 @@ and the following comparison's attribution, uncertainty and evidence adequacy.
 Include embedded literals, equivalent wording, genuine extraction loss, wrong-role
 selection, negation, conditions, obligation strength and joint claim support in
 unrelated domains. Hand-written obligations test only comparison, not the complete
-handoff. Historical culprit-selection
-comparisons retain their original requests/results; they do not validate the new
-contract. Freeze new production-generated comparison requests before approved
+handoff. Earlier culprit-selection comparisons do not validate this contract. Freeze new production-generated comparison requests before approved
 live trials. Publication and rubric quality still require separately approved E2E.

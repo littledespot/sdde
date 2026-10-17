@@ -30,6 +30,7 @@ pub const Authorization = atomic.Authorization;
 pub const Error = session.Error || atomic.Error || candidates.Error || error{ InvalidSpecificationRepair, UnsafeSpecificationRepair };
 
 pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, rejection: candidates.Rejection) Error!Authorization {
+    if (rejection.issue.text_issue) |issue| if (issue.isComposition()) return error.InvalidSpecificationRepair;
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.references.lineage.history);
     const stamp = rejection.dependencies orelse return error.InvalidSpecificationRepair;
@@ -46,18 +47,23 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         if (!std.meta.eql(active, target)) return error.InvalidSpecificationRepair;
         return authorizeGroup(allocator, owner, candidate, facts, target, prior.policy, rejection, false);
     }
-    if (rejection.issue.membership != null) {
-        if (candidate.response != .content or candidate.response.content != .records) return error.InvalidSpecificationRepair;
-        const records = candidate.response.content.records;
-        const decision = current.units[2].?.response.content.entities.disposition;
-        const missing = decision == .required and rejection.issue.field == .unit;
-        const target: Target = if (missing) .{ .record = records.len } else if (rejection.issue.field == .target and rejection.issue.field.target == .record) rejection.issue.field.target else return error.InvalidSpecificationRepair;
-        if (missing) {
-            for (records) |record| if (record.content == .entity) return error.InvalidSpecificationRepair;
-        } else if (target.record >= records.len or decision != .not_applicable or records[target.record].content != .entity) return error.InvalidSpecificationRepair;
-        const assigned = try session.currentBinding(allocator, current, context);
-        if (assigned != .records) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance, .fixed_source_group_ids = if (missing) try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{assigned.records.signal}) else records[target.record].source_group_ids } }, rejection, missing);
+    if (rejection.issue.membership) |membership| {
+        if (current.completed != session.entities_index or candidate.response != .content or candidate.response.content != .entities) return error.InvalidSpecificationRepair;
+        const entities = candidate.response.content.entities;
+        if (membership.disposition != entities.disposition or membership.entity_count != entities.records.len or g.spec.entityMembershipSatisfied(entities.disposition, entities.records.len)) return error.InvalidSpecificationRepair;
+        if (entities.disposition == .not_applicable) {
+            if (rejection.issue.field != .target or rejection.issue.field.target != .record or rejection.issue.field.target.record >= entities.records.len) return error.InvalidSpecificationRepair;
+            var authorization = try atomic.authorizeDelete(allocator, owner, candidate.revision, rejection.issue.field.target, try candidates.select(candidate.response, rejection.issue.field.target), facts, .{ .requirement = "Remove only this entity record, preserving the fixed not_applicable decision and all siblings.", .text_issue = null, .value_choices = null });
+            authorization.retry = try retryPermit(allocator, authorization);
+            return authorization;
+        }
+        if (entities.records.len != 0 or rejection.issue.field != .unit) return error.InvalidSpecificationRepair;
+        // The feature-wide decision already retains its selected support. A
+        // missing record can use that exact association without selecting a
+        // different source group or borrowing a batch's write permission.
+        const groups = try p.validateAssociation(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), entities.basis.source_group_ids, entities.basis.provenance, .content);
+        defer allocator.free(groups);
+        return authorizeGroup(allocator, owner, candidate, facts, .{ .record = 0 }, .{ .membership = .{ .fixed_provenance = entities.basis.provenance, .fixed_source_group_ids = entities.basis.source_group_ids } }, rejection, true);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -86,19 +92,41 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
 
 fn valueEvidence(a: std.mem.Allocator, context: p.Context, response: g.Response, field: @FieldType(Target, "value")) Error!p.Resolved {
     const selected = try candidates.attributedValue(.model, response, field.subject, field.field);
-    const values = if (field.subject == .record)
-        try p.recordValues(a, response.content.records[field.subject.record].content)
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const references = @import("reference_support.zig").records(context.references);
+    const values: []const g.spec.BusinessValue = if (field.subject == .record)
+        try p.recordValues(scratch, try p.recognizeRecord(scratch, references, (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, null))
     else
-        &.{selected.value};
+        &.{try p.recognizeValue(scratch, references, selected.value, try candidates.singletonTextField(field.subject), null)};
     return p.lineageForRepair(a, context, selected.provenance, values);
+}
+
+fn recordEvidenceBound(a: std.mem.Allocator, context: p.Context, record: g.spec.Model.RecordProposal) Error!candidates.EvidenceBound {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const recognized = try p.recognizeRecord(scratch, @import("reference_support.zig").records(context.references), record.content, null);
+    const resolved = try p.lineageForRepair(a, context, record.provenance, try p.recordValues(scratch, recognized));
+    return .{ .effective = resolved.effective_claim_ids, .citations = resolved.provenance.citation_ids };
+}
+fn groupEvidenceBound(authorization: Authorization) ?candidates.EvidenceBound {
+    const group = authorization.rule.group orelse return null;
+    return switch (group) {
+        .membership => |membership| membership.evidence_bound,
+    };
+}
+fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.EvidenceBound) Error!void {
+    const r = @import("reference_reconciliation.zig");
+    r.sameSet(r.ClaimId, expected.effective, actual.effective) catch return error.InvalidSpecificationRepair;
+    r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
 fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
     const requirement = switch (policy) {
-        .membership => |membership| if (insert)
+        .membership => if (insert)
             "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
-        else if (membership.disposition == .not_applicable)
-            "Replace only this record with source-backed non-entity content. Preserve its exact evidence selection, source obligations and all siblings."
         else
             "Return the complete corrected entity record, preserving its source meaning and all siblings.",
     };
@@ -144,27 +172,30 @@ pub fn retainGroupTarget(candidate: Candidate, result: *g.Validation) Error!void
     const prior = candidate.group_repair orelse return;
     if (result.* != .invalid or result.invalid.field != .target) return;
     // Session membership is checked only after all field/evidence joins pass.
-    // Let that distinct defect use its existing kind-changing authority once
-    // the same-kind evidence repair has resolved.
+    // Let that distinct defect use its fixed membership authority once
+    // the entity evidence repair has resolved.
     const target = (try candidate.origins.currentTarget(prior.target, recordCount(candidate.response))) orelse return;
     if (candidates.contains(target, result.invalid.field.target)) result.invalid.repair_target = target;
 }
 
 fn recordCount(response: g.Response) usize {
-    return if (response == .content and response.content == .records) response.content.records.len else 0;
+    return if (response == .content) (if (g.recordCollection(.model, response.content)) |entries| entries.len else 0) else 0;
 }
 fn targetBound(response: g.Response) Error!u32 {
     if (response != .content) return error.InvalidSpecificationRepair;
     var count: usize = 1; // One conditional insertion is a whole-record repair target.
     switch (response.content) {
         .brief => count = 9,
-        .primary_user_story, .entities => count = 3,
-        .records => |records| for (records) |record| {
-            count = std.math.add(usize, count, 3) catch return error.InvalidSpecificationRepair;
-            switch (record.content) {
-                inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                    count = std.math.add(usize, count, if (comptime field.type == g.spec.BusinessValue) 1 else @field(fields, field.name).len) catch return error.InvalidSpecificationRepair;
-                },
+        .primary_user_story => count = 3,
+        .entities, .records => {
+            if (response.content == .entities) count += 3;
+            for (g.recordCollection(.model, response.content).?) |record| {
+                count = std.math.add(usize, count, 3) catch return error.InvalidSpecificationRepair;
+                switch (record.content) {
+                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                        count = std.math.add(usize, count, if (comptime field.type == g.spec.BusinessValue) 1 else @field(fields, field.name).len) catch return error.InvalidSpecificationRepair;
+                    },
+                }
             }
         },
     }
@@ -184,21 +215,27 @@ pub fn retryValidation(a: std.mem.Allocator, validator: @import("typed_text.zig"
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (accepted) .resolved else .recurring } };
 }
 fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: session.Session, candidate: Candidate, target: Target) Error!bool {
+    _ = current;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
     const response = candidate.response;
     const selected = try candidates.select(response, target);
     switch (target) {
         .provenance => return error.InvalidSpecificationRepair,
         .value => |field| {
             const evidence = try candidates.attributedValue(.model, response, field.subject, field.field);
-            const values = if (field.subject == .record) try p.recordValues(a, response.content.records[field.subject.record].content) else &.{evidence.value};
-            _ = p.checkValueInUnit(a, validator, context, evidence.provenance, values, evidence.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            const references = @import("reference_support.zig").records(context.references);
+            const values: []const g.spec.BusinessValue = if (field.subject == .record) try p.recordValues(scratch, try p.recognizeRecord(scratch, references, (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, null)) else &.{try p.recognizeValue(scratch, references, evidence.value, try candidates.singletonTextField(field.subject), null)};
+            const policy_field = if (field.subject == .record) try candidates.recordTextField((g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
+            _ = p.checkValueInUnit(scratch, validator, context, evidence.provenance, values, evidence.value, policy_field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
-        .attributed => _ = p.checkAttributed(.model, a, validator, context, selected.attributed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
+        .attributed => |subject| _ = p.checkAttributed(.model, scratch, validator, context, selected.attributed, try candidates.singletonTextField(subject)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
         .record => {
             if (candidate.group_repair) |group| if (group.policy == .membership) {
-                if (!g.spec.entityMembershipSatisfied(current.units[2].?.response.content.entities.disposition, @intFromBool(selected.record.content == .entity))) return false;
+                if (!g.spec.entityMembershipSatisfied(response.content.entities.disposition, @intFromBool(selected.record.content == .entity))) return false;
             };
-            _ = p.checkRecord(.model, a, validator, context, selected.record) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            _ = p.checkRecord(.model, scratch, validator, context, selected.record) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
     }
     return true;
@@ -211,15 +248,16 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     const unit = try session.unit(current.completed);
     if (authorization.operation == .delete) return error.InvalidSpecificationRepair;
     const kind = if (authorization.operation == .replace) std.meta.activeTag(authorization.operation.replace) else authorization.operation.insert;
-    if (kind == .record and unit != .records) return error.InvalidSpecificationRepair;
+    if (kind == .record and unit != .entities) return error.InvalidSpecificationRepair;
     var guidance_arena: std.heap.ArenaAllocator = .init(allocator);
     defer guidance_arena.deinit();
+    const options = try packetOptions(authorization);
     const task = repairTask(guidance_arena.allocator(), authorization) catch |err| return switch (err) {
         error.InvalidRequiredAuthority => error.InvalidSpecificationRepair,
         else => |other| other,
     };
     const base = try session.packetForOptions(allocator, current, context, current.completed, .{
-        .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else null,
+        .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else if (groupEvidenceBound(authorization)) |bound| bound.effective else null,
         .task = task,
     });
     defer packets.release(base);
@@ -227,39 +265,59 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         .provenance => return error.InvalidSpecificationRepair,
         .value => "value",
         .attributed => "attributed_value",
-        .record => switch (authorization.rule.group orelse return error.InvalidSpecificationRepair) {
-            .membership => |membership| if (membership.disposition == .required) "repair_record_entity" else "repair_record_non_entity",
-        },
+        .record => "repair_record_entity",
     };
-    if (authorization.operation == .insert) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial);
+    if (authorization.operation == .insert) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial, options);
     // current_value already carries the whole selected record. Containing-field
     // context is needed only when a smaller value selection is writable.
     if (kind == .record or kind == .attributed) {
-        const fixed = if (authorization.rule.group) |group| (if (group == .membership) group.membership.fixed_provenance else null) else null;
+        const fixed: ?g.spec.Selection = if (authorization.rule.group) |group| (if (group == .membership) group.membership.fixed_provenance else null) else null;
         const narrowed = if (fixed) |selection|
-            try session.withSelectionChoices(allocator, base, context, selection)
+            try session.withSelectionChoices(allocator, base, context, .{ .claim_ids = if (groupEvidenceBound(authorization)) |bound| bound.effective else selection.claim_ids, .clarification_response_ids = selection.clarification_response_ids })
         else
             try packets.withExcludedVariants(allocator, base, base.excludedVariants());
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
     if (kind == .value) {
         const value = try candidates.attributedValue(.model, authorization.dependencies.candidate.response, authorization.target.value.subject, authorization.target.value.field);
         // The rejected value is already in current_value; only its pinned
         // provenance is needed as containing-field context.
         const contextual = if (authorization.target.value.subject == .record)
-            try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target))
+            try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try modelReadContext(guidance_arena.allocator(), context, try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)))
         else
             try packets.withContext(g.spec.Selection, allocator, base, "provenance", value.provenance);
         defer packets.release(contextual);
         const bound = authorization.rule.value_bound orelse return error.InvalidSpecificationRepair;
         const narrowed = try session.withSelectionChoices(allocator, contextual, context, .{ .claim_ids = bound.effective, .clarification_response_ids = value.provenance.clarification_response_ids });
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
-    const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target));
+    const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try modelReadContext(guidance_arena.allocator(), context, try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)));
     defer packets.release(contextual);
-    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+}
+
+fn modelReadContext(a: std.mem.Allocator, context: p.Context, value: candidates.ReadContext) Error!candidates.ReadContext {
+    const references = @import("reference_support.zig").records(context.references);
+    return switch (value) {
+        .attributed => |attributed| .{ .attributed = try p.modelAttributed(.model, a, references, attributed) },
+        .record => |record| result: {
+            var projected = record;
+            projected.content = try p.modelRecord(a, references, record.content);
+            break :result .{ .record = projected };
+        },
+    };
+}
+
+fn packetOptions(authorization: Authorization) Error!shared.PacketOptions {
+    const response = authorization.dependencies.candidate.response;
+    const field: ?@import("text_field_policy.zig").Field = switch (authorization.target) {
+        .value => |selected| if (selected.subject == .record) try candidates.recordTextField((g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[selected.subject.record].content, selected.field) else try candidates.singletonTextField(selected.subject),
+        .attributed => |subject| try candidates.singletonTextField(subject),
+        .provenance, .record => null,
+    };
+    return .{ .fields = .{ .replacement = .{ .inherited = field } } };
 }
 
 /// Present the engine-selected target without reviving an authoring assignment.
@@ -279,7 +337,7 @@ fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || auth
         },
         .attributed => |selected| selected,
         .record => return switch (authorization.rule.group orelse return error.InvalidSpecificationRepair) {
-            .membership => |membership| membershipTask(a, membership.disposition),
+            .membership => descriptions.record(a, .entity),
         },
         .provenance => return error.InvalidSpecificationRepair,
     };
@@ -292,16 +350,6 @@ fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || auth
         .record => return error.InvalidSpecificationRepair,
     };
     return descriptions.task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
-}
-
-fn membershipTask(a: std.mem.Allocator, disposition: g.spec.Applicability) authority.Error![]const u8 {
-    var permitted: std.ArrayList(g.spec.Kind) = .empty;
-    defer permitted.deinit(a);
-    for (std.meta.tags(g.spec.Kind)) |kind| {
-        if (!g.spec.entityMembershipSatisfied(disposition, @intFromBool(kind == .entity))) continue;
-        try permitted.append(a, kind);
-    }
-    return descriptions.recordsFor(a, permitted.items);
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -324,7 +372,7 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
                 .insert => blk_selection: {
                     const group = authorization.rule.group orelse return error.InvalidSpecificationRepair;
                     if (group != .membership) return error.InvalidSpecificationRepair;
-                    break :blk_selection group.membership.fixed_provenance orelse return error.InvalidSpecificationRepair;
+                    break :blk_selection group.membership.fixed_provenance;
                 },
                 .delete => return error.InvalidSpecificationRepair,
             };
@@ -334,16 +382,49 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
     };
 }
 
-pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
+fn recognizeReplacement(a: std.mem.Allocator, context: p.Context, candidate: Candidate, authorization: Authorization, proposed: Replacement) Error!Replacement {
+    const references = @import("reference_support.zig").records(context.references);
+    const fixed: ?[]const @import("reference_reconciliation.zig").ClaimId = if (authorization.rule.value_bound) |bound| bound.effective else if (groupEvidenceBound(authorization)) |bound| bound.effective else null;
+    return switch (proposed) {
+        .provenance => error.InvalidSpecificationRepair,
+        .value => |value| result: {
+            if (authorization.target != .value) return error.InvalidSpecificationRepair;
+            const target = authorization.target.value;
+            const field = if (target.subject == .record) try candidates.recordTextField((g.recordCollection(.model, candidate.response.content) orelse return error.InvalidSpecificationRepair)[target.subject.record].content, target.field) else try candidates.singletonTextField(target.subject);
+            break :result .{ .value = p.recognizeValue(a, references, value, field, fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair };
+        },
+        .attributed => |value| result: {
+            if (authorization.target != .attributed) return error.InvalidSpecificationRepair;
+            var recognized = value;
+            recognized.value = p.recognizeValue(a, references, value.value, try candidates.singletonTextField(authorization.target.attributed), fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
+            break :result .{ .attributed = recognized };
+        },
+        .record => |value| result: {
+            var recognized = value;
+            recognized.content = p.recognizeRecord(a, references, value.content, fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
+            break :result .{ .record = recognized };
+        },
+    };
+}
+
+pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
+    if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
     if (authorization.target == .provenance or (proposed_replacement != null and proposed_replacement.? == .provenance)) return error.InvalidSpecificationRepair;
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.references.lineage.history);
     var result = candidate;
     const prior_value = if (authorization.operation == .insert) null else try candidates.select(candidate.response, authorization.target);
-    const merged = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed_replacement, origin);
+    var recognition_arena: std.heap.ArenaAllocator = .init(allocator);
+    defer recognition_arena.deinit();
+    const proposed = if (proposed_replacement) |value| try recognizeReplacement(recognition_arena.allocator(), context, candidate, authorization, value) else null;
+    var merged = try atomic.checkMerge(allocator, canonical, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed, origin);
+    if (authorization.operation == .replace) {
+        const previous = try recognizeReplacement(recognition_arena.allocator(), context, candidate, authorization, authorization.operation.replace);
+        merged.changed = !try shared.progressEqual(Replacement, allocator, canonical, previous, proposed orelse return error.InvalidSpecificationRepair);
+    }
     if (authorization.rule.value_bound) |bound| {
-        if (authorization.target != .value or proposed_replacement == null or proposed_replacement.? != .value) return error.InvalidSpecificationRepair;
-        const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed_replacement.?);
+        if (authorization.target != .value or proposed == null or proposed.? != .value) return error.InvalidSpecificationRepair;
+        const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed.?);
         const resolved = valueEvidence(allocator, context, updated, authorization.target.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
         if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationRepair;
         for (resolved.provenance.claim_ids, bound.explicit) |actual, expected_id| if (actual.ordinal != expected_id.ordinal) return error.InvalidSpecificationRepair;
@@ -351,13 +432,14 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.
         @import("reference_reconciliation.zig").sameSet(@import("reference_reconciliation.zig").CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationRepair;
     }
     if (authorization.rule.group) |group| {
-        const proposed = proposed_replacement orelse return error.InvalidSpecificationRepair;
+        const replacement = proposed orelse return error.InvalidSpecificationRepair;
         switch (group) {
             .membership => |membership| {
-                if (proposed != .record or !g.spec.entityMembershipSatisfied(membership.disposition, @intFromBool(proposed.record.content == .entity))) return error.InvalidSpecificationRepair;
-                if (membership.fixed_source_group_ids.len != proposed.record.source_group_ids.len) return error.InvalidSpecificationRepair;
-                for (membership.fixed_source_group_ids, proposed.record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationRepair;
-                if (membership.fixed_provenance) |fixed| if (!try atomic.equal(allocator, .{ .provenance = fixed }, .{ .provenance = proposed.record.provenance })) return error.InvalidSpecificationRepair;
+                if (replacement != .record or replacement.record.content != .entity) return error.InvalidSpecificationRepair;
+                if (membership.fixed_source_group_ids.len != replacement.record.source_group_ids.len) return error.InvalidSpecificationRepair;
+                for (membership.fixed_source_group_ids, replacement.record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationRepair;
+                if (!try atomic.equal(allocator, .{ .provenance = membership.fixed_provenance }, .{ .provenance = replacement.record.provenance })) return error.InvalidSpecificationRepair;
+                if (membership.evidence_bound) |bound| try checkEvidenceBound(bound, try recordEvidenceBound(allocator, context, replacement.record));
             },
         }
     }
@@ -368,32 +450,36 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.
     result.value_bound = authorization.rule.value_bound;
     switch (authorization.operation) {
         .replace => {
-            const replacement = try atomic.copyReplacement(allocator, proposed_replacement.?);
+            const replacement = try atomic.copyReplacement(allocator, proposed.?);
             result.response = try candidates.replace(allocator, candidate.response, authorization.target, replacement);
             result.origins = try candidate.origins.replacing(allocator, authorization.target, origin);
         },
         .delete => {
             if (authorization.target != .record) return error.InvalidSpecificationRepair;
             const index = authorization.target.record;
-            const old = candidate.response.content.records;
+            const old = g.recordCollection(.model, candidate.response.content) orelse return error.InvalidSpecificationRepair;
             const records = try allocator.alloc(g.spec.Model.RecordProposal, old.len - 1);
             @memcpy(records[0..index], old[0..index]);
             @memcpy(records[index..], old[index + 1 ..]);
-            result.response.content.records = records;
+            (g.recordCollectionPtr(.model, &result.response.content) orelse return error.InvalidSpecificationRepair).* = records;
             result.origins = try candidate.origins.deleting(allocator, index, old.len);
         },
         .insert => {
-            if (authorization.target != .record or (authorization.rule.group == null or authorization.rule.group.? != .membership or authorization.rule.group.?.membership.disposition != .required) or authorization.target.record != recordCount(candidate.response)) return error.InvalidSpecificationRepair;
-            const old_records = candidate.response.content.records;
+            if (authorization.target != .record or (authorization.rule.group == null or authorization.rule.group.? != .membership) or authorization.target.record != recordCount(candidate.response)) return error.InvalidSpecificationRepair;
+            const old_records = g.recordCollection(.model, candidate.response.content) orelse return error.InvalidSpecificationRepair;
             const records = try allocator.alloc(g.spec.Model.RecordProposal, old_records.len + 1);
             @memcpy(records[0..old_records.len], old_records);
-            records[old_records.len] = (try atomic.copyReplacement(allocator, proposed_replacement.?)).record;
-            result.response.content.records = records;
+            records[old_records.len] = (try atomic.copyReplacement(allocator, proposed.?)).record;
+            (g.recordCollectionPtr(.model, &result.response.content) orelse return error.InvalidSpecificationRepair).* = records;
             result.origins = try candidate.origins.replacing(allocator, authorization.target, origin);
             result.origins.record_occurrences = try candidate.origins.record_occurrences.inserting(allocator, old_records.len, old_records.len);
         },
     }
-    if (authorization.rule.group) |group| result.group_repair = .{ .target = result.pending_repair.?.target, .policy = group };
+    if (authorization.rule.group) |group| {
+        var retained = group;
+        if (retained.membership.evidence_bound == null) retained.membership.evidence_bound = try recordEvidenceBound(allocator, context, (proposed orelse return error.InvalidSpecificationRepair).record);
+        result.group_repair = .{ .target = result.pending_repair.?.target, .policy = retained };
+    }
     result.origins.repair_target_bound = permit.maximum_targets;
     return result;
 }

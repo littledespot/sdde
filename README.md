@@ -26,7 +26,7 @@ and publication evidence control workflow authority.
   workload and publication assurance work are open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [current FIX01 review and remaining work](fixes/FIX01.md).
+  [current FIX05 review and remaining work](fixes/FIX05.md).
 - The development harness runs real generation and grades the actual published
   specification through the selected OpenAI or Bedrock evaluator. A successful
   scored live baseline, human rubric calibration and broader acceptance remain
@@ -109,6 +109,28 @@ time is included in the phase that failed. Capture a full run for comparison wit
 zig build verify --summary all > .zig-cache/verify-costs.log 2>&1
 ```
 
+Generate a repository-wide code heuristics report with:
+
+```sh
+zig build code-heuristics
+```
+
+Read [the Markdown report](zig-out/code-heuristics/report.md) or use
+[the complete JSON measurements](zig-out/code-heuristics/report.json). The command
+refreshes both files on every run (`--prefix` changes the output root).
+It inventories tracked and unignored untracked Zig source in the repository root,
+`src/`, `test/` and `build/`, excluding deleted files, generated output and
+dependencies. Production, tests and development tooling are reported separately.
+Git and the pinned Zig compiler are required; no model calls or credentials are used.
+
+The report highlights file/function size, decision-token counts, brace depth and
+identical function bodies after removing whitespace/comments. Thresholds are
+advisory review signals, with their definitions and limits included in the report;
+they do not assess semantic correctness or impose a CI gate. JSON contains all
+measurements and candidates, including those omitted from the Markdown's ranked
+function and duplicate lists. Test the reporter with `zig build test-code-heuristics`;
+its tests also run in the canonical unit suite.
+
 ## Configure and run a workflow
 
 Run the executable from the target project's root. Bootstrap reads only that
@@ -163,10 +185,13 @@ inspection separates provider bytes, extracted text, parsed JSON and schema diag
 With `"logs": { "level": "debug", "console": true }` in `.sddtoolkit.json`,
 the prompt stream beneath the feature's `logs/prompts` retains the entire available
 provider response after credential redaction. Large responses span ordered chunks;
-the chunk size does not truncate the response. Bedrock GPT-OSS reasoning remains
-in the raw response, including when the provider stops at its output limit or
-returns no final answer. In the debugger, select **Response → Raw provider response**
-to inspect it; **Extracted model text** contains only the admitted final answer.
+the chunk size does not truncate the response. Bedrock Converse reasoning is
+retained as separate, owned diagnostics on complete, stopped and rejected provider
+results, including when no final answer is available. The debugger's
+**Response → Provider reasoning** card shows ordered readable blocks and identifies
+provider-redacted blocks whose text is unavailable. **Raw provider response**
+retains the original captured bytes; **Extracted model text** contains only the
+candidate answer. Reasoning never becomes candidate JSON or workflow authority.
 Interrupted transport retains all received bytes with explicit partial-response
 provenance. `trace` also enables capture; `console` controls the console mirror,
 not file capture.
@@ -177,6 +202,10 @@ incur provider charges and saves a new linked record under the feature's
 `logs/debugger`; original captures remain unchanged. Current provider authorization
 and credentials are required. Replay does not run workflow nodes or semantic
 validators, publish artifacts, or change workflow state.
+
+Older provider-specific chat captures remain inspectable as recorded evidence. Exact replay
+rejects when their bytes differ from the current canonical Converse request;
+there is no legacy wire codec or replay fallback.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
 prompt formats are rejected. Request descriptions use `model-request-debug/v3`
@@ -206,6 +235,15 @@ source snapshot explicitly show that source navigation is unavailable.
 selection, retained evidence and result interpretation. Each agent-initiated
 E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 
+Live development tests permit only Bedrock `openai.gpt-oss-20b-1:0` from
+`ap-southeast-2`, with native JSON Schema. Generation and grading use the same
+explicit model tuple with separate settings and accounting. The registered
+profile uses temperature `0.1`; Spec generation, repair and grading select low
+reasoning. Sonnet, Sol, Haiku, Luna, direct OpenAI and unregistered selections
+reject before credentials or network use. Luna remains registered for explicitly
+configured production use; changing the test selection does not remove its codec.
+These API contracts do not establish model quality or authorize a live run.
+
 ```sh
 ./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
 ```
@@ -229,7 +267,7 @@ effort:
 ./scripts/e2e-call.sh \
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation --call 1 \
-  --model openai.gpt-oss-20b-1:0 --reasoning-effort high --repeats 3
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort low --repeats 3
 ```
 
 Replace the run placeholder with a real capture; the command never selects the
@@ -240,6 +278,8 @@ semantic quality is not assessed. The launcher shares `.env.e2e` setup with
 `e2e-spec.sh`; `--help` and offline builds make no API calls. Live diagnostics
 require explicit approval for the selected calls and repeat count. They do not
 establish full-workflow E2E acceptance or change browser replay behavior.
+Captured catalogues and controls must already admit the GPT-OSS-20B tuple and
+selected reasoning effort.
 
 The [historical authoring-role diagnostics](test/calibration/authoring-roles/README.md)
 retain frozen experiment evidence. FIX03 Phase 5 removes that production classifier
@@ -257,17 +297,17 @@ remain separate from E2E and workflow authority.
 | [Contract samples](design/code.md) | Illustrative shapes and links to their owners; not an alternate runtime schema. |
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
-| [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
-| [FIX01](fixes/FIX01.md) | Current corrective focus, code findings, remaining work and required acceptance evidence. |
+| [Harness overview](design/harness/README.md) | Harness purpose, authority boundary and commands; open work is in FIX05. |
+| [FIX05](fixes/FIX05.md) | Architecture review, current corrective focus, remaining work and required acceptance evidence. |
 | [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 
 ### Fix records
 
-[FIX01](fixes/FIX01.md) is the sole active fix record. Keep outstanding work and
+[FIX05](fixes/FIX05.md) is the sole active fix record. Keep outstanding work and
 its implementation/verification status there; remove completed tasks from active
-tracking. Completed FIX01 work and its supporting dated reviews live in
-[Z_FIX01](fixes/Z_FIX01.md); older records and experiments remain under
-`fixes/archive/`. Historical proposals and status statements do not
+tracking. Completed work and its supporting dated reviews live in
+[Z_FIX01](fixes/Z_FIX01.md) and [Z_FIX02](fixes/Z_FIX02.md); older records and
+experiments remain under `fixes/archive/`. Historical proposals and status statements do not
 create current work, grant approval or establish successful live acceptance.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)

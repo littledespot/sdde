@@ -1,6 +1,5 @@
 const std = @import("std");
 const data = @import("../domain/pipeline_data.zig");
-const pipeline = @import("../domain/pipeline.zig");
 const repair = @import("../domain/specification_coverage_repair.zig");
 const owned = @import("specification_values.zig").storage;
 const spec = @import("specification_workflow.zig");
@@ -23,7 +22,7 @@ pub const Authorize = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_coverage_repair.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -33,30 +32,7 @@ pub const Authorize = struct {
         errdefer owned.destroy(owner);
         const decision = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), rejection) catch |operation_error| return operation_error;
         owner.payload = .{ .coverage_repair = decision };
-        var result = owned.publish(self.allocator, schema, owner, if (decision == .authorized) .ok else .blocked) catch |operation_error| return operation_error;
-        if (decision == .authorized) result.delta.repair_transition = .{ .authorized = decision.authorized.retry orelse return error.OperationExecutionFailed };
-        return result;
-    }
-};
-pub const Merge = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage_repair, .result = .specification_generation_session } };
-    pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
-    pub const Action = @import("../actions/specification/merge_specification_coverage_repair.zig").Action;
-    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
-    pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const state = owned.read(&input.step.data, schema, .coverage_repair) catch |operation_error| return operation_error;
-        if (state != .authorized) return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-        errdefer owned.destroy(owner);
-        owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), state.authorized) catch |operation_error| return operation_error };
-        var delta: pipeline.NodeDelta = .{ .repair_transition = .{ .merged = .{ .permit = state.authorized.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.session.revision } } };
-        delta.data_replacements[@intFromEnum(spec.session_schema.key)] = values.adopt(self.allocator, spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
-        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-        return .{ .outcome = .ok, .delta = delta };
+        return owned.publish(self.allocator, schema, owner, .blocked) catch |operation_error| return operation_error;
     }
 };
 fn content(view: *const data.View) operations.Error!@import("../domain/specification.zig").IdentifiedContent {
