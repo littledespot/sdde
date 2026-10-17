@@ -12,8 +12,9 @@ provenance, coverage, citation and publication checks remain. Whole canonical
 units/collections retain exact per-member findings and origins. Source repair
 requires a current pre-generation witness at authorization, packet creation and
 merge. Completed/pending state use v16; no compatibility reader is introduced.
-Implementation and required offline validation are complete. Committed-build live
-comparisons remain pending separate approval in [FIX05](../../fixes/FIX05.md).
+Implementation and required offline validation are complete. Both separately
+approved committed-build diagnostics stopped before review; live review-cost
+effects and finding-type accuracy remain unmeasured in [FIX05](../../fixes/FIX05.md).
 
 **Implementation:** The native Specify path publishes validated content and controlled
 generation clarifications. Answer application, feature logging and remaining

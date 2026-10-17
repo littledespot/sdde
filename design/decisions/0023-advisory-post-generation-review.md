@@ -1,6 +1,6 @@
 # ADR 0023: Retain post-generation semantic review as advice
 
-- **Status:** Accepted amendment; implemented and verified offline; live comparisons pending
+- **Status:** Accepted amendment; implemented and verified offline; live review benefit unmeasured
 - **Date:** 2026-10-17
 - **Decision authority:** The user's instruction to implement FIX05 B2 and W1
   together, include W2, and the explicit scope answer: "All post-generation
@@ -165,3 +165,11 @@ semantic-quality success. [FIX05](../../fixes/FIX05.md) records commands, retain
 evidence, offline checks and the separately approved live comparisons. A later
 generation failure remains a baseline result; it does not authorize another
 presentation/rewording phase or an automatic rerun.
+
+The separately approved comparisons on clean committed build `b4c7b07` both
+stopped before review: hello-world on duplicate/competing records, and loan-renewal
+on the provider output limit. Neither published or ran rubric evaluation. Both
+reported zero observed admission escapes; hello retained five exact witnesses,
+while loan retained none after upstream token classification. These attempts do
+not establish review-cost savings, finding-type accuracy, original-source token
+preservation or semantic benefit. FIX05 records the retained evidence and scope.

@@ -276,8 +276,68 @@ admission and v16 stored validation; it creates no authored support.
 The independent `contract-reviewer` found no remaining findings. Final logs and
 hashes are retained in `.zig-cache/b2-validation-manifest.json`; integration's
 complete matrix is recorded in `.zig-cache/b2-advisory-integration-14-summary.json`.
-These checks prove offline mechanics, not publication or output quality. Neither
-billed comparison has run on B2/W1/W2; each requires fresh, separate approval.
+These checks prove offline mechanics, not publication or output quality. The
+separately approved committed-build comparisons are recorded below.
+
+**Committed-build live comparison — 17 October 2026:** the user separately
+approved exactly one hello-world and one loan-renewal diagnostic on
+`b4c7b07f792d88a6ae2639bef2e0600a029a2a24`. Both ran once from a clean detached
+checkout; captured provenance reports `modified: false`, Zig 0.16.0, and source
+hash `792f1266c53668831977ceea8a4c923b028b4ea1d4e6fc417f1fa4c3531cae47`.
+The launch commands were unchanged:
+
+- `./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json`
+- `./scripts/e2e-spec.sh --case test/e2e/wf-002-loan-renewal/workflow.case.json`
+
+| Build / case | Accounted calls | Workflow tokens | All review tokens | Terminal outcome |
+| --- | ---: | ---: | --- | --- |
+| B3 `dfae959` / hello-world | 12 | 18,757 | 0; not reached | Blocked: duplicate / competing records |
+| B2/W1/W2 `b4c7b07` / hello-world | 11 | 17,754 | 0; not reached | Blocked: duplicate / competing records |
+| B3 `dfae959` / loan-renewal | 38 | 101,933 | 77,537 (76.1%) | Failed: workflow token budget |
+| B2/W1/W2 `b4c7b07` / loan-renewal | 10 | 32,333 | 0; not reached | Failed: provider `output_limit` |
+
+Hello admitted and advanced the first prose record batch, including native exact
+recognition, then rejected a byte-identical repeated user-visible outcome as
+`duplicate_record` / `competing_records`; repair authorization returned
+`UnsafeSpecificationRepair` with `blocked`. No repair occurred. Its complete
+observed admission audit contains 14 values from 8 producers, five canonical
+exact witnesses, and zero escaped or unattributed values.
+
+Loan stopped before records were collected: the provider returned
+`stopReason=max_tokens`, with 16,384 output tokens against the requested 16,384
+limit. Its complete observed audit contains 9 values from 7 producers and zero
+escaped or unattributed values, but **no exact witnesses**. Both original
+inline-code candidates had been classified `irrelevant`; the admitted message
+strings remained literals. This is an upstream classification observation, not
+a counted native admission escape. This attempt neither exercises native exact
+recognition nor proves original-source token preservation.
+
+Both runs stopped before any semantic review finding, publication or rubric
+evaluation. Review cost effects and finding-type accuracy are **unmeasured**;
+the lower totals reflect different execution coverage and do not establish B2
+savings, semantic benefit or reduced brittleness. No baseline label is transferred
+to a changed candidate. Both per-run approvals are consumed. Under §7, retain the
+generation failures as baseline evidence; do not open another rewording sub-phase
+or automatically rerun.
+
+The new reports are retained at:
+
+- `zig-out/e2e-spec/2026-10-17T00-38-56Z-f26b1f0f123016ca419a66968d79addf/report.json`
+- `zig-out/e2e-spec/2026-10-17T00-39-51Z-9210b2b21f83c723235fef18c6eed60e/report.json`
+
+`zig-out/b2-live-diagnostics/manifest.json` hashes the retained artifacts;
+`zig-out/b2-live-diagnostics/accounting.json` records all four runs using exact
+captured native workflow routes, unique accounting origins, complete usage and
+explicit unknown handling. Its SHA-256 is
+`a1a9918b20b12d756c9db49ff979d686cee537f25338a8f639bd28deb4817269`.
+The offline analysis command is
+`python3 .zig-cache/b2_diagnostic_analysis.py <retained-run-directory>`;
+its SHA-256 is `1221b14d94d19a03a60e04733dbc507ce65d566697becd5758697da6e063a572`.
+It counts all pre-generation and post-generation semantic review/correction
+work when present, keeps evaluation outside workflow spend, and does not alter
+frozen B3 artifacts. Independent read-only audit confirmed the native failures,
+admitted-value scope and absent review evidence. B2/W1/W2 is implemented and
+verified offline; its live review benefit remains unproven.
 
 Measure the review workload (former R5): coverage, sends and actual tokens per stage,
 latency, retained memory and finding-type accuracy (§7).
@@ -436,8 +496,9 @@ dispositions mark the original `Renewal refused.` claim 3 superseded by
 requirements, but only `Loan renewed!` appears in the canonical exact-value
 witnesses. This is retained lineage evidence, **not a new B3 admission escape**.
 It does not authorize a rewording phase. B2/W1/W2 approval is recorded above and
-in §6; implementation and required offline checks are complete. The two committed-build
-live comparisons remain pending separate per-run approval.
+in §6; implementation and required offline checks are complete. Both separately approved
+committed-build comparisons recorded above stopped before review; their review effects
+remain unmeasured.
 
 **Diagnosis before this cutover:** the model had to splice `exact_copy` insertions into its prose, and native coverage
 credits only an insertion ([coverage](../src/domain/specification_coverage.zig#L77)).
@@ -905,9 +966,10 @@ the earlier proposed order for B3, B2, W1 and W2:
    authority. Current native facts and genuine supported human decisions remain
    mandatory. Include W2 by deleting the unused post-generation upstream path and
    merge variants. Add A4 rejection reasons only if debugging needs them.
-4. Rerun the same two separately approved diagnostics, measuring review's share of
-   cost and finding-type accuracy. Governing amendments and their tests accompany
-   the B2/W1 implementation; they are not part of the B3 change.
+4. **Two separately approved attempts complete on `b4c7b07`:** neither reached
+   review, so comparative review cost and finding-type accuracy remain unmeasured.
+   Governing amendments and their tests accompany the B2/W1 implementation; they
+   are not part of the B3 change.
 
 The remaining recommendations below are proposals, not additional authorization:
 
