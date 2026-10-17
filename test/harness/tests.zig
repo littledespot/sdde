@@ -627,7 +627,8 @@ test "Bedrock native schema output retains complete judgment validation and exac
         // The shared §22.6 decoder admits exactly the approved opening artifacts.
         .{ .text = "{\"" ++ good, .reason = null },
         .{ .text = "{\"results" ++ good, .reason = null },
-        .{ .text = "{\"resu" ++ good, .reason = .json },
+        .{ .text = "{\"resu" ++ good, .reason = null },
+        .{ .text = "{\"resx" ++ good, .reason = .json },
         .{ .text = "{\"{\"" ++ good, .reason = .json },
     }) |case| {
         var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", case.text) } });

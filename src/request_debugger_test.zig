@@ -1125,4 +1125,8 @@ test "debugger exposes provider reasoning separately including stopped and missi
     try std.testing.expect(std.mem.indexOf(u8, ui, "p.append(reasoningView(v.reasoning))") != null);
     try std.testing.expect(std.mem.indexOf(u8, ui, "e.textContent = String(text)") != null);
     try std.testing.expect(std.mem.indexOf(u8, ui, "innerHTML") == null);
+    // Every engine normalization is displayed separately from the raw response.
+    inline for (comptime std.meta.tags(@import("domain/model_envelope.zig").Normalization)) |rule| {
+        if (rule != .none) try std.testing.expect(std.mem.indexOf(u8, ui, @tagName(rule) ++ ":") != null);
+    }
 }

@@ -518,13 +518,26 @@ At the first quote or object opener after `{"`, it requires the exact continuati
 above. It rejects escapes, control bytes and any other closing-quote continuation;
 it never searches past another fragment or discards string-value content.
 
+**Partial member-name amendment (user-approved, 18 October 2026):** Bedrock GPT-OSS
+also truncates the unfinished member name, for example `{"find{"findings":…}`.
+- In the `{"name` form only, `name` may be a nonempty start of the first member name
+  rather than the whole name. It must still be unescaped, control-free, valid UTF-8,
+  so it cannot split a character.
+- The key scan then ends at the first quote or backslash after `name`. A backslash
+  rejects; a quote must be followed, after JSON whitespace, by a colon.
+- The strict remainder parse still owns the validity of every key byte.
+- The candidate records `removed_partial_field_prefix`.
+- The string-value opener still requires the exact name.
+- Every other rule in this section is unchanged.
+
 Remove that one prefix and strictly parse the entire remainder. Accept normalization
 only when it is one complete JSON object. Valid input is never altered; no leading
 whitespace, recursive removal, other prefix, fence, suffix, duplicate key or malformed
 remainder is salvaged. Schema and domain validation remain mandatory.
 
-The candidate retains a typed `removed_leading_brace_quote` or
-`removed_repeated_field_prefix` fact and its original invocation evidence.
+The candidate retains a typed `removed_leading_brace_quote`,
+`removed_repeated_field_prefix` or `removed_partial_field_prefix` fact and its
+original invocation evidence.
 The runner logs `model.response_normalized` at warning level
 with that rule, node, request and attempt; logging failure remains terminal.
 Raw provider/text captures are unchanged. The shared domain handoff supplies the

@@ -5370,6 +5370,8 @@ test "runner logs normalization once with call provenance and stops on log failu
         .{ .body = "{\"answer\":\"{\"answer\":\"valid\"}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
         .{ .body = "{\"answer\":\"{\"answer\":42}", .code = "REMOVED_REPEATED_FIELD_PREFIX", .outcome = .invalid },
         .{ .body = "{\"answer\":\"{\"answer\":\"valid\",\"extra\":true}", .code = "REMOVED_REPEATED_FIELD_PREFIX", .outcome = .invalid },
+        .{ .body = "{\"ans{\"answer\":\"valid\"}", .code = "REMOVED_PARTIAL_FIELD_PREFIX" },
+        .{ .body = "{\"ans{\"answer\":42}", .code = "REMOVED_PARTIAL_FIELD_PREFIX", .outcome = .invalid },
     }) |case| {
         const body = case.body;
         var fixture: Fixture = undefined;
@@ -5403,11 +5405,15 @@ test "runner logs normalization once with call provenance and stops on log failu
     };
 }
 
-test "approved repeated field prefixes avoid protocol correction" {
-    for ([_]bool{ false, true }) |consolidated| for ([_][]const u8{
-        "{\"answer{\"answer\":\"MOCK valid\"}",
-        "{\"answer\":\"{\"answer\":\"MOCK valid\"}",
-    }) |body| {
+test "approved repeated and partial field prefixes avoid protocol correction" {
+    const envelope = @import("domain/model_envelope.zig");
+    const Case = struct { body: []const u8, normalization: envelope.Normalization };
+    for ([_]bool{ false, true }) |consolidated| for ([_]Case{
+        .{ .body = "{\"answer{\"answer\":\"MOCK valid\"}", .normalization = .removed_repeated_field_prefix },
+        .{ .body = "{\"answer\":\"{\"answer\":\"MOCK valid\"}", .normalization = .removed_repeated_field_prefix },
+        .{ .body = "{\"ans{\"answer\":\"MOCK valid\"}", .normalization = .removed_partial_field_prefix },
+    }) |case| {
+        const body = case.body;
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -5419,7 +5425,7 @@ test "approved repeated field prefixes avoid protocol correction" {
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
-        try std.testing.expectEqual(.removed_repeated_field_prefix, (try payloadResult(&runner)).outcome().valid.candidate().normalization());
+        try std.testing.expectEqual(case.normalization, (try payloadResult(&runner)).outcome().valid.candidate().normalization());
         try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?.terminal_reason.?);
         try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
         try expectResponseAccounting(&runner, &fake, 7);
@@ -5432,6 +5438,8 @@ test "normalization never bypasses schema rejection or the protocol retry allowa
         "{\"{ \"answer\":\"invalid remainder\",}",
         "{\"answer{\"answer\":42}",
         "{\"answer{\"answer\":\"invalid remainder\",}",
+        "{\"ans{\"answer\":42}",
+        "{\"ans{\"answer\":\"invalid remainder\",}",
         "{\"answer\":\"{\"answer\":42}",
         "{\"answer\":\"{\"answer\":\"valid\",\"extra\":true}",
         "{\"answer\":\"{\"answer\":\"invalid remainder\",}",

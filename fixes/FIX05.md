@@ -298,7 +298,8 @@ What blocks or misleads now:
     and the title is the whole requirement sentence.
 - **B7 reproduced again.** Loan-renewal extraction produced one claim saying "may
   renew".
-- **Truncated-key prefix.** `{"find{` cost one protocol retry in each run (B6).
+- **Truncated-key prefix.** `{"find{` cost one protocol retry in each run (B6),
+  later normalized (§12).
 
 ## 2. Why the engine is hard to implement
 
@@ -993,9 +994,11 @@ Constraints carried from former F1–F8 and FIX04 §§4–5:
 
 - Extraction merging requirements is now tracked as B7, because both B3 baselines
   show it.
-- The GPT-OSS envelope-prefix malformation (`{"token{`) recurs. It is counted, not
-  normalized. It recurred at hello-world call 2 on the B3 build, and the protocol
-  retry corrected it.
+- The GPT-OSS envelope-prefix malformation (`{"token{`) recurs. It recurred at
+  hello-world call 2 on the B3 build, and the protocol retry corrected it.
+  **Resolved 18 October 2026:** the user approved normalizing the truncated
+  member-name form after it appeared in 6 of 20 source-review responses in one run,
+  causing 5 retries and one exhausted assignment (§12).
 - Before B3, entity applicability was marked required for a feature with no business
   data, and the entity-name exception then admitted an insertion-only name. No native
   rule can judge applicability. Both B3 baselines judged it correctly:
@@ -1649,6 +1652,8 @@ bounded approval, and each E2E run needs its own explicit approval
   B4's post-R8 evidence, generalized B9 to all runaway output, and updated §6.
 - **18 October 2026, after the post-B4/B9 runs:** added §1's post-B4/B9 diagnostics
   and §10's forbidden-verdict fix, and updated §6.
+- **18 October 2026, prefix decision:** approved normalizing the truncated Bedrock
+  GPT-OSS member-name prefix, logged as an engine fix. Added §12 and updated B6.
 - **18 October 2026, user decisions:** approved routing the grader through the
   canonical envelope parser. Directed that there be no output token limits and that
   provider-applied limits be logged. Added §11 and updated §1, B9, §5, §6 and §9.
@@ -1912,8 +1917,9 @@ unchanged. Contract 27 records the event.
 
 **Regression evidence:**
 
-- **Grader:** `{"` and repeated-key prefixes are scored. Truncated (`{"resu`) and
-  doubled prefixes are rejected as `json`. The added Bedrock cases fail without the
+- **Grader:** `{"` and repeated-key prefixes are scored. Since §12, so is a key start
+  (`{"resu`). A non-matching start (`{"resx`) and doubled prefixes are rejected as
+  `json`. The added Bedrock cases fail without the
   change. A separate guard test shows `judgment.validate` alone still rejects a
   prefixed proposal.
 - **Configuration:** a `maxOutputTokens` value of 1, 2,048, 16,384 or null is
@@ -1952,3 +1958,73 @@ unchanged. Contract 27 records the event.
 The direct Anthropic proposal ([claude_connector.md](claude_connector.md)) assumes a
 required `maxOutputTokens`. It stays unaccepted and would need a new decision. No
 billed calls, E2E reruns or human acceptance are included.
+
+## 12. Partial member-name prefix normalization — 18 October 2026
+
+**Decision.** On 18 October the user approved normalizing the truncated opening artifact
+that Bedrock GPT-OSS-20B emits. The engine must log each fix as a warning, and the
+change must stay limited to the prefix.
+
+**Evidence.** The 18 October 10:00 AEDT loan-renewal run
+(`2026-10-17T23-00-08Z-5210055c5d2617259529446984f05612`) hit this artifact in 5 of
+its 20 source-review calls, counting retries.
+- Six responses began `{"find{"findings":…`: calls 11, 17, 19, 21, 29 and 30.
+- They caused five protocol retries, which together cost 18,802 tokens.
+- Call 30 was itself the retry for request 25 and failed again. The correction
+  allowance was exhausted, so the advice for requirement ordinals 25–26 closed
+  incomplete, with no source review for those subjects.
+- The run exceeded the 100,000-token budget at 111,880. Without the retries it
+  would have been about 93,000, assuming nothing else changed.
+- The same form, `{"token{` and `{"find{`, appeared once per run from 16 October.
+
+**Change.**
+- In [model_envelope.zig](../src/domain/model_envelope.zig), the shared §22.6
+  parser also accepts `{"name{` when `name` is a nonempty start of the next
+  object's first key, rather than the whole key.
+- That key must end at an unescaped quote followed by a colon.
+- Everything else is unchanged:
+  - only the opening fragment is removed;
+  - escapes, control bytes and recursive or trailing artifacts still reject;
+  - the remainder must strictly parse as one complete object;
+  - schema and native validation still run;
+  - the string-value opener still requires the exact name.
+- The candidate records `removed_partial_field_prefix`. The runner logs the
+  existing warning event `model.response_normalized`, which reports that the engine
+  fixed the response, with diagnostic `REMOVED_PARTIAL_FIELD_PREFIX`.
+- The request debugger shows every normalization rule from one note map; a test
+  requires an entry for each rule.
+- The engine and the grader share this parser.
+- §22.6 and contract 27 record the amendment.
+
+**Regression evidence:**
+
+- **Envelope tests accept:**
+  - `{"find{"findings":…}`, `{"token{"token_classifications":…}` and
+    `{"kind{"kind_extra":…}` (the last was previously listed as rejected);
+  - a whitespace-led key;
+  - a UTF-8 key start (`{"é{"état":…}`).
+- **Envelope tests reject:**
+  - a non-matching start and a longer name;
+  - a missing colon, a trailing fragment, a trailing comma and an incomplete
+    remainder;
+  - an escaped key and a recursive prefix;
+  - a duplicate key, a control byte or invalid UTF-8 in the rest of the key, and a
+    name that splits a character;
+  - a truncated string-value opener.
+- **Runner tests:**
+  - The runner logs `REMOVED_PARTIAL_FIELD_PREFIX` once at warning level, and the
+    request completes without protocol correction.
+  - Partial-prefix responses that fail the schema or the remainder parse still use
+    the protocol retry allowance.
+  - The accepted-case test fails with partial prefixes rejected.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-model-envelope test-model-request-workflow -j2 --summary all` | 6/6 steps; 511/511 tests. |
+| `zig build test-rubric-evaluator -j2 --summary all` | 3/3 steps; 386/386 tests. The grader now accepts `{"resu` and rejects `{"resx`. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,890/1,890 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included.
