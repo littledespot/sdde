@@ -48,9 +48,141 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | First run passing every native generation check (20:33) | 42 calls and 100,884 tokens; budget exceeded during re-review; review 75.6% |
 | Pre-B3 retained run (22:00, modified `3303498`) | `RetryLimitExhausted` at brief generation after 10 calls and 13,797 tokens: `embedded_insertion_syntax`, and a `{"token{` envelope prefix on call 2 |
 | B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
+| B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
 | History | 199 commits in 8 weeks; 297,901 Zig lines inserted and 148,709 surviving; 22 ADRs between 26 August and 6 October |
+
+### Post-B3 outcome assessment — 17 October 2026
+
+This assessment compares the two B3 live baselines with the 16 October runs and with
+the [intent](../design/intent.md). B3 records the mechanics of those baselines.
+
+**Verdict: the direction is right, but the outcome has not improved yet.**
+
+B3 did what it was designed to do:
+
+- Every generation call in both runs was admitted on its first attempt, with no
+  composition correction. Before B3, four of the five most recent hello-world runs
+  failed on exact values.
+- Loan-renewal passed exact-value coverage in a live run for the first time.
+- Failures moved downstream to the boundaries this record predicted: B5's record
+  batches and B2's review. No new failure class appeared.
+
+But neither run published. Useful completion is therefore still zero across the ten
+full-workflow runs since 16 October, and loan-renewal ended where its 08:09 run did:
+out of budget in review.
+
+| Case | Run (AEDT) | Build | Calls / tokens | Generation corrections | Furthest point | Terminal |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hello-world | 16 Oct 16:20 | `bfec3d7` | 8 / 12,896 | Title rejected; repair repeated it | Brief | `RepairNoProgress` |
+| Hello-world | 16 Oct 18:58 | `54de975` plus uncommitted code | 14 / 20,374 | Record fields collapsed into insertions | Records | `RepairNoProgress` |
+| Hello-world | 16 Oct 20:22 | `6676ad8` | 14 / 22,780 | Story corrected twice | Coverage | Blocked: value typed, not inserted |
+| Hello-world | 16 Oct 20:33 | `6676ad8` | 42 / 100,884 | Not recorded | Re-review | Budget |
+| Hello-world | 16 Oct 22:00 | modified `3303498` | 10 / 13,797 | Insertion syntax in prose | Brief | `RetryLimitExhausted` |
+| Hello-world | **17 Oct 09:05** | **`dfae959` (B3)** | **12 / 18,757** | **None** | **Records batch 2** | **Blocked: duplicate records** |
+| Loan-renewal | 16 Oct 07:54 | uncommitted `4f25a06` | 13 / 25,508 | Not recorded | Records | Blocked: duplicate records |
+| Loan-renewal | 16 Oct 08:09 | uncommitted `4f25a06` | 37 / 101,002 | Not recorded | Entity review | Budget |
+| Loan-renewal | **17 Oct 09:06** | **`dfae959` (B3)** | **38 / 101,933** | **None** | **Entity review** | **Budget** |
+
+Against the intent's success measures:
+
+| Measure | Observed in the B3 baselines |
+| --- | --- |
+| Requirement preservation | Hello-world: all three duties preserved. Loan-renewal: all five source duties appear in functional-requirement prose, but extraction weakened "must be able to renew" to "may renew" (B7), no acceptance criterion tests refusal, and `Renewal refused.` lost its exact-value witness (B8). |
+| Unsupported additions | Minor. The Loan–Borrower, DueDate and RenewalStatus relationships are inferred, not stated; hello-world's goal adds "confirming the application runs correctly". |
+| False assessments | Review accepted the weakened obligation as faithful (calls 15, 17 and 23), accepted refusal coverage that doesn't exist (call 20), and gave opposite verdicts on byte-identical text (calls 29 and 35). |
+| Repair-induced harm | None observed; no content repair ran. |
+| Successful completion | 0 of 2 (0 of 10 since 16 October). |
+| Latency | About 17 seconds and 52 seconds. |
+| Cost per acceptable result | Undefined, because there is no acceptable result. |
+
+**Alignment with the intent.** B3, and the B2/W1 change now being implemented under
+[ADR 0023](../design/decisions/0023-advisory-post-generation-review.md), both apply
+the intent's central principle: deterministic code owns bookkeeping, and model review
+is advice, not authority. Two cautions follow from these runs:
+
+1. **Publication will soon stop being a measure of quality.** Once review is
+   advisory, a candidate like this loan-renewal one could publish despite its
+   weakened obligation, missing refusal scenario and dropped exact value. The intent
+   counts useful, faithful output, not publication. R8's acceptance policy and a
+   refreshed rubric calibration therefore need to be in place before the post-B2/W1
+   reruns, or a publication will be mistaken for success.
+2. **The next failures are engine structure, not model capability.** Three of them
+   are bookkeeping or structure that code can own: token-only record batches (B5),
+   model-disposed exact tokens (B8) and extraction collapsing structured sources
+   (B7). Fixing them applies the same principle as B3. Rewording prompts does not.
+
+### Post-B2/W1 live diagnostics — 17 October 2026
+
+Both reruns used committed `b4c7b07` (B2/W1/W2), unmodified, about 2.5 hours after
+the B3 baselines. B2's committed-build live comparison records their mechanics and
+audit artifacts; this section assesses outcome and direction.
+
+| Case | Run (AEDT) | Calls / tokens | Duration | Furthest point | Terminal |
+| --- | --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T00-38-56Z-f26b1f0f123016ca419a66968d79addf/report.json) | 17 Oct 11:38 | 11 / 17,754 | About 15 s | Records batch 2 | Blocked: duplicate records (B5) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T00-39-51Z-9210b2b21f83c723235fef18c6eed60e/report.json) | 17 Oct 11:39 | 10 / 32,333 | About 50 s | Records batch 1 | Failed: provider output limit (B9) |
+
+Admission escape is zero in both runs (14 and 9 admitted values).
+
+**Verdict: no improvement, and B2/W1 is still untested live.**
+
+- **B2/W1 not exercised.** Neither run reached review, so these runs neither confirm
+  nor refute the advisory-review change. Its offline verification (B2) remains the
+  only evidence.
+- **No publication.** Useful completion is 0 of 12 full-workflow runs since
+  16 October.
+- **No sign that B2/W1 caused either failure.** It changed review only. The
+  generation requests use identical inference settings and differ from the B3
+  baselines only in what earlier model calls produced.
+
+What the runs show:
+
+- **B5 reproduced exactly.** Hello-world's second record batch was again assigned
+  only `Hello, World!`; the model re-authored the feature and the run blocked. It is
+  now the deterministic hello-world blocker, in 2 of 2 runs since B3.
+- **Exact values lost again, by a different route (B8).** Token classification
+  (call 2) marked both `Loan renewed!` and `Renewal refused.` as `irrelevant`, so the
+  run carried no exact-value obligations at all. In the B3 baseline the same step
+  preserved both, and reconciliation then dropped one. Loan-renewal has lost exact
+  obligations in both post-B3 runs.
+- **Runaway record output (new B9).** With no tokens, loan-renewal had only one
+  record batch.
+  - The entities step's basis now named three entities.
+  - The batch wrote an acceptance criterion, a functional requirement and then 286
+    invented entity records, degenerating into names like
+    `RenewalNotificationFailureNotificationFailure…Log`, until the 16,384-token
+    output limit.
+  - That one call used 19,979 tokens (62% of the run) and 37 seconds.
+  - The engine rejected the partial output with a typed `output_limit`, as
+    designed.
+- **B7 reproduced.** Extraction collapsed the source list into one claim in all four
+  post-B3 runs. It weakened loan-renewal's "must be able to renew" to "may renew" in
+  both loan runs.
+- **Run-to-run variance.** With identical source bytes and settings (temperature
+  0.1), the same steps flipped between runs:
+  - token classification went from preserve to `irrelevant`;
+  - the entity basis went from one entity to three;
+  - record output went from 3 records to 286.
+
+  Single model judgments that decide bookkeeping aren't stable enough to depend on.
+- **Minor text defects.** Hello-world's story says "exactly as preserved", which is
+  engine vocabulary leaking into business text. Its title is the whole requirement
+  sentence.
+
+**Direction and alignment.** The direction is still consistent with the intent.
+These runs, however, move the binding constraints upstream of review, onto things
+the engine can own:
+
+- the token-only record batch (B5), which is deterministic;
+- exact-value classification and disposition (B8);
+- extraction granularity (B7).
+
+Both runs stopped explicitly, with typed outcomes and no invented success, as the
+intent requires. Until B5 and B8 change, further billed reruns add little
+information: hello-world will block on B5, and B2/W1 stays unobserved unless a run
+reaches review.
 
 ## 2. Why the engine is hard to implement
 
@@ -221,6 +353,13 @@ Evidence from former F9 and F13, and FIX01 R5 and R6:
 - **Panel result.** The 30-call actual source-review panel passed 15/26 faithful
   omission handoffs, 2/2 supported controls and 0/2 genuine-gap controls
   ([results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md)).
+- **B3 baselines, 17 October.** These classes recur on cleanly admitted content:
+  - review took 76.1% of loan-renewal's tokens;
+  - it judged byte-identical relationship text both `supported` (call 29) and
+    `candidate_omission` (call 35);
+  - it accepted an obligation-strength change as faithful (B7).
+
+  39.5% of the review cost went on records duplicated by the token-only batch (B5).
 
 **Decision** (amends §17.3 and §22):
 
@@ -537,8 +676,8 @@ every retained capture with no model calls
 selected-membership and whole-word observations remain dated historical evidence;
 the approved native scope and delimiter policies supersede them for production.
 
-Historical gates of the former Phases 1A.2 and 1A.3, now mechanically closed by the
-committed baselines above ([approved plan](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)):
+Open gates of the former Phases 1A.2 and 1A.3
+([approved plan](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)):
 
 - The approved representation change replaces Phase 1A.3 steps 2–3: the
   21-send [attribution panel](../test/calibration/insertion-presentation/README.md)
@@ -594,6 +733,33 @@ Evidence from former F1, F9 and F13:
   whether uncertainty blocks drafting.
 - Six model requests precede authoring even on a three-line source.
 
+**Token-only record batches: B3 baseline evidence, 17 October.** In both B3
+baselines, the second record batch was assigned only a preserved token, with no
+behaviour to author: `Hello, World!` in hello-world and `Loan renewed!` in
+loan-renewal. Each time the model re-authored the whole feature:
+
+- in hello-world, as an exact duplicate that blocked the run;
+- in loan-renewal, as near-duplicates. Reviewing them took 10 of 25 review calls and
+  30,651 tokens (39.5% of review), plus 3,952 generation tokens.
+
+The cause is native. [`recordCount`](../src/domain/specification_source_binding.zig#L131)
+counts every question-eligible group, while
+[`tokenOnly`](../src/domain/specification_source_binding.zig#L30) only shapes the
+request presentation. Since B3, the behavioural batch already carries those values:
+hello-world's first batch admitted `Hello, World!` as a recognized exact occurrence.
+The post-B2/W1 hello-world rerun reproduced the block exactly, so it has now occurred
+in 2 of 2 runs since B3 (§1).
+
+**Decision** (amends the §17 record assignment and ADR 0020): don't schedule a record
+batch for a group whose claims are all preserved tokens.
+
+- Other records must carry those values as recognized occurrences.
+- If they don't, the existing exact-coverage check blocks with a typed outcome.
+- Test accepted and rejected cases at the session owner, including a token that no
+  behavioural record mentions.
+
+This is narrower than the A/C comparison and should come before the baseline.
+
 **Proposal:** compare current per-group records (A) with one complete record
 collection (C). Add a purpose-only acceptance-criterion diagnostic (B) or per-family
 collections (D) only where measured failures justify them. Run it after B2 and B3,
@@ -629,16 +795,118 @@ Constraints carried from former F1–F8 and FIX04 §§4–5:
 
 ### B6. Secondary failure classes to measure
 
-- Extraction has merged hello-world's three requirements into one claim in every
-  sample since Phase 1A.
+- Extraction merging requirements is now tracked as B7, because both B3 baselines
+  show it.
 - The GPT-OSS envelope-prefix malformation (`{"token{`) recurs. It is counted, not
-  normalized.
-- Entity applicability was marked required for a feature with no business data, and
-  the entity-name exception then admitted an insertion-only name. No native rule can
-  judge applicability.
+  normalized. It recurred at hello-world call 2 on the B3 build, and the protocol
+  retry corrected it.
+- Before B3, entity applicability was marked required for a feature with no business
+  data, and the entity-name exception then admitted an insertion-only name. No native
+  rule can judge applicability. Both B3 baselines judged it correctly:
+  `not_applicable` for hello-world and `required` for loan-renewal.
 
 Measure each as its own class in the baseline. Don't widen the normalizer or narrow
 the entity-name exception without a decision.
+
+### B7. Extraction collapses structured sources and weakens obligations
+
+Evidence from both B3 baselines:
+
+- **Collapsed lists.** Both sources are Markdown bullet lists of distinct
+  requirements: three items in hello-world and five in loan-renewal. Extraction
+  returned one claim for each whole list, citing lines 5–7 and 5–9. Hello-world has
+  done this in every sample since Phase 1A.
+- **Weakened obligation.** Loan-renewal's claim turned "A borrower must be able to
+  renew" into "A borrower may renew". That is an obligation-strength change, which
+  the intent says extraction must preserve. The weakened text flowed into the brief
+  description, the story and the first functional requirement, and review judged
+  them `supported` (calls 15, 17 and 23).
+- **Downstream effect.** With one behavioural claim per feature there is one
+  behavioural source group, and every record cites the same claim. Coverage is
+  satisfied by any record that mentions that claim, and review subjects are whole
+  paragraphs. Traceability suffers, and native checks could not see the missing
+  refusal scenario.
+- **Reproduced after B2/W1.** All four post-B3 runs collapse the list, and both
+  loan-renewal runs write "may renew".
+
+**Proposal** (measure first; then **Decision**, amending the §16 chunking and
+extraction contracts): segment structured sources natively, starting with Markdown
+list items, so the model extracts one requirement at a time instead of deciding how
+to split a chunk. Source structure is deterministic, so this follows B3's principle.
+
+First, replay both cases' retained extraction requests split per item, with
+repetitions under bounded approval. Score claim count and obligation-strength
+preservation.
+
+### B8. The model classifies and disposes exact-value tokens
+
+In the B3 baseline, loan-renewal's reconciliation asked the model to dispose its two
+preserved tokens:
+
+- **First attempt.** It marked both as duplicates of the business claim. Native rules
+  rejected that, which cost two repair calls; calls 4–6 together used 4,100 tokens.
+- **Repair.** The repair for `Renewal refused.` offered `retained` or `superseded` by
+  claim 2 (`Loan renewed!`). The model chose `superseded`, and native rules accepted
+  it because both claims are preserved tokens.
+- **Consequence.** `Renewal refused.` lost its canonical exact-value witness (recorded
+  under B3).
+
+Exact tokens are byte facts. Whether two tokens are duplicates is computable. Whether
+one distinct value supersedes another within a single source is a judgment the small
+model got wrong here.
+
+**Post-B2/W1 rerun, 17 October.**
+
+- Token classification marked both inline-code values as `irrelevant`, even though
+  extraction's admitted claim contains both strings verbatim ("displays the message
+  "Loan renewed!"").
+- Native forcing applies only when the extraction outcome forces a classification
+  ([forced classifications](../src/actions/reference/construct_forced_token_classifications.zig)),
+  so this was the model's free choice, and nothing checked it.
+- The baseline run's same step had preserved both values.
+
+Loan-renewal has now lost exact-value obligations in both post-B3 runs, each time
+through a different model bookkeeping step.
+
+**Decision** (amends the §16 extraction and reconciliation contracts and ADR 0020):
+native code owns preserved-token bookkeeping.
+
+- A token candidate whose exact bytes appear in an admitted business claim from the
+  same chunk can't be classified as `irrelevant`; native code preserves it.
+- Among preserved tokens, identical bytes are duplicates; any other token is
+  retained.
+- The model disposes only business claims.
+- A genuine change of value across sources remains a business-claim conflict.
+
+Before deciding, check the retained captures offline for any run where the model's
+token classification or disposition was both correct and non-trivial, including a
+legitimately irrelevant code span inside a business claim.
+
+### B9. Record output can run away
+
+Evidence:
+
+- **Runaway batch.** The loan-renewal rerun's only record batch produced 286 entity
+  records, most of them invented and increasingly degenerate, until it hit the
+  provider's 16,384-token output limit (call 10).
+- **No bound.** The records schema places no bound on the array, and every record
+  batch may author entity records.
+- **Same family, other failure.** In the B3 baseline the same entity family was
+  instead duplicated across both batches (B5), costing review calls.
+- **Repeated authoring.** Entity records are authored per batch, even though the
+  entities unit decides applicability once per feature.
+
+**Proposal** (measure first; then **Decision**, amending the §17 generation units):
+
+- Author entity records once per feature, alongside the existing
+  entity-applicability decision, rather than in every record batch.
+- Decide separately whether the closed records schema should bound per-family
+  cardinality. Whether such a bound is compatible with ADR 0011 needs an explicit
+  decision; it must not become a disguised size ceiling.
+
+Replay this request with repetitions to measure the runaway rate before deciding.
+Hello-world has no entities, so §7 also needs a second case that does. Don't answer
+the runaway with sampling changes or extra retries (§7).
 
 ## 4. Spec workflow simplification
 
@@ -705,7 +973,7 @@ The merge operations also come in pairs, with identical bodies (code-heuristics
 groups 4 and 5):
 
 - [`merge-source-extraction-repair`](../src/actions/reference/merge_source_extraction_repair.zig)
-  and [`merge-upstream-extraction-repair`](../src/actions/reference/merge_upstream_extraction_repair.zig);
+  and `merge-upstream-extraction-repair` (deleted in `b4c7b07`);
 - their reconciliation counterparts.
 
 Each pair differs only in its static invalidation set. The upstream variant adds
@@ -973,15 +1241,25 @@ the earlier proposed order for B3, B2, W1 and W2:
 
 The remaining recommendations below are proposals, not additional authorization:
 
-1. Consider A4's broader evidence gaps and W5's identical sibling steps separately
+1. **Pause billed reruns until B5 and B8 are decided and implemented.** Hello-world
+   blocks on B5 deterministically, and B2/W1 can't be observed until a run reaches
+   review (§1's post-B2/W1 diagnostics).
+2. Decide B5's token-only batch rule and B8's native token classification and
+   disposition rules. Each is deterministic and evidenced in both post-B3 runs of
+   its case. Measure B7 and B9 on retained captures. Do all of these before the
+   next reruns and before freezing the Phase 2 baseline.
+3. **Before any rerun that can publish:** decide R8's acceptance policy and refresh
+   the rubric calibration. Advisory review lets defective candidates publish (see
+   §1's post-B3 outcome assessment), so publication alone cannot count as success.
+4. Consider A4's broader evidence gaps and W5's identical sibling steps separately
    from the debugging-only A4 scope above.
-2. B4 remains a separate budget/scope decision.
-3. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
+5. B4 remains a separate budget/scope decision.
+6. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
    adding operations for another workflow.
-4. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
+7. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
    and run B5's A/C comparison only if generation-boundary failures remain.
-5. Treat R2 as a separate required feature. Decide R1 and R8 before promising stronger
-   provenance or automated quality gates. Gather R6 and R7 evidence after B2.
+8. Treat R2 as a separate required feature. Decide R1 before promising stronger
+   provenance. Gather R6 and R7 evidence after B2.
 
 ## 7. Acceptance and evidence rules
 
@@ -1037,6 +1315,10 @@ bounded approval, and each E2E run needs its own explicit approval
   (from 15 October) were consolidated here and deleted. The Spec workflow
   simplification review (§4) was added the same day, and §1's subgraph-call count was
   corrected from 78 to 77; a step named `call` had been counted as one.
+- **17 October 2026, after the B3 baselines:** added §1's post-B3 outcome assessment
+  and the B7 and B8 items, and updated B2, B5, B6 and §6 from the two baseline runs.
+- **17 October 2026, after the B2/W1 reruns:** added §1's post-B2/W1 diagnostics and
+  the B9 item, extended B8 to token classification, and updated B5, B7 and §6.
 - **Not carried forward:**
   - completed-execution narratives, already in Z_FIX01 and Z_FIX02;
   - the detailed FIX04 Phase 0–6 rollout text; the protocol and operator guide are
