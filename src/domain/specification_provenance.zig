@@ -482,7 +482,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         try storedValue(a, inputs, passive, references, resolved, attributed.value, entry.field);
     }
     for (candidate.records) |record| {
-        if (record.proposal.source_group_ids.len != 1) return error.InvalidSpecification;
+        if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(record.proposal.content), record.proposal.source_group_ids.len)) return error.InvalidSpecification;
         const groups = try validateAssociation(.canonical, a, inputs, references, record.proposal.source_group_ids, record.proposal.provenance, .content);
         defer a.free(groups);
         const values = try recordValues(a, record.proposal.content);
@@ -546,7 +546,7 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
     inspection.* = .{};
-    if (candidate.source_group_ids.len != 1) return error.InvalidSpecification;
+    if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(candidate.content), candidate.source_group_ids.len)) return error.InvalidSpecification;
     const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, .content);
     errdefer allocator.free(groups);
     var recognized_content = candidate.content;

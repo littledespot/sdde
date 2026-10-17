@@ -124,8 +124,10 @@ and qualification. No real grader is currently qualified by these pending record
 - `evaluation-rubric/v2`: required nullable critical minima.
 - `evaluation-report/v3`: raw assessment and explicit grader/acceptance evidence.
 - `spec-e2e-case/v2`: required expected outcome.
-- `spec-e2e-report/v4`: expected outcome, captured evaluation inputs, replayable
-  admission evidence and separate acceptance.
+- `spec-e2e-report/v5`: the single total token budget and aggregate actual usage,
+  expected outcome, captured evaluation inputs, replayable admission evidence and
+  separate acceptance. No advisory budget, usage subtotal or consumption-class
+  token accounting is retained.
 - `human-spec-adjudication/v1`, `spec-adjudication/v1`: bound human judgment and
   derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,

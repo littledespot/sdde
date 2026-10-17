@@ -14,16 +14,20 @@ steps:
     on: { ok: validate, failed: end.failed }
   validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
   build: { use: build-model-request, on: { ok: account, failed: end.failed } }
-  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: operation, failed: end.failed } }
+  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: operation, more: account-stop, failed: end.failed } }
   operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
   authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: advance-request, failed: terminate-operation, cancelled: terminate-operation } }
   advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
   advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: call, failed: end.failed } }
   call: { use: invoke-model, on: { ok: validate-response, failed: validate-response, cancelled: validate-response } }
-  validate-response: { use: validate-provider-invocation-observation, on: { ok: complete-operation, failed: complete-operation, cancelled: complete-operation } }
-  complete-operation: { use: complete-provider-operation, on: { ok: decode, failed: decode, cancelled: decode } }
-  decode: { use: decode-model-envelope, on: { ok: validate-payload, invalid: validate-payload, failed: validate-payload, cancelled: validate-payload } }
-  validate-payload: { use: validate-model-payload-schema, on: { ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request } }
+  validate-response: { use: validate-provider-invocation-observation, on: { ok: complete-operation, more: complete-operation, failed: complete-operation, cancelled: complete-operation } }
+  complete-operation: { use: complete-provider-operation, on: { ok: decode, more: decode, failed: decode, cancelled: decode } }
+  decode: { use: decode-model-envelope, on: { ok: validate-payload, invalid: validate-payload, more: validate-payload, failed: validate-payload, cancelled: validate-payload } }
+  validate-payload: { use: validate-model-payload-schema, on: { ok: close-request, invalid: close-request, more: advisory-failure, failed: close-request, cancelled: close-request } }
   close-request: { use: complete-model-request, on: { ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled } }
   terminate-operation: { use: terminate-provider-operation, on: { failed: terminate-request, cancelled: terminate-request } }
   terminate-request: { use: terminate-model-request, on: { failed: end.failed, cancelled: end.cancelled } }
+
+  account-stop: {use: complete-advisory-protocol-request, on: {blocked: protocol-failure}}
+  advisory-failure: {use: propagate-advisory-request-failure, on: {failed: end.failed}}
+  protocol-failure: {use: propagate-advisory-request-failure, on: {failed: end.failed}}

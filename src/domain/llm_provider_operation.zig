@@ -110,7 +110,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     exact_scope: ?@import("model_exact_values.zig").Scope = null,
-
+    /// Native, nonserialized assignment provenance, retained through correction.
     pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
         return value;

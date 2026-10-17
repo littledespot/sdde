@@ -14,6 +14,11 @@ pub const ContentBuffer = [3]provider.ModelVisibleContent;
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
 pub const Request = opaque {
+    /// Native eligibility for optional review completion, never token policy.
+    pub fn advisoryAssessment(self: *const Request) ?packets.AdvisoryAssessment {
+        if (self.prepared() == null) return null;
+        return (self.packet() orelse return null).advisoryAssessment();
+    }
     /// Authored resource aliases retained by this exact request selection.
     pub fn sourceResources(self: *const Request) SourceResources {
         const value = storage(self);
@@ -228,6 +233,9 @@ pub const Selection = struct {
         if (!std.mem.eql(u8, definition.bytes, prior.result_definition.?.bytes) or
             !std.mem.eql(u8, current.packet.body(), old.packet.body())) return false;
         if (!@import("model_exact_values.zig").same(current.packet.exactScope(), old.packet.exactScope())) return false;
+        if ((current.packet.advisoryAssessment() != null) != (old.packet.advisoryAssessment() != null)) return false;
+        if (current.packet.advisoryAssessment()) |assessment| if (old.packet.advisoryAssessment() == null or
+            assessment.projection != old.packet.advisoryAssessment().?.projection) return false;
         const canonical = self.result.content.result_schema.select(definition) orelse return false;
         if (canonical != prior.result.content.result_schema) return false;
         const Restrictions = struct {
@@ -382,7 +390,8 @@ pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?
     var next = storage(current).*;
     try preparation.validateRequest(try current.source(owned.request.model_visible_input_id), owned.request);
     if (correction) |value| {
-        if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema) return error.ModelRequestAssociationInvalid;
+        if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema or
+            !packets.sameAdvisoryAssessment(if (current.packet()) |packet| packet.advisoryAssessment() else null, if (value.previous.packet()) |packet| packet.advisoryAssessment() else null)) return error.ModelRequestAssociationInvalid;
         _ = try value.previous.protocolRepetition(value.rejected, value.diagnostic);
         const operation_id = value.rejected.operationId();
         if (operation_id.model_request_id != current.id() or operation_id.kind != .inference or operation_id.model_attempt_ordinal.value == 0)

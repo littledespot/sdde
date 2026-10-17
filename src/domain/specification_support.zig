@@ -84,6 +84,55 @@ pub fn Contract(comptime purpose: Purpose) type {
             pending: Candidate,
         };
 
+        /// Stop optional advice without manufacturing findings. Retain only a
+        /// complete valid native assignment prefix; a rejected assignment is
+        /// discarded as a whole, including its otherwise valid siblings.
+        pub fn stop(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, reason: a.AdviceStop.Reason, origin: ?Origin) Error!Collection {
+            if (!acceptsProjection(inputs.projection) or a.assessmentPolicy(inputs.projection) != .advisory or inputs.advice_stop != null or inputs.evidence.len != 0 or inputs.candidates.len != 0) return error.InvalidRequiredAuthority;
+            const ledger = try a.build(allocator, inputs);
+            if (prior) |value| if (value == .accepted) {
+                var current = value.accepted.inputs;
+                current.evidence = inputs.evidence;
+                current.candidates = inputs.candidates;
+                current.review_origin = inputs.review_origin;
+                current.review_origins = inputs.review_origins;
+                current.principle_assessment = inputs.principle_assessment;
+                if (!std.mem.eql(u8, try @import("canonical_json.zig").encode(a.Inputs, allocator, current), try @import("canonical_json.zig").encode(a.Inputs, allocator, inputs))) return error.InvalidRequiredAuthority;
+                try validateStored(allocator, value.accepted.inputs, context.inputs);
+                return value;
+            };
+            var candidate: Candidate = if (prior) |value| switch (value) {
+                .pending => |pending| pending,
+                .rejected => |rejected| rejected.candidate orelse .{ .review = .{ .entries = &.{} }, .origin = null, .origins = &.{} },
+                .accepted => unreachable,
+            } else .{ .review = .{ .entries = &.{} }, .origin = null, .origins = &.{} };
+            if (candidate.origins.len != candidate.review.entries.len or candidate.review.entries.len > ledger.requirements.len) return error.InvalidRequiredAuthority;
+            var retained: usize = 0;
+            while (retained < candidate.review.entries.len) {
+                const assigned = try assignmentSubjects(allocator, inputs, ledger.requirements[retained].seed.id);
+                const end = std.math.add(usize, retained, assigned.len) catch return error.InvalidRequiredAuthority;
+                if (end > candidate.review.entries.len) break;
+                var prefix = candidate;
+                prefix.working = true;
+                prefix.pending_localization = null;
+                prefix.review.entries = candidate.review.entries[0..end];
+                prefix.origins = candidate.origins[0..end];
+                const checked = try validateWorking(allocator, inputs, context.inputs, prefix);
+                if (checked == .rejected) break;
+                retained = end;
+            }
+            candidate.working = false;
+            candidate.pending_localization = null;
+            candidate.review.entries = candidate.review.entries[0..retained];
+            candidate.origins = candidate.origins[0..retained];
+            if (retained == ledger.requirements.len) return validate(allocator, inputs, context.inputs, candidate);
+            const requirements = try allocator.alloc(a.Id, ledger.requirements.len);
+            for (ledger.requirements, requirements) |requirement, *id| id.* = requirement.seed.id;
+            var stopped = inputs;
+            stopped.advice_stop = .{ .reason = reason, .projection = inputs.projection, .candidate_revision = inputs.revision, .requirements = requirements, .unassessed = requirements[retained..], .authorities = inputs.authorities, .origin = origin };
+            return validate(allocator, stopped, context.inputs, candidate);
+        }
+
         // Correlate responses by ordinal; native identity/version and revision remain
         // in the retained ledger. Only the applicable review subject reaches the model.
         const Requirement = struct { ordinal: u32, task: []const u8, permitted_not_applicable: ?a.Rule, evidence: admission.Requirements.Guidance };
@@ -135,6 +184,29 @@ pub fn Contract(comptime purpose: Purpose) type {
             return packetForContext(allocator, inputs, context, scope);
         }
 
+        /// A stopped request must still belong to this exact current native
+        /// assignment or authorized finding repair, not merely the same feature.
+        pub fn matchesAdvicePacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet) @import("specification_support_repair.zig").Contract(purpose).Error!bool {
+            if (!acceptsProjection(inputs.projection) or a.assessmentPolicy(inputs.projection) != .advisory) return false;
+            const bound = packet.advisoryAssessment() orelse return false;
+            const dependencies = try adviceDependencies(allocator, inputs);
+            if (bound.projection != (if (purpose == .source) .source else .principles) or bound.candidate_revision != inputs.revision or
+                !std.mem.eql(u8, bound.feature.bytes, inputs.feature.bytes) or !bound.reference_state.eql(context.inputs.corpus.state_id) or
+                !std.mem.eql(u8, &bound.dependencies, &dependencies)) return false;
+            const expected = if (packet.repairPermit() != null) repaired: {
+                const current = prior orelse return false;
+                if (current != .rejected or current.rejected.candidate == null) return false;
+                const Repair = @import("specification_support_repair.zig").Contract(purpose);
+                const authorization = try Repair.authorize(allocator, inputs, context, current.rejected);
+                break :repaired try Repair.packet(allocator, inputs, context, current.rejected.candidate.?, authorization);
+            } else try packetFor(allocator, inputs, context, assignmentScope(inputs, try nextSubject(allocator, inputs, prior)));
+            defer packets.release(expected);
+            checkPacket(expected, packet) catch |err| return if (err == error.InvalidRequiredAuthority) false else err;
+            return std.meta.eql(expected.repairPermit(), packet.repairPermit()) and
+                std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.excludedVariants(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.excludedVariants(), .{})) and
+                std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.integerChoices(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.integerChoices(), .{}));
+        }
+
         fn assignmentDefinition() @import("model_result_schema.zig").DefinitionId {
             return .{ .bytes = if (purpose == .source) "assignment_findings" else "principle_assignment_findings" };
         }
@@ -170,9 +242,6 @@ pub fn Contract(comptime purpose: Purpose) type {
                     };
                 } else {
                     if (subject.object.fetchOrderedRemove("context")) |entry| business_context = entry.value;
-                    if (subject.object.fetchOrderedRemove("record")) |entry| if (entry.value != .null) {
-                        record = entry.value;
-                    };
                 }
                 try requirement.object.put(scratch, "subject", subject);
                 if (purpose == .source) {
@@ -377,7 +446,29 @@ pub fn Contract(comptime purpose: Purpose) type {
         }
 
         fn reviewPacket(allocator: std.mem.Allocator, inputs: a.Inputs, state: r.evidence.identity.StateId, body: []const u8, slot: []const u8, definition: ?@import("model_result_schema.zig").DefinitionId) Error!*packets.Packet {
-            return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
+            const base = try packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
+            if (a.assessmentPolicy(inputs.projection) != .advisory) return base;
+            defer packets.release(base);
+            return classifyAdvicePacket(allocator, inputs, state, base);
+        }
+
+        pub fn classifyAdvicePacket(allocator: std.mem.Allocator, inputs: a.Inputs, state: r.evidence.identity.StateId, base: *const packets.Packet) Error!*packets.Packet {
+            var arena = std.heap.ArenaAllocator.init(allocator);
+            defer arena.deinit();
+            _ = try a.build(arena.allocator(), inputs);
+            if (!acceptsProjection(inputs.projection) or a.assessmentPolicy(inputs.projection) != .advisory) return error.InvalidRequiredAuthority;
+            return packets.withAdvisoryAssessment(allocator, base, .{ .feature = inputs.feature, .reference_state = .{ .bytes = state.bytes }, .candidate_revision = inputs.revision, .projection = if (purpose == .source) .source else .principles, .dependencies = try adviceDependencies(arena.allocator(), inputs) });
+        }
+
+        fn adviceDependencies(allocator: std.mem.Allocator, inputs: a.Inputs) std.mem.Allocator.Error![32]u8 {
+            var native = inputs;
+            native.evidence = &.{};
+            native.candidates = &.{};
+            native.review_origin = null;
+            native.review_origins = &.{};
+            native.principle_assessment = null;
+            native.advice_stop = null;
+            return (try @import("atomic_repair.zig").snapshot(a.Inputs, allocator, native)).bytes;
         }
 
         pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
@@ -582,7 +673,9 @@ pub fn Contract(comptime purpose: Purpose) type {
 
         pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, proposed: Candidate) Error!Collection {
             if ((purpose == .principles) != (inputs.projection == .principle_assessment)) return error.InvalidRequiredAuthority;
-            const ledger = try a.build(allocator, inputs);
+            var unreviewed = inputs;
+            unreviewed.advice_stop = null;
+            const ledger = try a.build(allocator, unreviewed);
             if (inputs.evidence.len != 0 or inputs.candidates.len != 0 or proposed.revision == 0 or proposed.origins.len != proposed.review.entries.len) return error.InvalidRequiredAuthority;
             var diagnostics: std.ArrayList(Diagnostic) = .empty;
             // Preserve selection order: association defects in response order, then
@@ -663,7 +756,10 @@ pub fn Contract(comptime purpose: Purpose) type {
                     };
                     entry_origin.* = proposed.origins[position];
                 }
-                if (!found) try diagnostics.append(allocator, diagnostic(proposed, .missing_finding, requirement.seed.id, ordinal, null));
+                if (!found) {
+                    if (inputs.advice_stop) |stopped| if (a.contains(a.Id, stopped.unassessed, requirement.seed.id)) continue;
+                    try diagnostics.append(allocator, diagnostic(proposed, .missing_finding, requirement.seed.id, ordinal, null));
+                }
             }
             if (diagnostics.items.len != 0) return .{ .rejected = .{ .candidate = proposed, .rejection = .{ .diagnostics = try diagnostics.toOwnedSlice(allocator) } } };
             var result = inputs;
@@ -671,6 +767,22 @@ pub fn Contract(comptime purpose: Purpose) type {
             result.candidates = candidates;
             result.review_origin = proposed.origin;
             result.review_origins = origins;
+            if (inputs.advice_stop != null) {
+                const admitted_evidence = try allocator.alloc(a.Evidence, proposed.review.entries.len);
+                const admitted_candidates = try allocator.alloc(a.Candidate, proposed.review.entries.len);
+                const admitted_origins = try allocator.alloc(?Origin, proposed.review.entries.len);
+                for (proposed.review.entries, admitted_evidence, admitted_candidates, admitted_origins) |finding, *entry, *candidate, *origin| {
+                    const index = finding.requirement_ordinal - 1;
+                    entry.* = evidence[index];
+                    candidate.* = candidates[index];
+                    origin.* = origins[index];
+                }
+                result.evidence = admitted_evidence;
+                result.candidates = admitted_candidates;
+                result.review_origins = admitted_origins;
+                _ = try a.build(allocator, result);
+                try validateAssignmentPrefix(allocator, result, proposed.review.entries.len);
+            }
             return .{ .accepted = .{ .inputs = result, .candidate = proposed } };
         }
         fn diagnostic(candidate: Candidate, issue: Issue, requirement: ?a.Id, ordinal: ?u32, index: ?usize) Diagnostic {
@@ -680,12 +792,18 @@ pub fn Contract(comptime purpose: Purpose) type {
         /// Re-admit self-contained published findings without any prior call ledger.
         pub fn validateStored(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs) Error!void {
             const ledger = try a.build(allocator, inputs);
-            if (inputs.evidence.len != ledger.requirements.len) return error.InvalidRequiredAuthority;
-            const findings = try allocator.alloc(Finding, ledger.requirements.len);
+            if (inputs.advice_stop == null and inputs.evidence.len != ledger.requirements.len) return error.InvalidRequiredAuthority;
+            if (inputs.advice_stop != null) try validateAssignmentPrefix(allocator, inputs, inputs.evidence.len);
+            const findings = try allocator.alloc(Finding, inputs.evidence.len);
             const origins = try allocator.alloc(?Origin, findings.len);
             @memset(origins, null);
-            for (ledger.requirements, inputs.evidence, findings, 0..) |requirement, evidence, *finding, index| {
-                if (evidence.id.ordinal != index + 1 or !std.meta.eql(evidence.requirement, requirement.seed.id)) return error.InvalidRequiredAuthority;
+            var previous: u32 = 0;
+            for (inputs.evidence, findings) |evidence, *finding| {
+                const ordinal = evidence.id.ordinal;
+                if (ordinal <= previous or ordinal > ledger.requirements.len) return error.InvalidRequiredAuthority;
+                previous = ordinal;
+                const requirement = ledger.requirements[ordinal - 1];
+                if (!std.meta.eql(evidence.requirement, requirement.seed.id)) return error.InvalidRequiredAuthority;
                 try evidence_admission.validate(allocator, inputs, sources, evidence);
                 const review = evidence.review.?;
                 const required = try applicability(inputs, requirement.seed.id);
@@ -693,7 +811,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .missing_obligation = review.missing_obligation, .question = review.question, .authority_gap = review.authority_gap, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
+                finding.* = .{ .requirement_ordinal = ordinal, .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .missing_obligation = review.missing_obligation, .question = review.question, .authority_gap = review.authority_gap, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
             }
             var empty = inputs;
             empty.evidence = &.{};
@@ -702,6 +820,17 @@ pub fn Contract(comptime purpose: Purpose) type {
             if (checked != .accepted) return error.InvalidRequiredAuthority;
             if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, checked.accepted.inputs.evidence, .{}), try std.json.Stringify.valueAlloc(allocator, inputs.evidence, .{})) or
                 !std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, checked.accepted.inputs.candidates, .{}), try std.json.Stringify.valueAlloc(allocator, inputs.candidates, .{}))) return error.InvalidRequiredAuthority;
+        }
+
+        fn validateAssignmentPrefix(allocator: std.mem.Allocator, inputs: a.Inputs, count: usize) Error!void {
+            const ledger = try a.build(allocator, inputs);
+            if (count > ledger.requirements.len) return error.InvalidRequiredAuthority;
+            var position: usize = 0;
+            while (position < count) {
+                const assigned = try assignmentSubjects(allocator, inputs, ledger.requirements[position].seed.id);
+                position = std.math.add(usize, position, assigned.len) catch return error.InvalidRequiredAuthority;
+                if (position > count) return error.InvalidRequiredAuthority;
+            }
         }
     };
 }

@@ -18,7 +18,7 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
             .requires = if (kind == .inference) &@import("../domain/workflow_provider_operation.zig").completion_requires else &@import("../domain/workflow_provider_operation.zig").count_completion_requires,
             .produces = &.{.terminal_provider_operation},
             .invalidates = &.{.invoked_provider_operation},
-            .outcomes = &.{ .ok, .failed, .cancelled },
+            .outcomes = if (kind == .inference) &.{ .ok, .more, .failed, .cancelled } else &.{ .ok, .failed, .cancelled },
             .side_effect = Action.contract.side_effect,
             .runner_accounting = Action.contract.runner_accounting,
             .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = if (kind == .inference) .provider_invocation_validation_result else .provider_token_count_validation_result, .result = .terminal_provider_operation } },
@@ -60,6 +60,11 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
     if (!source.operationId().eql(invoked.id) or invoked.id.kind != .inference) return error.OperationExecutionFailed;
     const terminal: lifecycle.Terminal = switch (source.outcome()) {
         .validated => |evidence| switch (evidence.result()) {
+            .complete => .completed,
+            .stopped => |reason| .{ .stopped = reason },
+            .failed => |failure| .{ .failed = failure },
+        },
+        .advisory_stopped => |stop| switch (stop.evidence.result()) {
             .complete => .completed,
             .stopped => |reason| .{ .stopped = reason },
             .failed => |failure| .{ .failed = failure },

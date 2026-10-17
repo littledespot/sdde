@@ -40,6 +40,22 @@ The subsequent approved B2/W1 assessment amendment advances both to
 The accepted [B5/B8 amendment](../decisions/0024-native-exact-token-authority.md)
 advances both to `specification-state/v17`, with native token classification,
 dispositions and complete original-occurrence coverage recomputed during readback.
+The approved B4 amendment advances both variants to `specification-state/v18`.
+An optional native `advice_stop` binds the source or principle projection, candidate
+revision, complete ordered requirements and current authorities, exact unassessed
+suffix, reason and producing inference origin. Every incomplete-advice reason,
+including unknown usage, requires a valid origin from an actual attempt.
+Pre-send global-budget or unavailable-usage checks reject without creating an
+advice result or accounting row. Stored validation reconstructs the
+whole-assignment prefix and all current bindings, rejecting forged or stale stops,
+partial retained assignments and native requiredness/coverage gaps. Missing advice
+is explicitly `assessment_incomplete`; it cannot certify support or become a
+positive finding. Provider failures keep their failed request identity and actual
+usage even when the exact advisory outcome references are discharged natively.
+The execution retains one aggregate actual-token ledger and global call-stop
+state; persisted advice metadata neither creates a separate allowance nor stores
+an advisory token subtotal. Global-budget rejection is fatal and has no
+persisted incomplete-advice reason. All native publication checks remain mandatory.
 Earlier versions reject without migration or a compatibility reader.
 The native-association amendment removed persisted presentation roles and stores required `source_group_ids`
 inside attributed values and shared-provenance records, without changing general
@@ -57,7 +73,9 @@ its explicit obligation, diagnostic explanation, source selection, subject and
 review revision without post-generation loss-comparison or repair authority.
 Readback rebuilds the current native assessment policy and exact member/revision
 bindings, preserving each original finding. A stored advisory marker cannot
-replace evidence or certify support. Missing or changed bindings, forged
+replace evidence or certify support. Explicit native incomplete-advice metadata
+permits only the missing assignment suffix defined above; it never substitutes
+for a missing native requirement. Missing or changed bindings, forged
 deterministic methods and semantic-success substitutions reject; loading cannot
 infer authority from diagnostic prose or eligible claims. The pending
 variant retains reference and clarification data without claiming completed
@@ -69,7 +87,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
 only in one execution's native owners. They are not part of
-`specification-state/v17` and are not restored by state readback. Loading ordinary
+`specification-state/v18` and are not restored by state readback. Loading ordinary
 published review evidence cannot manufacture an accepted call origin or a reusable
 receipt. Candidate-local re-admission does not resume an earlier execution;
 every fresh invocation starts at `start` with empty review history.

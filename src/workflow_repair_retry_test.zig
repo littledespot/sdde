@@ -1,6 +1,65 @@
 const std = @import("std");
 const retry = @import("domain/workflow_retry.zig");
 
+test "advisory abandonment retires only the exact permit and preserves parent obligations and counts" {
+    var state = retry.State.init(std.testing.allocator);
+    defer state.deinit();
+    const parent = permit(1, 1, 1);
+    const child = permit(2, 2, 2);
+    try apply(&state, .{ .authorized = parent });
+    try apply(&state, .{ .merged = .{ .permit = parent, .revision_after = 2, .changed = true, .validation = .dependent_review } });
+    try apply(&state, .{ .authorized = child });
+    _ = try state.beginAttempt(.{ .bytes = "advisory-correction" }, .{ .value = 1 }, child);
+    try std.testing.expectError(error.InvalidRepairProgress, state.prepare(.{ .abandoned_advice = parent }));
+    var foreign = child;
+    foreign.authorization[0] ^= 1;
+    try std.testing.expectError(error.InvalidRepairProgress, state.prepare(.{ .abandoned_advice = foreign }));
+    try std.testing.expect(!retry.permitsTransition(.validate, .{ .abandoned_advice = child }));
+    try std.testing.expect(!retry.permitsTransition(.none, .{ .abandoned_advice = child }));
+    try std.testing.expect(retry.permitsTransition(.abandon_advice, .{ .abandoned_advice = child }));
+    const before = state.completedAttempts(.{ .bytes = "advisory-correction" }, child.key);
+    try apply(&state, .{ .abandoned_advice = child });
+    try std.testing.expectEqualDeep(parent, state.currentPermit().?);
+    try std.testing.expectEqual(before, state.completedAttempts(.{ .bytes = "advisory-correction" }, child.key));
+    try std.testing.expectEqualDeep(parent, state.currentDependentPermit().?);
+    try std.testing.expectError(error.InvalidRepairProgress, state.prepare(.{ .abandoned_advice = child }));
+}
+
+test "native advisory classification survives packet projections and rejects foreign scope" {
+    const packets = @import("domain/model_input_packet.zig");
+    const identity = @import("domain/model_request_identity.zig");
+    const owner: identity.ImmutableUnitOwnerId = .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = "reference-1" }, .feature_id = .{ .bytes = "feature" }, .unit_slot_id = .{ .bytes = "candidate" } } }, .review_slot_id = .{ .bytes = "review" } } };
+    const raw = try packets.create(std.testing.allocator, "{\"value\":\"candidate\"}", owner, .{ .semantic_review = .{ .bytes = "review" } }, .{ .bytes = "finding" });
+    defer packets.release(raw);
+    try std.testing.expect(raw.advisoryAssessment() == null);
+    const binding: packets.AdvisoryAssessment = .{ .feature = .{ .bytes = "feature" }, .reference_state = .{ .bytes = "reference-1" }, .candidate_revision = 7, .projection = .source, .dependencies = @splat(7) };
+    const classified = try packets.withAdvisoryAssessment(std.testing.allocator, raw, binding);
+    defer packets.release(classified);
+    const projected = try packets.withBody(std.testing.allocator, classified, "{\"value\":\"projected\"}");
+    defer packets.release(projected);
+    const restricted = try packets.withExcludedVariants(std.testing.allocator, projected, &.{.{ .kind = "not_applicable" }});
+    defer packets.release(restricted);
+    try std.testing.expect(restricted.advisoryAssessment() != null);
+    try std.testing.expectEqual(@as(u64, 7), restricted.advisoryAssessment().?.candidate_revision);
+    try std.testing.expectEqualStrings("reference-1", restricted.advisoryAssessment().?.reference_state.bytes);
+    var foreign = binding;
+    foreign.reference_state.bytes = "reference-2";
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withAdvisoryAssessment(std.testing.allocator, raw, foreign));
+    foreign = binding;
+    foreign.candidate_revision = 0;
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withAdvisoryAssessment(std.testing.allocator, raw, foreign));
+    foreign = binding;
+    foreign.candidate_revision = 8;
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withAdvisoryAssessment(std.testing.allocator, classified, foreign));
+    foreign = binding;
+    foreign.dependencies[0] ^= 1;
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withAdvisoryAssessment(std.testing.allocator, classified, foreign));
+    foreign = binding;
+    foreign.projection = .principles;
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withAdvisoryAssessment(std.testing.allocator, classified, foreign));
+    try std.testing.expect(raw.advisoryAssessment() == null);
+}
+
 test "unchanged canonical replacements exhaust actual repair attempts without acceptance" {
     const atomic = @import("domain/atomic_repair.zig");
     const Replacement = union(enum) { narrative: []const u8, selection: []const u32 };

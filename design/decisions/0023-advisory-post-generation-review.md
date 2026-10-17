@@ -1,6 +1,6 @@
 # ADR 0023: Retain post-generation semantic review as advice
 
-- **Status:** Accepted amendment; implemented and verified offline; live review benefit unmeasured
+- **Status:** Accepted amendment; single-budget implementation verified offline; live review benefit unmeasured
 - **Date:** 2026-10-17
 - **Decision authority:** The user's instruction to implement FIX05 B2 and W1
   together, include W2, and the explicit scope answer: "All post-generation
@@ -35,6 +35,79 @@ changes the finding nor certifies its truth. Forged or missing applicability
 bindings reject. Missing, duplicate, foreign, malformed
 or stale findings cannot complete an assessment.
 
+### B4 amendment — 17 October 2026
+
+**Advisory allowance withdrawn.** A separate 20,000-token advisory allowance was
+first recorded here. The user did not request it, and it is removed: there is one
+total limit ([ADR 0011, "Workflow token accounting"](0011-provider-owned-request-limits.md#workflow-token-accounting)). Post-generation source and
+principle advice count against the same workflow token budget as required work.
+The policy's `totalModelTokenBudget` is 100,000 tokens across all inference calls,
+including retries and correction. No advisory usage is separately calculated.
+Reaching or exceeding that total prohibits every later model call. A global
+budget rejection remains `WorkflowTokenBudgetExceeded` during advice as well as
+required work; it cannot become an incomplete-advice stop or publish a specification.
+No advisory allowance, reservation or budget-derived output control is introduced.
+
+Each selected principle set is assessed in one assignment (FIX05 B4 option 3). The
+registered native assessment owner binds the advisory classification to the exact
+current candidate and source/principle projection; a workflow, slot, model response
+or review-purpose string cannot select it. Corrections retain that native binding.
+Actual input and output usage is retained once in the single execution ledger.
+The advisory classification controls non-budget incomplete-failure semantics only and adds no
+token subtotal. No reservation, size estimate or local output ceiling is added.
+Unknown actual usage forbids later model calls without estimating it; native
+publication may still finish when it requires no
+further model call.
+
+A provider non-candidate stop (including output limit), expected model-service
+failure, or exhaustion of the existing malformed-response correction ends only
+that bound advice as incomplete. The logical request remains failed and the
+original provider observation, actual usage and complete findings keep their
+original identity. Protocol exhaustion creates no fictitious provider operation,
+attempt, usage or candidate. Global-budget failures have no advisory pre-send
+stop or incomplete-assessment reason.
+Native deferred closure retains the actual failed request independently of its
+internal physical-stop (`more`) or protocol-receipt (`blocked`) transport route.
+These are distinct step occurrences with distinct cleanup contracts. Generic
+request wrappers propagate failure; only the native review wrapper may request
+completion. The shared compiler keeps exact dataflow joins and ordinary failure
+preservation unchanged, and proves that every deferred failed carrier reaches
+matching failure or an intact native completion before any effect. The runtime
+requires sealed current advisory evidence before marking a failure deferred, and
+only that marked failure can be discharged. Repair variants also retire their
+exact repair-state carrier; they cannot leave a parallel stale authorization.
+Only the native stop owner may discharge those exact advisory failure references;
+unrelated failures, future attempts and cancellation references remain blocking.
+A service/protocol stop inside authorized advisory finding repair retires only
+its exact permit, without claiming successful repair or erasing retry history.
+
+Cancellation, deadlines, authentication/authorization failures, TLS failures,
+logging failures, allocation failures and native authority/validation failures
+remain terminal. Existing native finding-evidence validation and bounded repair
+are preserved; this exception cannot admit malformed evidence or discharge a
+native defect. Pre-generation readiness and source-preservation checks remain
+required. There is no configurable review bypass or extra retry.
+
+The native `assessment_incomplete` outcome identifies the exact missing current
+assignment suffix, reason, revision, authorities and producing origin when a call
+was sent. Complete admitted assignment prefixes remain intact, including adverse
+or inconclusive findings. An incomplete assignment is discarded atomically;
+no absent finding becomes positive evidence or `assessment_complete`.
+Stored state (`specification-state/v18`) reconstructs these bindings and permits
+sparse findings only with this explicit native stop. Native requiredness, exact
+coverage, currentness and publication checks still run independently.
+The earlier 168/168-step, 1,892/1,892-test verification applies to the superseded
+separate-pool implementation. The corrected single-budget implementation passes
+168/168 steps and 1,890/1,890 tests, including clean packaged-executable checks;
+[FIX05 §9](../../fixes/FIX05.md#9-b4b9-implementation--17-october-2026) records the commands and review.
+
+Principle review assesses all current subjects of one selected principle set in
+one native assignment, retaining each record/member association. The complete
+corpus and business context appear once per call. Missing, duplicate, foreign or
+stale assignment members reject atomically. This amendment supersedes the earlier
+requirement in this ADR that advisory assessment must always be complete before
+publication, and amends the budget contract in ADR 0011 and §§12, 17, 22 and 24.
+
 Native requiredness, current authority, provenance, schema/family floors, exact
 coverage, citation/selection validity, repair bounds and publication checks remain
 mandatory and independent of the semantic verdict. A positive review cannot
@@ -65,10 +138,11 @@ dependency-on-absence rule.
 
 ## Whole-unit assignments
 
-Review a complete canonical unit or collection in one assignment, for both source
-and principle review. Native ownership groups the brief, story, entity
-applicability, every field/member of a record, and each complete assessed
-collection or reference subject. A model cannot select a subset or change that
+Source review assesses one complete canonical unit or collection per assignment.
+Native ownership groups the brief, story, entity applicability, every field/member
+of a record, and each complete assessed collection or reference subject. Principle
+review assesses the complete current subject set for one selected principle set
+in a single assignment. A model cannot select a subset or change either native
 partition. This replaces the acceptance-criterion-only grouping rule.
 
 One assignment retains an exact ordered native member set, full assessment
@@ -149,9 +223,10 @@ loader. Model selection and the live-test cost policy are unchanged.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v16`; earlier
+Completed and clarification-pending state use `specification-state/v18`; earlier
 contracts reject without migration or a compatibility reader. Stored validation
-recomputes native policy, authority currentness, complete review membership,
+recomputes native policy, authority currentness, complete assignment membership
+or the exact missing suffix authorized by native incomplete-advice evidence,
 assessment bindings, provenance and coverage. It rejects forged deterministic
 method tags, forged advisory bindings, semantic-success outcomes and stale candidates.
 Execution-local receipts and their origins remain separate from persisted

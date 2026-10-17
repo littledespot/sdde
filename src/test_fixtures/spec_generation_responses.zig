@@ -410,13 +410,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     }
                     if (auth.rule.group != null and auth.rule.group.? == .membership) {
                         const membership = auth.rule.group.?.membership;
-                        const decision = membership.disposition;
                         var content_value = value.value;
                         if (options.failed_repair) content_value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
-                        const record: g.spec.Model.RecordProposal = .{ .content = if (decision == .required)
-                            .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }
-                        else
-                            .{ .business_rule = .{ .text = content_value } }, .provenance = membership.fixed_provenance orelse value.provenance };
+                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
                 }
@@ -431,19 +427,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             var proposed: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
                 .primary_user_story => .{ .primary_user_story = value },
-                .entities => .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value } },
+                .entities => entity: {
+                    const include = options.entities_required != options.contradict_entities;
+                    const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
+                    if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
+                    break :entity .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value, .records = records } };
+                },
                 .records => result: {
                     var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
                     for (std.enums.values(g.spec.Kind)) |kind| {
-                        const include_entity = if (!options.entities_required and options.contradict_entities)
-                            (options.failed_repair or options.attempt == 1)
-                        else
-                            (options.entities_required != options.contradict_entities);
-                        if (kind == .entity and include_entity and current.record_cursor == 0) {
-                            const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
-                            try records.append(allocator, record);
-                            continue;
-                        }
                         if (omittedKind(options, kind)) continue;
                         if ((kind != .functional_requirement and kind != .user_visible_outcome and kind != .acceptance_criterion) or (options.omit_exact and kind == .user_visible_outcome)) continue;
                         for (all.entries) |item| {
@@ -956,7 +948,16 @@ fn associateFixtureResponse(allocator: std.mem.Allocator, context: @import("../d
         .content => |*content| switch (content.*) {
             .brief => |*brief| inline for (.{ "title", "description", "primary_goal" }) |field| try associateFixtureValue(allocator, context, &@field(brief, field)),
             .primary_user_story => |*story| try associateFixtureValue(allocator, context, story),
-            .entities => |*entities| try associateFixtureValue(allocator, context, &entities.basis),
+            .entities => |*entities| {
+                try associateFixtureValue(allocator, context, &entities.basis);
+                const selected = try allocator.dupe(g.spec.Model.RecordProposal, entities.records);
+                for (selected) |*record| {
+                    const association = try fixtureGroups(allocator, context, record.provenance.claim_ids, .content);
+                    record.source_group_ids = association.source_group_ids;
+                    record.provenance = association.selection;
+                }
+                entities.records = selected;
+            },
             .records => |records| {
                 if (bound != .records) return error.InvalidFixture;
                 const selected = try allocator.dupe(g.spec.Model.RecordProposal, records);

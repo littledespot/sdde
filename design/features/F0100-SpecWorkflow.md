@@ -9,12 +9,22 @@ semantic principle-finding-to-Plan-obligation handoff described below. All
 post-generation source/principle findings remain advice. Native assessment
 completion is distinct from semantic support; mandatory current authority,
 provenance, coverage, citation and publication checks remain. Whole canonical
-units/collections retain exact per-member findings and origins. Source repair
+source units/collections retain exact per-member findings and origins; each
+selected principle set assesses its complete current subject set in one call.
+Approved B4 records an exact native incomplete suffix when advice encounters an
+eligible service/protocol stop. One 100,000-token total budget covers all model
+work; the separate 20,000-token advisory allowance was withdrawn on 17 October 2026
+(ADR 0011). Usage is recorded once with no advisory token subtotal; global-budget
+rejection remains fatal during advice. All native publication gates remain. Source repair
 requires a current pre-generation witness at authorization, packet creation and
-merge. Completed/pending state use v16; no compatibility reader is introduced.
-Implementation and required offline validation are complete. Both separately
-approved committed-build diagnostics stopped before review; live review-cost
-effects and finding-type accuracy remain unmeasured in [FIX05](../../fixes/FIX05.md).
+merge. Completed/pending state use v18; no compatibility reader is introduced.
+Approved B9 assigns entities once per feature and requests 2,048 provider output
+tokens in the diagnostic generation/repair slots, without new retries or array caps.
+The single-budget correction passes 168/168 verification steps and 1,890/1,890
+tests, including clean packaged-executable checks. Commands and review are in
+[FIX05 §9](../../fixes/FIX05.md#9-b4b9-implementation--17-october-2026).
+Earlier separately approved diagnostics and their measured outcomes remain
+historical evidence; they do not establish the amended build's quality.
 
 **Implementation:** The native Specify path publishes validated content and controlled
 generation clarifications. Answer application, feature logging and remaining
@@ -1274,7 +1284,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - The native generation candidate is a closed content/clarification/inconclusive union.
 - Content units are a feature brief (title, description, primary goal), primary story,
-  entity applicability, or the complete mixed record collection (§17.3).
+  feature-wide entity applicability plus entity records, or a source-group batch
+  of non-entity records (§17.3). Each entity independently selects its support.
 - Native validation normalizes typed text, checks closed record variants and identical
   normalized records, and keeps questions outside specification content.
 
@@ -1335,9 +1346,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Per-family initial assignments and their whole-record kind replacement
   are superseded: closed variant/schema correction handles malformed record shapes.
-  The approved FIX_002 §31 exception permits replacing one contradictory entity
-  with a non-entity record using the same evidence selection, or inserting one
-  missing required entity, bound to the unchanged applicability decision.
+  B9 supersedes the FIX_002 §31 kind-changing exception: the feature-wide entities
+  unit can delete one contradictory entity or insert one missing required entity,
+  bound to the unchanged applicability decision and fixed feature-basis selection.
+  Record batches cannot author or insert entities.
   One whole-record target remains bounded across field-level failures of that
   replacement; successful siblings, full coverage and semantic review remain.
   Existing reviewed omission insertion still binds the exact required record kind

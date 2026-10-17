@@ -11,9 +11,9 @@
         "provider": "aws-bedrock",
         "model": "openai.gpt-oss-20b-1:0",
         "reasoningEffort": "low",
-        "maxOutputTokens": 16384
+        "maxOutputTokens": 2048
       },
-      "repair": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0", "reasoningEffort": "low" },
+      "repair": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0", "reasoningEffort": "low", "maxOutputTokens": 2048 },
       "design_section_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
       "implementation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" }
     }

@@ -12,11 +12,20 @@ pub fn Responses(comptime boundary: spec.Boundary) type {
     const fields = spec.Values(boundary);
     return struct {
         const Self = @This();
+        pub const Entities = struct {
+            disposition: spec.Applicability,
+            basis: fields.AttributedValue,
+            records: []const fields.RecordProposal = &.{},
+
+            pub fn decision(self: @This()) fields.ApplicabilityProposal {
+                return .{ .disposition = self.disposition, .basis = self.basis };
+            }
+        };
         pub const Need = struct { reason: NeedReason, question: fields.AttributedValue, record_kind: ?spec.Kind = null };
         pub const Content = union(enum) {
             brief: fields.Brief,
             primary_user_story: fields.AttributedValue,
-            entities: fields.ApplicabilityProposal,
+            entities: Self.Entities,
             records: []const fields.RecordProposal,
         };
         pub const Response = union(enum) { content: Self.Content, clarification: Self.Need, inconclusive: Inconclusive };
@@ -28,6 +37,22 @@ pub const Need = Responses(.model).Need;
 pub const Content = Responses(.model).Content;
 pub const Response = Responses(.model).Response;
 pub const CanonicalResponse = Responses(.canonical).Response;
+/// Record indices are local to their native owning unit. Entity records belong
+/// only to the feature-wide entities unit, never a source-group record batch.
+pub fn recordCollection(comptime boundary: spec.Boundary, content: Responses(boundary).Content) ?[]const spec.Values(boundary).RecordProposal {
+    return switch (content) {
+        .entities => |entities| entities.records,
+        .records => |records| records,
+        .brief, .primary_user_story => null,
+    };
+}
+pub fn recordCollectionPtr(comptime boundary: spec.Boundary, content: *Responses(boundary).Content) ?*[]const spec.Values(boundary).RecordProposal {
+    return switch (content.*) {
+        .entities => &content.entities.records,
+        .records => &content.records,
+        .brief, .primary_user_story => null,
+    };
+}
 pub const RecordAssignment = struct {
     reference_state: @import("reference_identity.zig").StateId,
     group_index: usize,
@@ -40,6 +65,7 @@ pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 
 /// Initial authoring owns its supporting-group choice; repair remains value-only.
 pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []const @import("reference_reconciliation.zig").SignalId };
+pub const AuthoringEntity = struct { content: spec.Content(spec.BusinessValue), signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 pub const ModelResponse = union(enum) {
     pub const model_fields = .{ .primary_user_story = @import("text_field_policy.zig").Field.spec_story };
     brief: struct {
@@ -53,6 +79,7 @@ pub const ModelResponse = union(enum) {
         pub const model_fields = .{ .basis = @import("text_field_policy.zig").Field.spec_entity_basis };
         disposition: spec.Applicability,
         basis: AuthoringValue,
+        records: []const AuthoringEntity,
     },
     records: struct { records: []const spec.Wire.RecordProposal },
     clarification: struct {
@@ -70,7 +97,11 @@ pub const ModelResponse = union(enum) {
             .content => |content| switch (content) {
                 .brief => |brief| .{ .brief = .{ .title = try wireValue(allocator, context, brief.title), .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
                 .primary_user_story => |story| .{ .primary_user_story = try wireValue(allocator, context, story) },
-                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = try wireValue(allocator, context, entities.basis) } },
+                .entities => |entities| entity: {
+                    const records = try allocator.alloc(AuthoringEntity, entities.records.len);
+                    for (entities.records, records) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content), .signal_ids = record.source_group_ids };
+                    break :entity .{ .entities = .{ .disposition = entities.disposition, .basis = try wireValue(allocator, context, entities.basis), .records = records } };
+                },
                 .records => |records| blk: {
                     const projected = try allocator.alloc(spec.Wire.RecordProposal, records.len);
                     for (records, projected) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content) };
@@ -99,11 +130,22 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
         .inconclusive => |failure| .{ .inconclusive = failure },
         .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .title = try associated(allocator, available, brief.title, .content), .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
         .primary_user_story => |story| if (bound == .primary_user_story) .{ .content = .{ .primary_user_story = try associated(allocator, available, story, .content) } } else error.InvalidSpecificationUnit,
-        .entities => |entities| if (bound == .entities) .{ .content = .{ .entities = .{ .disposition = entities.disposition, .basis = try associated(allocator, available, entities.basis, .content) } } } else error.InvalidSpecificationUnit,
+        .entities => |entities| if (bound == .entities) entity: {
+            const records = try allocator.alloc(spec.Model.RecordProposal, entities.records.len);
+            for (entities.records, records) |wire, *record| {
+                if (wire.content != .entity) return error.InvalidSpecificationUnit;
+                const selected = @import("specification_source_binding.zig").resolveGroups(allocator, available.records, available.inputs, wire.signal_ids, .content) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+                record.* = .{ .content = wire.content, .source_group_ids = selected.source_group_ids, .provenance = selected.selection };
+            }
+            break :entity .{ .content = .{ .entities = .{ .disposition = entities.disposition, .basis = try associated(allocator, available, entities.basis, .content), .records = records } } };
+        } else error.InvalidSpecificationUnit,
         .records => |batch| if (bound == .records) records: {
             const records = try allocator.alloc(spec.Values(.model).RecordProposal, batch.records.len);
             const ids = try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{bound.records.signal});
-            for (batch.records, records) |wire, *record| record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = bound.records.selection };
+            for (batch.records, records) |wire, *record| {
+                if (wire.content == .entity) return error.InvalidSpecificationUnit;
+                record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = bound.records.selection };
+            }
             break :records .{ .content = .{ .records = records } };
         } else error.InvalidSpecificationUnit,
     };
@@ -120,17 +162,19 @@ pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig
 /// Full candidate validation retains the native value-repair evidence bound.
 /// Recognition during revalidation cannot widen a previously authorized S+E.
 pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: candidate.Candidate) Error!Validation {
+    if (proposed.group_repair != null and unit != .entities) return error.InvalidSpecificationUnit;
     const result = try validate(a, validator, context, unit, proposed.response);
     if (result != .valid) return result;
     if (proposed.group_repair) |group| if (group.policy.membership.evidence_bound) |bound| {
         var scratch_arena: std.heap.ArenaAllocator = .init(a);
         defer scratch_arena.deinit();
         const scratch_allocator = scratch_arena.allocator();
-        const count = if (proposed.response == .content and proposed.response.content == .records) proposed.response.content.records.len else 0;
+        const count = if (proposed.response == .content) (if (recordCollection(.model, proposed.response.content)) |entries| entries.len else 0) else 0;
         const selected = (proposed.origins.currentTarget(group.target, count) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit) orelse return error.InvalidSpecificationUnit;
-        if (selected != .record or result.valid.response != .content or result.valid.response.content != .records) return error.InvalidSpecificationUnit;
-        const record = result.valid.response.content.records[selected.record];
-        if (group.policy.membership.fixed_provenance) |fixed| {
+        if (selected != .record or result.valid.response != .content) return error.InvalidSpecificationUnit;
+        const record = (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[selected.record];
+        {
+            const fixed = group.policy.membership.fixed_provenance;
             if (fixed.claim_ids.len != record.provenance.claim_ids.len) return error.InvalidSpecificationUnit;
             for (fixed.claim_ids, record.provenance.claim_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
             if (fixed.clarification_response_ids.len != record.provenance.clarification_response_ids.len) return error.InvalidSpecificationUnit;
@@ -148,11 +192,11 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
-    const length = if (proposed.response == .content and proposed.response.content == .records) proposed.response.content.records.len else 0;
+    const length = if (proposed.response == .content) (if (recordCollection(.model, proposed.response.content)) |entries| entries.len else 0) else 0;
     const target = (proposed.origins.currentTarget(bound.target, length) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit) orelse return error.InvalidSpecificationUnit;
     if (target != .value) return error.InvalidSpecificationUnit;
     const value = candidate.attributedValue(.canonical, result.valid.response, target.value.subject, target.value.field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
-    const values = if (target.value.subject == .record) try provenance.recordValues(scratch, result.valid.response.content.records[target.value.subject.record].content) else &.{value.value};
+    const values = if (target.value.subject == .record) try provenance.recordValues(scratch, (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[target.value.subject.record].content) else &.{value.value};
     const resolved = try provenance.lineageForRepair(scratch, context, .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids }, values);
     if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationUnit;
     for (resolved.provenance.claim_ids, bound.explicit) |actual, expected| if (actual.ordinal != expected.ordinal) return error.InvalidSpecificationUnit;
@@ -173,7 +217,7 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     const result: CanonicalResponse = switch (proposed) {
         .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },
         .clarification => |need| need: {
-            if ((unit == .records) != (need.record_kind != null)) return .{ .invalid = .{ .unit = unit, .field = .clarification_question, .rule = .unit_kind, .observed = null, .blocked = .clarification_question } };
+            if ((unit == .records) != (need.record_kind != null) or (unit == .records and need.record_kind == .entity)) return .{ .invalid = .{ .unit = unit, .field = .clarification_question, .rule = .unit_kind, .observed = null, .blocked = .clarification_question } };
             break :need .{ .clarification = .{
                 .reason = need.reason,
                 .record_kind = need.record_kind,
@@ -189,23 +233,51 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
                     .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .spec_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },
                 .primary_user_story => |story| .{ .primary_user_story = inspectAuthored(boundary, allocator, validator, context, story, .spec_story, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
-                .entities => |entities| .{ .entities = .{
-                    .disposition = entities.disposition,
-                    .basis = inspectAuthored(boundary, allocator, validator, context, entities.basis, .spec_entity_basis, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
-                } },
+                .entities => |entities| entity: {
+                    const basis = inspectAuthored(boundary, allocator, validator, context, entities.basis, .spec_entity_basis, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err);
+                    const records = try inspectRecords(boundary, allocator, validator, context, unit, proposed, entities.records, &inspection);
+                    if (records == .invalid) return .{ .invalid = records.invalid };
+                    if (!spec.entityMembershipSatisfied(entities.disposition, records.valid.len)) return .{ .invalid = .{
+                        .unit = .entities,
+                        .field = if (records.valid.len == 0) .unit else .{ .target = .{ .record = 0 } },
+                        .rule = .entity_membership,
+                        .observed = null,
+                        .membership = .{ .disposition = entities.disposition, .entity_count = records.valid.len },
+                        .detail = if (records.valid.len == 0) "The fixed entity decision requires at least one source-backed entity record." else "Entity records contradict the fixed not_applicable decision.",
+                    } };
+                    break :entity .{ .entities = .{
+                        .disposition = entities.disposition,
+                        .basis = basis,
+                        .records = records.valid,
+                    } };
+                },
                 .records => |records| records: {
-                    const checked = try allocator.alloc(spec.RecordProposal, records.len);
-                    for (records, checked, 0..) |record, *accepted, index| {
-                        const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
-                        accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection, err);
-                        for (checked[0..index]) |prior| if (try duplicateRecordIssue(allocator, prior, accepted.*, index, observed)) |issue| return .{ .invalid = issue };
-                    }
-                    break :records .{ .records = checked };
+                    const checked = try inspectRecords(boundary, allocator, validator, context, unit, proposed, records, &inspection);
+                    if (checked == .invalid) return .{ .invalid = checked.invalid };
+                    break :records .{ .records = checked.valid };
                 },
             } };
         },
     };
     return .{ .valid = .{ .unit = unit, .response = result } };
+}
+
+fn inspectRecords(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Responses(boundary).Response, records: []const spec.Values(boundary).RecordProposal, inspection: *provenance.Inspection) Error!union(enum) { valid: []const spec.RecordProposal, invalid: candidate.Issue } {
+    const checked = try allocator.alloc(spec.RecordProposal, records.len);
+    for (records, checked, 0..) |record, *accepted, index| {
+        if ((unit == .entities) != (record.content == .entity)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
+        const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
+        accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, inspection) catch |err| {
+            const rejected_result = try rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection.*, err);
+            return .{ .invalid = rejected_result.invalid };
+        };
+        for (checked[0..index]) |prior| if (try duplicateRecordIssue(allocator, prior, accepted.*, index, observed)) |issue| {
+            var owning_issue = issue;
+            owning_issue.unit = unit;
+            return .{ .invalid = owning_issue };
+        };
+    }
+    return .{ .valid = checked };
 }
 
 // Every authored value retains an explicit group occurrence and the owning

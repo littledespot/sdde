@@ -87,11 +87,17 @@ pub fn prepare(
             try changes.add(.{ .associate = .{ .source = subject, .target = next } });
         }
         if (binding.evidence != binding.subject) {
-            if (hasValue(&after, binding.evidence)) {
-                const evidence = try nativeSubject(envelope, occurrence, candidate, binding.kind, binding.evidence, true);
+            const survives = hasValue(&after, binding.evidence);
+            const consumed = candidate.delta.data_invalidations.contains(binding.evidence) and hasValue(&before, binding.evidence);
+            if (survives or consumed) {
+                // Retirement does not remove the obligation to validate the
+                // consumed input witness. Its exact native repair reference
+                // can bridge the replacement without restoring its data slot.
+                const evidence = try nativeSubject(envelope, occurrence, candidate, binding.kind, binding.evidence, survives);
+                const native_repair = repairMergeEvidence(envelope, descriptor, candidate, binding.subject, evidence);
                 if (!changed(candidate, binding.evidence) and !dependsOn(envelope, binding.evidence, subject) and
-                    !repairMergeEvidence(envelope, descriptor, candidate, binding.subject, evidence)) return error.InvalidOutcomeAssociation;
-                try changes.add(.{ .associate = .{ .source = subject, .target = evidence } });
+                    !native_repair) return error.InvalidOutcomeAssociation;
+                if (survives or native_repair) try changes.add(.{ .associate = .{ .source = subject, .target = evidence } });
             }
         }
         if (binding.result) |key| if (changed(candidate, key)) {
@@ -104,7 +110,15 @@ pub fn prepare(
         .independent => unreachable,
         .observe => {},
         .preserve => {
-            if (subject == .request) try changes.add(.{ .preserve = subject });
+            if (subject == .request) {
+                if (candidate.outcome == .more and binding.evidence == .provider_invocation_validation_result) {
+                    // Optional-stop routing does not relabel the failed raw
+                    // request. Only this exact sealed observation can carry
+                    // its unchanged failure toward native advisory closure.
+                    const source = observation.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
+                    if (observation.status(source) != .more or !source.operationId().eql(subject.request)) return error.InvalidOutcomeAssociation;
+                } else try changes.add(.{ .preserve = subject });
+            }
         },
         .request_decode => {
             const result = decoded.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
@@ -134,6 +148,16 @@ pub fn prepare(
                     return error.InvalidOutcomeAssociation;
             }
         },
+        .advisory_request_closure => {
+            const facts = @import("advisory_request_completion_workflow.zig").closing(&before) catch return error.InvalidOutcomeAssociation;
+            if (!facts.operation.eql(subject.request)) return error.InvalidOutcomeAssociation;
+            const protocol_stop = if (@import("workflow_model_accounting.zig").readAdvisoryStop(&before)) |_| true else |_| false;
+            if (candidate.outcome != (if (protocol_stop) @import("../domain/workflow.zig").OutcomeTag.blocked else .more)) return error.InvalidOutcomeAssociation;
+            const next = values.read(&after, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.InvalidOutcomeAssociation;
+            const record = next.record(facts.request.id()) orelse return error.InvalidOutcomeAssociation;
+            if (record.status != .terminal or record.terminal_reason != .failed) return error.InvalidOutcomeAssociation;
+            try changes.add(.{ .advisory_request_failed = facts.operation });
+        },
         .request_closure => {
             const next = values.read(&after, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.InvalidOutcomeAssociation;
             const record = next.record(subject.request.model_request_id) orelse return error.InvalidOutcomeAssociation;
@@ -156,13 +180,28 @@ pub fn prepare(
             if (candidate.delta.repair_transition) |transition| switch (transition) {
                 .validated => |progress| if (progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
                 .merged_validated => |progress| if (progress.changed and progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
-                .authorized, .merged => return error.InvalidOutcomeAssociation,
+                .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
             };
         },
         .diagnostic_admission => {
             if (candidate.outcome == .ok and envelope.outcomes.permitsDiagnosticAdmission(subject)) {
                 const decision = try diagnosticAdmission(&after, binding.evidence);
                 if (decision == .accepted) try changes.add(.{ .resolve = .{ .diagnostic_admitted = .{ .subject = subject, .evidence = decision } } });
+            }
+        },
+        .advisory_completion => {
+            if (candidate.outcome == .failed) {
+                if (candidate.delta.repair_transition != null) return error.InvalidOutcomeAssociation;
+                @import("specification_advice_stop_workflow.zig").validateUnchangedFailure(envelope.allocator, &before, &after) catch return error.InvalidOutcomeAssociation;
+            } else {
+                if (candidate.outcome != .ok) return error.InvalidOutcomeAssociation;
+                const facts = @import("specification_advice_stop_workflow.zig").validateCompletion(envelope.allocator, &before, &after) catch return error.InvalidOutcomeAssociation;
+                const permit = facts.request.packet().?.repairPermit();
+                if (permit) |expected| {
+                    const transition = candidate.delta.repair_transition orelse return error.InvalidOutcomeAssociation;
+                    if (transition != .abandoned_advice or !std.meta.eql(transition.abandoned_advice, expected)) return error.InvalidOutcomeAssociation;
+                } else if (candidate.delta.repair_transition != null) return error.InvalidOutcomeAssociation;
+                try changes.add(.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = facts.operation, .permit = permit } } });
             }
         },
         .authority_reconcile => {
@@ -202,13 +241,13 @@ pub fn prepare(
             }
         },
     }
-    if (association.prohibiting(candidate.outcome) and descriptor != .request_closure) {
+    if (association.prohibiting(candidate.outcome) and descriptor != .request_closure and descriptor != .advisory_request_closure) {
         const recurring: ?retry.Transition = if (descriptor == .repair_validate) progress: {
             const transition = candidate.delta.repair_transition orelse break :progress null;
             break :progress switch (transition) {
                 .validated => |value| if (value.result == .recurring) transition else null,
                 .merged_validated => |value| if (value.changed and value.result == .recurring) transition else null,
-                .authorized, .merged => return error.InvalidOutcomeAssociation,
+                .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
             };
         } else null;
         try changes.add(.{ .observe = .{ .subject = subject, .outcome = candidate.outcome, .repair_progress = recurring } });
@@ -295,6 +334,7 @@ fn packetSubjects(envelope: *const envelope_module.PipelineEnvelope, packet: *co
 fn proposedView(envelope: *const envelope_module.PipelineEnvelope, candidate: *const execution.Candidate) data.View {
     var result: data.View = .{ .slots = envelope.slots };
     for (candidate.delta.data_writes, candidate.delta.data_replacements, 0..) |write, replacement, index| {
+        if (candidate.delta.data_invalidations.contains(@enumFromInt(index))) result.slots[index] = null;
         if (write) |value| result.slots[index] = value;
         if (replacement) |value| result.slots[index] = value;
     }
@@ -380,6 +420,10 @@ fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request:
                 .prepared => null,
             };
         },
+        .accounted_model_attempt => stopped: {
+            const stop = @import("workflow_model_accounting.zig").readAdvisoryStop(view) catch return error.InvalidOutcomeAssociation;
+            break :stopped stop.request().protocolCorrection();
+        },
         .model_request_identity_ledger => null,
         else => return error.InvalidOutcomeAssociation,
     };
@@ -396,7 +440,7 @@ fn missingFinalText(changes: *Changes, source: *const observation.Result, outcom
     if (outcome != .invalid) return;
     switch (source.outcome()) {
         .validated => |evidence| if (evidence.missingFinalText()) try changes.add(.{ .reclassify = .{ .missing_final_text = evidence } }),
-        .rejected, .cancelled => {},
+        .rejected, .cancelled, .advisory_stopped => {},
     }
 }
 

@@ -150,7 +150,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\policy: core.capability-free@1
         \\start: account
         \\steps:
-        \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
+        \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, more: account-stop, failed: end.failed } }
+        \\  account-stop: {use: complete-advisory-protocol-request, on: {blocked: end.failed}}
     );
     const denied_accounting = std.Build.Step.Run.create(b, "reject packaged attempt accounting without a prepared request");
     denied_accounting.addFileArg(missing_request_executable);

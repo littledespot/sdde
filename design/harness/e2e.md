@@ -304,8 +304,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 - Generation retains the selected slot's optional output allowance under
   [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
   The evaluator supplies no output allowance and delegates the provider default.
-- The engine enforces the workflow's cumulative actual-token budget; the evaluator has
-  its separate cumulative budget.
+- The engine accounts every inference, including post-generation advice and
+  correction, once against one execution budget and aggregate usage total. It
+  calculates no advisory token subtotal. The evaluator has its own cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
@@ -512,9 +513,12 @@ separately reports the finalization error and potentially incomplete files, and 
 unsuccessfully even if generation and evaluation succeeded. It does not retry writes
 or rerun the workflow/evaluator to repair reporting.
 
-`total_token_budget`, `retry_settings` and `attempts` project the executed graph
-and native accounting. Per-call usage survives budget rejection before candidate
-text projection. `exchange_evidence` links retained response bytes and distinguishes
+`token_accounting` (the single total budget and actual usage), `retry_settings` and `attempts` project the executed graph
+and native accounting. `model_calls` counts reconciled inference operations,
+including proven non-delivery; `not_sent_operations` identifies that subset.
+Captured exchanges separately count physical sends. Missing receipts are permitted
+only for explicit non-delivery or captured-evidence failure, never to invent paid
+usage. Per-call usage survives budget rejection before candidate text projection. `exchange_evidence` links retained response bytes and distinguishes
 absent responses, budget stops, other missing text and capture failure. Known
 transport phases/causes remain separate from delivery and retry policy; unknown
 causes stay unknown. Recognized provider failures survive request release.
@@ -573,12 +577,15 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v4`,
-`baseline-acquisition/v3` and `baseline-score/v3`. Step events remain
+The current closed report formats are `spec-e2e-report/v5`,
+`baseline-acquisition/v3`, `baseline-score/v3` and `baseline-budget-feasibility/v1`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
 assessor documents retain numeric schema `2`. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
+Feasibility evidence retains the single total budget and aggregate actual usage;
+it contains no advisory pool or usage subtotal. The separate advisory allowance
+was withdrawn on 17 October 2026 (ADR 0011).
 
 ### Reliability assessment
 
@@ -673,3 +680,13 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   evidence.
 
 Active corrective work and required evidence are tracked in [FIX05](../../fixes/FIX05.md).
+
+The report records one 100,000-token total budget for all model work, with
+aggregate actual usage including full overshoots. The separate 20,000-token
+advisory allowance first recorded with B4 was withdrawn on 17 October 2026
+(ADR 0011). Global-budget rejection remains a workflow failure during advice;
+it cannot produce incomplete advice or publication. An explicitly incomplete
+review from an eligible non-budget stop does not establish acceptance:
+R8's rubric thresholds, expected publication and pending human adjudication remain
+independent. Earlier report versions have no compatibility reader. No new billed
+run is implied by this offline contract change.

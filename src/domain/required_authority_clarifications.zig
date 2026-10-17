@@ -14,7 +14,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
             .clarification_required => |value| value,
             .upstream_rework_required => |value| .{ .owner = value.owner, .reason = value.reason },
             .administrative_block => return error.InvalidRequiredAuthority,
-            .assessment_complete, .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
+            .assessment_complete, .assessment_incomplete, .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
         };
         const registered = a.policy(entry.requirement) orelse return error.InvalidRequiredAuthority;
         if (registered.owner != gap.owner or entry.input_authorities.len == 0) return error.InvalidRequiredAuthority;

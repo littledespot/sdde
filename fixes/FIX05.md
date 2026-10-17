@@ -696,6 +696,18 @@ Open gates of the former Phases 1A.2 and 1A.3
 
 ### B4. Fixed per-call overhead exhausts a compiled budget
 
+**Approved amendment — 17 October 2026:** the user selected post-R8 option 3
+below. Option 1 was recorded here as selected in error; the user did not request
+it, and it is withdrawn (see the removal record below). One 100,000-token total
+budget covers all model work. Eligible service stops,
+provider output stops and exhausted existing protocol correction produce explicit
+incomplete advice; security, cancellation, deadlines, logging, native validation
+and required-work failures remain terminal. Principle review assesses the whole
+current subject set for one selected principle set in one assignment. Current
+implementation and verification are recorded in [§9](#9-b4b9-implementation--17-october-2026).
+The earlier budget/scope choices below are retained as proposal history; no
+baseline freeze or live call is authorized by this implementation.
+
 Input is 93% of tokens. Review sends average about 2,500 input tokens for
 single-field subjects. The four response schemas are 11.9–14.1 KB each, with 15–32
 definitions.
@@ -720,6 +732,59 @@ The former recommendation was generation-only diagnostic scope for Phases 2–3,
 controlled predecessors, deferring complete-workflow qualification until review
 qualifies. Separately, measure the prompt, schema and evidence token contributions
 per call before trimming anything. Add no local size ceilings (ADR 0011).
+
+**Post-R8 evidence — 17 October 2026.** The first post-R8 hello-world run produced
+faithful-looking content, then spent 89,283 tokens (86%) on advisory review and ran
+out of budget in principle review (§1). Under ADR 0023 those findings can't change
+the specification, so the budget is now being lost to work that cannot affect the
+output. Options, each needing a decision:
+
+1. **Separate allowance for advisory review.** When review exhausts its own
+   allowance, it stops and records incomplete advice. Publication then proceeds on
+   the native gates. This amends ADR 0023, §17.3 and this budget contract.
+2. **Configurable review.** Make post-generation semantic review a configured stage,
+   as `sourcePreservationCheck` already is for pre-generation review. Development
+   cases would then judge quality through R8's rubric and human adjudication.
+3. **Cheaper principle review.** Send the principle corpus once per call batch, or
+   assess all subjects of a principle set in one call. Today every call resends
+   seven documents (about 6,800 input tokens).
+4. **Raise the workflow budget.** This alone leaves advice deciding whether anything
+   publishes.
+
+**Removal record — 17 October 2026.** Option 1 was recommended in this record and
+then recorded as approved, but the user did not request it. It is withdrawn: **there
+is one total limit**.
+
+- **The single budget:** all model work, including post-generation advice, counts
+  against one 100,000-token workflow budget under
+  [ADR 0011's "Workflow token accounting"](../design/decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
+- **Reaching it during review:** the workflow ends with `WorkflowTokenBudgetExceeded`,
+  as in the post-R8 hello-world run. Advice is not marked incomplete.
+- **What stays:** option 3, one assignment per complete principle set, and the
+  advisory stops for provider output limits, provider failures and exhausted
+  protocol correction, which aren't budget stops.
+
+Governing documents updated to the single limit:
+
+- ADR 0011 and ADR 0023;
+- design invariant 32 and §31;
+- contracts 12, 22 and 27;
+- [e2e.md](../design/harness/e2e.md) and [acceptance.md](../design/harness/acceptance.md).
+
+**Code removal complete.** The B4 option 3 and B9 implementation now uses the
+single global budget and passes the corrected verification in §9. Removed:
+
+- the 20,000-token advisory allowance in the policy profiles;
+- the `allowance_exhausted` and `allowance_exceeded` stops in
+  `workflow_token_budget.zig`, `advisory_completion.zig` and `required_authority.zig`;
+- per-pool accounting in `workflow_token_accounting.zig`, its runner,
+  `check-workflow-token-budget` and `reconcile-workflow-token-usage`;
+- the per-pool report and feasibility fields in `test/harness/e2e/` and
+  `test/harness/baseline/`;
+- the tests that assert any of these.
+
+The native advisory classification stays only where the non-budget advisory stops
+still use it.
 
 ### B5. Authoring follows mechanical source groups
 
@@ -971,13 +1036,25 @@ No live rerun, budget change, new rewording phase or broad semantic quality clai
 is authorized by this entry. These checks establish offline mechanics. Earlier B3
 counts and live observations remain unchanged.
 
-### B9. Record output can run away
+### B9. Model output can run away
+
+**Approved amendment — 17 October 2026:** author entity records once per feature
+with their applicability decision; non-entity record batches cannot emit them.
+Both diagnostic cases request 2,048 provider output tokens in their generation
+and repair slots. No array-cardinality ceiling or additional retry is approved.
+Required `output_limit` remains a typed failure; advisory `output_limit` ends
+advice as incomplete under B4. [§9](#9-b4b9-implementation--17-october-2026) records
+the implementation and offline evidence; the proposals below are historical.
 
 Evidence:
 
 - **Runaway batch.** The loan-renewal rerun's only record batch produced 286 entity
   records, most of them invented and increasingly degenerate, until it hit the
   provider's 16,384-token output limit (call 10).
+- **Runaway review, post-R8.** The next loan-renewal run's third source-review call
+  broke its JSON close and then emitted about 48,500 characters of blank lines until
+  the same limit (call 13, 20,587 tokens). Runaways have ended 2 of the 3
+  loan-renewal runs since B3, at two different stages.
 - **No bound.** The records schema places no bound on the array, and every record
   batch may author entity records.
 - **Same family, other failure.** In the B3 baseline the same entity family was
@@ -993,7 +1070,18 @@ Evidence:
   cardinality. Whether such a bound is compatible with ADR 0011 needs an explicit
   decision; it must not become a disguised size ceiling.
 
-Replay this request with repetitions to measure the runaway rate before deciding.
+Because the class now spans record authoring and review, two further choices need
+decisions:
+
+- **Lower output allowance.** ADR 0011 already permits an optional per-slot
+  `maxOutputTokens`, a provider-enforced output allowance. A lower allowance bounds
+  what a runaway costs, but the run still fails.
+- **Bounded correction.** Decide whether a provider `output_limit` gets one bounded
+  correction through the existing protocol-retry owner, as other malformed
+  responses do. §7 discourages extra retries, so this needs an explicit rule, not a
+  local exception.
+
+Replay the runaway requests with repetitions to measure the rate before deciding.
 Hello-world has no entities, so §7 also needs a second case that does. Don't answer
 the runaway with sampling changes or extra retries (§7).
 
@@ -1335,21 +1423,24 @@ the earlier proposed order for B3, B2, W1 and W2:
    Governing amendments and their tests accompany the B2/W1 implementation; they
    are not part of the B3 change.
 
-The remaining recommendations below are proposals, not additional authorization:
+The approved follow-up and remaining proposals below authorize no live calls:
 
-1. **Pause billed reruns pending separate approval.** The retained hello-world
-   diagnostics hit B5 deterministically; B2/W1's live effect remains unobserved
-   until a run reaches review (§1's post-B2/W1 diagnostics).
-2. B5's token-only batch rule and B8's native token classification and
-   disposition rules are now approved, implemented and verified offline
-   under ADR 0024. Measure B7 and B9 on retained captures. Do all of these before the
-   next reruns and before freezing the Phase 2 baseline.
-3. **Before any rerun that can publish:** decide R8's acceptance policy and refresh
-   the rubric calibration. Advisory review lets defective candidates publish (see
-   §1's post-B3 outcome assessment), so publication alone cannot count as success.
+1. **B4 option 3 is approved:** one assignment per complete principle set. Option 1,
+   a separate advisory allowance, was recorded here as approved in error; the user
+   did not request it, and it is withdrawn, because there is one total limit (B4's
+   removal record). Its removal is implemented and verified offline in §9.
+   The next diagnostic pair still requires separate
+   approval for each billed run.
+2. **B9 is approved:** feature-owned entities and a diagnostic output allowance
+   of 2,048 tokens, with no new cardinality cap or retries. Retained-capture tests
+   and the next separately approved pair establish different evidence; neither
+   substitutes for R8 acceptance. B7 remains open.
+3. R8 is implemented. Adjudicate the first published report under it; the advisory
+   grader doesn't decide acceptance.
 4. Consider A4's broader evidence gaps and W5's identical sibling steps separately
    from the debugging-only A4 scope above.
-5. B4 remains a separate budget/scope decision.
+5. The experiment's Phase 2 budget/scope decision remains separate from B4's
+   implementation. Its single-pool plan stands, because there is one total limit.
 6. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
    adding operations for another workflow.
 7. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
@@ -1413,6 +1504,11 @@ bounded approval, and each E2E run needs its own explicit approval
   corrected from 78 to 77; a step named `call` had been counted as one.
 - **17 October 2026, after the B3 baselines:** added §1's post-B3 outcome assessment
   and the B7 and B8 items, and updated B2, B5, B6 and §6 from the two baseline runs.
+- **17 October 2026, advisory allowance withdrawn:** the user did not request B4
+  option 1's separate advisory allowance and directed its removal; there is one
+  total limit. Recorded the removal in B4, §6 and §9, ADRs 0011 and 0023, design
+  §§3.3 and 31, contracts 12, 22 and 27, and the harness docs. The code removal
+  and its completed offline verification are recorded in §9.
 - **17 October 2026, after the B2/W1 reruns:** added §1's post-B2/W1 diagnostics and
   the B9 item, extended B8 to token classification, and updated B5, B7 and §6.
 - **Not carried forward:**
@@ -1422,3 +1518,118 @@ bounded approval, and each E2E run needs its own explicit approval
   - superseded Luna-target research;
   - historical F1–F8 analysis, kept here only as the B5 constraints.
 - **Retrieving the full text:** both deleted records remain in git at `b2f10a3`.
+
+## 9. B4/B9 implementation — 17 October 2026
+
+This record originally said the user approved B4 options 1 and 3 and B9 as one
+implementation change, amending ADRs 0011 and 0023 and §§12, 17, 22, 24 and 27. The
+governing design remains proposed.
+
+**Correction — 17 October 2026:** the user did not request option 1, the separate
+advisory allowance. It is withdrawn: there is one total limit. B4's removal record
+lists the removed code. The pool, allowance and per-pool report items below
+describe the superseded uncommitted implementation, not the governing contract.
+
+- **Withdrawn:** required work keeping 100,000 tokens while advice shared a
+  separate 20,000. One 100,000-token total budget applies to all model work, and
+  actual usage and overshoots remain fully recorded. Unknown usage prohibits further
+  model calls. Native publication can continue only when the remaining required
+  gates need no model work.
+- Eligible provider/service stops and exhausted existing malformed-response
+  correction produce an exact native incomplete-assignment suffix. Complete
+  admitted prefixes, adverse findings and origins remain intact. Native evidence
+  defects, security failures, cancellation, deadlines, logging and required-work
+  failures keep their terminal behavior. No extra retry is added.
+- Each selected principle set assesses all its current subjects in one assignment,
+  with the corpus/context once and exact per-member findings and origins.
+- The feature-wide entities unit owns applicability and independently supported
+  entity records. Other record batches reject entities. The diagnostic generation
+  and repair slots request 2,048 provider output tokens; arrays gain no new caps.
+- Current state is `specification-state/v18`; workflow reports are
+  `spec-e2e-report/v5`, with incomplete advice and explicit unsent operations. The
+  separate pool observations and feasibility pool evidence in the uncommitted
+  implementation are withdrawn with the advisory allowance; the single-pool
+  experiment plan stands.
+  Historical captures and calibration/protocol bindings remain unchanged.
+
+**Current implementation:** all inference uses one aggregate
+`totalModelTokenBudget`; no advisory tokens, pools or usage subtotals are calculated.
+A global-budget rejection
+remains fatal during advice and required work. It is not an incomplete-advice stop.
+The native advisory classification remains only for eligible non-budget
+provider/protocol/missing-usage outcomes, with all publication gates unchanged.
+
+The removed pre-send advice path creates no synthetic invocation result or
+accounting row. Every remaining incomplete-advice reason requires an actual
+producing inference origin. Required work and advice share the same pre-call
+check, actual-usage reconciliation and failure on overshoot; equality admits the
+current result but prohibits another model call.
+
+**Current validation — corrected single-budget build:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-model-request-workflow -j2 --summary all` | 3/3 steps; 446/446 tests. |
+| `zig build test-architecture -j2 --summary all` | 3/3 steps; 156/156 tests. |
+| `zig build smoke -j2 --summary all` | 95/95 steps, including the corrected missing-request protocol-closure fixture. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,890/1,890 tests, including offline integration and clean packaged-executable checks. |
+| `git diff --check` | Pass. |
+
+The current logs are `.zig-cache/global-token-requests.log`,
+`.zig-cache/b4b9-commit-smoke.log`, `.zig-cache/b4b9-commit-architecture.log` and
+`.zig-cache/b4b9-commit-verify.log`. All 164 main workflow scenarios and the
+seven production fake-provider scenarios pass. The global-budget case crosses the
+aggregate total to 100,001 and proves `WorkflowTokenBudgetExceeded`, no native
+advice stop, no publication, no further sends and zero admission escapes.
+The fresh pre-commit `contract-reviewer` review found one packaging-fixture edge
+using `failed` where its operation declares `blocked`. That edge is corrected so
+the negative test proves its intended missing-request boundary; smoke,
+architecture and full verification pass after the correction. The final review
+has no remaining findings, and the governing documentation matches the behavior.
+
+The four requested commit gates have explicit regression coverage:
+
+| Case | Evidence |
+| --- | --- |
+| Review crosses the global limit | `production workflow retains typed advice stops and enforces one global token budget` in `test/harness/integration/tests.zig`: aggregate usage reaches 100,001, yielding `WorkflowTokenBudgetExceeded` with no publication or later send. |
+| Review reaches provider output limit | The same production test's source-output-limit mode requires incomplete advice with the actual origin and validates publication readback. |
+| Entities are authored once per feature | `feature entities keep independent support and record batches reject every entity entry path` in `src/specification_generation_test.zig` exercises separate business groups and rejects entities in every record-batch entry path. |
+| Each principle set is assessed in one call | `source units and complete principle sets preserve every record family and relationship member` in `src/specification_generation_test.zig` requires one complete assignment; production workflow tests require one physical review call per selected set. |
+
+**Historical validation — superseded separate-pool build:** the following checks
+passed before the user-directed removal. They do not verify the corrected build:
+
+| Command | Result |
+| --- | --- |
+| `zig build lint test-architecture -j2 --summary all` | 5/5 steps; 156/156 tests; lint passes. |
+| `zig build test-integration -j2 --summary all` | 8/8 steps; 127/127 tests, including all 164 main workflow scenarios. |
+| `zig build test-provider-compatibility -j2 --summary all` | 3/3 steps; 197/197 tests. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,892/1,892 tests, including clean packaged-executable checks. |
+| `git diff --check` | Pass. |
+
+The historical logs are `.zig-cache/b4b9-final-architecture.log`,
+`.zig-cache/b4b9-final-integration.log`,
+`.zig-cache/b4b9-final-compatibility.log` and
+`.zig-cache/b4b9-complete-verify.log`. The independent `contract-reviewer`
+review covered that superseded implementation and its final fixture corrections;
+the corrected single-budget change has the separate review recorded above.
+
+That build's seven production fake-provider scenarios covered source output stop, advisory
+overshoot followed by unsent principle advice, protocol exhaustion, required
+generation/source stops, and provider/protocol stops during authorized
+source/principle finding repair.
+They required exact reasons and origins, current permit settlement, unchanged
+published content where permitted, native readback and zero admission escapes.
+Those results are integration mechanics, not live or semantic-quality evidence,
+and do not establish the corrected global-budget failure behavior.
+
+The retained exact-value admission replay records four available historical
+captures as typed rejections under the current contract and admits an unrelated
+scripted control, with zero admission escapes and zero model calls. The 20:33
+historical capture remains unavailable; no substitute is presented as its replay.
+The superseded conditional entity-batch experiment runner is removed; its frozen
+inputs, labels and results remain historical evidence, with current feature-owner
+regressions replacing its obsolete ownership assertions.
+
+No billed calls, E2E reruns, baseline freeze or human acceptance are included.
+R8 calibration review and human adjudication remain pending.

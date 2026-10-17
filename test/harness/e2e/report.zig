@@ -302,10 +302,18 @@ fn writeRepairs(writer: *std.Io.Writer, repairs: []const @import("../../../src/d
 }
 
 fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
-    try writer.print("Model calls: {d}. Accounted tokens: {d}", .{ report.model_calls, report.total_tokens });
-    if (report.total_token_budget) |budget| try writer.print("/{d}", .{budget});
+    try writer.print("Reconciled inference operations: {d} ({d} proven not sent). Accounted tokens: {d}", .{ report.model_calls, report.not_sent_operations, report.total_tokens });
     try writer.print("; usage complete: {}.\n\n", .{report.usage_complete});
+    if (report.admission_audit != null) try writer.print("Captured physical sends: {d}.\n\n", .{report.admission_exchanges.len});
+    if (report.token_accounting) |accounting| {
+        try writer.print("Workflow tokens: {d}/{d}. In-flight overshoots retain full usage.\n\n", .{ accounting.total_tokens, accounting.total_budget.value });
+    }
     if (report.last_model_usage) |usage| try writer.print("Last exchange usage: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
+    if (report.advisory_completion) |completion| {
+        try writer.writeAll("Native incomplete advice (does not certify semantic support): ");
+        try std.json.Stringify.value(completion, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.exchange_evidence) |exchange| {
         try writer.writeAll("Exchange evidence: ");
         try std.json.Stringify.value(exchange, .{}, writer);

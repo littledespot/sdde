@@ -145,8 +145,8 @@ test "test.integration.exact_value.production_admission retained failure classes
     try std.testing.expectEqual(@as(usize, 1), report.unavailable_requested_runs);
     try std.testing.expectEqual(@as(usize, 4), report.replayed_capture_rows);
     try std.testing.expectEqual(@as(usize, 1), report.scripted_control_rows);
-    try std.testing.expectEqual(@as(usize, 2), report.admitted_rows);
-    try std.testing.expectEqual(@as(usize, 3), report.typed_rejection_rows);
+    try std.testing.expectEqual(@as(usize, 1), report.admitted_rows);
+    try std.testing.expectEqual(@as(usize, 4), report.typed_rejection_rows);
     try std.testing.expectEqual(@as(usize, 0), report.admission_escape_rows);
     try std.testing.expectEqual(@as(usize, 6), report.rows.len);
     try std.testing.expect(!report.historical_metadata_promoted and !report.workflow_authority and !report.semantic_quality_assessed);
@@ -161,6 +161,11 @@ test "test.integration.exact_value.production_admission retained failure classes
     try std.testing.expectEqual(.prose_without_insertions, report.rows[2].failure_class);
     try std.testing.expectEqual(.authentic_capture, report.rows[2].origin);
     try std.testing.expectEqualStrings("2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4", report.rows[2].execution_id.?);
+    // The old raw prose includes a third entity record. B9 requires that record
+    // to be authored by the feature entities unit, so this immutable batch now
+    // ends in a typed schema rejection rather than gaining an old-shape bypass.
+    try std.testing.expectEqual(.unknown_variant, report.rows[2].outcome.rejected.schema.reason);
+    try std.testing.expectEqualStrings("/records/2/content/kind", report.rows[2].outcome.rejected.schema.path);
     try std.testing.expectEqual(.unavailable_capture, report.rows[3].origin);
     try std.testing.expectEqual(.retained_raw_capture_not_found, report.rows[3].outcome.unavailable);
     try std.testing.expect(report.rows[3].output_sha256 == null);
@@ -168,7 +173,7 @@ test "test.integration.exact_value.production_admission retained failure classes
     const syntax = report.rows[4].outcome.rejected.composition;
     try std.testing.expect(syntax.len != 0);
     for (syntax) |issue| try std.testing.expectEqual(.embedded_insertion_syntax, issue.reason);
-    for ([_]usize{ 2, 5 }) |index| {
+    for ([_]usize{5}) |index| {
         const row = report.rows[index];
         const accepted = row.outcome.admitted;
         try std.testing.expect(accepted.records >= 2);

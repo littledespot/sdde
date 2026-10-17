@@ -130,7 +130,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v4" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v5" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;
@@ -157,12 +157,22 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
     }
     var tokens: u64 = 0;
     var usage_complete = report.usage_complete;
-    for (1..report.model_calls + 1) |ordinal| {
-        if (try callTokens(io, a, repository, run, path, selected.workflow_id, ordinal, protocol, report.attempts[ordinal - 1], &expected_config.value().models)) |actual| {
+    const captured_attempts = try capturedAttempts(a, report);
+    for (captured_attempts) |captured| {
+        if (try callTokens(io, a, repository, run, path, selected.workflow_id, captured.ordinal, protocol, captured.attempt, &expected_config.value().models)) |actual| {
             tokens = std.math.add(u64, tokens, actual) catch return error.InvalidBudgetEvidence;
         } else usage_complete = false;
     }
     if (usage_complete and report.total_tokens != tokens) return error.InvalidBudgetEvidence;
+    if (report.token_accounting) |snapshot| {
+        if (!snapshot.total_budget.isValid() or snapshot.total_tokens != report.total_tokens or
+            snapshot.usage_unavailable == report.usage_complete) return error.InvalidBudgetEvidence;
+        var actual: u128 = 0;
+        for (report.attempts) |attempt| if (attempt.usage) |usage| {
+            actual = std.math.add(u128, actual, usage.total_tokens) catch return error.InvalidBudgetEvidence;
+        };
+        if (actual != snapshot.total_tokens) return error.InvalidBudgetEvidence;
+    }
     const completed = report.publication_check == .passed and (report.workflow_outcome == .ok or report.workflow_outcome == .needs_user);
     const budget_exhausted = if (report.terminal_rejection) |rejection| rejection.kind == .token_budget and rejection.detail != null and std.mem.eql(u8, rejection.detail.?, "WorkflowTokenBudgetExceeded") else false;
     return .{
@@ -172,16 +182,48 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         .build = source.source,
         .case_id = report.case_id.?,
         .execution_id = report.execution_id.?,
-        .sends = report.model_calls,
+        .sends = std.math.cast(u64, captured_attempts.len) orelse return error.InvalidBudgetEvidence,
         .actual_tokens = if (usage_complete) tokens else null,
         .known_actual_tokens = tokens,
         .usage_complete = usage_complete,
         .completed_workflow = completed,
         .completed_product_flow = completed and report.workflow_outcome == .ok,
         .budget_exhausted = budget_exhausted,
-        .observed_workflow_budget = report.total_token_budget,
+        .observed_workflow_budget = if (report.token_accounting) |snapshot| snapshot.total_budget.value else null,
         .cost_extent = if (completed) .complete else .stopped_lower_bound,
     };
+}
+
+const CapturedAttempt = struct { ordinal: usize, attempt: native.Attempt };
+
+/// Physical receipt ordinals and native origins are separate identities. Native
+/// non-delivery may have no exchange; every other attempt requires its own one.
+fn capturedAttempts(a: std.mem.Allocator, report: native.Report) ![]const CapturedAttempt {
+    if (report.model_calls != report.attempts.len) return error.InvalidBudgetEvidence;
+    const matched = try a.alloc(bool, report.attempts.len);
+    defer a.free(matched);
+    @memset(matched, false);
+    const captured = try a.alloc(CapturedAttempt, report.admission_exchanges.len);
+    errdefer a.free(captured);
+    var not_sent: usize = 0;
+    for (report.attempts, 0..) |attempt, index| {
+        if (attempt.origin.kind != .inference or attempt.origin.request.value == 0 or attempt.origin.attempt.value == 0 or
+            (attempt.accounting == .exact_usage) != (attempt.usage != null)) return error.InvalidBudgetEvidence;
+        for (report.attempts[0..index]) |prior| if (std.meta.eql(prior.origin, attempt.origin)) return error.InvalidBudgetEvidence;
+        if (@import("../e2e/observation.zig").provenNotSent(attempt)) not_sent += 1;
+    }
+    if (not_sent != report.not_sent_operations) return error.InvalidBudgetEvidence;
+    for (report.admission_exchanges, captured, 0..) |exchange, *entry, index| {
+        if (exchange.call != index + 1) return error.InvalidBudgetEvidence;
+        const selected = for (report.attempts, 0..) |attempt, attempt_index| {
+            if (std.meta.eql(attempt.origin, exchange.origin)) break attempt_index;
+        } else return error.InvalidBudgetEvidence;
+        if (matched[selected] or !std.meta.eql(exchange.usage, report.attempts[selected].usage)) return error.InvalidBudgetEvidence;
+        matched[selected] = true;
+        entry.* = .{ .ordinal = exchange.call, .attempt = report.attempts[selected] };
+    }
+    for (report.attempts, matched) |attempt, found| if (!found and !@import("../e2e/observation.zig").provenNotSent(attempt)) return error.InvalidBudgetEvidence;
+    return captured;
 }
 
 fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, run: std.Io.Dir, path: []const u8, workflow_id: []const u8, ordinal: usize, protocol: comparison.Protocol, attempt: native.Attempt, expected_models: *const @import("../../../src/domain/config.zig").ModelsConfig) !?u64 {
@@ -204,6 +246,10 @@ fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, 
     const outcome = try contracts.decode(@import("../e2e/trace.zig").TransportOutcome, a, try files.read(io, a, run, outcome_path));
     const status: ?u16 = if (outcome == .received) outcome.received.status else null;
     if (captured.call.response_status != null and captured.call.response_status != status) return error.InvalidBudgetEvidence;
+    if (@import("../e2e/observation.zig").provenNotSent(attempt)) {
+        if (outcome != .failed or outcome.failed.delivery != .not_sent or captured.call.response != null) return error.InvalidBudgetEvidence;
+        return 0;
+    }
     const raw = captured.call.response;
     const actual = attempt.usage;
     if (attempt.accounting != .exact_usage and actual != null) return error.InvalidBudgetEvidence;
@@ -441,6 +487,29 @@ test "only complete known usage committed source and explicit existing scope can
     try std.testing.expect(mismatch.user_decision_required);
 }
 
+test "global workflow budget overshoot retains full cost without establishing completion" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const protocol = try comparison.parseProtocol(a, @embedFile("../../calibration/semantic-simplicity/protocol.json"));
+    var plan = testPlan();
+    plan.decision = .{ .retain_existing_scope = .{ .record = "User retained the existing global workflow budget and experiment scope." } };
+    var observed = testEvidence(false);
+    observed.actual_tokens = 110000;
+    observed.known_actual_tokens = 110000;
+    observed.observed_workflow_budget = 100000;
+    const report = try summarize(a, plan, protocol, testBuild(false), 100000, &.{observed});
+    try std.testing.expectEqual(.insufficient, report.status);
+    try std.testing.expect(hasReason(report, .observed_workflow_budget_exhaustion));
+    try std.testing.expect(hasReason(report, .no_complete_product_flow_evidence));
+    try std.testing.expect(hasReason(report, .projected_token_budget_exceeded));
+    try std.testing.expect(!hasReason(report, .workflow_budget_unconfirmed));
+    try std.testing.expectEqual(@as(?u64, 110000), report.worst_observed_tokens);
+    try std.testing.expectEqual(@as(?u64, 7920000), report.projected_minimum_tokens);
+    try std.testing.expect(report.user_decision_required);
+    try std.testing.expectEqual(@as(?u64, 100000), report.evidence[0].observed_workflow_budget);
+}
+
 test "external budget evidence rejects unknown native report fields before any usage estimate" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -516,4 +585,51 @@ test "persisted feasibility report requires its explicit closed version" {
     try std.testing.expectError(error.InvalidEvaluationContract, contracts.decode(Report, a, missing));
     const unknown = try std.mem.replaceOwned(u8, a, bytes, "baseline-budget-feasibility/v1", "baseline-budget-feasibility/v2");
     try std.testing.expectError(error.InvalidEvaluationContract, contracts.decode(Report, a, unknown));
+}
+
+test "budget evidence joins physical origins independently of native unsent operation positions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
+    const first: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const unsent: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const second: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    const usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(4, 3, 7).?;
+    const attempts = [_]native.Attempt{
+        .{ .origin = second, .step = "later-required", .accounting = .exact_usage, .usage = usage },
+        .{ .origin = unsent, .step = "advisory-stopped-before-send", .accounting = .not_sent, .usage = null },
+        .{ .origin = first, .step = "first-required", .accounting = .exact_usage, .usage = usage },
+    };
+    const exchanges = [_]@import("admission.zig").Exchange{
+        .{ .call = 1, .origin = first, .usage = usage },
+        .{ .call = 2, .origin = second, .usage = usage },
+    };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
+    const joined = try capturedAttempts(a, report);
+    try std.testing.expectEqual(@as(usize, 2), joined.len);
+    try std.testing.expectEqual(@as(usize, 1), joined[0].ordinal);
+    try std.testing.expectEqualDeep(first, joined[0].attempt.origin);
+    try std.testing.expectEqualDeep(second, joined[1].attempt.origin);
+    var wrong = report;
+    wrong.admission_exchanges = exchanges[0..1];
+    try std.testing.expectError(error.InvalidBudgetEvidence, capturedAttempts(a, wrong));
+    var unknown = attempts;
+    unknown[1].accounting = .unavailable;
+    wrong = report;
+    wrong.attempts = &unknown;
+    wrong.not_sent_operations = 0;
+    try std.testing.expectError(error.InvalidBudgetEvidence, capturedAttempts(a, wrong));
+    var duplicate = exchanges;
+    duplicate[1].origin = first;
+    wrong = report;
+    wrong.admission_exchanges = &duplicate;
+    try std.testing.expectError(error.InvalidBudgetEvidence, capturedAttempts(a, wrong));
+    duplicate = exchanges;
+    duplicate[1].usage = null;
+    wrong.admission_exchanges = &duplicate;
+    try std.testing.expectError(error.InvalidBudgetEvidence, capturedAttempts(a, wrong));
+    wrong = report;
+    wrong.not_sent_operations = 0;
+    try std.testing.expectError(error.InvalidBudgetEvidence, capturedAttempts(a, wrong));
 }

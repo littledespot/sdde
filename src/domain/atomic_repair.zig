@@ -146,7 +146,9 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
             const raw = try packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
             defer packets.release(raw);
-            const native = if (base.exactScope()) |scope| try packets.withExactScope(a, raw, scope) else try packets.retain(raw);
+            const classified = if (base.advisoryAssessment()) |assessment| try packets.withAdvisoryAssessment(a, raw, assessment) else try packets.retain(raw);
+            defer packets.release(classified);
+            const native = if (base.exactScope()) |scope| try packets.withExactScope(a, classified, scope) else try packets.retain(classified);
             defer packets.release(native);
             const result = try packets.withOriginalSourceTexts(a, native, base.originalSources());
             defer packets.release(result);

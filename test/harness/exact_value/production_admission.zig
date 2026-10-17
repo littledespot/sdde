@@ -182,7 +182,16 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
     };
     if (input.unit == .records) {
         current.completed = sessions.records_index;
-        const entity_fixture = try g.validate(a, text.validator, context, .entities, .{ .content = .{ .entities = .{ .disposition = if (input.requires_entity) .required else .not_applicable, .basis = try plainProposal(a, context, "The requested behavior has an observable result.") } } });
+        const basis = try plainProposal(a, context, "The requested behavior has an observable result.");
+        // Current scripted context owns entities once per feature. The retained
+        // response remains byte-for-byte old output and is independently
+        // rejected if it still tries to author an entity in a record batch.
+        const entities = if (input.requires_entity) try a.dupe(g.spec.Model.RecordProposal, &.{.{
+            .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Application" } }} }, .business_meaning = basis.value, .relationships = &.{} } },
+            .source_group_ids = basis.source_group_ids,
+            .provenance = basis.provenance,
+        }}) else &.{};
+        const entity_fixture = try g.validate(a, text.validator, context, .entities, .{ .content = .{ .entities = .{ .disposition = if (input.requires_entity) .required else .not_applicable, .basis = basis, .records = entities } } });
         current.units[2] = switch (entity_fixture) {
             .valid => |checked| checked,
             .invalid => |failure| {
@@ -259,7 +268,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
             const description = try plain(a, context, "The application provides the requested result.", .spec_description);
             const goal = try plain(a, context, "Provide the requested behavior.", .spec_goal);
             const story = try plain(a, context, "The user requests the supported behavior and observes the result.", .spec_story);
-            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities, .records = checked.response.content.records }, .{});
+            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{});
             const coverage = try @import("../../../src/domain/specification_coverage.zig").validate(a, context.references, .{ .title = title, .description = description, .primary_goal = goal }, identified.content);
             var targets: usize = 0;
             for (coverage.obligations) |obligation| targets += obligation.exact_targets.len;
@@ -297,7 +306,10 @@ pub fn run(a: std.mem.Allocator) !Report {
         }
         const prohibited_capture = switch (row.failure_class) {
             .insertion_only, .collapsed_records, .embedded_insertion_syntax => true,
-            .prose_without_insertions, .admitted_generation_then_review_failure, .unrelated_loan_control => false,
+            // This immutable prose capture also authors an entity in its old
+            // record batch, forbidden by the current feature-owned contract.
+            .prose_without_insertions => true,
+            .admitted_generation_then_review_failure, .unrelated_loan_control => false,
         };
         if (prohibited_capture and row.outcome == .admitted) escapes += 1;
     }

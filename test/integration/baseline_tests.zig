@@ -11,7 +11,7 @@ const transport = @import("../../src/adapters/provider/bedrock_transport.zig");
 const paths: frozen_inputs.InputPaths = .{
     .protocol = "test/calibration/semantic-simplicity/protocol.json",
     .cases = "test/calibration/semantic-simplicity/cases.json",
-    .template_case = "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json",
+    .template_case = @import("frozen_protocol_fixture.zig").template_case,
     .rubric = "test/integration/fixtures/baseline/rubric.json",
 };
 const build: @import("../../build/provenance.zig").Identity = .{ .revision = "offline-baseline-boundary", .source_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", .modified = true };
@@ -51,6 +51,27 @@ test "test.integration.baseline current preparation requires a new freeze and re
     try std.testing.expectError(error.InvalidEvaluationContract, frozen_inputs.decode(a, try std.json.Stringify.valueAlloc(a, stale, .{})));
     try std.testing.expectError(error.FixtureChanged, frozen_inputs.verifySources(std.testing.io, a, .cwd(), stale));
     try std.testing.expectError(error.BaselineNotFrozen, frozen_inputs.requireExecutable(a, frozen));
+}
+
+test "test.integration.baseline current shipped output allowance cannot silently change the frozen protocol" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const current_paths: frozen_inputs.InputPaths = .{
+        .protocol = paths.protocol,
+        .cases = paths.cases,
+        .template_case = "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json",
+        .rubric = paths.rubric,
+    };
+    const template_bytes = try files.read(std.testing.io, a, .cwd(), current_paths.template_case);
+    const template = try @import("../harness/e2e/contracts.zig").parse(a, template_bytes);
+    const captured = try fixture.capture(std.testing.io, a, .cwd(), template);
+    const path_policy = try @import("../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(std.testing.io, .cwd()).resolve(a);
+    try std.testing.expectError(error.FrozenBindingRejected, frozen_inputs.create(a, build, try files.read(std.testing.io, a, .cwd(), paths.protocol), try files.read(std.testing.io, a, .cwd(), paths.cases), template_bytes, try files.read(std.testing.io, a, .cwd(), paths.rubric), captured, current_paths, path_policy));
+    var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, captured.config);
+    defer current.deinit();
+    try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+    try fixture.verifySources(std.testing.io, a, .cwd(), captured);
 }
 
 test "test.integration.baseline reads compiled budget without dispatch and refuses an unresolved preparation" {

@@ -256,11 +256,12 @@ same normalization. A new array position is never a new repair allowance. Existi
 redundant-projection deletion keeps its separate authorization and proof; overlap
 alone authorizes neither deletion nor coupled replacement.
 
-**Approved conditional-membership amendment (25 September 2026, FIX_002 §31):**
-The specification session's existing entity decision may authorize replacement of
-one contradictory entity with a source-grounded non-entity record, retaining its
-exact evidence selection, or insertion of one missing required entity. It may not
-change that decision, delete unique content, reclassify siblings or infer semantics.
+**Conditional entity membership (25 September 2026, amended by approved B9 on
+17 October 2026):** the feature-wide entities unit's fixed applicability decision
+may authorize deletion of one contradictory entity or insertion of one missing
+required entity. Record batches cannot author entities or use this authorization.
+Repair may not change the decision, reclassify an entity as another record family,
+change siblings or infer semantics.
 Bind the current session, old value/absence, source/policy dependencies and stable
 record occurrence. A replacement fixes the old record's authored source selection
 `S`, source groups, effective evidence `L = S ∪ E`, and derived citations. Native
@@ -268,8 +269,8 @@ occurrence recognition over all of the old record's permitted fields establishes
 `E` before the bound is captured, including unchanged sibling prose. Its packet,
 merge and full validation use the same fixed occurrence scope; replacement cannot
 add or remove effective evidence. Initial insertion has no old `L`: it uses the
-independently authorized current-group selection and current eligible occurrence
-scope, then fixes the inserted record's resulting `L` and citations for later
+fixed feature-basis source groups and authored selection, and the current native
+eligible occurrence scope, then fixes the inserted record's resulting `L` and citations for later
 replacements. Subsequent invalid fields of that record retain the same
 whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
@@ -324,8 +325,9 @@ The repair guidance contains:
 **Focused-review repair (approved 26 September 2026; task-authorized Phase 4
 transport/lifecycle amendment, 11 October 2026).** All produced findings are
 individually validated before the next native assignment is requested. The
-whole-unit/collection assignment in §17 produces all its native member findings
-in one call for source and principle assessment. Exact complete native membership is checked
+source unit/collection assignment in §17 produces all its native member findings
+in one call; principle assessment produces the complete current subject set of
+one selected principle set in one call. Exact complete native membership is checked
 before appending any member; partial, duplicate, foreign or misbound responses
 cannot contribute coverage. Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
@@ -598,6 +600,12 @@ below adds required names to immediate child-object descriptors only.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
   compiler-validated local limit owns further attempts of that assignment (§22.7).
 - The execution's total-token budget continues across all requests and corrections.
+  Under ADR 0023, exhausted malformed-response correction of bound optional
+  advice closes the logical request failed without another provider operation
+  and records incomplete advice. A provider/protocol stop during advisory atomic
+  finding repair explicitly retires only the exact active permit, retaining
+  counters and unresolved history without claiming that repair succeeded.
+  Native finding-evidence validation and repair exhaustion remain terminal.
 - Request IDs cannot reset either authority.
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.
@@ -611,15 +619,23 @@ evidence without decoding a nonexistent candidate. Provider-operation failure re
 recorded; explicit request closure remains failed/invalid unless a later response
 passes ordinary admission. Missing answers, JSON and schema failures share one
 assignment allowance, including selected native-repair parents. Charge every exchange
-before continuation; unknown usage or an exhausted global budget prohibits a new call.
+before continuation; unknown usage or an exhausted global budget prohibits a new
+call. All inference and corrections share the same `totalModelTokenBudget` and
+aggregate usage ledger; no advisory token calculation or allowance applies.
+Global-budget rejection remains fatal during advisory repair and cannot be
+converted into incomplete advice.
 
-Runner retry exhaustion retains the owning compiled operation, declared limit
-and completed execution count alongside the last response diagnostic. It is a
-typed terminal rejection, never an ordinary YAML outcome that could continue
-to success or `needs_user`. If JSON decoding or schema validation still fails when
-correction is unavailable or exhausted, the workflow reports an error and exits
-nonzero; it cannot publish either a completed or incomplete specification. Existing
-open clarifications do not override that failure. A correction that passes admission
+Ordinary runner retry exhaustion retains the owning compiled operation, declared
+limit and completed execution count alongside the last response diagnostic. It is
+a typed terminal rejection, never an ordinary YAML outcome that could continue
+to success or `needs_user`. ADR 0023's native-bound advisory protocol exhaustion
+is the explicit exception described above: only its sealed current stop receipt
+may record incomplete advice, without another attempt or provider call. Otherwise,
+if JSON decoding or schema validation still fails when correction is unavailable
+or exhausted, the workflow reports an error and exits nonzero; it cannot publish
+either a completed or incomplete specification. Native finding-evidence or repair
+exhaustion and global-budget rejection remain terminal. Existing open
+clarifications do not override that failure. A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
 is not itself a publication veto. Whole-stage regeneration is not used.
 

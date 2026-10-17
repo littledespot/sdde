@@ -113,7 +113,7 @@ pub const Observation = struct {
         allocator.free(self.assignments);
     }
 };
-pub const Role = enum { none, authorize, merge, validate, merge_validate };
+pub const Role = enum { none, authorize, merge, validate, merge_validate, abandon_advice };
 /// Native repair membership uses u32 ordinals. This representational bound also
 /// bounds the execution's distinct keys across multiple native scopes.
 pub const maximum_repair_keys: u32 = std.math.maxInt(u32);
@@ -148,6 +148,7 @@ pub fn permitsTransition(role: Role, transition: ?Transition) bool {
         .merge => value == .merged,
         .validate => value == .validated,
         .merge_validate => value == .merged_validated,
+        .abandon_advice => value == .abandoned_advice,
     };
 }
 
@@ -196,6 +197,8 @@ pub const Transition = union(enum) {
     merged: struct { permit: Permit, revision_after: u64, changed: bool, validation: ValidationMode = .native },
     validated: struct { permit: Permit, revision: u64, result: Validation },
     merged_validated: struct { permit: Permit, revision_after: u64, changed: bool, result: Validation },
+    /// Optional advice was not assessed. This retires authorization, never a defect.
+    abandoned_advice: Permit,
 };
 pub const ProgressError = error{InvalidRepairProgress};
 pub const StateError = std.mem.Allocator.Error || ProgressError;
@@ -330,7 +333,7 @@ pub const State = struct {
         const value: struct { permit: Permit, revision_after: u64 } = switch (transition) {
             .merged => |merged| if (!merged.changed) .{ .permit = merged.permit, .revision_after = merged.revision_after } else return null,
             .merged_validated => |merged| if (!merged.changed) .{ .permit = merged.permit, .revision_after = merged.revision_after } else return null,
-            .authorized, .validated => return null,
+            .authorized, .validated, .abandoned_advice => return null,
         };
         try self.validateMerge(value.permit, value.revision_after);
         const index = self.active.?.admitted_attempt orelse return error.InvalidRepairProgress;
@@ -391,6 +394,7 @@ pub const State = struct {
                 self.scopes.items[self.scopeIndex(value.permit.key.scope).?].revision = value.revision_after;
                 self.finishValidation(value.result);
             },
+            .abandoned_advice => self.active = self.deferred.pop(),
         }
         self.revision = next_revision;
     }
@@ -479,6 +483,10 @@ pub const State = struct {
                 }) return error.InvalidRepairProgress;
             },
             .merged_validated => |value| try self.validateTransition(.{ .merged = .{ .permit = value.permit, .revision_after = value.revision_after, .changed = value.changed } }),
+            .abandoned_advice => |permit| {
+                const active = self.active orelse return error.InvalidRepairProgress;
+                if (!std.meta.eql(active.permit, permit)) return error.InvalidRepairProgress;
+            },
         }
     }
 

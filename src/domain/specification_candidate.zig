@@ -33,14 +33,7 @@ pub const Target = union(enum) { provenance: Subject, value: struct { subject: S
 pub const StableTarget = struct { value: Target };
 pub const Replacement = union(enum) { provenance: g.spec.Selection, value: g.spec.BusinessValue, attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
 pub const Rule = enum { provenance, typed_text, exact_copy, duplicate_record, entity_membership, unit_kind, interpretation };
-pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review, entity_insertion_scope };
-/// The admitted basis identifies possible owners; it cannot widen a batch's
-/// existing write permission or choose one owner from several semantic groups.
-pub const EntityInsertionScope = struct {
-    basis_source_group_ids: []const @import("reference_reconciliation.zig").SignalId,
-    writable_source_group_id: ?@import("reference_reconciliation.zig").SignalId,
-    outcome: enum { current_group, multiple_basis_groups, outside_writable_group, no_writable_group },
-};
+pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review };
 pub const Field = union(enum) { target: Target, unit, clarification_question, interpretation };
 pub const Issue = struct {
     detail: ?[]const u8 = null,
@@ -52,7 +45,7 @@ pub const Issue = struct {
     text_issue: ?@import("typed_text.zig").Issue = null,
     value_choices: ?@import("specification_provenance.zig").ValueChoices = null,
     repair_target: ?Target = null,
-    membership: ?struct { disposition: g.spec.Applicability, entity_count: usize, insertion_scope: ?EntityInsertionScope = null } = null,
+    membership: ?struct { disposition: g.spec.Applicability, entity_count: usize } = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, InvalidPassiveLiteral } = null,
 };
 pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair: ?@import("atomic_repair.zig").Merge = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };
@@ -146,7 +139,7 @@ pub const Origins = struct {
     }
 };
 pub const GroupPolicy = union(enum) {
-    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null },
+    membership: struct { fixed_provenance: g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null },
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
 pub const EvidenceBound = struct {
@@ -231,8 +224,9 @@ pub fn select(response: g.Response, selected: Target) Error!Replacement {
     if (response != .content) return error.InvalidSpecificationRepair;
     var content = response.content;
     if (recordIndex(selected)) |index| {
-        if (content != .records or index >= content.records.len) return error.InvalidSpecificationRepair;
-        var record = content.records[index];
+        const records = g.recordCollection(.model, content) orelse return error.InvalidSpecificationRepair;
+        if (index >= records.len) return error.InvalidSpecificationRepair;
+        var record = records[index];
         return switch (selected) {
             .record => .{ .record = record },
             .attributed => return error.InvalidSpecificationRepair,
@@ -251,7 +245,7 @@ pub fn select(response: g.Response, selected: Target) Error!Replacement {
 pub const ReadContext = union(enum) { attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
 pub fn readContext(response: g.Response, selected: Target) Error!ReadContext {
     _ = try select(response, selected);
-    if (recordIndex(selected)) |index| return .{ .record = response.content.records[index] };
+    if (recordIndex(selected)) |index| return .{ .record = (g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair)[index] };
     var content = response.content;
     const subject = switch (selected) {
         .provenance, .attributed => |value| value,
@@ -264,8 +258,8 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
     _ = try select(response, selected);
     var result = response;
     if (recordIndex(selected)) |index| {
-        const records = try a.dupe(g.spec.Model.RecordProposal, response.content.records);
-        result.content.records = records;
+        const records = try a.dupe(g.spec.Model.RecordProposal, g.recordCollection(.model, response.content) orelse return error.InvalidSpecificationRepair);
+        (g.recordCollectionPtr(.model, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
         switch (selected) {
             .record => records[index] = replacement.record,
             .attributed => return error.InvalidSpecificationRepair,
@@ -296,8 +290,9 @@ pub fn attributedValue(comptime boundary: g.spec.Boundary, response: g.Responses
         if (field != .value) return error.InvalidSpecificationRepair;
         return (try attributed(boundary, &content, subject)).*;
     }
-    if (content != .records or subject.record >= content.records.len) return error.InvalidSpecificationRepair;
-    var record = content.records[subject.record];
+    const records = g.recordCollection(boundary, content) orelse return error.InvalidSpecificationRepair;
+    if (subject.record >= records.len) return error.InvalidSpecificationRepair;
+    var record = records[subject.record];
     return .{ .value = try valueField(&record.content, field), .source_group_ids = record.source_group_ids, .provenance = record.provenance };
 }
 pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, field: ValueField, value: g.spec.BusinessValue) Error!g.CanonicalResponse {
@@ -306,8 +301,8 @@ pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse
     if (subject != .record) {
         (try attributed(.canonical, &result.content, subject)).value = value;
     } else {
-        const records = try a.dupe(g.spec.RecordProposal, response.content.records);
-        result.content.records = records;
+        const records = try a.dupe(g.spec.RecordProposal, g.recordCollection(.canonical, response.content) orelse return error.InvalidSpecificationRepair);
+        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
         if (field == .relationship) {
             const relationships = try a.dupe(g.spec.BusinessValue, records[subject.record].content.entity.relationships);
             relationships[field.relationship] = value;
@@ -320,10 +315,12 @@ pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse
 pub fn replaceCanonicalProvenance(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, provenance: g.spec.Provenance) Error!g.CanonicalResponse {
     var result = response;
     if (subject == .record) {
-        if (result != .content or result.content != .records or subject.record >= result.content.records.len) return error.InvalidSpecificationRepair;
-        const records = try a.dupe(g.spec.RecordProposal, result.content.records);
+        if (result != .content) return error.InvalidSpecificationRepair;
+        const prior = g.recordCollection(.canonical, result.content) orelse return error.InvalidSpecificationRepair;
+        if (subject.record >= prior.len) return error.InvalidSpecificationRepair;
+        const records = try a.dupe(g.spec.RecordProposal, prior);
         records[subject.record].provenance = provenance;
-        result.content.records = records;
+        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
     } else (try attributed(.canonical, &result.content, subject)).provenance = provenance;
     return result;
 }

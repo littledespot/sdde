@@ -235,6 +235,10 @@ references, and normative resolutions are retained in the linked sections.
     It records and propagates provider failures/stops and accounts actual input
     plus output tokens against only the execution's total-token budget. Calls
     at or above that budget are prohibited; retries remain explicitly local.
+    Post-generation advice has no separate allowance; the 17 October 2026
+    advisory pool was withdrawn (ADR 0011). No advisory-token subtotal is
+    calculated. Global budget rejection remains fatal for every inference purpose;
+    it cannot become incomplete advice.
 
 - Runner rejections retain their closed diagnostics through the top-level workflow result rather
   than selecting YAML outcome edges.
@@ -880,8 +884,9 @@ The new engine is ready for production evaluation when all of the following are 
       nano-class model and has an ADR 0006 compact closed response schema, complete
       evidence/guidance packet, and deterministic runner-owned request identity/accounting
       without model echoes.
-    - The selected workflow policy supplies the sole workflow-global model-consumption limit as
-      one positive total-token budget initialized for each execution.
+    - The selected workflow policy supplies one positive `totalModelTokenBudget`,
+      currently 100,000 tokens, initialized for each execution and shared by all
+      inference calls. No advisory pool, usage subtotal or reservation is calculated.
     - Every retry-capable operation instance supplies its own explicit compiler-validated
       `retry-limit`; no workflow policy, configuration, provider, adapter, or runner supplies a
       retry default or global attempt ceiling. Atomic repair counts follow the native
@@ -894,7 +899,10 @@ The new engine is ready for production evaluation when all of the following are 
       binding, request authorization, correction, capture and replay; omission delegates
       the provider default. Unsupported or substituted controls reject without clamping.
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
-      call is allowed at or above the execution budget.
+      call is allowed at or above the execution budget. Prove this across generation,
+      review and correction without partitioning usage. A global-budget rejection
+      during advice is fatal, while eligible non-budget stops alone may create the
+      native incomplete-advice disposition in ADR 0023.
     - Configured response parts follow [ADR 0016](decisions/0016-configured-json-response-composition.md):
       one complete schema, generic derived part schemas, independent request identities,
       prompt-free native assembly with actual producer provenance, and full validation.
@@ -959,8 +967,9 @@ The new engine is ready for production evaluation when all of the following are 
     - The exact current principle registry is loaded, selected and cited for Spec's
       focused consistency assessment (§17.3.1), and at plan, tasks, implement and fresh
       clarification-rerun gates. It never invents or erases specification requirements.
-    - Spec proves complete current assessment/evidence coverage and retains
-      semantic principle findings as advice. Such a finding alone creates no
+    - Spec proves complete current assessment/evidence coverage or records the
+      exact unassessed suffix through the native incomplete-advice contract
+      (ADR 0023), and retains semantic principle findings as advice. Such a finding alone creates no
       mandatory Plan obligation. Plan rechecks current principles and resolves
       its native required policy decisions; Spec assessment completion does not
       certify policy approval.

@@ -35,9 +35,11 @@ pub const BusinessSubject = union(enum) {
     entity_applicability: EntityApplicability,
 };
 
-/// Complete native business ownership, independent of the review's purpose.
+/// Complete native assignment ownership. Source review owns business units;
+/// principle review assesses every subject against the current selected set.
 /// Collection coverage remains its own duty, not a pass inferred from members.
 pub const AssignmentUnit = union(enum) {
+    principle_set,
     brief,
     primary_user_story,
     entities,
@@ -52,8 +54,8 @@ pub fn assignmentUnit(a: std.mem.Allocator, inputs: authority.Inputs, id: author
         var arena: std.heap.ArenaAllocator = .init(a);
         defer arena.deinit();
         const assigned = try @import("principle_assessment.zig").subjects(arena.allocator(), context.business);
-        if (id.unit != .decision or id.unit.decision.ordinal == 0 or id.unit.decision.ordinal > assigned.len) return error.InvalidRequiredAuthority;
-        return businessUnit(assigned[id.unit.decision.ordinal - 1]);
+        if (id.kind != .policy_predicate or id.slot != .compliance or id.unit != .decision or id.unit.decision.ordinal == 0 or id.unit.decision.ordinal > assigned.len or context.selection.chunks.len == 0) return error.InvalidRequiredAuthority;
+        return .principle_set;
     }
     if (inputs.projection != .specification) return .{ .singleton = id };
     return businessUnit(id);

@@ -321,25 +321,32 @@ pub const Tracker = struct {
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .primary_goal, .field = .value } } }, .spec_goal, brief.primary_goal.value);
                 },
                 .primary_user_story => |story| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .story, .field = .value } } }, .spec_story, story.value),
-                .entities => |entities| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .entity_basis, .field = .value } } }, .spec_entity_basis, entities.basis.value),
-                .records => |records| for (records, 0..) |record, index| switch (record.content) {
-                    inline else => |fields, kind| inline for (std.meta.fields(@TypeOf(fields))) |field| {
-                        const value = @field(fields, field.name);
-                        if (comptime field.type == specification.BusinessValue) {
-                            try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), value);
-                        } else for (value, 0..) |relationship, relationship_index| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = .{ .relationship = relationship_index } } } }, specification.textField(kind, field.name), relationship);
-                    },
+                .entities => |entities| {
+                    try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .entity_basis, .field = .value } } }, .spec_entity_basis, entities.basis.value);
+                    try self.auditRecords(sequence, after_call, checked, record_offset, entities.records);
                 },
+                .records => |records| try self.auditRecords(sequence, after_call, checked, record_offset, records),
             },
         }
+    }
+
+    fn auditRecords(self: *Tracker, sequence: usize, after_call: usize, checked: generation.Checked, record_offset: usize, proposals: []const specification.RecordProposal) !void {
+        for (proposals, 0..) |record, index| switch (record.content) {
+            inline else => |fields, kind| inline for (std.meta.fields(@TypeOf(fields))) |field| {
+                const value = @field(fields, field.name);
+                if (comptime field.type == specification.BusinessValue) {
+                    try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), value);
+                } else for (value, 0..) |relationship, relationship_index| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = .{ .relationship = relationship_index } } } }, specification.textField(kind, field.name), relationship);
+            },
+        };
     }
 
     fn business(self: *Tracker, sequence: usize, after_call: usize, checked: generation.Checked, record_offset: usize, field: candidate.Field, declared: policy.Field, value: specification.BusinessValue) !void {
         var stable = field;
         var record_kind: ?specification.Kind = null;
         if (field == .target) if (candidate.recordIndex(field.target)) |index| {
-            if (checked.response != .content or checked.response.content != .records) return error.InvalidAdmissionAudit;
-            const records = checked.response.content.records;
+            if (checked.response != .content) return error.InvalidAdmissionAudit;
+            const records = generation.recordCollection(.canonical, checked.response.content) orelse return error.InvalidAdmissionAudit;
             if (index >= records.len) return error.InvalidAdmissionAudit;
             record_kind = std.meta.activeTag(records[index].content);
             stable.target = (try checked.origins.stableTarget(field.target, records.len)).value;
@@ -443,7 +450,7 @@ fn validSubject(subject: Subject, field: policy.Field, value: Value) bool {
         .specification => |selected| value == .business and switch (selected.field) {
             .clarification_question => selected.record_kind == null and field == .clarification_question,
             .target => |target| if (target != .value) false else if (target.value.subject == .record)
-                selected.unit == .records and selected.record_kind != null and field == (candidate.recordKindTextField(selected.record_kind.?, target.value.field) catch return false)
+                selected.record_kind != null and (if (selected.record_kind.? == .entity) selected.unit == .entities else selected.unit == .records) and field == (candidate.recordKindTextField(selected.record_kind.?, target.value.field) catch return false)
             else
                 selected.record_kind == null and target.value.field == .value and field == (candidate.singletonTextField(target.value.subject) catch return false) and switch (target.value.subject) {
                     .title, .description, .primary_goal => selected.unit == .brief,

@@ -409,8 +409,14 @@ native collection validation permits authority advancement.
 
 - Inference requires no size estimate, token count or static-capacity preflight; the provider
   reports its own size errors or stops.
-- The runner accounts API-reported input plus output usage against the execution's total token
-  budget.
+- The runner accounts API-reported input plus output usage exactly once against
+  the execution's single `totalModelTokenBudget`, currently 100,000 tokens, across
+  all inference calls. Advice has no separate allowance or usage subtotal
+  (ADR 0011). Global exhaustion, overshoot or unavailable usage prohibits later
+  model calls. Native advisory classification controls eligible non-budget
+  incomplete-failure semantics only, survives correction and cannot be chosen by a
+  workflow, slot or model response. A global budget rejection remains fatal during
+  advice and required work; it cannot become incomplete advice.
 - Optional count operations provide observations only and never authorize inference or replace
   actual-usage accounting.
 
@@ -421,7 +427,11 @@ native collection validation permits authority advancement.
   identity, applies the proposed accounting transition, and publishes sealed
   `accounted_model_attempt` evidence from that canonical record together with the envelope
   delta.
-- Rejection publishes neither.
+- Rejection publishes neither. An advisory protocol-correction exhaustion instead
+  publishes a sealed stop receipt naming the existing request and exact exhaustion,
+  without allocating an attempt or provider operation. An explicit lifecycle step
+  closes that request failed; the native advice owner may record incomplete advice
+  only for that same current projection (ADR 0023).
 - Later visits use the accounting step's compiled authority and runner-owned counts.
   Atomic repairs use native defect keys; ordinary requests use immutable assignment
   keys, and required dependent requests additionally bind their native repair parent
@@ -775,6 +785,11 @@ authenticated answer acceptance and protected history (§23.2).
 - `assessment_complete`, naming the exact current subject/revision binding of
   complete admitted advisory review; it neither asserts semantic support nor
   discharges native authority/coverage defects;
+- `assessment_incomplete`, naming the exact current advisory projection, revision,
+  authority/member set, missing assignment suffix, native stop reason and origin
+  when sent. Only ADR 0023's bound non-budget provider/protocol stop or eligible
+  missing usage can produce it;
+  native requirements remain mandatory and absent findings are not evidence;
 - `clarification_required`, with a closed reason and the earliest owning `spec | plan | tasks` stage;
 - `upstream_rework_required`, when a downstream stage encounters a gap owned by an earlier stage; or
 - `administrative_block`, when the kind/slot has no registered ownership/reconciliation policy or requires authority that the workflow is not authorized to create.
@@ -800,13 +815,16 @@ authenticated answer acceptance and protected history (§23.2).
   it.
 
 - Detection time does not change resolution ownership. Spec's early principle
-  assessment (§17.3.1) must completely account for its assigned evidence and findings.
+  assessment (§17.3.1) must completely account for its assigned evidence and findings,
+  or retain the exact missing assignment suffix under ADR 0023's native
+  incomplete-advice contract.
   Under ADR 0023, semantic policy findings remain cited advice and alone create
   no mandatory Plan obligation. They are not inserted as policy-resolution
   requirements into the Spec ledger or relabelled supported. Plan validates its
   current native required policy decisions independently.
-  Genuine business-intent gaps remain Spec-owned; missing/invalid assessment evidence
-  follows the ordinary rejection path and cannot be deferred as a policy obligation.
+  Genuine business-intent gaps remain Spec-owned; invalid assessment evidence or
+  missing evidence without that native stop follows the ordinary rejection path
+  and cannot be deferred as a policy obligation.
 
 - The ledger is a deterministic projection over current canonical authorities, not a competing
   persisted truth or fingerprint.
@@ -907,7 +925,7 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v17` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+The current `specification-state/v18` contract in [§24.1](24-workflow-state.md#241-workflow-state)
 retains authorized pre-generation comparisons and authored associations. Generated
 source and principle findings instead retain advisory assessment bindings under
 ADR 0023 and reject attached loss-comparison authority. Earlier snapshot contracts

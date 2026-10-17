@@ -93,6 +93,12 @@ pub const Attempt = struct {
     accounting: std.meta.Tag(@import("../../../src/domain/workflow_token_accounting.zig").Reconciliation),
     usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage,
 };
+pub const AdvisoryCompletion = struct {
+    reason: @import("../../../src/domain/required_authority.zig").AdviceStop.Reason,
+    origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
+    delivery: @import("../../../src/domain/llm_provider_operation.zig").ProviderDeliveryDisposition,
+    usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage,
+};
 pub const ProtocolRejection = struct {
     call: usize,
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
@@ -136,7 +142,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v4" },
+    schema: enum { @"spec-e2e-report/v5" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -160,8 +166,10 @@ pub const Report = struct {
     terminal_step: ?[]const u8 = null,
     terminal_rejection: ?TerminalRejection = null,
     last_operation_rejection: ?@import("../../../src/domain/workflow_execution.zig").OperationRejection = null,
+    /// Reconciled inference operations, including proven non-delivery.
     model_calls: usize = 0,
-    total_token_budget: ?u64 = null,
+    not_sent_operations: usize = 0,
+    token_accounting: ?@import("../../../src/domain/workflow_token_accounting.zig").Snapshot = null,
     retry_settings: []const @import("../../../src/domain/workflow_retry.zig").Observation = &.{},
     attempts: []const Attempt = &.{},
     last_model_step: ?[]const u8 = null,
@@ -169,6 +177,7 @@ pub const Report = struct {
     models: []const evaluator.GenerationModel = &.{},
     total_tokens: u128 = 0,
     last_model_usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
+    advisory_completion: ?AdvisoryCompletion = null,
     usage_complete: bool = true,
     diagnostic: ?[]const u8 = null,
     provider_diagnostic: ?[]const u8 = null,

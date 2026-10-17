@@ -169,7 +169,7 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
         const selected = try subject(a, inputs, entry.requirement);
         if (!std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, selected)).bytes)) continue;
         const resolved = entry.candidate_defect == null and switch (entry.outcome) {
-            .assessment_complete => return error.InvalidRequiredAuthority,
+            .assessment_complete, .assessment_incomplete => return error.InvalidRequiredAuthority,
             .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => true,
             .clarification_required, .upstream_rework_required, .administrative_block => false,
         };

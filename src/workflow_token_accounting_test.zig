@@ -145,6 +145,26 @@ fn usage(input: u64, output: u64) accounting.Reconciliation {
     return .{ .exact_usage = operation.ProviderUsage.init(input, output, input + output).? };
 }
 
+test "one global budget counts every request without a work classification" {
+    var first = try Fixture.init();
+    defer first.deinit();
+    var second = try Fixture.init();
+    defer second.deinit();
+    var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
+    defer runner.deinit();
+    try runner.reconcile(.initial, first.inferenceId(1), usage(60, 10));
+    try runner.reconcile(.{ .value = 1 }, second.inferenceId(1), usage(15, 5));
+    try std.testing.expectEqual(@as(u128, 90), runner.current().committed());
+    try runner.check();
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.reconcile(.{ .value = 2 }, first.inferenceId(2), usage(8, 3)));
+    try std.testing.expectEqual(@as(u128, 101), runner.current().committed());
+    try std.testing.expectEqual(@as(u64, 3), runner.current().revision().value);
+    try std.testing.expectEqual(@as(usize, 3), runner.current().accounted_operations.items.len);
+    try std.testing.expectError(error.WorkflowTokenBudgetExceeded, runner.check());
+    try std.testing.expectEqualDeep(accounting.Snapshot{ .total_budget = .{ .value = 100 }, .total_tokens = 101, .usage_unavailable = false }, runner.current().snapshot());
+    try std.testing.expect(!@hasField(accounting.AccountedOperation, "consumption_class"));
+}
+
 const Fixture = struct {
     requests: request_runner.Runner,
     request: *const identity.ModelRequestId,

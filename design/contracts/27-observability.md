@@ -142,3 +142,12 @@ origin remains unchanged. Native invalid-comparison diagnostics identify that
 comparison attempt; unresolved ownership and known unsupported repair remain
 distinct from invalid evidence. Origins are observations, never evidence authority
 or a requirement for log replay during readback.
+
+The execution snapshot records the single `totalModelTokenBudget`, aggregate
+actual tokens and unavailable-usage state. Every inference is charged once,
+including retries and stopped output; there are no advisory token calculations,
+separate pools or per-class subtotals (ADR 0011). A global budget rejection remains
+fatal and cannot be reported as incomplete advice. An eligible non-budget advisory stop
+retains the original provider result and failed request; explicit incomplete advice
+records its current assignment suffix, reason, revision and producing origin when
+sent. Exhausted protocol correction records no new attempt or operation.

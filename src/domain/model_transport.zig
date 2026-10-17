@@ -2,8 +2,10 @@ const pipeline = @import("pipeline.zig");
 
 pub const Error = error{InvalidTransportRetirement};
 
-pub const Retirement = enum { request, rejected_attempt, input, request_and_input };
+pub const Retirement = enum { request, rejected_attempt, input, request_and_input, advisory_protocol };
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result };
+pub const advisory_protocol_keys = [_]pipeline.DataKey{ .accounted_model_attempt, .assigned_model_request, .validated_model_request, .prepared_model_request, .model_input_packet };
+pub const advisory_protocol_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt };
 pub const attempt_keys = [_]pipeline.DataKey{
     .accounted_model_attempt,     .terminal_provider_operation,           .provider_authorization_result,
     .provider_invocation_result,  .provider_invocation_validation_result, .model_envelope_result,
@@ -19,6 +21,7 @@ pub fn keys(comptime retirement: Retirement) []const pipeline.DataKey {
         .request_and_input => &(request_keys ++ [_]pipeline.DataKey{.model_input_packet}),
         .rejected_attempt => &attempt_keys,
         .input => &.{.model_input_packet},
+        .advisory_protocol => &advisory_protocol_keys,
     };
 }
 
@@ -26,7 +29,7 @@ pub fn retire(comptime retirement: Retirement, ledger: *const @import("model_req
     const record = ledger.record(request) orelse return error.InvalidTransportRetirement;
     if (retirement == .rejected_attempt) {
         if (record.status != .invoked or payload != .invalid) return error.InvalidTransportRetirement;
-    } else if (record.status != .terminal) return error.InvalidTransportRetirement;
+    } else if (record.status != .terminal or (retirement == .advisory_protocol and record.terminal_reason != .failed)) return error.InvalidTransportRetirement;
     var delta: pipeline.NodeDelta = .{};
     for (keys(retirement)) |key| delta.data_invalidations.insert(key);
     return delta;

@@ -89,6 +89,9 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
         w.print("Registry {d}, revision {d}. Selected chunks:", .{ review.registry.id.ordinal, review.registry.id.revision }) catch return error.OutOfMemory;
         for (review.selection.chunks) |id| w.print(" POL-{d}", .{id.ordinal}) catch return error.OutOfMemory;
         try write(w, "\n\n### Advisory Principle Findings\n\n");
+        if (review.advice_stop) |stopped| {
+            w.print("Assessment incomplete ({s}): {d} of {d} subjects were not assessed. Missing advice is not a compatible finding.\n\n", .{ @tagName(stopped.reason), stopped.unassessed.len, review.requirements.len }) catch return error.OutOfMemory;
+        }
         var findings: usize = 0;
         for (review.evidence) |finding| {
             if (finding.finding == .supported) continue;

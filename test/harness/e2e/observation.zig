@@ -78,9 +78,13 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
     report.last_operation_rejection = runner.last_operation_rejection;
     const ledger = runner.tokenLedger();
     report.model_calls = ledger.accounted_operations.items.len;
+    report.not_sent_operations = 0;
+    for (ledger.accounted_operations.items) |operation| if (operation.reconciliation == .not_sent) {
+        report.not_sent_operations += 1;
+    };
     report.total_tokens = ledger.committed();
     report.usage_complete = ledger.status() != .usage_unavailable;
-    report.total_token_budget = ledger.totalTokenBudget().value;
+    report.token_accounting = ledger.snapshot();
     report.retry_settings = try runner.retryObservations(allocator);
     const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
     var attempts: std.ArrayList(c.Attempt) = .empty;
@@ -97,8 +101,10 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, id) orelse return error.MissingProviderEvidence;
             const usage = if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
             try attempts.append(allocator, .{ .origin = origin, .step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes), .accounting = accounted.reconciliation, .usage = usage });
-            report.last_model_origin = origin;
-            report.last_model_usage = usage;
+            if (accounted.reconciliation != .not_sent) {
+                report.last_model_origin = origin;
+                report.last_model_usage = usage;
+            }
             const found = for (used.items) |model| {
                 if (std.mem.eql(u8, model.slot, slot)) break true;
             } else false;
@@ -156,9 +162,46 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                     report.provider_diagnostic = @errorName(reason);
                     report.provider_origin = origin;
                 },
+                .advisory_stopped => |stop| {
+                    const evidence = stop.evidence;
+                    report.advisory_completion = .{ .reason = stop.reason, .origin = origin, .delivery = evidence.delivery(), .usage = evidence.usage() };
+                    report.last_model_origin = origin;
+                    report.last_model_usage = evidence.usage();
+                    switch (evidence.result()) {
+                        .failed => |failure| {
+                            report.provider_diagnostic = @tagName(failure.cause);
+                            report.provider_origin = origin;
+                            report.provider_content_diagnostic = failure.content;
+                        },
+                        .stopped => |reason| {
+                            report.provider_diagnostic = @tagName(reason);
+                            report.provider_origin = origin;
+                        },
+                        .complete => {},
+                    }
+                },
                 .cancelled => {},
             }
         }
+    }
+    if (view.contains(.accounted_model_attempt)) {
+        if (@import("../../../src/application/workflow_model_accounting.zig").readAdvisoryStop(&view)) |receipt| {
+            const operation = receipt.request().protocolCorrection() orelse return error.MissingProviderEvidence;
+            const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, operation) orelse return error.MissingProviderEvidence;
+            const operations = runner.model_accounting orelse return error.MissingProviderEvidence;
+            const record = operations.current_operations.record(operation) orelse return error.MissingProviderEvidence;
+            const terminal = switch (record.state) {
+                .terminal => |value| value,
+                .assigned, .invoked => return error.MissingProviderEvidence,
+            };
+            const usage = for (ledger.accounted_operations.items) |accounted| {
+                if (accounted.id.eql(operation)) break if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
+            } else return error.MissingProviderEvidence;
+            report.advisory_completion = .{ .reason = .protocol_exhausted, .origin = origin, .delivery = terminal.delivery(), .usage = usage };
+            report.last_model_origin = origin;
+            report.last_model_usage = usage;
+        } else |_| {}
     }
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);
@@ -234,6 +277,10 @@ pub const Call = struct {
 
 /// The experiment joins only the native accounting record for this physical
 /// exchange. An absent record means unknown usage, never the latest prior usage.
+pub fn provenNotSent(attempt: c.Attempt) bool {
+    return attempt.accounting == .not_sent and attempt.usage == null;
+}
+
 pub fn usageFor(attempts: []const c.Attempt, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage {
     var found = false;
     var usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null;

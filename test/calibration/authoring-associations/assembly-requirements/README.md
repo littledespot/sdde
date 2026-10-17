@@ -1,5 +1,14 @@
 # Assembly requirements and ownership comparisons
 
+**Historical experiment, superseded by B9 on 17 October 2026.** Entity records
+now belong to the feature-wide entities unit; record batches reject them. The
+conditional entity-family comparison and its active preparation runner have been
+retired. Current schema, ownership, repair and readback regressions cover that
+replacement contract. Retained experiment inputs, labels, frozen payloads and
+results remain historical evidence. The instructions below describe the earlier
+experiment; the current test command no longer prepares these comparison arms
+or authorizes new calls.
+
 This records-only diagnostic contains two adjacent single-factor comparisons,
 sharing their middle arm instead of sending it twice:
 

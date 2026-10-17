@@ -107,13 +107,9 @@ pub const PipelineEnvelope = struct {
         return result;
     }
 
-    pub fn apply(self: *PipelineEnvelope, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
-        return self.applyOccurrence(try self.beginOccurrence(contract.id), contract, delta, outcome);
-    }
-
-    pub fn applyOccurrence(self: *PipelineEnvelope, occurrence: Occurrence, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
-        try self.checkOccurrence(occurrence);
-        if (!std.mem.eql(u8, occurrence.producer, contract.id)) return error.InvalidInformationOccurrence;
+    /// Validate declared effects and owned value shapes before consumers inspect
+    /// the proposed state. Publication uses this same validator again on apply.
+    pub fn validateDelta(self: *const PipelineEnvelope, contract: pipeline.NodeContract, delta: *const pipeline.NodeDelta) Error!void {
         _ = try self.shape().applyDelta(contract, delta);
         var seen: [data.key_count * 2]?*data.Value = @splat(null);
         var count: usize = 0;
@@ -128,6 +124,16 @@ pub const PipelineEnvelope = struct {
                 if (!expected.eql(values.valueSchema(value))) return error.DataSchemaMismatch;
             }
         }
+    }
+
+    pub fn apply(self: *PipelineEnvelope, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
+        return self.applyOccurrence(try self.beginOccurrence(contract.id), contract, delta, outcome);
+    }
+
+    pub fn applyOccurrence(self: *PipelineEnvelope, occurrence: Occurrence, contract: pipeline.NodeContract, delta: *pipeline.NodeDelta, outcome: workflow.OutcomeTag) Error!void {
+        try self.checkOccurrence(occurrence);
+        if (!std.mem.eql(u8, occurrence.producer, contract.id)) return error.InvalidInformationOccurrence;
+        try self.validateDelta(contract, delta);
 
         const renewal = if (delta.repair_transition) |transition| transition == .merged and transition.merged.validation == .dependent_review and contract.replaces.len != 0 else false;
         var superseded = std.enums.EnumSet(pipeline.DataKey).initEmpty();

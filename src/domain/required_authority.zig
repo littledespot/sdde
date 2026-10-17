@@ -125,6 +125,19 @@ pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Auth
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Projection = enum { source_readiness, specification, source_preservation, principle_assessment, registered_obligations };
 pub const AssessmentPolicy = enum { required, advisory };
+/// Native termination of optional advice. Model findings cannot create this
+/// marker, and it never resolves a required authority or native candidate defect.
+pub const AdviceStop = struct {
+    pub const Reason = enum { usage_unavailable, provider_failure, provider_output_limit, protocol_exhausted };
+    reason: Reason,
+    projection: Projection,
+    candidate_revision: u64,
+    requirements: []const Id,
+    unassessed: []const Id,
+    authorities: []const Authority,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+};
+pub const IncompleteAssessment = struct { candidate_revision: u64, reason: AdviceStop.Reason, origin: ?@import("model_candidate_origin.zig").Origin };
 /// Current review authority must be retired before generation consumes sources.
 /// The retirement operation and source-consumption precondition share this set.
 pub const projection_keys = [_]@import("pipeline.zig").DataKey{ .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate };
@@ -153,6 +166,7 @@ pub const Inputs = struct {
     review_origin: ?@import("model_candidate_origin.zig").Origin = null,
     revision: u64 = 1,
     review_origins: []const ?@import("model_candidate_origin.zig").Origin = &.{},
+    advice_stop: ?AdviceStop = null,
 };
 pub const Applicability = union(enum) { required, not_applicable: Rule, review: Rule };
 /// Registered applicability is a fact about the current candidate declaration,
@@ -180,6 +194,7 @@ pub const Gap = struct { owner: Stage, reason: GapReason };
 pub const BlockReason = enum { unregistered_ownership_or_policy, unauthorized_authority_creation, incomplete_assessment };
 pub const Outcome = union(enum) {
     assessment_complete: Assessment,
+    assessment_incomplete: IncompleteAssessment,
     resolved_exactly_one: Resolution,
     resolved_explicit_not_applicable: Rule,
     resolved_explicit_exception: ExceptionId,
@@ -248,6 +263,28 @@ pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
         if (findRequirement(requirements, gap.requirement) == null) return error.InvalidRequiredAuthority;
         for (inputs.forced_gaps[0..index]) |other| if (std.meta.eql(other.requirement, gap.requirement)) return error.InvalidRequiredAuthority;
     }
+    if (inputs.advice_stop) |stop| {
+        if (assessmentPolicy(inputs.projection) != .advisory or stop.projection != inputs.projection or stop.candidate_revision != inputs.revision or stop.unassessed.len == 0 or stop.requirements.len != requirements.len) return error.InvalidRequiredAuthority;
+        if (stop.origin == null) return error.InvalidRequiredAuthority;
+        if (stop.origin) |origin| if (origin.kind != .inference or origin.request.value == 0 or origin.attempt.value == 0) return error.InvalidRequiredAuthority;
+        try sameSet(Authority, stop.authorities, inputs.authorities);
+        var missing: usize = 0;
+        for (requirements, stop.requirements) |requirement, bound| {
+            if (!std.meta.eql(requirement.seed.id, bound)) return error.InvalidRequiredAuthority;
+            var count: usize = 0;
+            for (inputs.evidence) |evidence| if (std.meta.eql(evidence.requirement, bound)) {
+                count += 1;
+            };
+            if (count != 0) {
+                if (missing != 0) return error.InvalidRequiredAuthority;
+                continue;
+            }
+            if (missing >= stop.unassessed.len or !std.meta.eql(bound, stop.unassessed[missing])) return error.InvalidRequiredAuthority;
+            for (inputs.candidates) |candidate| if (std.meta.eql(candidate.requirement, bound)) return error.InvalidRequiredAuthority;
+            missing += 1;
+        }
+        if (missing != stop.unassessed.len) return error.InvalidRequiredAuthority;
+    }
     return .{ .inputs = inputs, .requirements = requirements };
 }
 
@@ -300,7 +337,7 @@ pub fn reconcile(allocator: std.mem.Allocator, ledger: Ledger, observations: Obs
         if (defect != null and result.continuation != .blocked) result.continuation = .invalid;
         entry.* = .{ .candidate_defect = defect, .requirement = requirement.seed.id, .outcome = outcome, .evidence_ids = evidence_ids, .input_authorities = requirement.seed.input_authorities };
         switch (outcome) {
-            .assessment_complete, .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
+            .assessment_complete, .assessment_incomplete, .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
             .clarification_required => if (result.continuation == .all_resolved) {
                 result.continuation = .needs_user;
             },
@@ -392,7 +429,11 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
         } else resolution = evidence.resolution;
     }
     if (reason) |gap| return route(inputs.detected_at, registered.owner, gap);
-    if (assessmentPolicy(inputs.projection) == .advisory) return if (assessment) |binding| .{ .assessment_complete = binding } else .{ .administrative_block = .incomplete_assessment };
+    if (assessmentPolicy(inputs.projection) == .advisory) {
+        if (assessment) |binding| return .{ .assessment_complete = binding };
+        if (inputs.advice_stop) |stop| if (contains(Id, stop.unassessed, seed.id)) return .{ .assessment_incomplete = .{ .candidate_revision = stop.candidate_revision, .reason = stop.reason, .origin = stop.origin } };
+        return .{ .administrative_block = .incomplete_assessment };
+    }
     const value = resolution orelse return route(inputs.detected_at, registered.owner, .missing);
     return switch (value) {
         .existing_authority, .supported_candidate => .{ .resolved_exactly_one = value },

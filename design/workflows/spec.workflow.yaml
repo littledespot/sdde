@@ -690,14 +690,14 @@ subgraphs:
         use: build-specification-support-input
         on: {ok: model, failed: end.failed}
       model:
-        call: model-request
+        call: support-request
         with:
           slot: spec_generation
           prompt: {param: prompt}
           schema: support-schema
           selection: input
           retry-limit: {param: retry-limit}
-        on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: collect, invalid: end.invalid, more: stop-advice, blocked: stop-protocol-advice, failed: end.failed, cancelled: end.cancelled}
       collect:
         use: collect-specification-support
         on: {ok: release, more: release, invalid: authorize, failed: end.failed}
@@ -714,14 +714,14 @@ subgraphs:
         use: build-specification-support-repair-input
         on: {ok: repair, failed: end.failed}
       repair:
-        call: model-request
+        call: support-request
         with:
           slot: repair
           prompt: {param: prompt}
           schema: support-schema
           selection: input
           retry-limit: 1
-        on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: parse, invalid: end.invalid, more: stop-repair-advice, blocked: stop-protocol-repair-advice, failed: end.failed, cancelled: end.cancelled}
       parse:
         use: parse-specification-support-repair
         on: {ok: merge, failed: end.failed}
@@ -730,6 +730,21 @@ subgraphs:
         with:
           retry-limit: 2
         on: {ok: release, more: release, invalid: authorize, failed: end.failed}
+      stop-advice:
+        use: stop-specification-advice
+        on: {ok: release, failed: end.failed}
+      stop-protocol-advice:
+        use: stop-specification-protocol-advice
+        on: {ok: release-advisory-protocol, failed: end.failed}
+      stop-repair-advice:
+        use: stop-specification-repair-advice
+        on: {ok: release, failed: end.failed}
+      stop-protocol-repair-advice:
+        use: stop-specification-protocol-repair-advice
+        on: {ok: release-advisory-protocol, failed: end.failed}
+      release-advisory-protocol:
+        use: retire-advisory-protocol-transport
+        on: {ok: end.ok, failed: end.failed}
   generate-specification:
     start: initialize-specification
     steps:
@@ -936,7 +951,13 @@ subgraphs:
       request:
         call: model-request-body
         with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: end.ok, invalid: end.invalid, more: advisory-failure, blocked: protocol-failure, failed: end.failed, cancelled: end.cancelled}
+      advisory-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
+      protocol-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
   model-request:
     start: prepare
     steps:
@@ -952,7 +973,29 @@ subgraphs:
       request:
         call: model-request-body
         with: {retry-limit: {param: retry-limit}}
-        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: end.ok, invalid: end.invalid, more: advisory-failure, blocked: protocol-failure, failed: end.failed, cancelled: end.cancelled}
+      advisory-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
+      protocol-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
+  support-request:
+    start: prepare
+    steps:
+      prepare:
+        use: prepare-model-request
+        with:
+          slot: {param: slot}
+          protocol-prompt: protocol-prompt
+          prompt: {param: prompt}
+          result-schema: {param: schema}
+          result-selection: {param: selection}
+        on: {ok: request, failed: end.failed}
+      request:
+        call: model-request-body
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: end.ok, invalid: end.invalid, more: end.more, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
   composition-request:
     start: prepare
     steps:
@@ -974,10 +1017,16 @@ subgraphs:
       request:
         call: model-request-body
         with: {retry-limit: {param: retry-limit}}
-        on: {ok: retain, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: retain, invalid: end.invalid, more: advisory-failure, blocked: protocol-failure, failed: end.failed, cancelled: end.cancelled}
       retain:
         use: retain-json-part
         on: {ok: end.ok, failed: end.failed}
+      advisory-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
+      protocol-failure:
+        use: propagate-advisory-request-failure
+        on: {failed: end.failed}
   model-request-body:
     start: account
     steps:
@@ -985,7 +1034,7 @@ subgraphs:
         use: advance-model-attempt-accounting
         with:
           retry-limit: {param: retry-limit}
-        on: {ok: operation, failed: end.failed}
+        on: {ok: operation, more: close-advisory-protocol, failed: end.failed}
       operation:
         use: assign-provider-operation
         with:
@@ -1014,13 +1063,13 @@ subgraphs:
         on: {ok: observation, failed: observation, cancelled: observation}
       observation:
         use: validate-provider-invocation-observation
-        on: {ok: complete-operation, failed: complete-operation, cancelled: complete-operation}
+        on: {ok: complete-operation, more: complete-operation, failed: complete-operation, cancelled: complete-operation}
       complete-operation:
         use: complete-provider-operation
-        on: {ok: admit, failed: admit, cancelled: admit}
+        on: {ok: admit, more: admit, failed: admit, cancelled: admit}
       admit:
         use: admit-model-response
-        on: {ok: close, invalid: retry, failed: close, cancelled: close}
+        on: {ok: close, invalid: retry, more: close-advice, failed: close, cancelled: close}
       retry:
         use: build-model-protocol-retry
         on: {ok: account, failed: end.failed}
@@ -1033,6 +1082,12 @@ subgraphs:
       terminate-request:
         use: terminate-model-request
         on: {failed: end.failed, cancelled: end.cancelled}
+      close-advisory-protocol:
+        use: complete-advisory-protocol-request
+        on: {blocked: end.blocked}
+      close-advice:
+        use: complete-advisory-model-request
+        on: {more: end.more}
   release-request:
     start: retire
     steps:

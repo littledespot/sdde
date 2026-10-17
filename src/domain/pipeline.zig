@@ -452,7 +452,7 @@ fn validateRunnerAccountingTransition(
         .increment_model_attempt => {
             const value = transition orelse return error.MissingRunnerAccountingTransition;
             switch (value) {
-                .increment_model_attempt => {},
+                .increment_model_attempt, .advisory_model_attempt_stopped => {},
                 else => return error.UndeclaredRunnerAccountingTransition,
             }
         },

@@ -34,7 +34,7 @@ pub const Action = struct {
             .coverage = accounted,
             .clarification = .{ .state_ordinal = clarification.state_ordinal, .revision = clarification.revision },
             .principle_assessment = inputs.principle_assessment orelse return error.InvalidSpecificationState,
-            .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result },
+            .review = .{ .candidate_revision = inputs.revision, .seeds = inputs.seeds, .evidence = inputs.evidence, .candidates = inputs.candidates, .observations = observations, .result = result, .advice_stop = inputs.advice_stop },
         };
         try state.validate(allocator, value, inputs.feature, self.contracts);
         return value;

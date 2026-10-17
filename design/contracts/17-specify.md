@@ -140,11 +140,13 @@ Typed content covers these concerns; each concern does not require a separate ca
   judgment remains advice; independent native defects retain their typed routes.
 - **Post-generation assessment — approved 17 October 2026:**
   [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
-  and principle review. Assess one whole canonical unit or complete collection
-  per call: the brief, story, entity applicability, all fields/relationship
-  members of one record, or an independently assigned collection/reference
-  subject. Native ownership defines the complete member set; a model cannot
-  choose a subset. This supersedes acceptance-criterion-only grouping.
+  and principle review. Source review assesses one whole canonical unit or
+  complete collection per call: the brief, story, entity applicability, all
+  fields/relationship members of one record, or an independently assigned
+  collection/reference subject. Principle review assesses the complete generated
+  requirement set together, carrying the selected principle corpus once. Native
+  ownership defines each complete member set; a model cannot choose a subset.
+  This supersedes acceptance-criterion-only grouping and per-unit principle calls.
   Each closed assignment response contains exactly one finding per assigned
   requirement. Missing, duplicate, foreign or partial membership rejects before
   any member is appended. Canonical ledger order, per-member evidence, origins,
@@ -153,6 +155,19 @@ Typed content covers these concerns; each concern does not require a separate ca
   Narrow finding correction preserves the verdict and every sibling.
   Retention must compare the complete current assignment and dependencies;
   reuse creates neither a new call nor semantic proof.
+  All inference, including post-generation review and correction, counts once
+  against the single 100,000-token workflow budget (ADR 0011). No advisory usage
+  subtotal or allowance is calculated. Global exhaustion, overshoot or unavailable
+  usage prohibits all later model calls. A global budget rejection ends the workflow
+  with `WorkflowTokenBudgetExceeded`, including during advice; it cannot publish or
+  become incomplete advice. Eligible provider stops, exhausted protocol correction
+  or genuinely missing usage may record `assessment_incomplete`, with the exact
+  unassessed member set and native stop evidence. Only a fully admitted assignment contributes
+  findings. This is no assessment success or semantic support, and it cannot fail an
+  otherwise valid workflow. Native defects, invalid trusted associations, cancellation, deadlines
+  and security/logging/operational failures retain their ordinary blocking routes.
+  Inspectable retained findings and the incomplete status are published together
+  with the same current candidate binding; stale or forged stop evidence rejects.
 - Registered source-readiness and preservation projections require native
   pre-generation phase facts. Generation sessions cannot be treated as readiness
   merely because no brief has been produced yet. Late required-review projection
@@ -230,10 +245,20 @@ All-preserved-token groups have no record batch, but remain in general source
 catalogues and exact evidence. Zero authorable groups returns a typed binding
 rejection. Mixed groups retain every original member and occurrence identity.
 The model-facing `record_requirements` projects those same native assembly rules:
-AC and FR are required, with entity records also required when the accepted entity
-decision requires them. Its scope is `assembled_specification`; an individual
+AC and FR are required across the assembled non-entity record batches. Entity
+records are owned by the single feature-wide entities unit, which returns the
+applicability decision, its basis and the complete entity collection together.
+A `required` decision requires at least one entity; `not_applicable` requires an
+empty collection. Each entity record explicitly selects its own eligible source
+groups, independently of the decision basis. Native code derives its full support
+and citations through the shared source association and exact-recognition owners.
+A record batch cannot author an entity: the closed schema, native admission,
+canonical revalidation and repair boundary enforce the same ownership rule.
+The feature collection participates once in canonical IDs, coverage, review and
+stored readback; its fields and records retain their actual producing origins.
+The batch presentation's scope remains `assembled_specification`; an individual
 group may remain empty, including after earlier groups have satisfied a family.
-This presentation introduces no per-group minimum or new repair permission.
+This presentation introduces no per-group minimum or per-family cardinality cap.
 
 Initial brief/story/entity responses and clarification questions select groups;
 fixed value and record repairs do not. Protocol correction preserves the initial
@@ -241,8 +266,14 @@ catalogue and schema. Value-only repair preserves the existing authored associat
 `S`, effective evidence bounds, siblings, revision and retry identity. Changing
 group membership requires separately authorized authored-unit rebuilding, which
 this amendment does not add. An unresolved association blocks; it cannot be
-rerouted to extraction, grouping or a removed role producer. Record insertion
-requires an explicitly bound accepted occurrence, not equal claim-list matching.
+rerouted to extraction, grouping or a removed role producer. A missing required
+entity may be inserted only in the feature entities unit,
+using the existing applicability basis's exact selected association; it cannot
+choose a new group or borrow a writable record batch. Contradictory entities under
+`not_applicable` are removed from that collection; they are never converted into
+another content family. Coupled entity correction preserves the fixed association,
+its native effective evidence bound, siblings and retry identity. This replaces
+the earlier batch-scoped entity-insertion/replacement permission.
 Upstream changes invalidate affected groups, authored associations and dependent
 review/attribution evidence. Canonical readback recomputes projections from captured
 groups and rejects inconsistency; no parallel binding store or legacy reader applies.
@@ -258,8 +289,8 @@ source associations, never inferred from headings or claim ordinals.
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
 - **Consolidated generation (user-directed simplification, 25 September 2026):**
-  the shipped workflow requests brief, primary story, entity applicability and
-  records as four sequential task types through one shared
+  the shipped workflow requests brief, primary story, feature entities and
+  source-group records as four sequential task types through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
@@ -274,8 +305,9 @@ For each feature-brief or specification unit, the declared model operation retur
   the brief, records receive the brief and entity decision. Brief and story requests
   receive neither sibling draft. Dependent drafts are resolved business text and
   applicability; their canonical provenance, fragment wrappers and display-span
-  bookkeeping remain native. Record-family purposes and response alternatives use
-  the same eligibility decision, including the accepted entity applicability.
+  bookkeeping remain native. Record-family purposes and response alternatives
+  use the same native unit ownership; entity applicability and records are decided
+  together in the feature entities unit. Batch records always exclude entities.
   Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
   Authoring packets resolve offered complete group requirements beside field
@@ -412,9 +444,10 @@ is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citati
   remains prohibited until every Spec clarification is resolved under the existing
   answer/authority contract; Tasks remains prohibited while any Spec or Plan
   clarification is open.
-- Completed Spec publication requires complete current assessment/evidence
-  coverage and all native business/authority checks. Assessment completion never
-  certifies semantic compatibility. Plan validates current project policy and
+- Completed Spec publication requires current native assessment bindings and
+  all native business/authority checks. Advice may be completely assessed or
+  explicitly `assessment_incomplete` with the exact unassessed set and an
+  admissible native stop. Neither disposition certifies semantic compatibility. Plan validates current project policy and
   its own required decisions independently; a semantic finding alone cannot
   choose that requiredness or resolve policy.
 
@@ -504,8 +537,9 @@ The engine validates:
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved specification-owned conflicts and blocking open questions;
-- complete current principle-assessment coverage and exact downstream policy-obligation
-  associations under §17.3.1; policy findings cannot erase source requirements;
+- current principle-assessment bindings under §17.3.1, either complete findings
+  or a validated incomplete-advice disposition; policy findings cannot erase
+  source requirements or create downstream mandatory obligations;
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 

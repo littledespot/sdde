@@ -123,7 +123,7 @@ pub fn execute(io: std.Io, a: std.mem.Allocator, frozen: frozen_inputs.Freeze, p
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &secrets };
     var captured: trace.CaptureLog = .init(a);
     defer captured.deinit();
-    var report: native.Report = .{ .schema = .@"spec-e2e-report/v4", .started_at_utc = try a.dupe(u8, &run.started_at_utc), .execution_id = try a.dupe(u8, &run.name), .case_id = project.selected.id, .workflow_id = project.selected.workflow_id, .status = .input_invalid };
+    var report: native.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = try a.dupe(u8, &run.started_at_utc), .execution_id = try a.dupe(u8, &run.name), .case_id = project.selected.id, .workflow_id = project.selected.workflow_id, .status = .input_invalid };
     const started: std.Io.Clock.Timestamp = .now(io, .awake);
     const published = @import("../e2e/invoke.zig").run(io, a, run.project, project.selected, project.captured, key, store, &report, .{ .purpose = .whole_workflow, .transport = transport, .experiment = gate, .capture = &captured }) catch |err| failed: {
         report.status = .harness_error;
@@ -199,7 +199,7 @@ test "native report write failures preserve charged exchanges after trace owners
         captured.candidates.first = .{ .json = try a.dupe(u8, "{}"), .sha256 = std.fmt.bytesToHex(initial_digest, .lower), .first_pass = true };
         captured.candidates.latest = .{ .json = try a.dupe(u8, "{\"corrected\":true}"), .sha256 = std.fmt.bytesToHex(final_digest, .lower), .first_pass = false };
         const attempts = [_]native.Attempt{.{ .origin = origin, .step = "native-model-call", .accounting = .exact_usage, .usage = usage }};
-        const report: native.Report = .{ .schema = .@"spec-e2e-report/v4", .started_at_utc = "2026-10-16T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled, .model_calls = 1, .total_tokens = 12, .attempts = &attempts };
+        const report: native.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-16T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled, .model_calls = 1, .total_tokens = 12, .attempts = &attempts };
         var facts: Facts = .{ .trial = .{ .ordinal = 1, .arm = .A, .case_id = "case", .feature_id = "feature", .repetition = 1 }, .freeze_sha256 = "freeze" };
         try std.testing.expectError(error.NotOpenForWriting, retainInvocation(std.testing.io, a, &facts, report, &captured, sink));
         captured.deinit();
@@ -380,10 +380,12 @@ fn validateNative(report: native.Report, receipts: []const trace.Receipt) !void 
     if (report.model_calls != report.attempts.len or report.semantic_quality != .not_run or report.evaluation != null) return error.AcquisitionMismatch;
     var tokens: u128 = 0;
     var usage_complete = true;
+    var not_sent_operations: usize = 0;
     for (report.attempts, 0..) |attempt, index| {
         if ((attempt.accounting == .exact_usage) != (attempt.usage != null)) return error.AcquisitionMismatch;
         for (report.attempts[0..index]) |prior| if (std.meta.eql(prior.origin, attempt.origin)) return error.AcquisitionMismatch;
         if (attempt.accounting == .unavailable) usage_complete = false;
+        if (attempt.accounting == .not_sent) not_sent_operations += 1;
         if (attempt.usage) |usage| {
             if (@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(usage.input_tokens, usage.output_tokens, usage.total_tokens) == null) return error.AcquisitionMismatch;
             tokens = std.math.add(u128, tokens, usage.total_tokens) catch return error.AcquisitionMismatch;
@@ -395,7 +397,8 @@ fn validateNative(report: native.Report, receipts: []const trace.Receipt) !void 
         };
         // Proven non-delivery may precede transport. An unavailable operation
         // without a physical receipt requires an observed capture failure.
-        if (!found and (attempt.usage != null or attempt.accounting != .not_sent and report.evidence_error == null)) return error.AcquisitionMismatch;
+        if (!found and !@import("../e2e/observation.zig").provenNotSent(attempt) and
+            (attempt.usage != null or report.evidence_error == null)) return error.AcquisitionMismatch;
     }
     for (receipts) |receipt| {
         var matches: usize = 0;
@@ -404,7 +407,7 @@ fn validateNative(report: native.Report, receipts: []const trace.Receipt) !void 
         };
         if (matches != 1) return error.AcquisitionMismatch;
     }
-    if (tokens != report.total_tokens or usage_complete != report.usage_complete) return error.AcquisitionMismatch;
+    if (tokens != report.total_tokens or usage_complete != report.usage_complete or not_sent_operations != report.not_sent_operations) return error.AcquisitionMismatch;
     if (report.last_model_origin) |origin| {
         var found = false;
         for (report.attempts) |attempt| if (std.meta.eql(attempt.origin, origin)) {
@@ -413,4 +416,30 @@ fn validateNative(report: native.Report, receipts: []const trace.Receipt) !void 
         };
         if (!found) return error.AcquisitionMismatch;
     } else if (report.last_model_usage != null or receipts.len != 0) return error.AcquisitionMismatch;
+}
+
+test "native advisory non-delivery needs no physical receipt and preserves the prior exchange" {
+    const usage = dispatch.ProviderUsage.init(10, 2, 12).?;
+    const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const unsent: @TypeOf(origin) = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const attempts = [_]native.Attempt{
+        .{ .origin = origin, .step = "required-generation", .accounting = .exact_usage, .usage = usage },
+        .{ .origin = unsent, .step = "advisory-review", .accounting = .not_sent, .usage = null },
+    };
+    const receipts = [_]trace.Receipt{.{ .call = 1, .origin = origin, .purpose = .initial_generation, .owner_kind = .reference_chunk, .experiment_send = null, .request_step = "required-generation", .context_sha256 = @splat(1), .request_sha256 = @splat(2), .usage = usage }};
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .workflow_outcome = .ok, .model_calls = 2, .not_sent_operations = 1, .total_tokens = 12, .attempts = &attempts, .last_model_origin = origin, .last_model_usage = usage };
+    try validateNative(report, &receipts);
+    var wrong = report;
+    wrong.not_sent_operations = 0;
+    try std.testing.expectError(error.AcquisitionMismatch, validateNative(wrong, &receipts));
+    wrong = report;
+    wrong.last_model_origin = unsent;
+    try std.testing.expectError(error.AcquisitionMismatch, validateNative(wrong, &receipts));
+    var unproved = attempts;
+    unproved[1].accounting = .unavailable;
+    wrong = report;
+    wrong.attempts = &unproved;
+    wrong.not_sent_operations = 0;
+    wrong.usage_complete = false;
+    try std.testing.expectError(error.AcquisitionMismatch, validateNative(wrong, &receipts));
 }

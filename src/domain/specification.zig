@@ -49,7 +49,6 @@ pub const Kind = enum {
 /// Mandatory business-content families; optional section presence never changes
 /// this contract. Semantic support and completeness remain authority obligations.
 pub const required_record_families = [_]Kind{ .acceptance_criterion, .functional_requirement };
-const entity_required_record_families = required_record_families ++ [_]Kind{.entity};
 
 /// Structural mapping permission; semantic support still requires review.
 pub fn permitsPositiveMapping(content: reference.ClaimContent) bool {
@@ -209,11 +208,6 @@ pub const RecordProposal = Values(.canonical).RecordProposal;
 pub const Applicability = enum { required, not_applicable };
 pub fn entityMembershipSatisfied(disposition: Applicability, entity_count: usize) bool {
     return (disposition == .required) == (entity_count != 0);
-}
-/// Assembly guidance projects the same family and membership policy enforced
-/// by native validation; it does not require every source group to emit records.
-pub fn assemblyRequiredRecordFamilies(disposition: Applicability) []const Kind {
-    return if (entityMembershipSatisfied(disposition, 0)) &required_record_families else &entity_required_record_families;
 }
 pub const ApplicabilityProposal = Values(.canonical).ApplicabilityProposal;
 pub const ContentProposal = struct {

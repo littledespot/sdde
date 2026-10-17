@@ -24,6 +24,11 @@ pub const Bound = union(enum) { brief: Catalogue, primary_user_story: Catalogue,
 pub const GuidanceMode = enum { authoring, repair };
 const Requirement = @import("model_evidence.zig").Requirement;
 pub const FieldGuidance = struct { purpose: ?[]const u8 = null };
+/// Batch records inherit exactly one assignment. A feature-owned entity selects
+/// its own nonempty set of eligible groups; neither boundary infers support.
+pub fn validRecordGroupCount(kind: spec.Kind, count: usize) bool {
+    return if (kind == .entity) count != 0 else count == 1;
+}
 pub const GroupGuidance = struct { signal_id: r.SignalId, requirements: []const Requirement };
 /// A native membership fact, independent of field policy or semantic support.
 pub fn tokenOnly(records: refs.Records, id: r.SignalId) Error!bool {
@@ -50,7 +55,7 @@ pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirem
     return switch (bound) {
         .brief => .{ .brief = .{ .title = try fieldGuidance(a, .display_name, mode), .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
         .primary_user_story => .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, mode) },
-        .entities => .{ .entities = try fieldGuidance(a, .entities, mode) },
+        .entities => .{ .entities = .{ .purpose = if (mode == .authoring) try std.fmt.allocPrint(a, "{s}\n{s}", .{ (try fieldGuidance(a, .entities, mode)).purpose.?, @import("required_authority_description.zig").record(a, .entity) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding }) else null } },
         .records => |value| .{ .records = .{
             .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding else null,
             .signal = value.signal,

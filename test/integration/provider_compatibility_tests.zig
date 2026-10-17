@@ -1,5 +1,5 @@
-//! Offline, fresh production-request probes. Scripted exchanges prove harness
-//! boundaries only; they are never authentic provider or semantic evidence.
+//! Offline production requests with explicit frozen-protocol fixtures. Scripted
+//! exchanges prove harness boundaries only, never current live compatibility.
 const std = @import("std");
 const fixture = @import("../harness/e2e/fixture.zig");
 const contracts = @import("../harness/e2e/contracts.zig");
@@ -88,6 +88,10 @@ fn absent(io: std.Io, root: std.Io.Dir, path: []const u8) !void {
 }
 
 fn runScenario(case_path: []const u8, scenario: Scenario) !void {
+    return runScenarioWithBinding(case_path, scenario, .frozen_protocol);
+}
+
+fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: enum { frozen_protocol, current_shipped }) !void {
     const io = std.testing.io;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -100,8 +104,9 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
     const project = try run.openDir(io, "project", .{});
     defer project.close(io);
 
-    const case_bytes = try files.read(io, a, .cwd(), case_path);
-    const selected = try contracts.parse(a, case_bytes);
+    const shipped = try contracts.parse(a, try files.read(io, a, .cwd(), case_path));
+    const selected = if (binding == .frozen_protocol) try @import("frozen_protocol_fixture.zig").select(a, shipped) else shipped;
+    const case_bytes = try std.json.Stringify.valueAlloc(a, selected, .{});
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);
     try fixture.materialize(io, project, captured);
@@ -121,7 +126,7 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v4",
+        .schema = .@"spec-e2e-report/v5",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -137,6 +142,26 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
         .purpose = .{ .single_exchange = &probe },
         .transport = if (scenario == .partial_cancelled) prefix_cancellation.port() else wire.port(),
     }) catch |err| {
+        if (binding == .current_shipped) {
+            // Preflight rejects before a captured call exists. Final evidence
+            // correlation independently rejects that absent call; the retained
+            // primary diagnostic must still identify the frozen policy drift.
+            try std.testing.expectEqual(error.MissingRequestEvidence, err);
+            try std.testing.expectEqual(.binding_rejected, probe.boundary);
+            try std.testing.expectEqual(@as(usize, 0), probe.physical_sends);
+            try std.testing.expectEqual(@as(usize, 0), wire.calls);
+            try std.testing.expectEqualStrings("FrozenBindingRejected", report.evidence_error.?);
+            try std.testing.expectEqual(.harness_error, report.status);
+            try std.testing.expect(report.workflow_outcome != .ok);
+            try std.testing.expect(report.specification == null);
+            try std.testing.expectEqual(.not_run, report.publication_check);
+            try std.testing.expectEqual(.not_run, report.semantic_quality);
+            var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, try files.read(io, a, project, ".sddtoolkit.json"));
+            defer current.deinit();
+            try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+            try fixture.verifySources(io, a, .cwd(), captured);
+            return;
+        }
         if (scenario != .capture_failed) return err;
         try std.testing.expectEqual(error.EvidenceCaptureFailed, err);
         try std.testing.expectEqual(@as(usize, 0), wire.calls);
@@ -149,6 +174,7 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
         try std.testing.expect(report.workflow_outcome != null and report.workflow_outcome.? != .ok);
         return;
     };
+    if (binding == .current_shipped) return error.TestExpectedError;
     if (scenario == .capture_failed) return error.TestExpectedError;
     try std.testing.expect(published == null);
     try std.testing.expectEqual(@as(usize, 1), wire.calls);
@@ -448,8 +474,12 @@ fn retainOfflineReport(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, case_p
     try std.testing.expect(std.mem.indexOf(u8, try files.read(io, a, run, "report.md"), "no publication or workflow-completion authority") != null);
 }
 
-test "test.integration.provider_compatibility fresh unchanged production requests stop after one accounted exchange in unrelated domains" {
+test "test.integration.provider_compatibility frozen protocol production requests stop after one accounted exchange in unrelated domains" {
     for (cases) |case_path| try runScenario(case_path, .complete);
+}
+
+test "test.integration.provider_compatibility current shipped output allowance cannot substitute for the frozen protocol before send" {
+    for (cases) |case_path| try runScenarioWithBinding(case_path, .complete, .current_shipped);
 }
 
 test "test.integration.provider_compatibility empty server tool metadata retains exact usage and shared prefix normalization in unrelated domains" {
@@ -492,7 +522,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
     try temporary.dir.createDirPath(io, "project");
     const project = try temporary.dir.openDir(io, "project", .{});
     defer project.close(io);
-    const selected = try contracts.parse(a, try files.read(io, a, .cwd(), case_path));
+    const selected = try @import("frozen_protocol_fixture.zig").select(a, try contracts.parse(a, try files.read(io, a, .cwd(), case_path)));
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try fixture.materialize(io, project, captured);
     var gate = try @import("../harness/baseline/dispatch.zig").Gate.init(.{ .maximum_sends = 1, .maximum_actual_tokens = 2_000_000 });
@@ -510,7 +540,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v4", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
         .purpose = .whole_workflow,

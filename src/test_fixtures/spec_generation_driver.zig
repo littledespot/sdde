@@ -16,6 +16,13 @@ pub const Fault = struct {
     }
 };
 pub const Driver = struct {
+    pub const AdviceProjection = @FieldType(@import("../domain/model_input_packet.zig").AdvisoryAssessment, "projection");
+    pub const ProtocolAdvice = struct {
+        request: *const @import("../domain/model_request_identity.zig").ModelRequestId,
+        origin: @import("../domain/model_candidate_origin.zig").Origin,
+        exhaustion: @import("../domain/workflow_retry.zig").Exhaustion,
+        repair: bool,
+    };
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
     finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
@@ -95,6 +102,14 @@ pub const Driver = struct {
     fault_requests: usize = 0,
     fault_request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null,
     rejected_operation: ?[]const u8 = null,
+    protocol_advice: std.EnumArray(AdviceProjection, ?ProtocolAdvice) = .initFill(null),
+    pub fn expectsProtocolAdvice(self: *const Driver) bool {
+        if (self.fault) |fault| if (fault.stage == .support or fault.stage == .candidate_review) {
+            if (fault.repetition == .persistent or fault.shape == .review_dropped or fault.shape == .review_changed) return true;
+        };
+        return self.support_fault == .question_exhaust or self.support_fault == .question_evidence_exhaust or
+            self.support_fault == .question_evidence_alternating or self.evidence_fault == .empty_correction;
+    }
     pub fn run(self: *Driver) @import("../domain/run_outcome.zig").Outcome {
         return @import("../application/workflow_engine_orchestrator.zig").run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step, .finalize = finalize } });
     }
@@ -473,6 +488,14 @@ pub const Driver = struct {
         };
         const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "complete-advisory-protocol-request") and result == .outcome and result.outcome == .blocked) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            const receipt = @import("../application/workflow_model_accounting.zig").readAdvisoryStop(&view) catch unreachable;
+            const facts = @import("../application/advisory_request_completion_workflow.zig").read(&view) catch unreachable;
+            const projection = facts.request.packet().?.advisoryAssessment().?.projection;
+            std.testing.expect(self.protocol_advice.get(projection) == null) catch unreachable;
+            self.protocol_advice.set(projection, .{ .request = facts.request.id(), .origin = facts.origin.?, .exhaustion = receipt.exhaustion(), .repair = facts.request.packet().?.repairPermit() != null });
+        };
         // A native candidate rejection is an applied invalid outcome, whereas
         // operational failure is Applied.rejected. Observe both at the same
         // operation boundary without changing the production transition.
@@ -817,6 +840,14 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     try std.testing.expectEqual(assigned.len, requirements.len);
     try std.testing.expect(!input.object.contains("subject") and !input.object.contains("assessment_scope") and !input.object.contains("task"));
     const ledger = try @import("../domain/required_authority.zig").build(allocator, inputs);
+    if (purpose == .principles) {
+        // One selected corpus owns exactly the complete requirement set. This
+        // checks membership as well as the reduced number of model requests.
+        try std.testing.expectEqual(ledger.requirements.len, assigned.len);
+        const context = inputs.principle_context.?;
+        const guidance = try @import("../domain/principle_registry.zig").guidance(allocator, context.registry, context.selection);
+        try std.testing.expectEqualStrings(try @import("../domain/model_candidate_json.zig").encodeEvidence(@TypeOf(guidance), allocator, guidance), try std.json.Stringify.valueAlloc(allocator, input.object.get("principles").?, .{}));
+    }
     const owner = try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, first);
     for (assigned, requirements) |id, requirement| {
         try std.testing.expectEqualDeep(owner, try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, id));
@@ -829,7 +860,7 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
             try std.testing.expect(requirement.object.contains("evidence") and requirement.object.contains("assessment_scope") and requirement.object.contains("evidence_rules"));
         }
         const subject = requirement.object.get("subject").?.object;
-        try std.testing.expect(!subject.contains("record"));
+        if (purpose == .source) try std.testing.expect(!subject.contains("record"));
         if (purpose == .principles) try std.testing.expect(!subject.contains("context"));
     }
     const properties = schema.object.get("properties").?.object;

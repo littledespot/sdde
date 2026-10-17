@@ -36,7 +36,7 @@ fn command(init: std.process.Init) !bool {
     defer run.close(io);
     const output = try reports.Output.reserve(io, run.dir);
     defer output.close(io);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v4", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
     report.build = .{
         .source = (try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, allocator, @embedFile("build_provenance"))).identity,
         .zig_version = @import("builtin").zig_version_string,
