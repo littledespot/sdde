@@ -1240,19 +1240,26 @@ scope.
 
 ### R8. Development acceptance policy
 
-**Decision required.** [E2E command success](../test/harness/e2e/contracts.zig)
-includes completed evaluation and `awaiting_clarification`. The rubric supports an
-aggregate threshold, not a critical-error veto, and cases have no
-expected-terminal-outcome field.
+**Implemented offline. Human calibration review remains pending by user decision.**
+[R8 development acceptance](../design/harness/acceptance.md) defines the shared
+quality/critical gate, explicit per-case terminal outcome, grader independence
+checks and hash-bound human calibration evidence. Both current cases require
+publication; clarification remains a normal production outcome but cannot pass
+those development cases. Lifecycle status alone no longer owns command success.
 
-Define expected terminal outcomes, critical failures, aggregate thresholds and
-uncertainty before adding any automated gate. Keep one development evaluation policy
-owner, separate from workflow authority.
+The user approved 80% aggregate with critical minimum 3/4, uncertainty unresolved,
+and publication required for both source-complete cases. GPT-OSS-20B remains
+advisory; explicit human adjudication of the exact published report owns acceptance.
+The offline `zig build adjudicate-spec -- ...` command reapplies native mechanics
+and validates the bound human rubric proposal. The paid-call policy is unchanged;
+no new diagnostics or calibration calls have been authorized.
 
-The [whole-spec rubric calibration](../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/README.md)
-is unfinished: its seven specimens, including `faithful-a/b`, omit the UTC
-requirement. Refresh them and obtain human-reviewed labels before any
-judge-acceptance claim.
+The [Hello World panel](../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/REVIEW.md)
+has nine refreshed specimens covering UTC. The
+[loan-renewal panel](../test/integration/fixtures/wf-002-loan-renewal/calibration/REVIEW.md)
+has fifteen. Proposed labels, human approval and actual judge qualification are
+separate; both real human-review and qualification records remain pending. No
+human-reviewed labels, general grader accuracy or E2E quality is claimed.
 
 ### Summary hierarchy and cross-model variation
 

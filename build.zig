@@ -137,6 +137,36 @@ pub fn build(b: *std.Build) void {
     b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
+    const adjudicator = b.addExecutable(.{ .name = "sdde-adjudicate-spec", .root_module = b.createModule(.{
+        .root_source_file = b.path("adjudicate.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_adjudicator = b.addRunArtifact(adjudicator);
+    if (b.args) |args| run_adjudicator.addArgs(args);
+    b.step("adjudicate-spec", "Apply a bound human rubric judgment offline, without model calls").dependOn(&run_adjudicator.step);
+    b.step("build-adjudicator", "Build the offline human adjudication tool").dependOn(&adjudicator.step);
+    const adjudicator_directory = b.addTempFiles();
+    const adjudicator_binary = adjudicator_directory.addCopyFile(adjudicator.getEmittedBin(), adjudicator.out_filename);
+    const adjudicator_help = std.Build.Step.Run.create(b, "run standalone offline adjudicator help");
+    adjudicator_help.addFileArg(adjudicator_binary);
+    adjudicator_help.addArg("--help");
+    adjudicator_help.setCwd(adjudicator_directory.getDirectory());
+    adjudicator_help.clearEnvironment();
+    adjudicator_help.expectExitCode(0);
+    adjudicator_help.expectStdErrEqual("");
+    const adjudicator_denied = std.Build.Step.Run.create(b, "reject missing standalone adjudicator inputs");
+    adjudicator_denied.addFileArg(adjudicator_binary);
+    adjudicator_denied.setCwd(adjudicator_directory.getDirectory());
+    adjudicator_denied.clearEnvironment();
+    adjudicator_denied.expectExitCode(1);
+    adjudicator_denied.expectStdOutEqual("");
+    adjudicator_denied.expectStdErrEqual("Invalid arguments; use --help. No API call is possible.\n");
+    const adjudicator_smoke = b.step("smoke-adjudicator", "Test isolated human adjudication startup without model calls");
+    adjudicator_smoke.dependOn(&adjudicator_help.step);
+    adjudicator_smoke.dependOn(&adjudicator_denied.step);
+    test_step.dependOn(adjudicator_smoke);
     const call_module = b.createModule(.{
         .root_source_file = b.path("e2e_call.zig"),
         .target = target,
@@ -859,6 +889,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build_provenance.zig"));
     lint_command.addFileArg(b.path("code_heuristics.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
+    lint_command.addFileArg(b.path("adjudicate.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("attribution_replay.zig"));

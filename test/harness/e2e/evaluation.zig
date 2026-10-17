@@ -5,7 +5,8 @@ const evaluator = @import("../contracts.zig");
 const fixture = @import("fixture.zig");
 
 pub fn inputs(allocator: std.mem.Allocator, report: c.Report, captured: fixture.Evaluation, specification: []const u8, execution_id: []const u8) !evaluator.Capture {
-    if (report.status != .generated or report.workflow_outcome != .ok or report.publication_check != .passed or report.specification == null) return error.GenerationNotCompleted;
+    if (report.expected_outcome != .publication or report.status != .generated or report.workflow_outcome != .ok or report.publication_check != .passed or report.specification == null or
+        report.execution_id == null or !std.mem.eql(u8, report.execution_id.?, execution_id) or report.evaluation_case_id == null or !std.mem.eql(u8, report.evaluation_case_id.?, captured.case.id)) return error.GenerationNotCompleted;
     const value: evaluator.Capture = .{
         .evaluation_id = try std.mem.concat(allocator, u8, &.{ "eval-", execution_id }),
         .case = captured.case,

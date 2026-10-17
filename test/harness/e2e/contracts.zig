@@ -2,11 +2,13 @@ const std = @import("std");
 const evaluator = @import("../contracts.zig");
 const relative = @import("../../../src/domain/relative_directory_path.zig");
 pub const Artifact = enum { specification, reference_context, clarification_state, workflow_state };
+pub const ExpectedOutcome = enum { publication, clarification };
 pub const Copy = struct { source: []const u8, destination: []const u8 };
 pub const Case = struct {
     schema: []const u8,
     id: []const u8,
     workflow_id: []const u8,
+    expected_outcome: ExpectedOutcome,
     feature: []const u8,
     reference: []const u8,
     config: []const u8,
@@ -19,7 +21,7 @@ pub const Case = struct {
 
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) !Case {
     const value = try evaluator.decode(Case, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v1") or value.id.len == 0 or value.id.len > 128 or
+    if (!std.mem.eql(u8, value.schema, "spec-e2e-case/v2") or value.id.len == 0 or value.id.len > 128 or
         @import("../../../src/domain/workflow.zig").WorkflowId.parse(value.workflow_id) == null or
         value.files.len == 0 or value.files.len > 128 or value.directories.len > 32 or
         value.expected_artifacts.len != @typeInfo(Artifact).@"enum".fields.len) return error.InvalidE2ECase;
@@ -66,10 +68,6 @@ pub const Status = enum {
     generated,
     evaluator_failed,
     quality_unresolved,
-
-    pub fn commandSucceeded(self: Status) bool {
-        return self == .evaluated or self == .awaiting_clarification;
-    }
 };
 
 /// Serializable projection of a native rejection; no inferred domain verdict.
@@ -138,7 +136,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v3" },
+    schema: enum { @"spec-e2e-report/v4" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -152,7 +150,10 @@ pub const Report = struct {
     execution_id: ?[]const u8 = null,
     case_source: ?[]const u8 = null,
     case_id: ?[]const u8 = null,
+    evaluation_case_id: ?[]const u8 = null,
     workflow_id: ?[]const u8 = null,
+    expected_outcome: ?ExpectedOutcome = null,
+    acceptance: @import("acceptance.zig").Result = .{ .unresolved = .not_evaluated },
     status: Status,
     workflow_outcome: ?@import("../../../src/domain/workflow.zig").OutcomeTag = null,
     clarifications: []const @import("../../../src/domain/run_outcome.zig").Clarification = &.{},
@@ -180,6 +181,7 @@ pub const Report = struct {
     /// Read-only replay of shared mechanical text rules over admitted native
     /// values. Missing capture is distinct from a measured zero escape count.
     admission_audit: ?@import("../baseline/admission.zig").Audit = null,
+    admission_exchanges: []const @import("../baseline/admission.zig").Exchange = &.{},
     admission_escape: ?@import("../baseline/admission.zig").Metric = null,
     corrections: []const Correction = &.{},
     outstanding_work: []const WorkLink = &.{},
@@ -203,5 +205,7 @@ pub const Report = struct {
     publication_check: enum { not_run, passed, failed } = .not_run,
     semantic_quality: enum { not_run, scored, unresolved, evaluator_error } = .not_run,
     evaluation_configuration: ?@import("../configuration.zig").Config = null,
+    grader_qualification: ?@import("../grading_evidence.zig").Evidence = null,
+    evaluation_inputs: ?evaluator.Capture = null,
     evaluation: ?@import("../report.zig").Report = null,
 };

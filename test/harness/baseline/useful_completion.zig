@@ -3,6 +3,7 @@
 const std = @import("std");
 const c = @import("../contracts.zig");
 const judgment = @import("../judgment.zig");
+const acceptance = @import("../acceptance.zig");
 const final_metrics = @import("final_fidelity.zig");
 
 pub const Provenance = struct { kind: enum { human, model_assisted }, assessor: []const u8 };
@@ -21,7 +22,7 @@ pub const Target = struct {
     capture: c.Capture,
 };
 pub const Evaluation = struct {
-    state: enum { not_required, missing, disputed, unresolved, threshold_unconfigured, scored },
+    state: enum { not_required, missing, disputed, unresolved, threshold_unconfigured, human_adjudication_required, scored },
     useful: ?bool,
     rubric: ?judgment.Result = null,
     provenance: ?Provenance = null,
@@ -48,10 +49,17 @@ pub fn evaluate(a: std.mem.Allocator, attempted: bool, published: bool, source_f
     // not permit fabricated references, out-of-range scores or missing fields.
     const result = try judgment.validate(a, null, native.capture, try std.json.Stringify.valueAlloc(a, proposal.proposal, .{}));
     if (proposal.scoring_disputed) return .{ .state = .disputed, .useful = if (source_fidelity == false) false else null, .rubric = result, .provenance = proposal.provenance, .evidence_complete = false };
-    const state: @FieldType(Evaluation, "state") = if (result.assessment != .scored) .unresolved else if (result.threshold == .not_configured) .threshold_unconfigured else .scored;
+    // Model judgments have no acceptance authority under the human-review policy.
+    // Retain model assessments as diagnostics, without useful-completion credit.
+    if (proposal.provenance.kind == .model_assisted) return .{ .state = .human_adjudication_required, .useful = if (source_fidelity == false) false else null, .rubric = result, .provenance = proposal.provenance, .evidence_complete = false };
+    const quality = acceptance.quality(native.capture.rubric, result);
+    const state: @FieldType(Evaluation, "state") = switch (quality) {
+        .passed, .failed => .scored,
+        .unresolved => |reason| if (reason == .missing_threshold) .threshold_unconfigured else .unresolved,
+    };
     return .{
         .state = state,
-        .useful = if (source_fidelity == false or result.threshold == .not_met) false else if (source_fidelity == true and result.threshold == .met) true else null,
+        .useful = if (source_fidelity == false or quality == .failed) false else if (source_fidelity == true and quality == .passed) true else null,
         .rubric = result,
         .provenance = proposal.provenance,
         .evidence_complete = state == .scored and source_fidelity != null,
@@ -195,20 +203,20 @@ fn less(_: void, left: u64, right: u64) bool {
 
 const Test = struct {
     const rubric: c.Rubric = .{
-        .schema = "evaluation-rubric/v1",
+        .schema = "evaluation-rubric/v2",
         .id = "source-duty",
         .revision = 1,
         .minimum_score = 0,
         .maximum_score = 1,
         .pass_threshold_percent = 100,
-        .criteria = &.{.{ .id = "deadline", .description = "Retain the deadline.", .evidence = "Compare source deadline.", .weight = 1, .allow_not_applicable = false, .anchors = &.{ .{ .score = 0, .description = "Missing." }, .{ .score = 1, .description = "Preserved." } } }},
+        .criteria = &.{.{ .id = "deadline", .description = "Retain the deadline.", .evidence = "Compare source deadline.", .weight = 1, .allow_not_applicable = false, .minimum_acceptable_score = 1, .anchors = &.{ .{ .score = 0, .description = "Missing." }, .{ .score = 1, .description = "Preserved." } } }},
     };
     const criterion: judgment.CriterionResult = .{ .criterion_id = "deadline", .disposition = .scored, .score = 1, .explanation = "The specified deadline matches the source.", .evidence = &.{ .{ .document_id = "policy", .quote = "Return within 30 days." }, .{ .document_id = "specification", .quote = "Return within 30 days." } }, .missing_from_specification = false };
     const proposal: judgment.Proposal = .{ .results = &.{criterion} };
     fn target(a: std.mem.Allocator) !Target {
         const capture: c.Capture = .{
             .evaluation_id = "published-trial-1",
-            .case = .{ .schema = "evaluation-case/v1", .id = "return-policy", .sources = &.{.{ .id = "policy", .path = "reference/policy.md" }}, .rubric = "rubric.json" },
+            .case = .{ .schema = "evaluation-case/v2", .id = "return-policy", .sources = &.{.{ .id = "policy", .path = "reference/policy.md" }}, .rubric = "rubric.json", .grading_qualification = .{ .panel = "panel.json", .review = "review.json", .qualification = "qualification.json" } },
             .case_bytes = "frozen-case",
             .rubric = rubric,
             .rubric_bytes = try std.json.Stringify.valueAlloc(a, rubric, .{}),
@@ -249,6 +257,11 @@ test "useful completion requires exact native publication source fidelity and fr
     const missing = try evaluate(a, true, true, true, target, null);
     try std.testing.expectEqual(.missing, missing.state);
     try std.testing.expect(missing.useful == null and !missing.evidence_complete);
+    var model_assisted = supplied;
+    model_assisted.provenance.kind = .model_assisted;
+    const unqualified = try evaluate(a, true, true, true, target, model_assisted);
+    try std.testing.expectEqual(.human_adjudication_required, unqualified.state);
+    try std.testing.expect(unqualified.useful == null and !unqualified.evidence_complete);
     var disputed = supplied;
     disputed.scoring_disputed = true;
     try std.testing.expectEqual(.disputed, (try evaluate(a, true, true, true, target, disputed)).state);

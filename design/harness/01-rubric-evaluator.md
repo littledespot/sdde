@@ -92,7 +92,7 @@ the executable schema and scoring scale; criterion drafting can begin now.
 
 ### Required work
 
-- Ground the case in the two stated requirements: successful startup and displaying the
+- Ground the case in successful startup, UTC date/time and displaying the
   exact user-facing greeting `Hello, World!` when started.
 - Draft criteria for behavioral coverage, greeting fidelity, absence of unsupported
   requirements, clarity/testability, coherent organization and proportionate scope.

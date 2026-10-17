@@ -12,7 +12,7 @@ const paths: frozen_inputs.InputPaths = .{
     .protocol = "test/calibration/semantic-simplicity/protocol.json",
     .cases = "test/calibration/semantic-simplicity/cases.json",
     .template_case = "test/e2e/wf-001-hello-world/node-vitest/workflow.case.json",
-    .rubric = "test/calibration/semantic-simplicity/rubric.json",
+    .rubric = "test/integration/fixtures/baseline/rubric.json",
 };
 const build: @import("../../build/provenance.zig").Identity = .{ .revision = "offline-baseline-boundary", .source_sha256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", .modified = true };
 const key = "MOCK-offline-baseline-key";
@@ -28,6 +28,29 @@ fn prepare(a: std.mem.Allocator) !frozen_inputs.Freeze {
 fn firstTrial(frozen: frozen_inputs.Freeze, feature_id: []const u8) !comparison.Trial {
     for (frozen.trials) |trial| if (std.mem.eql(u8, trial.feature_id, feature_id)) return trial;
     return error.MissingBaselineTrial;
+}
+
+test "test.integration.baseline current preparation requires a new freeze and rejects historical rubric v1" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const evaluation = @import("../harness/contracts.zig");
+    const historical = try files.read(std.testing.io, a, .cwd(), "test/calibration/semantic-simplicity/rubric.json");
+    try std.testing.expectError(error.InvalidEvaluationContract, evaluation.parseRubric(a, historical));
+    const current = try evaluation.parseRubric(a, try files.read(std.testing.io, a, .cwd(), paths.rubric));
+    try std.testing.expectEqualStrings("evaluation-rubric/v2", current.schema);
+    try std.testing.expectEqual(@as(?f64, 100), current.pass_threshold_percent);
+    for (current.criteria) |criterion| try std.testing.expect(criterion.minimum_acceptable_score == null);
+
+    const frozen = try prepare(a);
+    var stale = frozen;
+    stale.inputs.evaluation.rubric_bytes = historical;
+    stale.rubric_sha256 = try frozen_inputs.hash(a, historical);
+    // Even a matching historical digest cannot convert an old rubric into
+    // current authority; preparation must capture and freeze the new inputs.
+    try std.testing.expectError(error.InvalidEvaluationContract, frozen_inputs.decode(a, try std.json.Stringify.valueAlloc(a, stale, .{})));
+    try std.testing.expectError(error.FixtureChanged, frozen_inputs.verifySources(std.testing.io, a, .cwd(), stale));
+    try std.testing.expectError(error.BaselineNotFrozen, frozen_inputs.requireExecutable(a, frozen));
 }
 
 test "test.integration.baseline reads compiled budget without dispatch and refuses an unresolved preparation" {

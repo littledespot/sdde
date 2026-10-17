@@ -67,6 +67,7 @@ test "source scope separates engine tests and tooling from generated or external
         .{ "integration.zig", Scope.tests },
         .{ "build/code_heuristics/main.zig", Scope.tooling },
         .{ "harness.zig", Scope.tooling },
+        .{ "adjudicate.zig", Scope.tooling },
     };
     inline for (cases) |case| try std.testing.expectEqual(case[1], scope(case[0]).?);
     for ([_][]const u8{ "zig-out/copy/main.zig", ".zig-cache/main.zig", "zig-pkg/dependency/main.zig", "design/example.zig", "README.md" }) |path|

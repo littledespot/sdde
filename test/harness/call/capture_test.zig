@@ -181,7 +181,7 @@ const config_bytes =
 const run_path = "runs/unrelated-run";
 const provider_bytes = "MOCK provider catalogue read without workflow execution";
 const case_bytes =
-    \\{"schema":"spec-e2e-case/v1","id":"MOCK-case","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","evaluation_config":"fixture/evaluation-config.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
+    \\{"schema":"spec-e2e-case/v2","id":"MOCK-case","expected_outcome":"publication","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","evaluation_config":"fixture/evaluation-config.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
 ;
 
 const Sink = struct {

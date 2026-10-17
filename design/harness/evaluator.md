@@ -182,22 +182,26 @@ The internal test environment supplies the evaluation selection:
 - See OpenAI's [phase
   guidance](https://developers.openai.com/api/docs/guides/latest-model#phase-parameter).
 
+See [R8 development acceptance](acceptance.md) for critical vetoes, grader
+qualification, human adjudication and the diagnostic run gate. Supplied-spec
+calibration retains raw scores while acceptance remains unresolved.
+
 ## Contracts and scoring
 
 - [contracts.zig](../../test/harness/contracts.zig),
   [configuration.zig](../../test/harness/configuration.zig),
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
-- Case, rubric and configuration use distinct `/v1` schema identifiers; reports
-  use `evaluation-report/v2` with typed judgment diagnostics.
+- Cases and rubrics use distinct `/v2` identifiers; configuration remains `/v1`.
+  Reports use `evaluation-report/v3` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
-- A case declares its ID, source IDs/paths and rubric path.
+- A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
 - One invocation selects one case; there is no case registry.
 
 - The rubric is the sole source of criteria, evidence guidance, integer score range,
   per-score anchors, positive integer weights, applicability permissions and optional
-  percentage threshold.
+  percentage threshold and nullable per-criterion critical minimum.
 - No criterion wording is copied into code or the shared judge instruction.
 - The API's judgment schema is derived from the native result type rather than
   maintained as a second schema.
@@ -237,11 +241,11 @@ For scored criteria, the percentage is:
 
 - The initial [Hello World
   rubric](../../test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json) is an
-  **uncalibrated draft**: 0–4 integer anchors, equal weights, no pass threshold and no
+  **uncalibrated draft**: 0–4 integer anchors, equal weights, 80% threshold, critical minima 3/4 and no
   non-applicable criteria.
 - These are visible rubric-author choices, not engine defaults or approved release
   policy.
-- Revision 2 adds the user-authored UTC requirement.
+- Revision 2 adds UTC; revision 3 adds explicit critical-score metadata.
 - Its seven criteria address startup, exact greeting, UTC date/time, grounding,
   clarity/testability, organization and proportionate business scope.
 - It does not demand Node/Vitest implementation details, invented entities or filler for
@@ -265,7 +269,7 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v2` carries the judgment validator's typed diagnostic in
+- `evaluation-report/v3` carries the judgment validator's typed diagnostic in
   JSON and Markdown: parser byte/line/column for invalid JSON, or the affected
   criterion, zero-based evidence index and document ID for invalid evidence.
   Missing source and specification evidence are distinct. Valid JSON that fails
@@ -328,9 +332,9 @@ For scored criteria, the percentage is:
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Completed scored evaluation, including a low score or missed threshold. |
-| `2` | Unresolved or no-applicable assessment. |
-| `1` | Input, configuration, provider, judgment or reporting failure. |
+| `0` | Reserved for authoritative acceptance; model evaluation remains advisory. |
+| `2` | Unresolved acceptance, including every advisory model judgment pending human review. |
+| `1` | Failed acceptance, input, configuration, provider, judgment or reporting failure. |
 
 - The machine report keeps workflow status separate from `evaluated` /
   `evaluator_error`.

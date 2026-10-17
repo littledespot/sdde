@@ -442,22 +442,17 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   choosing which value survives.
 - Neither correction path synthesizes a candidate example.
 
-- `evaluated` means generation, publication checks and a scored evaluation completed.
-- `awaiting_clarification` preserves native `needs_user` as a normal pause. The
-  harness verifies the complete pending publication, including the incomplete
-  `spec.md`, reports its path and `publication: passed`, and never grades the draft. Both
-  CLI entrypoints exit 0 and show registered open clarification IDs and paths.
-  Harness paths point into the retained run's `project/`; JSON paths are relative
-  to that project. Incomplete publication is checked; semantic quality and grading
-  remain `not_run`.
-  After validated answers, a fresh workflow invocation starts at `start`.
-- Exit 0 alone does not establish the published/scored baseline: require `evaluated`.
-- A low score is still a completed evaluation; inspect `score_percent` and the
-  separately reported threshold result.
-- No quality threshold has been adopted by the draft rubric.
-- Invalid candidates, workflow failure, blocked/cancelled execution, missing/changed
-  output, evaluator error and unresolved quality produce nonzero exit status.
-  Native `invalid`, `blocked` and `cancelled` retain distinct report statuses.
+- Lifecycle status and development acceptance are separate. `evaluated` records
+  that scoring completed; it cannot by itself return command success.
+- Cases declare `expected_outcome`. Both current source-complete cases require
+  `publication`, so an unexpected native `needs_user` does not pass acceptance.
+  An explicitly clarification-expected case still requires valid native partial
+  publication, registered clarification handles and measured zero admission escape.
+- Exit 0 requires passed acceptance and finalized reports. Missing thresholds,
+  critical human-score failures, uncertainty, missing human adjudication and
+  unexpected terminal outcomes cannot pass. Native workflow state remains unchanged.
+- See [R8 acceptance](acceptance.md) for approved numeric/human authority, refreshed calibration panels and the offline
+  human adjudication command.
 - Evaluator failure preserves a successfully published specification.
 
 The terminal prints the score and threshold result explicitly.
@@ -578,7 +573,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v3`,
+The current closed report formats are `spec-e2e-report/v4`,
 `baseline-acquisition/v3` and `baseline-score/v3`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
 assessor documents retain numeric schema `2`. The compatibility report's outer

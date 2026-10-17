@@ -1,10 +1,10 @@
 {
-  "schema": "evaluation-rubric/v1",
+  "schema": "evaluation-rubric/v2",
   "id": "hello-world-spec",
-  "revision": 2,
+  "revision": 3,
   "minimum_score": 0,
   "maximum_score": 4,
-  "pass_threshold_percent": null,
+  "pass_threshold_percent": 80,
   "criteria": [
     {
       "id": "startup-coverage",
@@ -12,6 +12,7 @@
       "evidence": "Quote the startup requirement from stories and the corresponding specification behavior, or report its absence.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "Successful startup is absent or contradicted." },
         { "score": 1, "description": "An application is mentioned, but startup behavior is only implied." },
@@ -26,6 +27,7 @@
       "evidence": "Quote the startup/display requirement and the specification's greeting and trigger, or identify the missing content.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "The greeting/display behavior is absent or contradicted." },
         { "score": 1, "description": "A generic greeting is mentioned but the required text and behavior are mostly lost." },
@@ -40,6 +42,7 @@
       "evidence": "Quote the UTC date/time requirement from stories and its corresponding specification behavior, or identify each missing part.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "Date/time output is absent or contradicted." },
         { "score": 1, "description": "A timestamp is implied but neither its content nor UTC basis is clear." },
@@ -54,6 +57,7 @@
       "evidence": "Compare source statements with relevant specification claims. When nothing unsupported is found, cite representative supported content and explain the finding.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "The specification substantially replaces the requested application with unsupported functionality." },
         { "score": 1, "description": "Several consequential unsupported requirements or constraints are added." },
@@ -68,6 +72,7 @@
       "evidence": "Quote behavior/acceptance statements and explain what a reviewer could observe or what remains unclear.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "The behavior cannot be meaningfully understood or checked." },
         { "score": 1, "description": "Statements are mostly vague, contradictory or unresolved." },
@@ -82,6 +87,7 @@
       "evidence": "Quote representative scenario/requirement organization or unresolved content and relate it to the source requirements.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": null,
       "anchors": [
         { "score": 0, "description": "No usable specification is provided, or unresolved template content dominates." },
         { "score": 1, "description": "Organization seriously obscures the requested behavior." },
@@ -96,6 +102,7 @@
       "evidence": "Quote representative scope/detail choices and compare them with the source requirements.",
       "weight": 1,
       "allow_not_applicable": false,
+      "minimum_acceptable_score": 3,
       "anchors": [
         { "score": 0, "description": "Unrelated scope or implementation material overwhelms the requested behavior." },
         { "score": 1, "description": "Substantial unnecessary scope or technical prescription dominates." },

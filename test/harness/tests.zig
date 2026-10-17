@@ -3,6 +3,12 @@ const c = @import("contracts.zig");
 const judgment = @import("judgment.zig");
 const packet = @import("packet.zig");
 test {
+    _ = @import("acceptance_test.zig");
+    _ = @import("human_adjudication_test.zig");
+    _ = @import("adjudicate_cli.zig");
+    _ = @import("acceptance_gate_test.zig");
+    _ = @import("judge_independence_test.zig");
+    _ = @import("grader_qualification_test.zig");
     _ = @import("model_cost_policy.zig");
     _ = @import("generation_comparison.zig");
     _ = @import("baseline/tests.zig");
@@ -15,10 +21,10 @@ test {
 }
 
 const case_bytes =
-    \\{"schema":"evaluation-case/v1","id":"unrelated-example","sources":[{"id":"requirements","path":"reference/input.md"}],"rubric":"rubric.json"}
+    \\{"schema":"evaluation-case/v2","id":"unrelated-example","sources":[{"id":"requirements","path":"reference/input.md"}],"rubric":"rubric.json","grading_qualification":{"panel":"panel.json","review":"review.json","qualification":"qualification.json"}}
 ;
 const rubric_bytes =
-    \\{"schema":"evaluation-rubric/v1","id":"test-rubric","revision":1,"minimum_score":1,"maximum_score":3,"pass_threshold_percent":60,"criteria":[{"id":"coverage","description":"Behavior is covered","evidence":"Cite source and candidate","weight":2,"anchors":[{"score":1,"description":"Missing"},{"score":2,"description":"Partial"},{"score":3,"description":"Covered"}],"allow_not_applicable":false}]}
+    \\{"schema":"evaluation-rubric/v2","id":"test-rubric","revision":1,"minimum_score":1,"maximum_score":3,"pass_threshold_percent":60,"criteria":[{"id":"coverage","description":"Behavior is covered","evidence":"Cite source and candidate","weight":2,"anchors":[{"score":1,"description":"Missing"},{"score":2,"description":"Partial"},{"score":3,"description":"Covered"}],"allow_not_applicable":false,"minimum_acceptable_score":null}]}
 ;
 const good =
     \\{"results":[{"criterion_id":"coverage","disposition":"scored","score":3,"explanation":"Both texts describe the behavior.","evidence":[{"document_id":"requirements","quote":"Store the message."},{"document_id":"specification","quote":"The user can store the message."}],"missing_from_specification":false}]}
@@ -58,7 +64,7 @@ test "strict case and rubric contracts reject unknown duplicate foreign and unsa
     for ([_][2][]const u8{
         .{ "\"schema\":", "\"extra\":true,\"schema\":" },
         .{ "\"id\":\"unrelated-example\"", "\"id\":\"x\",\"id\":\"y\"" },
-        .{ "evaluation-case/v1", "evaluation-case/v2" },
+        .{ "evaluation-case/v2", "evaluation-case/v1" },
         .{ "reference/input.md", "../input.md" },
         .{ "reference/input.md", "/private/input.md" },
         .{ "reference/input.md", "reference/%2e%2e/input.md" },
@@ -68,7 +74,7 @@ test "strict case and rubric contracts reject unknown duplicate foreign and unsa
         try std.testing.expectError(error.InvalidEvaluationContract, c.parseCase(a, bytes));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-rubric/v1", "evaluation-rubric/v2" },
+        .{ "evaluation-rubric/v2", "evaluation-rubric/v1" },
         .{ "\"weight\":2", "\"weight\":0" },
         .{ "\"maximum_score\":3", "\"maximum_score\":4" },
         .{ "\"pass_threshold_percent\":60", "\"pass_threshold_percent\":101" },
@@ -888,7 +894,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence without r
         try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
         try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
         const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
-        try std.testing.expectEqualStrings("evaluation-report/v2", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings("evaluation-report/v3", encoded.get("schema").?.string);
         try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("judgment_diagnostic").?.object.get("reason").?.string);
         const markdown = try reports.markdown(a, report);
         try std.testing.expect(std.mem.indexOf(u8, markdown, "No quality score") != null);

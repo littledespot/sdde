@@ -1,5 +1,5 @@
 {
-  "schema": "evaluation-case/v1",
+  "schema": "evaluation-case/v2",
   "id": "wf-002-loan-renewal-spec",
   "sources": [
     {
@@ -7,5 +7,10 @@
       "path": "test/e2e/wf-002-loan-renewal/stories.md"
     }
   ],
-  "rubric": "test/e2e/wf-002-loan-renewal/rubric.json"
+  "rubric": "test/e2e/wf-002-loan-renewal/rubric.json",
+  "grading_qualification": {
+    "panel": "test/integration/fixtures/wf-002-loan-renewal/calibration/panel.json",
+    "review": "test/integration/fixtures/wf-002-loan-renewal/calibration/human-review.json",
+    "qualification": "test/integration/fixtures/wf-002-loan-renewal/calibration/qualification.json"
+  }
 }

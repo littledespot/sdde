@@ -130,7 +130,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v3" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v4" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;

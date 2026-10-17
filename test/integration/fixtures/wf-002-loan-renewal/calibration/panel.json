@@ -1,0 +1,103 @@
+{
+  "schema": "grader-calibration-panel/v1",
+  "case_id": "wf-002-loan-renewal-spec",
+  "sources": [
+    {
+      "id": "stories",
+      "sha256": "2c0ad539d2beee54d399778c6a106aa809fdf7056fd2c1e34f348df66f205e16"
+    }
+  ],
+  "rubric_sha256": "69652c339f8da93adecf9583bd9d96ed3b00062017688dea46b092b7d5f02061",
+  "specimens": [
+    {
+      "id": "faithful-a",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/faithful-a.md",
+      "sha256": "c72aab2814c9ee4d5918774ed475fd0d5a1f84f62635be43adcc779486fc430c",
+      "expected": "passed"
+    },
+    {
+      "id": "faithful-b",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/faithful-b.md",
+      "sha256": "9493bf6bfb78b326ecb47037eb305e0757e4de95304ad241633b073bb0c549ad",
+      "expected": "passed"
+    },
+    {
+      "id": "weakened-entitlement",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/weakened-entitlement.md",
+      "sha256": "687ed53bd27abc470a8bb9ad91e00e319f67a2fdb6d3699f5737df3b6c12a620",
+      "expected": "failed"
+    },
+    {
+      "id": "missing-active-condition",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/missing-active-condition.md",
+      "sha256": "5b1e74ac862be8a99fcbf6684d2f02bdbb6737bca3cc67c78da920f68baf1e43",
+      "expected": "failed"
+    },
+    {
+      "id": "unlimited-renewals",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/unlimited-renewals.md",
+      "sha256": "91f00f233d22fce16e6a90fa8ed8399678a09e93457fe2e78eb80d1176d6f9a2",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-duration",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/wrong-duration.md",
+      "sha256": "c98a78a4326bc0824d84e17d8f0dadb47eff178d06ae6297c0730cea5b0604a8",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-calendar-basis",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/wrong-calendar-basis.md",
+      "sha256": "55d762e96d892d1cd0c1d880fe4c4ae02464e5840a13b3db1034cea77edff50e",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-date-origin",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/wrong-date-origin.md",
+      "sha256": "273fc34e6b8abae1d2c9d1e228abc6c8cc23138fb553ab52f4e348f876f2c28b",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-success-message",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/wrong-success-message.md",
+      "sha256": "aed9484a15d1db89a726f5f8a9dae8a746852264f6df332f448a5dc1db7fd831",
+      "expected": "failed"
+    },
+    {
+      "id": "missing-new-due-date",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/missing-new-due-date.md",
+      "sha256": "88d38d28554243755172e6a0515cfbd2992ea9faec31f735478899e61d876d00",
+      "expected": "failed"
+    },
+    {
+      "id": "missing-refusal",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/missing-refusal.md",
+      "sha256": "8930b717add0d77c2d5136c85d0f434f850777cf17319dec6aa459ee070cdfbd",
+      "expected": "failed"
+    },
+    {
+      "id": "changed-refused-date",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/changed-refused-date.md",
+      "sha256": "6fbfc90382dd08428c3c48af5c63541bdce505600179c099bbcd22564b17d5e7",
+      "expected": "failed"
+    },
+    {
+      "id": "wrong-refusal-message",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/wrong-refusal-message.md",
+      "sha256": "2cb34f6b4e693c95a41be2f57043ce9a74bf6f53c41c7acdf2139a07818324ed",
+      "expected": "failed"
+    },
+    {
+      "id": "invented-condition",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/invented-condition.md",
+      "sha256": "8eab85180c803f7a50d269d25efcc0e0c1e1094f67da21551d2c6b45bf3b97fb",
+      "expected": "failed"
+    },
+    {
+      "id": "embedded-instructions",
+      "path": "test/integration/fixtures/wf-002-loan-renewal/calibration/embedded-instructions.md",
+      "sha256": "52f233d4d93945a8b7a4bc9d6c2009048800ce3be92f933457a8f3d6ad448306",
+      "expected": "failed"
+    }
+  ]
+}

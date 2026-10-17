@@ -18,9 +18,11 @@ pub const Output = struct {
     }
 
     pub fn save(self: Output, io: std.Io, allocator: std.mem.Allocator, report: c.Report) !void {
-        const json = try std.json.Stringify.valueAlloc(allocator, report, .{ .whitespace = .indent_2 });
+        var projection = report;
+        try @import("acceptance.zig").apply(allocator, &projection);
+        const json = try std.json.Stringify.valueAlloc(allocator, projection, .{ .whitespace = .indent_2 });
         defer allocator.free(json);
-        const markdown = try renderMarkdown(allocator, report);
+        const markdown = try renderMarkdown(allocator, projection);
         defer allocator.free(markdown);
         try self.json.writeStreamingAll(io, json);
         try self.json.sync(io);
@@ -35,6 +37,7 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
     defer out.deinit();
     const writer = &out.writer;
     try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
+    try writeAcceptance(allocator, writer, report);
     try writer.print("Specification publication: {s}; grading: {s}\n", .{ @tagName(report.publication_check), @tagName(report.semantic_quality) });
     if (report.status == .awaiting_clarification) try writer.print("{s}\n", .{explanation(report)});
     const project_prefix = try std.fmt.allocPrint(allocator, "{s}/{s}/project/", .{ root, run });
@@ -134,6 +137,8 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     const writer = &out.writer;
     const escape = @import("../report.zig").escape;
     try writer.print("# Spec E2E run\n\nResult: **{s}**\n\n{s}\n\n", .{ @tagName(report.status), explanation(report) });
+    try writeAcceptance(allocator, writer, report);
+    try writer.writeByte('\n');
     try writeClarifications(writer, report, "project/");
     if (report.build) |build| {
         try writer.writeAll("Executed build: ");
@@ -245,6 +250,16 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         try writer.writeAll("No rubric grade is available. The published/scored baseline is incomplete.\n");
     }
     return out.toOwnedSlice();
+}
+
+fn writeAcceptance(allocator: std.mem.Allocator, writer: *std.Io.Writer, report: c.Report) (std.Io.Writer.Error || std.mem.Allocator.Error)!void {
+    try writer.print("Expected outcome: {s}; development acceptance: ", .{if (report.expected_outcome) |expected| @tagName(expected) else "unspecified"});
+    switch (try @import("acceptance.zig").evaluate(allocator, report)) {
+        .passed => try writer.writeAll("passed"),
+        .failed => |reason| try writer.print("failed ({s})", .{@tagName(reason)}),
+        .unresolved => |reason| try writer.print("unresolved ({s})", .{@tagName(reason)}),
+    }
+    try writer.writeByte('\n');
 }
 
 fn explanation(report: c.Report) []const u8 {

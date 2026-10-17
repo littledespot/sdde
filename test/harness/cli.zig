@@ -5,6 +5,8 @@ const files = @import("files.zig");
 const configuration = @import("configuration.zig");
 const environment = @import("environment.zig");
 const reports = @import("report.zig");
+const qualification = @import("grader_qualification.zig");
+const gate = @import("acceptance_gate.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
 pub const Options = struct { case: []const u8, spec: []const u8, config: []const u8, output: []const u8 };
 pub fn parse(args: []const []const u8) error{InvalidArguments}!Options {
@@ -65,6 +67,7 @@ pub fn main(init: std.process.Init) !void {
         .execution_id = null,
         .models = &.{},
     }) catch return fail(io, "Invalid or unavailable case, rubric, source or specification. No API call made.");
+    const grader = try qualification.inspect(io, a, .cwd(), inputs.case.grading_qualification, inputs.case, inputs.rubric_bytes, inputs.sources, config);
     const output = directories.open(io, .cwd(), options.output) catch return fail(io, "Output must be an existing safe directory. No API call made.");
     defer output.close(io);
     // Exclusive new reports cannot overwrite source/spec/clarification files.
@@ -79,7 +82,17 @@ pub fn main(init: std.process.Init) !void {
     const evidence_dir = try directories.open(io, output, id);
     defer evidence_dir.close(io);
     const store: @import("evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_dir, .secrets = &.{key} };
-    const result = @import("live.zig").run(io, a, config, key, inputs, store) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    var result = @import("live.zig").run(io, a, config, key, inputs, store) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    result.grader_qualification = grader;
+    if (result.outcome == .evaluated) {
+        // Supplied artifacts do not prove their generator identity. Calibration
+        // retains raw judgments while acceptance remains explicitly unresolved.
+        result.acceptance = gate.from(inputs.rubric, result.outcome.evaluated, .unknown_generation, if (grader == .qualified) .qualified else .unresolved);
+    }
+    if (!try unchanged(io, a, options, inputs, config_bytes, config, grader)) {
+        result.acceptance.qualification = .unresolved;
+        result.acceptance.decision = .{ .unresolved = .input_changed };
+    }
     try json_file.writeStreamingAll(io, try reports.json(a, result));
     try json_file.sync(io);
     try md_file.writeStreamingAll(io, try reports.markdown(a, result));
@@ -88,8 +101,29 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.File.stdout().writeStreamingAll(io, message);
     switch (result.outcome) {
         .evaluator_error => std.process.exit(1),
-        .evaluated => |value| if (value.assessment != .scored) std.process.exit(2),
+        .evaluated => switch (result.acceptance.decision) {
+            .passed => {},
+            .failed => std.process.exit(1),
+            .unresolved => std.process.exit(2),
+        },
     }
+}
+fn unchanged(io: std.Io, a: std.mem.Allocator, options: Options, inputs: c.Capture, config_bytes: []const u8, config: configuration.Config, grader: qualification.Evidence) !bool {
+    const current = files.capture(io, a, .cwd(), options.case, options.spec, inputs.evaluation_id, inputs.generation) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    const current_grader = qualification.inspect(io, a, .cwd(), current.case.grading_qualification, current.case, current.rubric_bytes, current.sources, config) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    const current_config = files.read(io, a, .cwd(), options.config) catch |err| return switch (err) {
+        error.OutOfMemory, error.Cancelled => err,
+        else => false,
+    };
+    return std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, current, .{}), try std.json.Stringify.valueAlloc(a, inputs, .{})) and
+        std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, grader, .{}), try std.json.Stringify.valueAlloc(a, current_grader, .{})) and
+        std.mem.eql(u8, config_bytes, current_config);
 }
 fn fail(io: std.Io, message: []const u8) !void {
     try std.Io.File.stderr().writeStreamingAll(io, message);

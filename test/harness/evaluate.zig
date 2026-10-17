@@ -95,5 +95,5 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
         outcome = .{ .evaluated = result };
         break;
     }
-    return .{ .capture = capture, .configuration = config, .attempts = try a.dupe(report.Attempt, attempts.items), .outcome = outcome, .judgment_diagnostic = diagnostic };
+    return .{ .capture = capture, .configuration = config, .attempts = try a.dupe(report.Attempt, attempts.items), .outcome = outcome, .judgment_diagnostic = diagnostic, .protocol_sha256 = try @import("packet.zig").protocolSha256(a) };
 }
