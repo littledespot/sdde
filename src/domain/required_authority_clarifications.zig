@@ -14,7 +14,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
             .clarification_required => |value| value,
             .upstream_rework_required => |value| .{ .owner = value.owner, .reason = value.reason },
             .administrative_block => return error.InvalidRequiredAuthority,
-            .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
+            .assessment_complete, .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => continue,
         };
         const registered = a.policy(entry.requirement) orelse return error.InvalidRequiredAuthority;
         if (registered.owner != gap.owner or entry.input_authorities.len == 0) return error.InvalidRequiredAuthority;
@@ -30,6 +30,9 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
         defer citations.deinit(allocator);
         for (inputs.evidence) |evidence| {
             if (!std.meta.eql(evidence.requirement, entry.requirement) or evidence.finding == .supported) continue;
+            // Advice cannot supply the question for an independently detected
+            // authority gap. Its narrative retains no clarification authority.
+            if (evidence.resolution == .assessment) continue;
             if (evidence.review) |review| {
                 if (!c.validText(review.detail, c.max_text_bytes)) return error.InvalidRequiredAuthority;
                 if (review.principle_registry == null) {
@@ -59,7 +62,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
         };
         // A descriptor can phrase a mechanically missing decision, but cannot
         // manufacture a question for an unresolved semantic assessment.
-        if (questions.items.len == 0 and inputs.projection != .principle_assessment) switch (gap.reason) {
+        if (questions.items.len == 0) switch (gap.reason) {
             .missing, .stale => {},
             else => return error.InvalidRequiredAuthority,
         };

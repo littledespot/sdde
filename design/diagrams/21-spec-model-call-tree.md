@@ -43,7 +43,7 @@ flowchart LR
     ROOT --> VALIDATE_RC["validate-reconciliation"]
     VALIDATE_RC -. "Invalid global candidate" .-> RC_REPAIR
 
-    ROOT -. "Source readiness requires review,<br/>or preservation check enabled" .-> SOURCE["review-source"]
+    ROOT -. "Readiness or pending repair requires review,<br/>or preservation check enabled" .-> SOURCE["review-source"]
     SOURCE --> SUPPORT["review-source-support<br/>See generation and review tree"]
     ROOT -. "Source-authority gate selects repair" .-> UPSTREAM["Source omission repair"]
     UPSTREAM --> SOURCE_EX["repair-source-extraction<br/>model-request-with-context<br/>repair-prompt"]
@@ -68,6 +68,11 @@ projections and reciprocal relationships. Summary partitions finish before the
 global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
 extracted claims and hierarchy.
+
+A source repair retains its original required readiness/preservation purpose in
+the native retry scope. Its pending review runs even if repaired references are
+generation-ready and optional preservation is disabled. Generation initialization
+rejects active repair obligations; post-generation advice cannot settle them.
 
 Empty token collections and classifications forced by `no_feature_claim` are
 constructed natively; positive token-only extraction still needs semantic
@@ -99,8 +104,10 @@ select their distinct question-eligible groups. Native admission derives require
 `source_group_ids`, complete claim unions and exact lineage. Records retain one
 native-bound group and return content only. No role-classifier call or mandatory
 role-prebinding gate remains. Invalid or stale native authority blocks without
-fabricating a user information gap; semantic support and authored meaning still
-require review and separate live qualification.
+fabricating a user information gap. Post-generation source and principle reviews
+retain semantic findings as advice under
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md); they do not prove
+semantic support or authorize content repair.
 
 ```mermaid
 flowchart LR
@@ -118,40 +125,40 @@ flowchart LR
     CANDIDATE -. "Selected principle spans apply" .-> POLICY["policy: assess-support<br/>principle-prompt"]
     ROOT -. "Pre-generation source review" .-> PRE["assess-source: review-source-support<br/>support-prompt"]
 
-    SOURCE --> SUPPORT["Source review loop<br/>Repeat for each pending native assignment"]
+    SOURCE --> REUSE["Source-only native reuse eligibility<br/>Complete current assignment + original accepted call"]
+    PRE --> REUSE
     POLICY --> FINDING
-    PRE --> SUPPORT
-    SUPPORT --> REUSE["Source-only native reuse eligibility<br/>Complete current assignment + original accepted call"]
     REUSE -- "Unchanged eligible source receipt" --> RETAIN["Native re-admission<br/>Original finding/origin; no model call"]
-    REUSE -- "Changed, excluded or policy assignment" --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per focused subject;<br/>1 source call for 3 AC-record field findings"]
-    RETAIN --> SUPPORT
-    SUPPORT -. "Source finding needs omission localization" .-> LOSS["loss-model<br/>loss-prompt<br/>1 complete comparison per omission;<br/>serial canonical order"]
-    SUPPORT -. "Review validation authorizes repair" .-> SUPPORT_REPAIR["repair<br/>Assigned support or principle prompt<br/>Authorized finding repair"]
-
-    REVIEW -. "Source-backed candidate omission" .-> OMISSION["repair-omission<br/>repair-prompt<br/>Generation schema; then reassemble and review"]
-    ROOT -. "Review returns upstream rework" .-> UPSTREAM["repair-upstream"]
-    UPSTREAM --> EX["repair-source-extraction<br/>model-request-with-context<br/>repair-prompt"]
-    UPSTREAM --> RC["repair-source-candidate<br/>repair-prompt<br/>Reconciliation schema"]
+    REUSE -- "Changed or excluded assignment" --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per native business unit or collection;<br/>focused duties before generation"]
+    PRE -. "Pre-generation omission requires attribution" .-> LOSS["loss-model<br/>loss-prompt<br/>Complete producer comparisons;<br/>pre-generation only"]
+    SOURCE -. "Invalid review data" .-> SUPPORT_REPAIR["repair<br/>Assigned support or principle prompt<br/>Authorized finding metadata correction"]
+    POLICY -. "Invalid review data" .-> SUPPORT_REPAIR
+    PRE -. "Invalid review data" .-> SUPPORT_REPAIR
 
     classDef model fill:#dbeafe,stroke:#2563eb,color:#111827;
     classDef repair fill:#ffedd5,stroke:#ea580c,color:#111827;
     class BRIEF,STORY,ENTITIES,RECORDS,FINDING,LOSS model;
-    class UNIT_REPAIR,SUPPORT_REPAIR,OMISSION,EX,RC repair;
+    class UNIT_REPAIR,SUPPORT_REPAIR repair;
 ```
 
 Record-group assignments enumerate complete active reconciled groups; one group
 may produce several specification records or none. Empty output advances the native
-cursor but cannot bypass aggregate coverage, required families or semantic review. Review subjects come
+cursor but cannot bypass aggregate coverage, required families or review completion. Review subjects come
 from the shared required-authority ledger. Empty principle selection requires no
-principle model call. Repairs and upstream rebuilding can cause renewed review
-or reconciliation calls; they do not independently commit a unit.
+principle model call. Pre-generation source repair can rebuild reconciliation;
+native generation validation can repair its authorized unit. Once generation has
+started, source-omission authorization, packet construction and merge reject with
+a typed phase error. A custom YAML route cannot reopen consumed source authority.
+Post-generation semantic findings cause no localization, source rebuilding,
+generated-content repair, mandatory Plan obligation or clarification.
 
 Phase 6 retains only clean admitted source assignments with unchanged complete
 packet, native requirements/applicability, sources, schema, guidance and model
-settings in the same execution. An AC receipt retains all three findings together.
+settings in the same execution. A receipt retains its complete native assignment.
 The pure reuse operation consumes a finite unchanged prefix, stopping at the first
 assignment that needs a model call. Source and policy loops share one assessment
-body; localization remains source-only, and policy has no reuse transition.
+body; localization remains pre-generation and source-only, and policy has no
+reuse transition.
 Sibling or broad-context changes require new review. Policy review, omissions and
 corrected assignments are reassessed. Historical receipts never satisfy authority;
 the ordinary collector re-admits them against the current revision and full native
@@ -159,41 +166,43 @@ validation still runs. Actual original origins and retry identities survive; no
 request, checkpoint or persisted cache is created. See
 [§22.4](../contracts/22-repair.md#224-repair-request-and-response).
 
-The AC record assignment starts at its native Given requirement and retains one
-finding for each of Given, When and Then. Exact complete membership is checked
-before append, wire order is normalized to native ledger order, and each field
-keeps its own purpose and evidence validation. A record pass cannot replace any
-field finding. The separate AC/scenario collection assessments and all existing
-source-preservation and principle duties remain unchanged. Record protocol
-correction retains the complete assignment; native finding repair still changes
-only its authorized selected field. Batched findings share the actual accepted
-call origin. Multiple omissions retain their own findings and comparison origins;
-each is localized through a complete assignment before the next canonical pending
-omission or review assignment proceeds. These request-count changes grant no new
-repair or clarification permission and do not establish semantic improvement.
+Source and principle reviews use the same native business ownership: one brief
+assignment with its three field findings, one story, one entities decision, one
+complete record with all its fields, and separate acceptance-criteria,
+functional-requirements and scenario collections. Reference duties retain their
+own subjects. Exact complete membership is checked before append, wire order is
+normalized to native ledger order, and every finding retains its purpose and
+evidence validation. A record pass cannot replace a field finding. Protocol
+correction retains the complete assignment; native finding repair changes only
+its authorized invalid metadata. Batched findings share the accepted call origin.
+Post-generation omissions retain their detail without producer localization.
+Pre-generation source-preservation duties and repairs remain authoritative. These
+request-count changes do not establish semantic improvement.
 
 The `model-request-with-context` subgraph retains the workflow-selected context
-for extraction repairs and specification authoring. Generation, native unit repair
-and reviewed omission repair use one shared `generation-context` resource. It explains
+for extraction repairs and specification authoring. Generation and native unit
+repair use one shared `generation-context` resource. It explains
 ordered text fragments and literal insertion; the selected schema still defines
 the response shape. Story purpose comes from the shared native requirement descriptions.
 Brief and story packets contain source evidence without sibling drafts; entities
 receive the brief, and record requests receive the brief and entity decision.
 Authoring purposes include resolved bound requirements; other eligible meanings
 remain context and full source text stays available. Exact-reference bookkeeping
-is native, including construction of a sole eligible occurrence's handle.
+is native: raw prose is recognized against current eligible occurrence scope;
+the model cannot select exact-copy nodes or extend its fixed source selection.
 Native repairs use the repair prompt and their authorized purpose/task. Corrections
 retain the active context, prompt and dynamic input.
 
-Source review resolves the selected feature/record field or native signal while
-retaining original-source evidence. Producer localization carries the fixed
-finding and reconstruction evidence under its separate assignment. Native ID
+Source review assesses the selected feature/record field or native signal while
+retaining original-source evidence. Before generation, producer localization
+carries the fixed finding and reconstruction evidence under its separate
+assignment. Native ID
 eligibility narrows initial, composition and repair schemas at the shared result
 schema owner; protocol corrections retain the same selected schema. Membership
 restriction does not replace semantic judgment or native evidence validation.
 
-Coverage repair, authority gates, clarification forms, rendering and publication
-are deterministic in this YAML and do not add model requests.
+The mechanical coverage blocker, authority gates, clarification forms, rendering
+and publication are deterministic in this YAML and do not add model requests.
 
 ## Shared model-request execution
 
@@ -230,6 +239,6 @@ invalid outcomes remain distinct. Model-assisted review is candidate evidence,
 not deterministic semantic proof.
 
 The call counts shown in the trees exclude protocol retries, authorized repairs,
-localization and repeated work after upstream renewal. There is no fixed total
-for the workflow. The configured `spec_generation` and `repair` slots select
+pre-generation localization and repeated work after pre-generation source repair.
+There is no fixed total for the workflow. The configured `spec_generation` and `repair` slots select
 models; a slot name does not imply a single call.

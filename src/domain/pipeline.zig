@@ -158,7 +158,6 @@ pub const DataKey = enum {
     specification_support_review,
     specification_review_history,
     specification_support_repair,
-    specification_omission_repair,
     source_omission_repair,
     specification_document,
     rendered_specification,

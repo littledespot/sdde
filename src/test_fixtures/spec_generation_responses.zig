@@ -30,7 +30,7 @@ pub const applicability_detail = "The source requires a displayed value. Its ori
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
 pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
-pub const LossControl = enum { false_candidate, uncertain, unbound_association };
+pub const AdvisoryControl = enum { false_omission, inconclusive, unsupported, ambiguous, conflicting, candidate_invalid, unbound_association };
 pub const RecordReviewControl = enum { two_omissions, invalid_middle };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
@@ -52,10 +52,9 @@ pub const Options = struct {
     source_gaps: bool = false,
     evidence_fault: ?enum { recover, empty_correction } = null,
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
-    story_omission: ?enum { recover, invalid_repair, recurring } = null,
-    loss_control: ?LossControl = null,
+    story_omission: ?enum { missing, false_positive, multiple } = null,
+    advisory_control: ?AdvisoryControl = null,
     record_review: ?RecordReviewControl = null,
-    omission_merges: usize = 0,
     extraction_omission: bool = false,
     text_fault: bool = false,
     failed_text_repair: bool = false,
@@ -382,34 +381,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             } else return error.InvalidFixture;
             const value = try attributed(allocator, all, &.{first});
             if (request.id().purpose == .atomic_repair) {
-                const omission_schema = @import("../application/specification_omission_repair_workflow.zig").schema;
-                if (view.contains(omission_schema.key)) {
-                    const state = try @import("../application/specification_values.zig").storage.read(&view, omission_schema, .omission_repair);
-                    if (state.authorization.target.part == .value) {
-                        if (options.record_review == .two_omissions) {
-                            const field = state.authorization.target.part.value.field;
-                            const replacement: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = switch (field) {
-                                .given => "An eligible loan has no reservation.",
-                                .then => "The return deadline is extended by seven days.",
-                                else => return error.UnexpectedScriptedRepair,
-                            } } }} };
-                            return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, replacement) });
-                        }
-                        const mode = options.story_omission orelse return error.UnexpectedScriptedRepair;
-                        const replacement = if (mode == .invalid_repair)
-                            g.spec.BusinessValue{ .segments = &.{.{ .literal = .{ .value = " " } }} }
-                        else
-                            try storyValue(allocator, all, mode == .recover, options.omission_merges + 1);
-                        return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, replacement) });
-                    }
-                    const kind = try @import("../domain/specification_coverage_repair.zig").omissionRecordKind(state.authorization.rule.omission.requirement);
-                    const replacement: g.spec.Wire.RecordProposal = .{ .content = switch (kind) {
-                        .functional_requirement => .{ .functional_requirement = .{ .text = value.value } },
-                        .acceptance_criterion => .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } },
-                        else => return error.UnexpectedScriptedRepair,
-                    } };
-                    return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, replacement.content) });
-                }
                 if (view.contains(.specification_repair_authorization)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
                     const auth = state.authorization;
@@ -486,8 +457,8 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     break :result .{ .records = records.items };
                 },
             } };
-            if (unit == .primary_user_story and options.story_omission != null) proposed.content.primary_user_story.value = try storyValue(allocator, all, options.loss_control == .false_candidate, 0);
-            if (unit == .primary_user_story and options.loss_control == .unbound_association) {
+            if (unit == .primary_user_story and options.story_omission != null) proposed.content.primary_user_story.value = try storyValue(allocator, all, options.advisory_control == .false_omission or options.story_omission == .false_positive);
+            if (unit == .primary_user_story and options.advisory_control == .unbound_association) {
                 // This explicit fake selects the supplied literal occurrence,
                 // leaving the behavioral group available but unassociated. It
                 // exercises denied association rebuilding, not native support
@@ -523,11 +494,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
         },
         .semantic_review => {
             const workflow = @import("../application/specification_support_workflow.zig");
+            const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
             const progress = try workflow.progress(&view);
             if (workflow.purpose(progress) == .principles) {
                 const policy_inputs = try workflow.inputs(&view, progress);
                 const policy = @import("../domain/specification_support.zig").Contract(.principles);
-                const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, policy_inputs, try policy.nextSubject(allocator, policy_inputs, try workflow.prior(.principles, progress)));
                 const findings = try allocator.alloc(policy.Finding, policy_inputs.seeds.len);
                 const id = policy_inputs.principle_context.?.selection.chunks[0];
                 for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (options.principle_conflict and index == 0) .conflicting else .compatible, .citations = if (options.principle_conflict and index == 0) &.{.{ .chunk = .{ .ordinal = 999 }, .first_line = 1, .last_line = 1 }} else &.{}, .detail = if (options.principle_conflict and index == 0) (if (options.applicability != null) "The output-only policy conflicts with the additional source-required output; Plan must resolve it." else "The business retention requirement conflicts with policy; Plan must resolve it.") else "" } };
@@ -550,18 +521,17 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         };
                         return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .selection = .{ .citations = citations } });
                     }
-                    return @import("../domain/model_candidate_json.zig").encode(policy.Value, allocator, findings[selected_index].value);
+                    return encodePrincipleAssignment(allocator, packet, findings);
                 }
                 if (request.id().purpose == .atomic_repair) {
                     if (options.attempt == 1) return "{}";
                     return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_support_repair.zig").Contract(.principles).Replacement, allocator, .{ .selection = .{ .citations = &.{.{ .chunk = id, .first_line = 1, .last_line = 1 }} } });
                 }
-                return @import("../domain/model_candidate_json.zig").encode(policy.Value, allocator, findings[selected_index].value);
+                return encodePrincipleAssignment(allocator, packet, findings);
             }
             const inputs = try @import("../application/required_authority_values.zig").read(&view, @import("../application/required_authority_workflow.zig").inputs_schema, .inputs);
             const ledger = try a.build(allocator, inputs);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
-            const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
             if (options.evidence_fault == .empty_correction and options.attempt > 1) return "{}";
             if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "preservation_comparisons")) {
                 const prior = try workflow.prior(.source, progress);
@@ -572,25 +542,10 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 };
                 const ordinal = candidate.pending_localization orelse return error.InvalidFixture;
                 const id = ledger.requirements[ordinal - 1].seed.id;
-                const location: @import("../domain/source_omission.zig").Location = if (options.loss_control) |control| switch (control) {
-                    .false_candidate => .{ .candidate = .{} },
-                    .uncertain => .{ .unlocalized = .{} },
-                    .unbound_association => .{ .source_association = id },
-                } else if (falseConflict(options.source_loss) and id.unit == .conflict)
+                const location: @import("../domain/source_omission.zig").Location = if (falseConflict(options.source_loss) and id.unit == .conflict)
                     .{ .reconciliation_conflict = id.unit.conflict }
                 else if (options.source_loss) |mode|
                     try fixtureLoss(&view, inputs, context, mode)
-                else if (options.candidate_omissions != null) absent: {
-                    // These controls remove the entire assigned family. No
-                    // authored member remains to authorize a content insertion;
-                    // the absent association is explicit, not a candidate-local
-                    // repair inferred from the formerly prebound role.
-                    const groups = try @import("../domain/source_omission_binding.zig").authoredGroupIds(allocator, inputs, id);
-                    defer allocator.free(groups);
-                    if (groups.len != 0) return error.InvalidFixture;
-                    break :absent .{ .source_association = id };
-                } else if (options.story_omission != null or options.record_review == .two_omissions)
-                    .{ .candidate = .{} }
                 else
                     .{ .unlocalized = .{} };
                 return @import("source_omission_evidence.zig").encode(allocator, try @import("../domain/specification_support.zig").Source.comparisonAssignment(allocator, inputs, context, candidate), location);
@@ -599,7 +554,8 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const findings = try allocator.alloc(@import("../domain/specification_support.zig").Source.Finding, ledger.requirements.len);
             for (ledger.requirements, findings, 0..) |requirement, *finding, index| {
-                const eligible = try @import("../domain/specification_support_evidence.zig").choices(allocator, inputs.references.?, requirement.seed.id);
+                const required = try @import("../domain/specification_support_evidence.zig").requirements(allocator, inputs, context.inputs, requirement.seed.id);
+                const eligible = required.eligible_claim_ids;
                 var selected: g.spec.Selection = .{ .claim_ids = if (eligible.len == 0) &.{} else eligible[0..1], .clarification_response_ids = &.{} };
                 if (inputs.brief) |brief| if (requirement.seed.id.unit == .feature) {
                     selected = switch (requirement.seed.id.slot) {
@@ -634,22 +590,28 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     else => {},
                 }
                 const uncertain = options.uncertain or (options.brief_uncertain and inputs.brief != null and requirement.seed.id.slot == .description);
-                const bound = try @import("../domain/specification_support_evidence.zig").expectedProvenance(allocator, inputs, context.inputs, requirement.seed.id);
-                const unbound = eligible.len != 0 and bound == null and (requirement.seed.id.unit == .feature or requirement.seed.id.unit == .record);
+                const source_only = required.positive_evidence == .original_sources;
+                const source_positive = source_only and required.eligible_source_ids.len != 0;
+                if (source_only) selected = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} };
+                const unbound = (source_only and !source_positive) or (!source_only and eligible.len != 0 and required.supported_provenance == null and (requirement.seed.id.unit == .feature or requirement.seed.id.unit == .record));
                 const conflict = requirement.seed.id.unit == .conflict or ((eligible.len == 0 or unbound) and context.references.records.conflicts.len != 0);
                 const omission_kind: ?g.spec.Kind = switch (requirement.seed.id.slot) {
                     .functional_requirements => .functional_requirement,
                     .acceptance_criteria => .acceptance_criterion,
                     else => null,
                 };
-                const story_omitted = options.story_omission != null and inputs.specification != null and requirement.seed.id.slot == .primary_user_story and
-                    (options.story_omission != .recover or options.omission_merges == 0);
+                const story_omitted = options.story_omission != null and inputs.specification != null and
+                    (requirement.seed.id.slot == .primary_user_story or (options.story_omission == .multiple and requirement.seed.id.slot == .primary_goal));
                 const omission = story_omitted or (if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false);
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .missing_obligation = if (omission and !conflict) context.inputs.corpus.sources[0].bytes else null, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
+                if (source_positive and finding.value.kind == .supported) {
+                    finding.value.source_ids = required.eligible_source_ids[0..1];
+                    finding.value.detail = "The original source establishes the required readiness fact.";
+                }
                 if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (options.record_review) |control| if (requirement.seed.id.unit == .record and requirement.seed.id.unit.record.kind == .acceptance_criterion and requirement.seed.id.unit.record.ordinal == 1) {
                     switch (control) {
-                        .two_omissions => if ((requirement.seed.id.slot == .given and options.omission_merges == 0) or (requirement.seed.id.slot == .then and options.omission_merges < 2)) {
+                        .two_omissions => if (requirement.seed.id.slot == .given or requirement.seed.id.slot == .then) {
                             finding.value = .{
                                 .kind = .candidate_omission,
                                 .provenance = selected,
@@ -662,6 +624,26 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             finding.value.detail = "Invalid\x01detail";
                         },
                     }
+                };
+                if (options.advisory_control) |control| if (inputs.specification != null and requirement.seed.id.slot == .primary_user_story) {
+                    finding.value = .{
+                        .kind = switch (control) {
+                            .false_omission, .unbound_association => .candidate_omission,
+                            .inconclusive => .inconclusive,
+                            .unsupported => .unsupported,
+                            .ambiguous => .ambiguous,
+                            .conflicting => .conflicting,
+                            .candidate_invalid => .candidate_invalid,
+                        },
+                        .provenance = selected,
+                        .source_ids = &.{context.inputs.corpus.sources[0].id},
+                        .missing_obligation = if (control == .false_omission or control == .unbound_association) context.inputs.corpus.sources[0].bytes else null,
+                        .question = switch (control) {
+                            .unsupported, .ambiguous, .conflicting => "Which renewal behavior is intended? State the action and deadline.",
+                            else => null,
+                        },
+                        .detail = "MOCK post-generation semantic judgment; no native defect is established.",
+                    };
                 };
                 if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
                     finding.value.kind = .candidate_omission;
@@ -843,7 +825,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             const model = @import("../domain/specification_support_model.zig");
             const admission = @import("../domain/specification_support_evidence.zig");
-            if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings")) {
+            if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "assignment_findings")) {
                 var projected = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
                 defer projected.deinit();
                 const assigned = projected.value.object.get("requirements").?.array.items;
@@ -860,6 +842,20 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
         },
         else => return error.InvalidFixture,
     }
+}
+fn encodePrincipleAssignment(allocator: std.mem.Allocator, packet: *const @import("../domain/model_input_packet.zig").Packet, findings: []const @import("../domain/specification_support.zig").Contract(.principles).Finding) ![]const u8 {
+    const policy = @import("../domain/specification_support.zig").Contract(.principles);
+    const codec = @import("../domain/model_candidate_json.zig");
+    if (!std.mem.eql(u8, packet.resultDefinition().?.bytes, "principle_assignment_findings")) return error.InvalidFixture;
+    var parsed = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
+    defer parsed.deinit();
+    const assigned = parsed.value.object.get("requirements").?.array.items;
+    const batch = try allocator.alloc(policy.Finding, assigned.len);
+    for (assigned, batch) |requirement, *finding| {
+        const ordinal = std.math.cast(u32, requirement.object.get("ordinal").?.integer) orelse return error.InvalidFixture;
+        finding.* = findings[ordinal - 1];
+    }
+    return codec.encode(struct { findings: []const policy.Finding }, allocator, .{ .findings = batch });
 }
 fn sourceRepairWire(allocator: std.mem.Allocator, inputs: a.Inputs, context: @import("../domain/specification_provenance.zig").Context, authorized: @import("../domain/specification_support_repair.zig").Source.Authorization, replacement: @import("../domain/specification_support_repair.zig").Source.Replacement) ![]const u8 {
     const repair = @import("../domain/specification_support_repair.zig").Source;
@@ -1058,15 +1054,15 @@ fn misboundProjection(comptime T: type, projections: []const T) !r.SignalProposa
 }
 
 // Scripted semantic judgments stay in fake-provider fixtures. The native engine
-// still admits comparisons and authorizes the current story value replacement.
-fn storyValue(allocator: std.mem.Allocator, all: r.Items, repaired: bool, revision: usize) !g.spec.BusinessValue {
+// still validates ordinary candidate data; review has no content-repair authority.
+fn storyValue(allocator: std.mem.Allocator, all: r.Items, complete: bool) !g.spec.BusinessValue {
     var segments: std.ArrayList(r.text.BusinessSegment) = .empty;
-    if (repaired) {
+    if (complete) {
         for (all.entries) |item| {
             if (item.claim.content != .model) continue;
             if (try businessValue(allocator, item.claim)) |value| try segments.appendSlice(allocator, value.segments);
         }
-    } else try segments.append(allocator, .{ .literal = .{ .value = if (revision % 2 == 0) "MOCK kind exact_copy " else "MOCK exact_copy kind " } });
+    } else try segments.append(allocator, .{ .literal = .{ .value = "MOCK kind exact_copy " } });
     for (all.entries) |item| if (item.claim.content == .preserved_token) {
         if (segments.items.len != 0) try segments.append(allocator, .{ .literal = .{ .value = " " } });
         try segments.append(allocator, .{ .exact_copy = .{ .claim_id = item.claim.id } });

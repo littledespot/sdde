@@ -28,7 +28,7 @@ pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more
 fn support(view: *const data.View) operations.Error!loss.Support {
     const review = authority_values.read(view, @import("specification_support_workflow.zig").schema, .support) catch |operation_error| return operation_error;
     if (review != .accepted) return error.OperationExecutionFailed;
-    return .{ .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch |operation_error| return operation_error, .observations = authority_values.read(view, authority.observations_schema, .observations) catch |operation_error| return operation_error, .result = authority_values.read(view, authority.result_schema, .result) catch |operation_error| return operation_error };
+    return .{ .repair_phase = (try @import("specification_generation_facts.zig").read(view)).phase(), .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch |operation_error| return operation_error, .observations = authority_values.read(view, authority.observations_schema, .observations) catch |operation_error| return operation_error, .result = authority_values.read(view, authority.result_schema, .result) catch |operation_error| return operation_error };
 }
 fn facts(view: *const data.View) operations.Error!ex.Facts {
     const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
@@ -54,7 +54,7 @@ pub const Authorize = struct {
         const state = self.action.execute(owner.arena.allocator(), current, try parsed(&input.step.data), try rec.textContext(&input.step.data)) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             owner.rejection = err;
-            owner.payload = .{ .rejected = .{ .reason = if (err == error.UnlocalizedSourceOmission) .unlocalized_omission else .invalid_repair_authority, .support = current.support } };
+            owner.payload = .{ .rejected = .{ .reason = if (err == error.UnlocalizedSourceOmission) .unlocalized_omission else if (err == error.PostGenerationSourceRepairForbidden) .post_generation_source_repair_forbidden else .invalid_repair_authority, .support = current.support } };
             return owned.publish(self.allocator, schema, owner, .invalid) catch |operation_error| operation_error;
         };
         owner.payload = .{ .repair = state };
@@ -95,15 +95,15 @@ pub const Parse = struct {
         return .{ .outcome = .ok, .delta = delta };
     }
 };
-pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope: loss.Scope) type {
+pub fn Merge(comptime kind: enum { extraction, reconciliation }) type {
     return struct {
         pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation, .evidence = .source_omission_repair, .result = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
         pub const Action = switch (kind) {
-            .extraction => if (scope == .references) @import("../actions/reference/merge_source_extraction_repair.zig").Action else @import("../actions/reference/merge_upstream_extraction_repair.zig").Action,
-            .reconciliation => if (scope == .references) @import("../actions/reference/merge_source_reconciliation_repair.zig").Action else @import("../actions/reference/merge_upstream_reconciliation_repair.zig").Action,
+            .extraction => @import("../actions/reference/merge_source_extraction_repair.zig").Action,
+            .reconciliation => @import("../actions/reference/merge_source_reconciliation_repair.zig").Action,
         };
-        pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ if (kind == .reconciliation and scope == .specification) .more else .ok, .failed };
+        pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .failed };
         pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
         pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
         allocator: std.mem.Allocator,
@@ -121,20 +121,7 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope:
             delta.repair_transition = merged.transition(.dependent_review) catch return error.OperationExecutionFailed;
             delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
             for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-            return .{ .outcome = if (kind == .reconciliation and scope == .specification) .more else .ok, .delta = delta };
+            return .{ .outcome = .ok, .delta = delta };
         }
     };
 }
-pub const Check = struct {
-    pub const Action = @import("../actions/reference/check_source_omission.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
-        return .{ .outcome = if (self.action.execute(arena.allocator(), source.*, try support(&input.step.data)) catch |operation_error| return operation_error) .more else .ok, .delta = .{} };
-    }
-};

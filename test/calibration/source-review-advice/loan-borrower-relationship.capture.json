@@ -1,0 +1,104 @@
+{
+  "assignment": {
+    "assessment_scope": {
+      "derived_evidence": "Claims, associations, signals and dispositions are derived evidence. Their omissions or labels do not remove original obligations.",
+      "instruction": "Assess subject.text for its assigned field purpose within subject.record. Sibling fields may supply joint conditions and results; each field need not repeat the whole flow.",
+      "original_sources": "Original sources establish business obligations and unresolved decisions. Candidate assertions cannot establish source requirements."
+    },
+    "subject": {
+      "kind": "candidate_field",
+      "provenance": {
+        "citation_ids": [
+          2
+        ],
+        "claim_ids": [
+          2
+        ],
+        "clarification_response_ids": []
+      },
+      "record": {
+        "id": {
+          "kind": "entity",
+          "ordinal": 2
+        },
+        "proposal": {
+          "content": {
+            "business_meaning": "Represents a library loan record that tracks the borrower, due date, renewal status, and activity state. The entity is used to enforce renewal rules, update due dates, and provide user messages.",
+            "kind": "entity",
+            "name": "Loan",
+            "relationships": [
+              "A Loan is associated with a Borrower",
+              "A Loan has a DueDate",
+              "A Loan has a RenewalStatus"
+            ]
+          },
+          "provenance": {
+            "citation_ids": [
+              2
+            ],
+            "claim_ids": [
+              2
+            ],
+            "clarification_response_ids": []
+          },
+          "source_group_ids": [
+            2
+          ]
+        }
+      },
+      "slot": "relationship",
+      "text": "A Loan is associated with a Borrower"
+    },
+    "task": "entity: A business data concept with its meaning and relationships. relationship: The business relationship to another entity, including its meaning."
+  },
+  "byte_facts": {
+    "missing_obligation": "A Loan is associated with a Borrower",
+    "subject_text": "A Loan is associated with a Borrower",
+    "utf8_bytes_equal": true
+  },
+  "capture": {
+    "evidence": {
+      "context.json": {
+        "bytes": 12298,
+        "path": "zig-out/e2e-spec/2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc/evidence/generation/call-000033/context.json",
+        "sha256": "6eb13c469cb5aaaef73cff95a8edbd77498e6c1ffbc715da006b540389695471"
+      },
+      "model_output.txt": {
+        "bytes": 403,
+        "path": "zig-out/e2e-spec/2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc/evidence/generation/call-000033/model_output.txt",
+        "sha256": "5f728b5164a816cf666f05de4730c7a6ce6c9ee233f306ab3db4f92bdcb53a3e"
+      },
+      "outcome.json": {
+        "bytes": 96,
+        "path": "zig-out/e2e-spec/2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc/evidence/generation/call-000033/outcome.json",
+        "sha256": "6bb88b83c4df3667e234fd429908f33ddf9a5998215cce8b4c0e92681ae1fc76"
+      },
+      "response.json": {
+        "bytes": 1023,
+        "path": "zig-out/e2e-spec/2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc/evidence/generation/call-000033/response.json",
+        "sha256": "4c69bf86fe6c6a5140bdf594178c27270b60d9ccdfd8028b06f211d4cd1cad74"
+      }
+    },
+    "execution_id": "2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc",
+    "modified": false,
+    "physical_call": 33,
+    "source_revision": "dfae95968a555892b0821684c2436229e0b6de5f",
+    "source_sha256": "45646203775fd3598deb9bd6089875250ded59b4928f74b29160e61f1f882529"
+  },
+  "interpretation_limit": "Presence of this exact assertion does not prove it is supported by the source. No alternative semantic verdict is assigned.",
+  "observed_finding": {
+    "detail": "The candidate field states that a Loan is associated with a Borrower, but the source text does not contain any requirement or statement establishing this relationship. The source only specifies renewal rules and messages, with no mention of a borrower association for a Loan entity.",
+    "kind": "candidate_omission",
+    "missing_obligation": "A Loan is associated with a Borrower",
+    "source_ids": [
+      1
+    ]
+  },
+  "original_source": {
+    "id": 1,
+    "text": "# Library Loan Renewal\n\n## Requirements\n\n- A borrower must be able to renew an active loan that has not previously been renewed.\n- Successful renewal must extend the existing due date by fourteen calendar days.\n- After successful renewal, display `Loan renewed!` and the new due date to the borrower.\n- A loan may be renewed only once.\n- Refuse renewal if the loan is inactive or has previously been renewed; leave its due date unchanged and display `Renewal refused.`.\n",
+    "utf8_sha256": "2c0ad539d2beee54d399778c6a106aa809fdf7056fd2c1e34f348df66f205e16"
+  },
+  "purpose": "Immutable real-capture data for advisory-policy regression. This capture supplies no semantic truth label or runtime authority.",
+  "schema": "captured-source-review-finding/v1"
+}

@@ -265,6 +265,7 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
         .eligible_claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } },
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
         .candidate_bound = true,
     };
@@ -288,6 +289,7 @@ test "D1 source variants require questions only for gaps in focused findings" {
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
         .candidate_bound = false,
     };
@@ -444,6 +446,7 @@ test "focused review evidence shapes follow native minima without excluding sour
         .eligible_claim_ids = &.{.{ .ordinal = 7 }},
         .eligible_source_ids = &.{.{ .ordinal = 7 }},
         .positive_claims = .eligible_subset,
+        .positive_evidence = .bound_claims,
         .supported_provenance = null,
         .candidate_bound = false,
     };

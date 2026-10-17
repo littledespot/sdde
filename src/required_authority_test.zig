@@ -220,8 +220,12 @@ test "Specify projects registered native fields and complete reference obligatio
     const value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} };
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
     const attributed: spec.AttributedValue = .{ .value = value, .source_group_ids = &.{accounted.records.signals[0].id}, .provenance = provenance };
+    const brief: spec.Brief = .{ .title = attributed, .description = attributed, .primary_goal = attributed };
     var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };
-    const empty = try project.execute(allocator, before.feature, accounted, content, null);
+    try std.testing.expectEqual(.source_readiness, before.projection);
+    try std.testing.expectError(error.InvalidRequiredAuthority, project.execute(allocator, before.feature, accounted, content, null));
+    const empty = try project.execute(allocator, before.feature, accounted, content, brief);
+    try std.testing.expectEqual(.specification, empty.projection);
     try std.testing.expectEqual(before.seeds.len, empty.seeds.len);
     const records = try allocator.alloc(spec.IdentifiedRecord, @typeInfo(spec.Kind).@"enum".fields.len);
     inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
@@ -232,7 +236,7 @@ test "Specify projects registered native fields and complete reference obligatio
         records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .source_group_ids = attributed.source_group_ids, .provenance = provenance } };
     }
     content.records = records;
-    const after = try project.execute(allocator, before.feature, accounted, content, null);
+    const after = try project.execute(allocator, before.feature, accounted, content, brief);
     try std.testing.expectEqual(before.seeds.len + 15, after.seeds.len);
     const ledger = try build.execute(allocator, after);
     try std.testing.expectEqual(after.seeds.len, ledger.requirements.len);

@@ -56,6 +56,7 @@ pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.
     return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
 }
 pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
+    if ((content == null) != (brief == null)) return error.InvalidRequiredAuthority;
     const items = references.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
@@ -112,5 +113,5 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
             .input_authorities = sources,
         });
     }
-    return .{ .feature = feature, .projection = .specification, .specification = content, .brief = brief, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
+    return .{ .feature = feature, .projection = if (content == null) .source_readiness else .specification, .specification = content, .brief = brief, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
 }

@@ -318,22 +318,35 @@ pub const Apply = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .required_authority_inputs } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/apply_specification_support.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const reviewed = owned.read(&input.step.data, schema, .support) catch |operation_error| return operation_error;
-        if (reviewed == .accepted and reviewed.accepted.candidate.pending_localization != null) return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .inputs = self.action.execute(reviewed) catch |operation_error| return operation_error };
+        if (reviewed == .accepted and reviewed.accepted.candidate.pending_localization != null) return rejected(self.allocator, owner);
+        owner.payload = .{ .inputs = self.action.execute(reviewed) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidRequiredAuthority => return rejected(self.allocator, owner),
+        } };
         var delta: pipeline.NodeDelta = .{};
         if (input.step.repair_permit) |active| {
-            delta.repair_transition = @import("../domain/specification_coverage_repair.zig").admittedOmissionValidation(owner.arena.allocator(), active, reviewed.accepted) catch |operation_error| return operation_error;
-            if (delta.repair_transition == null)
-                delta.repair_transition = @import("../domain/source_omission.zig").admittedValidation(owner.arena.allocator(), active, reviewed.accepted) catch |operation_error| return operation_error;
+            delta.repair_transition = @import("../domain/source_omission.zig").admittedValidation(owner.arena.allocator(), active, reviewed.accepted) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => return rejected(self.allocator, owner),
+            };
         }
         delta.data_replacements[@intFromEnum(authority.inputs_schema.key)] = values.adopt(self.allocator, authority.inputs_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
+    }
+
+    fn rejected(allocator: std.mem.Allocator, owner: *owned.Owner) operations.Error!execution.Candidate {
+        owner.payload = .{ .rejected = .invalid_contract };
+        owner.rejection = error.InvalidRequiredAuthority;
+        var delta: pipeline.NodeDelta = .{};
+        delta.data_replacements[@intFromEnum(authority.inputs_schema.key)] = try values.adopt(allocator, authority.inputs_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+        return .{ .outcome = .invalid, .delta = delta, .diagnostic = error.InvalidRequiredAuthority };
     }
 };

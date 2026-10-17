@@ -8,6 +8,15 @@
 
 ## Decision
 
+**17 October 2026 amendment:** the user explicitly selected all post-generation
+semantic reviews for the B2/W1 change, including principle findings.
+[ADR 0023](0023-advisory-post-generation-review.md) supersedes promotion of a
+semantic conflict/uncertainty finding into a mandatory Plan obligation. Retain
+complete current assessment and advice; native principle capture, selection,
+citation and currentness checks remain mandatory. Plan still validates current
+policy under its own required authority. This amendment grants no content-repair,
+upstream-rebuild or model-selection permission.
+
 Specify includes a focused requirement–principle consistency assessment using the
 canonical principle capture/selection/guidance contracts. The assessment detects
 conflicts early; principles do not become business-source claims or permission to
@@ -20,11 +29,13 @@ clarification preparation retain separate responsibilities. Reuse the shared
 semantic-request/evidence path; introduce no second principle loader, policy
 registry, summary model or reconciliation mechanism.
 
-Clear business intent with a policy conflict produces a mandatory cited Plan
-obligation. Genuine uncertainty about business intent remains a Spec clarification.
-Plan resolves its policy obligations under current authority before publication;
-early detection neither grants policy approval nor creates a Plan form before its
-required predecessor/input state exists.
+Clear business intent with a model-reported policy conflict remains intact and
+retains the cited finding as advice. The finding alone produces no mandatory Plan
+obligation or Spec clarification. An independently established unresolved
+required decision follows its native clarification owner. Plan validates current
+policy authority before publication; early assessment neither grants policy
+approval nor creates a Plan form before its required predecessor/input state
+exists.
 
 The predecessor gates remain hard requirements: open Spec clarifications prevent
 Plan execution; open Spec or Plan clarifications prevent Tasks execution. Deferring

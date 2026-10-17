@@ -2,6 +2,19 @@
 
 **Status:** Proposed feature design
 
+**17 October 2026 accepted review amendment:**
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) supersedes the
+earlier post-generation semantic omission-repair/upstream-rebuild paths and
+semantic principle-finding-to-Plan-obligation handoff described below. All
+post-generation source/principle findings remain advice. Native assessment
+completion is distinct from semantic support; mandatory current authority,
+provenance, coverage, citation and publication checks remain. Whole canonical
+units/collections retain exact per-member findings and origins. Source repair
+requires a current pre-generation witness at authorization, packet creation and
+merge. Completed/pending state use v16; no compatibility reader is introduced.
+Implementation and required offline validation are complete. Committed-build live
+comparisons remain pending separate approval in [FIX05](../../fixes/FIX05.md).
+
 **Implementation:** The native Specify path publishes validated content and controlled
 generation clarifications. Answer application, feature logging and remaining
 clarification routes are unfinished. Phase 3 repair is verified offline. See

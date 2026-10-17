@@ -2,7 +2,7 @@ const pipeline = @import("../../domain/pipeline.zig");
 const config = @import("../../domain/config.zig");
 
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "check-source-preservation-policy", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "check-source-preservation-policy", .kind = .action, .requires = &.{.citable_reference_inputs}, .produces = &.{}, .side_effect = .none };
 
     pub fn execute(_: Action, policy: *const config.ValidationConfig) @import("../../domain/workflow.zig").OutcomeTag {
         return if (policy.sourcePreservationCheck) .ok else .more;

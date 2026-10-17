@@ -77,20 +77,21 @@ pub fn record(a: std.mem.Allocator, history: History, inputs: authority.Inputs, 
     const origin = Origin.fromAccepted(ledger, proof) orelse return error.InvalidRequiredAuthority;
     const native = try authority.build(a, inputs);
     const definition = packet.resultDefinition() orelse return error.InvalidRequiredAuthority;
-    const grouped = std.mem.eql(u8, definition.bytes, "record_findings");
-    const count: usize = if (grouped) std.meta.fields(@FieldType(@import("specification.zig").Content(@import("specification.zig").BusinessValue), "acceptance_criterion")).len else 1;
+    const grouped = std.mem.eql(u8, definition.bytes, "assignment_findings");
+    const payload = try @import("strict_json.zig").decode(std.json.Value, a, packet.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+    const count: usize = if (grouped) payload.object.get("requirements").?.array.items.len else 1;
     if (count > candidate.review.entries.len) return error.InvalidRequiredAuthority;
     const start = candidate.review.entries.len - count;
     const target = native.requirements[start].seed.id;
     const assigned = if (grouped) try source.assignmentSubjects(a, inputs, target) else try a.dupe(authority.Id, &.{target});
     if (assigned.len != count) return error.InvalidRequiredAuthority;
-    const expected = try source.packetFor(a, inputs, context, if (grouped) .{ .record = target } else .{ .finding = target });
+    const expected = try source.packetFor(a, inputs, context, if (grouped) .{ .assignment = target } else .{ .finding = target });
     defer packets.release(expected);
     if (!std.mem.eql(u8, expected.body(), packet.body()) or !identity.unitOwnerEql(expected.unit(), packet.unit()) or !identity.purposeEqlBounded(expected.purpose(), packet.purpose(), 1)) return error.InvalidRequiredAuthority;
     var prefix = candidate;
     prefix.review.entries = candidate.review.entries[0..start];
     prefix.origins = candidate.origins[0..start];
-    prefix.pending_localization = source.pendingLocalization(prefix.review.entries);
+    prefix.pending_localization = source.pendingLocalization(inputs, prefix.review.entries);
     if (prefix.occurrences.next_ordinal != 0) prefix.occurrences.values = candidate.occurrences.values[0..start];
     const replayed = try source.collectFocused(a, inputs, context, .{ .pending = prefix }, packet, proof.candidate().content(), origin);
     const replayed_candidate = candidateOf(replayed) orelse return error.InvalidRequiredAuthority;
@@ -197,7 +198,7 @@ pub fn reuse(a: std.mem.Allocator, history: History, inputs: authority.Inputs, c
     if (selected_packet != .packet or !std.mem.eql(u8, selected_packet.packet.body(), packet.body())) return error.InvalidRequiredAuthority;
     const native = try authority.build(a, inputs);
     const start = if (prior) |value| value.pending.review.entries.len else 0;
-    const assigned = if (source.assignmentScope(inputs, target) == .record) try source.assignmentSubjects(a, inputs, target) else try a.dupe(authority.Id, &.{target});
+    const assigned = if (source.assignmentScope(inputs, target) == .assignment) try source.assignmentSubjects(a, inputs, target) else try a.dupe(authority.Id, &.{target});
     var remaining = history.receipts.len;
     while (remaining != 0) {
         remaining -= 1;

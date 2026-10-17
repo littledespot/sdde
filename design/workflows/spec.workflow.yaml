@@ -80,10 +80,10 @@ steps:
       failed: end.failed
   source-readiness:
     use: check-specification-source-readiness
-    on: {ok: preservation-policy, blocked: source-requirements, failed: end.failed}
+    on: {ok: preservation-policy, blocked: source-requirements, invalid: end.invalid, failed: end.failed}
   preservation-policy:
     use: check-source-preservation-policy
-    on: {ok: preservation-requirements, more: generate, failed: end.failed}
+    on: {ok: preservation-requirements, more: generate, invalid: end.invalid, failed: end.failed}
   preservation-requirements:
     use: build-source-preservation-requirements
     on: {ok: review-source, blocked: end.blocked}
@@ -99,7 +99,7 @@ steps:
     on: {ok: apply-source, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
   apply-source:
     use: apply-specification-support
-    on: {ok: source-authority, failed: end.failed}
+    on: {ok: source-authority, invalid: end.invalid, failed: end.failed}
   source-authority:
     call: authority-gate
     on:
@@ -111,9 +111,6 @@ steps:
   retire-source-review:
     use: retire-required-authority-projection
     on: {ok: generate, failed: end.failed}
-  repair-upstream:
-    call: repair-upstream
-    on: {ok: rebuild-extraction, more: validate, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
   repair-source:
     use: authorize-source-omission-repair
     on: {ok: repair-extraction, more: repair-reconciliation, invalid: end.invalid, failed: end.failed}
@@ -148,7 +145,6 @@ steps:
     call: review-specification
     on:
       ok: publish
-      more: repair-upstream
       invalid: end.invalid
       needs-user: candidate-gaps
       blocked: end.blocked
@@ -649,7 +645,7 @@ subgraphs:
         on: {ok: advance, more: policy, invalid: end.invalid}
       apply:
         use: apply-specification-support
-        on: {ok: end.ok, failed: end.failed}
+        on: {ok: end.ok, invalid: end.invalid, failed: end.failed}
   review-source-support:
     start: reuse
     steps:
@@ -830,19 +826,9 @@ subgraphs:
       post:
         call: review-candidate
         on: {ok: gate, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
-      omit:
-        call: repair-omission
-        on:
-          ok: assemble-specification
-          invalid: end.invalid
-          failed: end.failed
-          cancelled: end.cancelled
       gate:
         call: authority-gate
-        on: {ok: end.ok, invalid: locate-loss, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
-      locate-loss:
-        use: check-source-omission
-        on: {ok: omit, more: end.more, failed: end.failed}
+        on: {ok: end.ok, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
   publish-specification:
     start: project-document
     steps:
@@ -885,27 +871,6 @@ subgraphs:
       publish-pending-clarifications:
         call: clarification-output
         on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
-  repair-upstream:
-    start: authorize
-    steps:
-      authorize:
-        use: authorize-source-omission-repair
-        on: {ok: ex, more: rc, invalid: end.invalid, failed: end.failed}
-      ex:
-        call: repair-source-extraction
-        on: {ok: merge-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      merge-extraction:
-        use: merge-upstream-extraction-repair
-        with: {retry-limit: 1}
-        on: {ok: end.ok, failed: end.failed}
-      rc:
-        call: repair-source-candidate
-        with: {schema: reconciliation-schema}
-        on: {ok: merge-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      merge-reconciliation:
-        use: merge-upstream-reconciliation-repair
-        with: {retry-limit: 1}
-        on: {more: end.more, failed: end.failed}
   repair-source-extraction:
     start: input
     steps:
@@ -1125,35 +1090,6 @@ subgraphs:
       output:
         call: clarification-output
         on: {ok: end.ok, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed}
-  repair-omission:
-    start: authorize
-    steps:
-      authorize:
-        use: authorize-specification-omission-repair
-        on: {ok: input, invalid: end.invalid, failed: end.failed}
-      input:
-        use: build-specification-omission-repair-input
-        on: {ok: model, failed: end.failed}
-      model:
-        call: model-request-with-context
-        with:
-          slot: repair
-          context: generation-context
-          prompt: repair-prompt
-          schema: generation-schema
-          retry-limit: 1
-        on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      parse:
-        use: parse-specification-omission-repair
-        on: {ok: release, failed: end.failed}
-      release:
-        call: release-request
-        on: {ok: merge, failed: end.failed}
-      merge:
-        use: merge-specification-omission-repair
-        with:
-          retry-limit: 64
-        on: {ok: end.ok, failed: end.failed}
   generation-clarifications:
     start: build-clarification
     steps:

@@ -34,7 +34,9 @@ subsets while retaining complete native collections. The approved FIX03 Phase 5
 authored-association cutover introduced `specification/v3` and
 `specification-state/v13`; the source-finding cutover below advances completed and
 clarification-pending state to `specification-state/v14`; the approved 17 October
-native-recognition amendment advances both variants to `specification-state/v15`.
+native-recognition amendment advanced both variants to `specification-state/v15`.
+The subsequent approved B2/W1 assessment amendment advances both to
+`specification-state/v16` under [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
 It removes persisted presentation roles and stores required `source_group_ids`
 inside attributed values and shared-provenance records, without changing general
 `Selection`/`Provenance` or adding a parallel association registry. Readback resolves
@@ -46,15 +48,14 @@ cannot be repaired by silently substituting a fresh union. Completed readback
 validates captured reconciliation groups and per-unit associations against the
 reference ledger, resolves stored explicit support and exact occurrence handles,
 then recomputes effective claims, citations and source links. It rejects
-inconsistent review or coverage projections. Omission review evidence retains
-the explicit source obligation, its diagnostic explanation, source selection,
-subject and review revision alongside the native assignment, canonical read facts,
-complete preservation assessments and separate comparison origin. Readback rebuilds
-that assignment from current canonical inputs and rederives its attribution using
-[§22.1](22-repair.md), without request logs or a trusted stored digest. The derived
-location is a checked projection, never independently writable authority.
-A missing or changed assignment or obligation binding rejects; loading cannot
-infer one from diagnostic prose or eligible claims. The pending
+inconsistent review or coverage projections. Advisory omission evidence retains
+its explicit obligation, diagnostic explanation, source selection, subject and
+review revision without post-generation loss-comparison or repair authority.
+Readback rebuilds the current native assessment policy and exact member/revision
+bindings, preserving each original finding. A stored advisory marker cannot
+replace evidence or certify support. Missing or changed bindings, forged
+deterministic methods and semantic-success substitutions reject; loading cannot
+infer authority from diagnostic prose or eligible claims. The pending
 variant retains reference and clarification data without claiming completed
 attributed content. Earlier versions reject without migration or a parallel
 reader. Changed authority invalidates affected descendants through the
@@ -64,7 +65,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
 only in one execution's native owners. They are not part of
-`specification-state/v15` and are not restored by state readback. Loading ordinary
+`specification-state/v16` and are not restored by state readback. Loading ordinary
 published review evidence cannot manufacture an accepted call origin or a reusable
 receipt. Candidate-local re-admission does not resume an earlier execution;
 every fresh invocation starts at `start` with empty review history.
@@ -213,3 +214,24 @@ capture or operation port; the shared contextual delimiter syntax is capability
 free. Earlier completed/pending versions reject without migration, aliases or a
 dual reader. This version decision does not change publication, clarification
 protection, upstream invalidation, fresh-run behavior or review/repair policy.
+
+### Advisory assessment cutover — approved 17 October 2026
+
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) subsequently
+advances both variants to `specification-state/v16`. Generated source and principle
+evidence retain their original semantic findings through a distinct native
+`assessment` binding; `assessment_complete` proves only complete current
+assessment. Native authority, provenance, exact coverage and publication
+validation remain independent and mandatory. Stored validation reconstructs the
+same policy from canonical generated inputs, rejects forged/stale assessment
+bindings and never promotes a model verdict to deterministic corroboration.
+Principle notes alone create no mandatory Plan obligation or clarification.
+Earlier versions, including B3's v15, reject without compatibility readers.
+
+The approved native readiness source-purpose evidence rule is recomputed on
+stored review data. Before any authored candidate exists, a positive finding
+requires nonempty current original source IDs and empty canonical claim, citation
+and clarification-response selections. Foreign/stale sources, forged provenance
+or a supported-candidate substitution reject; catalogue cardinality supplies no
+evidence. This source-purpose role cannot replace generated-content assessment
+or its exact bound provenance.

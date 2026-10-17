@@ -44,27 +44,34 @@ pub fn sourceLines(a: std.mem.Allocator, sources: r.evidence.Inputs) r.Error![]c
     return result.toOwnedSlice(a);
 }
 
-pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
+/// Current runner facts, separate from the semantic assessment's projection.
+/// Generation consumes source authority; later review cannot reopen producers.
+pub fn requireRepairPhase(phase: @import("specification_generation_phase.zig").Phase) error{PostGenerationSourceRepairForbidden}!void {
+    if (phase != .pre_generation) return error.PostGenerationSourceRepairForbidden;
+}
+pub const Support = struct { repair_phase: @import("specification_generation_phase.zig").Phase, review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
 pub const Rejection = enum {
     unlocalized_omission,
     invalid_repair_authority,
+    post_generation_source_repair_forbidden,
 
     pub fn explanation(self: Rejection) []const u8 {
         return switch (self) {
             .unlocalized_omission => "The source review reports an omission without establishing a defective upstream producer. No upstream repair target can be authorized.",
             .invalid_repair_authority => "The source omission cannot establish current repair authority. The workflow stops without a repair call or publication.",
+            .post_generation_source_repair_forbidden => "Generation has started. Semantic review cannot authorize mutation of consumed source authority.",
         };
     }
 };
-pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error || error{ UnlocalizedSourceOmission, UnsupportedSourceOmission };
+pub const Error = authority.Error || r.Error || @import("specification_support.zig").Source.Error || error{ UnlocalizedSourceOmission, UnsupportedSourceOmission, PostGenerationSourceRepairForbidden };
 const retry = @import("workflow_retry.zig");
 const atomic = @import("atomic_repair.zig");
 pub const Producer = enum { extraction, reconciliation };
 const Family = enum { source_omission };
-const Subject = union(enum) { requirement: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id, signal_claims: []const r.ClaimId, conflict_claims: []const r.ClaimId };
+const Subject = union(enum) { requirement: authority.Id, token: r.extraction.tokens.CandidateId, signal_claims: []const r.ClaimId, conflict_claims: []const r.ClaimId };
 
-fn subject(a: std.mem.Allocator, inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
+fn subject(a: std.mem.Allocator, inputs: authority.Inputs, requirement: authority.Id) authority.Error!Subject {
     return switch (requirement.unit) {
         .feature, .source => .{ .requirement = requirement },
         .token => |id| token: {
@@ -85,11 +92,11 @@ fn subject(a: std.mem.Allocator, inputs: authority.Inputs, requirement: authorit
             for (records.signals) |signal| if (std.meta.eql(signal.id, id)) break :blk .{ .signal_claims = try orderedClaims(a, signal.value.claim_ids) };
             return error.InvalidRequiredAuthority;
         },
-        .record, .decision => .{ .regenerated = requirement },
+        .record, .decision => error.InvalidRequiredAuthority,
     };
 }
 
-fn orderedClaims(a: std.mem.Allocator, claims: []const r.ClaimId) Error![]const r.ClaimId {
+fn orderedClaims(a: std.mem.Allocator, claims: []const r.ClaimId) std.mem.Allocator.Error![]const r.ClaimId {
     const result = try a.dupe(r.ClaimId, claims);
     std.mem.sort(r.ClaimId, result, {}, struct {
         fn less(_: void, lhs: r.ClaimId, rhs: r.ClaimId) bool {
@@ -99,15 +106,32 @@ fn orderedClaims(a: std.mem.Allocator, claims: []const r.ClaimId) Error![]const 
     return result;
 }
 
-fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) Error![32]u8 {
-    const scope = .{ .contract = @typeName(Family), .producer = producer, .feature = feature, .source_state = state };
+fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId, projection: authority.Projection) authority.Error![32]u8 {
+    switch (projection) {
+        .source_readiness, .source_preservation => {},
+        .specification, .principle_assessment, .registered_obligations => return error.InvalidRequiredAuthority,
+    }
+    const scope = .{ .contract = @typeName(Family), .producer = producer, .feature = feature, .source_state = state, .projection = projection };
     return (try atomic.snapshot(@TypeOf(scope), a, scope)).bytes;
 }
 
+/// A pending source repair retains its original required review purpose. Ready
+/// references alone cannot discharge that dependent semantic validation.
+pub fn pendingReview(a: std.mem.Allocator, permit: retry.Permit, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId) authority.Error!?authority.Projection {
+    if (!std.mem.eql(u8, &permit.key.family, &(try atomic.snapshot(Family, a, .source_omission)).bytes)) return null;
+    for ([_]authority.Projection{ .source_readiness, .source_preservation }) |projection| {
+        for (std.meta.tags(Producer)) |producer| {
+            if (std.mem.eql(u8, &permit.key.scope, &try retryScope(a, producer, feature, state, projection))) return projection;
+        }
+    }
+    return error.InvalidRequiredAuthority;
+}
+
 pub fn retryPermit(a: std.mem.Allocator, producer: Producer, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, authorization: @import("model_request_identity.zig").RepairAuthorizationId, revision: u64, support: Support, selected: authority.Id, previous: ?retry.Permit) Error!retry.Permit {
+    try requireRepairPhase(support.repair_phase);
     const records = support.inputs.references orelse return error.InvalidRequiredAuthority;
     var result = try atomic.permit(Subject, Family, a, owner, try subject(a, support.inputs, selected), .source_omission, authorization, revision, std.math.cast(u32, support.inputs.seeds.len) orelse return error.InvalidRequiredAuthority);
-    result.key.scope = try retryScope(a, producer, support.inputs.feature, records.items.state_id);
+    result.key.scope = try retryScope(a, producer, support.inputs.feature, records.items.state_id, support.inputs.projection);
     if (previous) |prior| if (std.mem.eql(u8, &prior.key.scope, &result.key.scope)) {
         result.maximum_targets = prior.maximum_targets;
     };
@@ -116,19 +140,16 @@ pub fn retryPermit(a: std.mem.Allocator, producer: Producer, owner: @import("mod
 
 /// The existing Source owner has already admitted this complete collection.
 /// Reuse that proof without capturing fresh pipeline dependencies at Apply.
-pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: @FieldType(@import("specification_support.zig").Source.Collection, "accepted")) Error!?retry.Transition {
+pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: @FieldType(@import("specification_support.zig").Source.Collection, "accepted")) authority.Error!?retry.Transition {
     const inputs = admitted.inputs;
-    if (!std.mem.eql(u8, &permit.key.family, &(try atomic.snapshot(Family, a, .source_omission)).bytes)) return null;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
-    const matched_scope = for (std.meta.tags(Producer)) |producer| {
-        if (std.mem.eql(u8, &permit.key.scope, &try retryScope(a, producer, inputs.feature, records.items.state_id))) break true;
-    } else false;
-    if (!matched_scope) return error.InvalidRequiredAuthority;
+    const projection = (try pendingReview(a, permit, inputs.feature, records.items.state_id)) orelse return null;
+    if (authority.assessmentPolicy(inputs.projection) == .advisory or projection != inputs.projection) return error.InvalidRequiredAuthority;
     const repaired_claims = admitted.candidate.omission_conflict_claims;
     if (repaired_claims.len != 0 and std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, .{ .conflict_claims = try orderedClaims(a, repaired_claims) })).bytes)) {
         var resolved = true;
         for (repaired_claims) |claim| {
-            _ = try r.item(records.items, claim);
+            _ = r.item(records.items, claim) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
             var supported = false;
             for (inputs.evidence) |finding| if (finding.review) |review| {
                 if (!r.contains(r.ClaimId, review.provenance.claim_ids, claim)) continue;
@@ -147,8 +168,8 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
     for (result.entries) |entry| {
         const selected = try subject(a, inputs, entry.requirement);
         if (!std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, selected)).bytes)) continue;
-        if (selected == .regenerated) break;
         const resolved = entry.candidate_defect == null and switch (entry.outcome) {
+            .assessment_complete => return error.InvalidRequiredAuthority,
             .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => true,
             .clarification_required, .upstream_rework_required, .administrative_block => false,
         };
@@ -209,6 +230,10 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 /// model-assisted; absence of a unique location cannot authorize a repair.
 pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
     if (!@import("specification_support_evidence.zig").validObligation(finding, review.missing_obligation)) return error.InvalidRequiredAuthority;
+    if (authority.assessmentPolicy(inputs.projection) == .advisory) {
+        if (location != .unlocalized or review.preservation != null) return error.InvalidRequiredAuthority;
+        return;
+    }
     if (review.preservation) |proof| {
         if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
         const derived = comparisons.validate(a, inputs, sources, subject_id, review, proof) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
@@ -324,8 +349,6 @@ pub const Repair = struct {
 };
 
 /// The compiler sees the exact invalidation set for each registered binding.
-pub const Scope = enum { references, specification };
-pub const specification_dependents = [_]@import("pipeline.zig").DataKey{ .specification_generation_session, .identified_specification_content, .specification_id_ledger, .specification_coverage };
 const merge_context = [_]@import("pipeline.zig").DataKey{ .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair };
 pub const extraction_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{ .structured_token_candidates, .text_validated_reference_extraction };
 // Summary parsing consumes raw_reference_reconciliation before review. It is

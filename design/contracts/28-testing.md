@@ -100,6 +100,27 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
     allowed/disallowed `not_applicable`, unknown ownership and downstream discovery
     of an upstream-owned gap.
   - Require the same closed outcomes and routing semantics in every domain.
+  - Under ADR 0023, retain positive and adverse post-generation findings with
+    `assessment_complete` candidate bindings. Neither finding type can discharge
+    a native forced gap, create clarification authority or authorize repair.
+  - Reject incomplete, duplicate, foreign and stale whole-unit source/principle
+    assignments before append. Reject forged supported resolutions, deterministic
+    methods or candidate bindings on persisted advisory findings.
+  - Preserve pre-generation source repair while rejecting authorization, packet
+    construction and merge after any generation session/content exists, including
+    retained permits and direct custom-workflow operation bindings.
+  - After a repair makes references generation-ready, require the original
+    readiness/preservation validation purpose even with optional preservation
+    disabled. Reject foreign/stale scope, removed-target progress and advisory
+    closure. Block initialization with an active repair or a child suspending it;
+    accept settled native validation with retired review projections.
+  - Through the production schema/decoder/admission path, accept positive native
+    readiness source-purpose evidence with explicit nonempty original source IDs
+    and empty canonical provenance across zero/one/multiple eligible catalogues.
+    Reject empty/duplicate/foreign/stale sources and forged canonical claims or
+    citations; stored roundtrip retains the same model-assisted authority without
+    creating a candidate or authored association. Preserve all candidate-bound
+    missing-provenance and exact reference/preservation evidence controls.
 - task unknown dependency, cycle, phase violation, read/write conflict, and exclusive command;
 - patch scope, patch failure, unexpected file changes, and evidence predicates;
 - create/update/replace/copy/delete expected-state rules and copy-source authorization;
@@ -109,16 +130,17 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
   - Supply current selected spans to the focused Spec policy assessment (§17.3.1),
     keeping extraction, source-preservation and business generation authority separate.
   - Cover the UTC/greeting conflict and unrelated privacy/retention constraints:
-    preserve clear requirements, cite mandatory Plan obligations and resolve them only
-    at the owning gate. Genuine business gaps remain SNN; source loss remains a defect.
-  - Reject omitted/foreign/stale assessment evidence and lost downstream obligations.
+    preserve clear requirements and retain cited advisory findings. Review alone
+    creates no mandatory Plan obligation or Spec question; Plan independently
+    validates its current required policy. Genuine native business gaps remain SNN.
+  - Reject omitted/foreign/stale assessment evidence and altered advisory bindings.
     Changed principles refresh dependent assessments and approvals without rewriting
     business intent. Empty/unrelated principles invent neither requirements nor questions.
   - Prove no Spec-to-PNN predecessor cycle, no policy approval inferred from review,
     and no old no-conflict result certifying Plan's current policy compliance.
   - Distinguish principle capture from assessment execution on a source-gap pause;
     do not report an unexecuted assessment as passed. Preserve supported business
-    intent where selected principles conflict; route policy obligations to their owner.
+    intent where selected principles conflict and retain the original cited advice.
   - Include requirements supported only by validated answers and authenticated Spec
     edits; their current bindings and policy assessment cannot be skipped on rerun.
 - **Clarifications:**
@@ -127,8 +149,8 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
   - Require exact complete conflict-set/view projection.
   - Reject stale answers; exercise authority/user resolution on rerun.
   - An open Spec clarification prevents all planning/model work; an open Spec or
-    Plan clarification prevents all task-generation/model work. Test policy-obligation
-    handoffs alongside open questions and reject attempts to relabel or drop those
+    Plan clarification prevents all task-generation/model work. Test advisory
+    principle handoffs alongside open questions and reject attempts to relabel or drop those
     questions. Closed file status without current validated resolution cannot pass.
   - Both need producers prepare identifiable subjects, current evidence and exact user
     decisions through §12.7. Identical review text for different S/P/T subjects must

@@ -718,6 +718,7 @@ pub const Omission = struct {
         return .{ .reconciliation = try context.capture(a, parsed, ctx), .support = support };
     }
     pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support) OmissionError!OmissionAuthorization {
+        try loss.requireRepairPhase(support.repair_phase);
         if (parsed.proposal != .global) return error.InvalidAtomicRepair;
         try v.input(a, parsed.input);
         const selected = try loss.select(a, ctx.inputs, support);
@@ -753,6 +754,7 @@ pub const Omission = struct {
         return loss.retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, current.support, selected.finding.requirement, current.reconciliation.source.omission_retry);
     }
     pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        try loss.requireRepairPhase(support.repair_phase);
         var arena: std.heap.ArenaAllocator = .init(a);
         defer arena.deinit();
         const current = try facts(a, parsed, ctx, support);
@@ -789,6 +791,7 @@ pub const Omission = struct {
         } };
     }
     pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+        try loss.requireRepairPhase(support.repair_phase);
         if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const current = try facts(a, parsed, ctx, support);

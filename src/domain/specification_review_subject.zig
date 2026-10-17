@@ -35,6 +35,44 @@ pub const BusinessSubject = union(enum) {
     entity_applicability: EntityApplicability,
 };
 
+/// Complete native business ownership, independent of the review's purpose.
+/// Collection coverage remains its own duty, not a pass inferred from members.
+pub const AssignmentUnit = union(enum) {
+    brief,
+    primary_user_story,
+    entities,
+    record: spec.Id,
+    collection: authority.Slot,
+    reference: authority.Unit,
+    singleton: authority.Id,
+};
+pub fn assignmentUnit(a: std.mem.Allocator, inputs: authority.Inputs, id: authority.Id) authority.Error!AssignmentUnit {
+    if (inputs.projection == .principle_assessment) {
+        const context = inputs.principle_context orelse return error.InvalidRequiredAuthority;
+        var arena: std.heap.ArenaAllocator = .init(a);
+        defer arena.deinit();
+        const assigned = try @import("principle_assessment.zig").subjects(arena.allocator(), context.business);
+        if (id.unit != .decision or id.unit.decision.ordinal == 0 or id.unit.decision.ordinal > assigned.len) return error.InvalidRequiredAuthority;
+        return businessUnit(assigned[id.unit.decision.ordinal - 1]);
+    }
+    if (inputs.projection != .specification) return .{ .singleton = id };
+    return businessUnit(id);
+}
+fn businessUnit(id: authority.Id) authority.Error!AssignmentUnit {
+    return switch (id.unit) {
+        .record => |record| .{ .record = record },
+        .feature => switch (id.slot) {
+            .display_name, .description, .primary_goal => .brief,
+            .primary_user_story => .primary_user_story,
+            .entities => .entities,
+            .acceptance_criteria, .functional_requirements, .scenario_coverage => .{ .collection = id.slot },
+            else => error.InvalidRequiredAuthority,
+        },
+        .source, .signal, .token, .conflict => .{ .reference = id.unit },
+        .decision => error.InvalidRequiredAuthority,
+    };
+}
+
 fn collection(a: std.mem.Allocator, slot: authority.Slot, context: BusinessContext) authority.Error!Collection {
     var selected: std.ArrayList(spec.CapturedRecord) = .empty;
     errdefer selected.deinit(a);

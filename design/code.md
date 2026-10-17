@@ -602,6 +602,13 @@ AuthorityGapReason =
   stale | unsupported | unregistered_ownership_or_policy
 
 AuthorityReconciliationOutcome =
+  | AssessmentComplete {
+      kind: assessment_complete,
+      authorityRequirementId: AuthorityRequirementId,
+      candidateSubjectId, candidateRevision,
+      currentNativeApplicabilityRule?, evidenceIds[]
+      // ADR 0023: current bound assessment completion, not semantic support.
+    }
   | ResolvedExactlyOneAuthority {
       kind: resolved_exactly_one,
       authorityRequirementId: AuthorityRequirementId,
@@ -648,10 +655,12 @@ AuthorityReconciliationOutcome =
       authorityRequirementId: AuthorityRequirementId,
       reason: unregistered_ownership_or_policy |
               unauthorized_authority_creation |
-              required_external_or_environment_authority_unavailable,
+              required_external_or_environment_authority_unavailable |
+              incomplete_assessment,
       diagnosticCode
     }
-  // There is deliberately no unresolved-success, warning-only, default,
+  // Advisory findings preserve their original type under AssessmentComplete.
+  // There is deliberately no unresolved authority success, default,
   // approximate, closest-match, conventional-choice, current-stage fallback,
   // or locally-repaired variant.
 

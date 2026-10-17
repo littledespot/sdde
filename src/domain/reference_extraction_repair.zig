@@ -210,6 +210,7 @@ pub const Omission = struct {
     pub const OmissionError = Atomic.Error || loss.Error;
 
     pub fn authorize(a: std.mem.Allocator, facts: OmissionFacts) OmissionError!OmissionAuthorization {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         const selected = try loss.select(a, facts.extraction.inputs, facts.support);
         const finding = selected.finding.review.?;
         const scope = switch (selected.location) {
@@ -244,6 +245,7 @@ pub const Omission = struct {
         return .{ .state_id = .{ .bytes = auth.owner.reference_chunk.reference_state_id.bytes }, .chunk_id = .{ .bytes = auth.owner.reference_chunk.chunk_id.bytes } };
     }
     pub fn packet(a: std.mem.Allocator, facts: OmissionFacts, literals: @import("passive_literals.zig").Registry, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         try Atomic.checkDependencies(a, auth, facts);
         var arena: std.heap.ArenaAllocator = .init(a);
         defer arena.deinit();
@@ -275,6 +277,7 @@ pub const Omission = struct {
         };
     }
     pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         if (!canonical.matchesInputs(facts.extraction.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const scope = try Omission.scopeOf(auth);

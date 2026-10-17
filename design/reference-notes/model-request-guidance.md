@@ -229,26 +229,35 @@ Completed entity-applicability review receives the disposition, resolved basis a
 business context through the same projection as policy review. Partial source
 review and producer localization retain their existing subjects and evidence.
 
-The task-authorized Phase 4 source transport/lifecycle amendment batches the
-existing Given, When and Then findings of one acceptance-criterion record. The
-production builder selects a record assignment only at its first Given requirement
-with all three current native IDs. The response contains `findings`, each with
-`requirement_ordinal` and the existing closed source `value`. The native owner
-requires exact complete membership before append, normalizes wire order to ledger
-order and validates each field under its own purpose and evidence rule. A broad
-pass cannot fill several findings. Original sources and the same current record
-sibling context are shared; every finding remains independently attributable.
+The approved [ADR 0023](../decisions/0023-advisory-post-generation-review.md)
+amendment batches both source and principle assessments by native whole-unit
+assignment: brief, story, entity applicability, complete record, complete
+collection or reference unit. Each request carries all current native requirement
+IDs for that assignment. The response contains `findings`, each with
+`requirement_ordinal` and its closed source or principle value. Admission requires
+exact complete membership before appending any finding, normalizes wire order to
+ledger order and validates each field under its own purpose and evidence rule.
+A broad verdict cannot substitute for per-member findings. Original evidence and
+shared sibling context appear once; every finding retains its own origin.
 
-Record protocol correction retains the complete assignment and schema. A native
-detail/evidence repair still receives only its selected singleton finding and
-cannot alter valid siblings or the verdict. One real accepted review call may
-appear in all three per-finding origin slots; only an actual selected replacement
-changes that field's origin. Multiple omissions are localized one at a time from
-the earliest canonical finding without preservation evidence. Each receives a
-complete bound comparison with its unchanged obligation and distinct comparison
-origin before review advances. No repair permission, required finding, collection
-coverage or principle duty is removed. Offline mechanical readiness does not
-establish lower actual cost, semantic equivalence or Phase 11 promotion.
+Protocol correction retains the complete assignment and schema. Native detail or
+evidence correction retains its selected scope and cannot alter valid siblings
+or the verdict. A real accepted call may supply all per-finding origins in its
+assignment; only an accepted selected replacement changes that member's origin.
+Post-generation semantic findings remain advisory, including adverse principle
+findings. Their receipt proves completion of the bound assessment, not semantic
+support. They cannot trigger omission localization, content repair, upstream
+rebuilding, mandatory Plan obligations or clarification. Independent native
+failures retain their typed outcomes and authorized correction paths.
+Pre-generation preservation comparisons retain their existing required scope.
+Offline mechanics do not establish lower live cost or semantic accuracy.
+
+Native pre-generation readiness source-purpose positives use explicitly selected
+nonempty original source IDs. The approved §12 rule constructs empty canonical
+claim, citation and clarification selections; zero, one or many eligible claims
+do not alter that rule. The packet and decoder expose the same evidence role.
+This creates no authored association or candidate support, and changes no
+generated-content or exact reference-subject evidence requirement.
 
 The shared requirement-description owner supplies source-only `assessment_scope`
 alongside the existing business purpose. It distinguishes authoritative original

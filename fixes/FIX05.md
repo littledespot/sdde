@@ -16,7 +16,8 @@ E2E run. The governing design remains **Proposed design**.
 
 **Evidence:** the code at `b2f10a3`, `zig build code-heuristics`, git history, the
 run records in Z_FIX02 and the retained 16 October 22:00 run. No tests or live calls
-were run for this review.
+were run for that initial review. Dated B3 updates below record subsequent
+approved checks and live diagnostics separately.
 
 ## 1. Verdict
 
@@ -45,7 +46,8 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | Full-workflow diagnostics, 16 October (AEDT) | Eight runs on GPT-OSS-20B: two loan-renewal and six hello-world (F9, F11–F13 and 22:00); none published a specification |
 | Most fully measured run (09:18) | 41 sends and 101,134 tokens; review 29 sends and 77%; input tokens 93% ([cost investigation](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation)) |
 | First run passing every native generation check (20:33) | 42 calls and 100,884 tokens; budget exceeded during re-review; review 75.6% |
-| Latest retained run (22:00, modified `3303498`) | `RetryLimitExhausted` at brief generation after 10 calls and 13,797 tokens: `embedded_insertion_syntax`, and a `{"token{` envelope prefix on call 2 |
+| Pre-B3 retained run (22:00, modified `3303498`) | `RetryLimitExhausted` at brief generation after 10 calls and 13,797 tokens: `embedded_insertion_syntax`, and a `{"token{` envelope prefix on call 2 |
+| B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
 | History | 199 commits in 8 weeks; 297,901 Zig lines inserted and 148,709 surviving; 22 ADRs between 26 August and 6 October |
@@ -231,6 +233,52 @@ Evidence from former F9 and F13, and FIX01 R5 and R6:
    proposed ADR 0021 and configuration amendment, and qualifying it live needs a
    changed live-test policy.
 
+**Approval — 17 October 2026; implemented and verified offline:** following the B3 live
+baselines, the user approved B2 and W1 together, including W2's deletion of the
+unused post-generation upstream-repair path. The user explicitly selected
+**“All post-generation semantic reviews”**, including principle review. Batch
+whole units or collections while preserving native per-subject association,
+correction scope, origins and retry identity. All post-generation semantic findings
+remain advisory: they cannot authorize content repair or an automatic upstream
+rebuild, manufacture a mandatory Plan obligation, or manufacture a clarification.
+Current native facts, authority-completeness checks and genuine supported human
+decisions remain mandatory. The separate assessment-model/configuration option,
+budget changes and further live calls are not authorized by this approval.
+
+**Additional approval — 17 October 2026:** the user approved source-only positive
+readiness evidence before an authored candidate exists. The native source-purpose
+role requires explicitly selected nonempty original source IDs and empty canonical
+claim, citation and clarification selections, independent of catalogue size.
+It retains model-assisted source authority without creating authored associations.
+[ADR 0023](../design/decisions/0023-advisory-post-generation-review.md) governs the
+shared packet/decoder/admission/readback rule and pre-generation repair closure;
+generated-content provenance checks remain unchanged. This approval authorizes
+no further billed diagnostic.
+
+**Implementation and offline verification — 17 October 2026:**
+[ADR 0023](../design/decisions/0023-advisory-post-generation-review.md) is implemented.
+Native assessment completion retains all source/principle verdicts as advice,
+with complete canonical review units and per-member origins. Post-generation
+upstream/omission repair routes and duplicate merges are deleted. Native phase,
+projection-lifetime and active-permit guards preserve required pre-generation
+repair, including its original dependent review after sources become ready.
+The approved source-only readiness rule is shared across packet, decoder,
+admission and v16 stored validation; it creates no authored support.
+
+| Verification command | Result |
+| --- | --- |
+| `zig build test-specification-generation test-model-candidate-json -j1 --summary all` | 6/6 steps; 477/477 tests |
+| `zig build test-required-authority test-model-result-schema test-model-request-preparation test-workflow-repair-retry test-exact-value-admission -j1 --summary all` | 15/15 steps; 435/435 tests |
+| `zig build test-integration -j1 --summary all` | 8/8 steps; 122/122 tests; all 164 original and 19 additional scenarios |
+| `zig build test-architecture -j1 --summary all` | 3/3 steps; 151/151 tests |
+| `zig build verify -j1 --summary all` | 163/163 steps; 1,814/1,814 tests, including clean native packaging smoke |
+
+The independent `contract-reviewer` found no remaining findings. Final logs and
+hashes are retained in `.zig-cache/b2-validation-manifest.json`; integration's
+complete matrix is recorded in `.zig-cache/b2-advisory-integration-14-summary.json`.
+These checks prove offline mechanics, not publication or output quality. Neither
+billed comparison has run on B2/W1/W2; each requires fresh, separate approval.
+
 Measure the review workload (former R5): coverage, sends and actual tokens per stage,
 latency, retained memory and finding-type accuracy (§7).
 
@@ -313,10 +361,83 @@ Completed/pending state now use `specification-state/v15`; current diagnostic
 requests use `model-request-debug/v6`. Superseded contracts reject; frozen older
 captures remain historical observations and cannot acquire current authority.
 
-No live fidelity, cost or publication improvement is claimed. The Phase 1A.3 live
-gate remains open and needs separate approval for each explicit E2E case. B2 and W1
-are outside this implementation; the user's subsequent follow-on instruction is
-recorded in §6. It supplies no per-run approval for live calls.
+**Approved live baselines — 17 October 2026 (AEDT):** both separately approved
+diagnostics ran on clean committed `dfae95968a555892b0821684c2436229e0b6de5f`, captured
+source digest `45646203775fd3598deb9bd6089875250ded59b4928f74b29160e61f1f882529`.
+The user's B3 PASS criterion was admitted prose records **or** a bounded typed
+composition failure/correction, with admission escape zero. Both runs admitted
+records from ordinary model prose and meet that local mechanical gate. **The B3
+mechanical live gate is closed.** Whole-workflow publication, semantic benefit and
+reduced brittleness remain unproven; neither run published or reached a semantic
+rubric result. No further live run is authorized by this result.
+
+| Baseline and retained report | Outcome | Sends / actual tokens | Observed admitted values / origins / escapes |
+| --- | --- | --- | --- |
+| [Hello-world, 16 October 22:05:27Z](../zig-out/e2e-spec/2026-10-16T22-05-27Z-83aeeb4bcf310f6fd46ca12b3e26b8fe/report.json) | `workflow_blocked`: `duplicate_record` / `competing_records`, followed by `UnsafeSpecificationRepair` | 12 / 18,757 | 14 / 8 / 0 |
+| [Loan-renewal, 16 October 22:06:05Z](../zig-out/e2e-spec/2026-10-16T22-06-05Z-8425e2615767d8c8fbe3172e67479cdc/report.json) | `workflow_failed`: `WorkflowTokenBudgetExceeded` during source-loss review | 38 / 101,933 | 27 / 9 / 0 |
+
+Both audit captures are complete for their declared
+`native_admitted_text_composition_and_wire` scope, with zero unattributed values.
+This measures observed native composition and wire escapes, not semantic coverage
+of every original obligation. Hello-world call 11 admits the first records batch;
+its selected business support is claim 1 while native exact recognition adds claim
+2 for `Hello, World!`. The second batch then competes with existing records.
+Loan-renewal calls 12 and 13 admit both prose records batches and reach review.
+The audit retains five canonical exact-value witnesses for hello-world and six
+for loan-renewal. Neither report has a typed composition failure.
+
+| Stage | Hello-world sends / tokens | Loan-renewal sends / tokens |
+| --- | --- | --- |
+| Reference preparation | 7 / 8,450 | 8 / 11,997 |
+| Generation | 5 / 10,307 | 5 / 12,399 |
+| Post-generation review, including loss attribution | 0 / 0 | 25 / 77,537 |
+
+Loan review consumed **65.8% of sends and 76.1% of actual tokens**: 21 source
+assessment sends and four loss-attribution sends; no principle review was reached.
+The 21 assessment sends produced 25 finding units (21 `supported`, four
+`candidate_omission`). These are observed output types, not truth labels. The last
+loss response, call 38, was received and its usage counted, but budget failure
+prevented content consumption; it is not an admitted localization result.
+
+Source-based labels, exact evidence paths and SHA-256 hashes are frozen in the
+local ignored [diagnostic artifact](../zig-out/b3-live-diagnostics/source-review-labels.json)
+and [manifest](../zig-out/b3-live-diagnostics/manifest.json). The strict findings
+are:
+
+- Calls 33 and 35 claim a missing relationship whose `missing_obligation` is
+  byte-identical to the selected candidate text. This excludes the claimed
+  omission; it does not decide `supported` versus `candidate_invalid`.
+- Call 20 accepts scenario coverage although both selected acceptance criteria
+  describe successful renewal only. The original source also requires refusal,
+  unchanged due date and `Renewal refused.`; its scope explicitly disallows
+  surrounding functional requirements from filling missing selected scenarios.
+- Call 27 also describes an already-present relationship as missing, but its
+  mixed obligation text makes this a supplementary source-based category judgment.
+  Call 18 is a qualified coverage concern because its generic task is narrower;
+  call 37 adds a relationship qualifier whose equivalence remains unresolved.
+  Those three are excluded from the strict metrics; 19 other units are unadjudicated.
+
+On the deliberately defect-selected strict slices, omission precision is **0/2**
+for the exact-presence category controls, and omission recall is **0/1** for the
+clear scenario-coverage omission. The slices differ and are not population
+estimates; overall precision, recall and accuracy remain unavailable. The immutable
+[loan relationship capture](../test/calibration/source-review-advice/loan-borrower-relationship.capture.json)
+retains call 33 and byte-equality facts without assigning a semantic truth label.
+
+The four omission findings and their following localization sends cost eight
+sends and 25,474 tokens. That is observed branch cost, not proven counterfactual
+savings. No specification-content repair occurred in either run; the loan's one
+repair was pre-generation reference reconciliation. No review-induced candidate
+rewrite or harm was observed, and there is no final candidate assessment.
+
+One upstream baseline observation limits coverage claims: the loan's retained
+dispositions mark the original `Renewal refused.` claim 3 superseded by
+`Loan renewed!` claim 2. Refusal prose remains in descriptions and functional
+requirements, but only `Loan renewed!` appears in the canonical exact-value
+witnesses. This is retained lineage evidence, **not a new B3 admission escape**.
+It does not authorize a rewording phase. B2/W1/W2 approval is recorded above and
+in §6; implementation and required offline checks are complete. The two committed-build
+live comparisons remain pending separate per-run approval.
 
 **Diagnosis before this cutover:** the model had to splice `exact_copy` insertions into its prose, and native coverage
 credits only an insertion ([coverage](../src/domain/specification_coverage.zig#L77)).
@@ -355,8 +476,8 @@ every retained capture with no model calls
 selected-membership and whole-word observations remain dated historical evidence;
 the approved native scope and delimiter policies supersede them for production.
 
-Open gates of the former Phases 1A.2 and 1A.3
-([approved plan](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)):
+Historical gates of the former Phases 1A.2 and 1A.3, now mechanically closed by the
+committed baselines above ([approved plan](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)):
 
 - The approved representation change replaces Phase 1A.3 steps 2–3: the
   21-send [attribution panel](../test/calibration/insertion-presentation/README.md)
@@ -367,7 +488,9 @@ Open gates of the former Phases 1A.2 and 1A.3
   - Each must admit records with prose, or end in a typed composition failure after
     bounded protocol correction, with admission escape measured zero.
   - This also closes Phase 1A.2's gate.
-  - Loan-renewal has not run on any build since Phase 1A.
+  - At that historical gate, loan-renewal had not run since Phase 1A. The separately
+    approved committed `dfae959` baseline above supersedes that absence; it does not
+    establish publication or semantic benefit.
   - The two F13 hello-world runs count only if no further presentation or
     representation change follows.
 
@@ -506,7 +629,8 @@ The 10 October 14:24 run did exactly this (former FIX01 R6 evidence, at `b2f10a3
 that names the producer and the evidence, or becomes a clarification. It never
 automatically rebuilds an upstream stage and regenerates every unit. Pre-generation
 source repair discards no generated content, so it is unaffected. This complements
-B2, under which uncorroborated findings never repair, and narrows R6.
+B2, under which post-generation semantic findings never authorize content repair,
+and narrows R6.
 
 ### W2. The upstream-repair path exists twice
 
@@ -526,13 +650,11 @@ groups 4 and 5):
 Each pair differs only in its static invalidation set. The upstream variant adds
 `specification_dependents`, which don't exist before generation.
 
-**Proposal** (no ADR change expected): call one subgraph from both places, with one
-merge per producer that declares the union. This removes five YAML steps and two
-operations, along with their bindings, registry entries and tests.
-
-First confirm that runner delta validation accepts invalidating data that isn't
-present yet. If it doesn't, that rule is what forces the duplication; record it
-under A2.
+**Approval — 17 October 2026; implemented and verified offline:** with B2/W1, delete the
+unused post-generation upstream-repair path and its merge variants, bindings,
+registry entries and tests. Preserve pre-generation source repair. This approved
+deletion supersedes the earlier proposal to consolidate both paths into one
+subgraph; no automatic post-generation rebuild remains to share it.
 
 ### W3. Eight repair routes repeat one shape
 
@@ -641,7 +763,7 @@ follow-ups ran as follows ([records](Z_FIX02.md#21-r6-follow-up-records-formerly
 - actual source-review handoff (30 calls): failed.
 
 **Remaining proposals.** Each needs a closed contract and coordinated tests. Re-scope
-them if B2 is approved, because uncorroborated findings would then no longer drive
+them under the approved B2 scope: post-generation semantic findings no longer drive
 content repair.
 
 1. **Source-authorized exact-reference repair eligibility** (former item 2).
@@ -775,11 +897,14 @@ the earlier proposed order for B3, B2, W1 and W2:
 2. On that committed build, run one hello-world and one loan-renewal diagnostic,
    each only after its own explicit billed-run approval. Preserve generation
    failure as a baseline result under §7; do not open another rewording phase.
-3. Decide and implement B2 and W1 together after those diagnostics: review findings
-   without deterministic corroboration remain advisory, and post-generation
-   attribution upstream ends as a typed outcome or clarification, never an
-   automatic rebuild. Include W2 by deleting the unused post-generation upstream
-   path and merge variants. Add A4 rejection reasons only if debugging needs them.
+3. **Approved after both baselines; implemented and verified offline:** implement B2 and W1
+   for all post-generation semantic reviews, including principles. Review whole
+   units or collections with exact per-subject association, correction scope,
+   origins and retry identity. All such findings remain advisory and confer
+   no content-repair, mandatory Plan-obligation, clarification or upstream-rebuild
+   authority. Current native facts and genuine supported human decisions remain
+   mandatory. Include W2 by deleting the unused post-generation upstream path and
+   merge variants. Add A4 rejection reasons only if debugging needs them.
 4. Rerun the same two separately approved diagnostics, measuring review's share of
    cost and finding-type accuracy. Governing amendments and their tests accompany
    the B2/W1 implementation; they are not part of the B3 change.

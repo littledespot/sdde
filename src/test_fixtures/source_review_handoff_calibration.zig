@@ -1,5 +1,5 @@
-//! Offline qualification preparation for actual Source-review values passed to
-//! one complete native preservation assignment. No dispatch or semantic oracle.
+//! Offline current admission of diagnostic review values. Generated findings
+//! remain advice; only actual pre-generation duties can request preservation.
 const std = @import("std");
 const temperature_policy = @import("calibration_temperature_policy.zig");
 const shared = @import("source_loss_calibration.zig");
@@ -12,7 +12,7 @@ const packets = @import("../domain/model_input_packet.zig");
 const comparison = @import("../domain/source_omission_comparison.zig");
 const envelope = @import("../domain/model_envelope.zig");
 const root = "test/calibration/source-review-handoff";
-const output = ".zig-cache/source-review-handoff";
+const output = ".zig-cache/source-review-handoff/current-advisory";
 
 const Case = struct {
     id: []const u8,
@@ -37,7 +37,7 @@ const Trial = struct {
     review_packet: File,
     review_edit: File,
     review_request: File,
-    loss_request: enum { derive_after_exact_receipt_admission },
+    loss_request: enum { pre_generation_only_after_exact_receipt_admission, forbidden_post_generation },
 };
 
 /// The diagnostic receipt remains diagnostic. Pasted/replayed bytes do not mint
@@ -87,11 +87,18 @@ pub fn run() !void {
     var prepared_development: usize = 0;
     var prepared_qualification: usize = 0;
     var admission_rejections: std.ArrayList(shared.AdmissionRejection) = .empty;
+    var unavailable: std.ArrayList(shared.Unavailable) = .empty;
     for (cases, 0..) |example, index| {
         for (cases[0..index]) |previous| try std.testing.expect(!std.mem.eql(u8, example.id, previous.id));
         if (example.cohort == .development) development += 1 else qualification += 1;
         const base = try sourceCase(example, retained);
         const prepared = prepare(a, example, base) catch |err| {
+            if (err == error.MissingCalibrationCandidate) {
+                const missing: shared.Unavailable = .{ .case_id = example.id };
+                try unavailable.append(a, missing);
+                try shared.writeUnavailable(a, output, missing);
+                continue;
+            }
             const rejection: shared.AdmissionRejection = .{ .case_id = example.id, .reason = shared.admissionReason(err) orelse return err };
             try admission_rejections.append(a, rejection);
             try shared.writeAdmissionRejection(a, output, rejection);
@@ -100,15 +107,16 @@ pub fn run() !void {
         defer prepared.passive.deinit();
         if (example.cohort == .development) prepared_development += 1 else prepared_qualification += 1;
         const target = try selectedTarget(a, prepared, base, example.target_slot);
-        const prior = try prefix(a, prepared, target);
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = target });
+        const focused = try shared.focus(a, prepared, target);
+        const prior = focused.prior;
+        const packet = focused.packet;
         defer packets.release(packet);
         try shared.writeAt(a, output, example.id, "review.packet.json", packet.body());
         try shared.exportBodyAt(a, output, schema, example.id, "review", packet, packet.body(), review_prompt);
         const packet_file = try pin(a, example.id, "review.packet.json");
         const edit_file = try pin(a, example.id, "review.edit.json");
         const request_file = try pin(a, example.id, "review.request.json");
-        for (1..3) |repetition| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-review-{d}", .{ example.id, repetition }), .case_id = example.id, .cohort = example.cohort, .repetition = @intCast(repetition), .review_packet = packet_file, .review_edit = edit_file, .review_request = request_file, .loss_request = .derive_after_exact_receipt_admission });
+        for (1..3) |repetition| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-review-{d}", .{ example.id, repetition }), .case_id = example.id, .cohort = example.cohort, .repetition = @intCast(repetition), .review_packet = packet_file, .review_edit = edit_file, .review_request = request_file, .loss_request = if (authority.assessmentPolicy(prepared.inputs.projection) == .advisory) .forbidden_post_generation else .pre_generation_only_after_exact_receipt_admission });
         try mechanicalProbe(a, example.id, prepared, prior, target, packet, parent, request_file.sha256, trials.items.len == 2);
     }
     try std.testing.expectEqual(@as(usize, 11), development);
@@ -117,9 +125,10 @@ pub fn run() !void {
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
         .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
     }), admission_rejections.items);
-    try std.testing.expectEqual(@as(usize, 9), prepared_development);
-    try std.testing.expectEqual(@as(usize, 1), prepared_qualification);
-    try std.testing.expectEqual(@as(usize, 20), trials.items.len);
+    try std.testing.expectEqual(@as(usize, 3), prepared_development);
+    try std.testing.expectEqual(@as(usize, 0), prepared_qualification);
+    try std.testing.expectEqual(@as(usize, 7), unavailable.items.len);
+    try std.testing.expectEqual(@as(usize, 6), trials.items.len);
     const dependency_paths = [_][]const u8{
         "src/test_fixtures/source_review_handoff_calibration.zig",
         "src/test_fixtures/source_loss_calibration.zig",
@@ -155,15 +164,19 @@ pub fn run() !void {
     var dependencies: std.ArrayList(File) = .empty;
     for (dependency_paths) |path| try dependencies.append(a, try filePin(a, path));
     for (cases) |example| if ((try sourceCase(example, retained)).candidate_file) |path| try dependencies.append(a, try filePin(a, path));
+    var conditional_loss_sends: usize = 0;
+    for (trials.items) |trial| if (trial.loss_request == .pre_generation_only_after_exact_receipt_admission) {
+        conditional_loss_sends += 1;
+    };
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
-        .measurement = "Actual admitted reviewer values to one complete native preservation assignment; semantic discovery, attribution, repair eligibility, denial and harm remain separate judgments.",
+        .measurement = "Current whole-unit advisory admission and actual pre-generation preservation controls. Frozen partial candidates are unavailable, never relabeled as current complete generation.",
         .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
-        .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = trials.items.len, .maximum_physical_sends = trials.items.len * 2, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
-        .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items },
+        .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = conditional_loss_sends, .maximum_physical_sends = trials.items.len + conditional_loss_sends, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
+        .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items, .unavailable_cases = unavailable.items },
         .native_origin_available_from_replayed_receipt = false,
         .prior_findings = "MOCK bound support or inconclusive unauthored prefix; never evidence of complete production workflow validation.",
-        .downstream = "Not frozen or fabricated from expectations. Derive current complete packet and request only from an exact admitted receipt; unchanged reviewer obligation, source IDs and diagnostic origin.",
+        .downstream = "Generated semantic findings cannot derive loss or repair requests. Actual pre-generation omission receipts may derive complete comparisons, without semantic or publication authority.",
         .dependencies = dependencies.items,
         .trials = trials.items,
     }, .{}) });
@@ -171,13 +184,14 @@ pub fn run() !void {
     for (cases) |example| {
         const base = try sourceCase(example, retained);
         const prepared = prepare(a, example, base) catch |err| {
-            if (shared.admissionReason(err) != null) continue;
+            if (shared.admissionReason(err) != null or err == error.MissingCalibrationCandidate) continue;
             return err;
         };
         defer prepared.passive.deinit();
         const target = try selectedTarget(a, prepared, base, example.target_slot);
-        const prior = try prefix(a, prepared, target);
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = target });
+        const focused = try shared.focus(a, prepared, target);
+        const prior = focused.prior;
+        const packet = focused.packet;
         defer packets.release(packet);
         for (1..3) |repetition| try consumeReceipt(a, schema, example.id, repetition, prepared, prior, packet, parent);
     }
@@ -195,7 +209,7 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
     if (example.target_slot) |slot| {
         if (slot != .functional_requirements or base.mode == .signal) return error.InvalidCalibrationTarget;
         const spec = @import("../domain/specification.zig");
-        const brief = prepared.inputs.brief orelse return error.MissingCalibrationSource;
+        const brief = prepared.brief;
         const value = brief.description;
         // The collection duty owns the whole feature. One retained description
         // becomes its incomplete FR; companion AC data is mock scaffolding,
@@ -210,6 +224,7 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
         try @import("../domain/specification_provenance.zig").validateStored(a, context.inputs, .{ .records = context.registry.records, .occurrences = context.registry.occurrences }, @import("../domain/reference_support.zig").records(context.references), brief, content);
         prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.inputs.feature, context.references, content, brief);
     }
+    if (base.mode == .candidate and prepared.inputs.specification == null) return error.MissingCalibrationCandidate;
     return prepared;
 }
 fn business(a: std.mem.Allocator, text: []const u8) !@import("../domain/specification.zig").BusinessValue {
@@ -220,20 +235,6 @@ fn selectedTarget(a: std.mem.Allocator, prepared: shared.PreparedContext, base: 
     for (ledger.requirements) |required| {
         const id = required.seed.id;
         if (if (base.mode == .signal) id.unit == .signal else id.unit == .feature and id.slot == (target_slot orelse if (base.target == .primary_user_story) authority.Slot.primary_user_story else .description)) return id;
-    }
-    return error.MissingCalibrationTarget;
-}
-fn prefix(a: std.mem.Allocator, prepared: shared.PreparedContext, target: authority.Id) !?support.Collection {
-    const ledger = try authority.build(a, prepared.inputs);
-    var prior: ?support.Collection = null;
-    for (ledger.requirements) |required| {
-        if (std.meta.eql(required.seed.id, target)) return prior;
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = required.seed.id });
-        defer packets.release(packet);
-        const rules = try evidence.requirements(a, prepared.inputs, prepared.context.inputs, required.seed.id);
-        const bytes = try shared.mockPrefix(a, rules);
-        prior = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, bytes, null);
-        try std.testing.expect(prior.? == .pending);
     }
     return error.MissingCalibrationTarget;
 }
@@ -248,6 +249,7 @@ fn mockReceipt(a: std.mem.Allocator, id: []const u8, packet: *const packets.Pack
     return .{ .input = packet.body(), .origin = .{ .trial_id = try std.fmt.allocPrint(a, "{s}-review-1", .{id}), .parent_run = parent.run, .parent_call = parent.call, .replay_run = "MOCK-offline-no-provider-send", .replay_id = "MOCK-response-1", .request_sha256 = request_hash, .response_sha256 = try shared.sha256(a, response) }, .response_bytes = response };
 }
 fn mechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: shared.PreparedContext, prior: ?support.Collection, target: authority.Id, packet: *const packets.Packet, parent: shared.ReviewParent, request_hash: []const u8, receipt_probes: bool) !void {
+    if (authority.assessmentPolicy(prepared.inputs.projection) == .advisory) return advisoryMechanicalProbe(a, id, prepared, prior, target, packet, parent, request_hash);
     const rules = try evidence.requirements(a, prepared.inputs, prepared.context.inputs, target);
     const source_ids = rules.eligible_source_ids;
     if (target.slot == .functional_requirements) {
@@ -345,6 +347,55 @@ fn mechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: shared.Prepar
     try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, prior, packet, response, null));
     try shared.writeAt(a, output, id, "mock.mechanics.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .unchanged_actual_values = true, .complete_comparison_admission = true, .gap_uncertainty_no_loss = true, .foreign_stale_rejected = true, .native_origin_available = false, .repair_eligibility = "not_assessed_by_diagnostic_attribution", .denial = "requires_connected_native_authorizer", .harm = "not_measured_offline" }, .{}));
 }
+
+fn advisoryMechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: shared.PreparedContext, prior: ?support.Collection, target: authority.Id, packet: *const packets.Packet, parent: shared.ReviewParent, request_hash: []const u8) !void {
+    const rules = try evidence.requirements(a, prepared.inputs, prepared.context.inputs, target);
+    const obligation = "MOCK deliberately incorrect reviewer obligation, retained byte for byte.";
+    const value: model.Value = .{ .candidate_omission = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK actual reviewer detail; do not replace from an oracle.", .missing_obligation = obligation } };
+    const response = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = value });
+    const receipt = try mockReceipt(a, id, packet, parent, request_hash, response);
+    const admitted = try admit(a, id, 1, prepared, prior, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, receipt, .{}));
+    const candidate = candidateOf(admitted.collection) orelse return error.InvalidCalibrationAdvice;
+    try std.testing.expect(admitted.collection != .rejected);
+    try std.testing.expectEqualDeep(receipt.origin, admitted.receipt.origin);
+    try std.testing.expectEqualStrings(response, admitted.receipt.response_bytes);
+    try std.testing.expect(candidate.pending_localization == null and candidate.origin == null);
+    for (candidate.origins) |origin| try std.testing.expect(origin == null);
+    try std.testing.expect((try derive(a, prepared, admitted)) == null);
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, candidate));
+    const ledger = try authority.build(a, prepared.inputs);
+    const index = for (ledger.requirements, 0..) |requirement, ordinal| {
+        if (std.meta.eql(requirement.seed.id, target)) break ordinal;
+    } else return error.InvalidCalibrationTarget;
+    const finding = candidate.review.entries[index].value;
+    try std.testing.expectEqualStrings(obligation, finding.missing_obligation.?);
+    try std.testing.expectEqualDeep(rules.eligible_source_ids, finding.source_ids);
+    try std.testing.expect(finding.loss == .unlocalized and finding.preservation == null);
+    const controls = [_]model.Value{
+        .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK grounded control." } },
+        .{ .unsupported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK purported missing choice remains advice.", .question = "MOCK Which event permits release?" } },
+        .{ .inconclusive = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK unresolved semantic assessment." } },
+    };
+    for (controls) |control| {
+        const bytes = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = control });
+        const result = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, bytes, null);
+        try std.testing.expect(result != .rejected);
+        try std.testing.expect(candidateOf(result).?.pending_localization == null);
+    }
+    const foreign = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = .{ .candidate_omission = .{ .source_ids = &.{.{ .ordinal = 999 }}, .detail = "MOCK foreign source.", .missing_obligation = obligation } } });
+    try std.testing.expect((try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, foreign, null)) == .rejected);
+    try receiptNegatives(a, id, prepared, prior, packet, parent, request_hash, receipt);
+    var normalized_receipt = receipt;
+    normalized_receipt.response_bytes = try std.fmt.allocPrint(a, "{{\"{s}", .{response});
+    normalized_receipt.origin.response_sha256 = try shared.sha256(a, normalized_receipt.response_bytes);
+    const normalized = try admit(a, id, 1, prepared, prior, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, normalized_receipt, .{}));
+    try std.testing.expectEqual(envelope.Normalization.removed_leading_brace_quote, normalized.normalization);
+    try std.testing.expectEqualDeep(candidate.review.entries, candidateOf(normalized.collection).?.review.entries);
+    var stale = prepared;
+    stale.inputs.feature = .{ .bytes = "MOCK-foreign-feature" };
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, prior, packet, response, null));
+    try shared.writeAt(a, output, id, "mock.mechanics.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .current_assignment = packet.body(), .unchanged_actual_values = true, .finding = finding, .post_generation_advice = true, .loss_request = @as(?[]const u8, null), .native_origin_available = false, .publication_authority = false, .harm = "not_measured_offline" }, .{}));
+}
 fn completeAssignmentNegatives(a: std.mem.Allocator, prepared: shared.PreparedContext, assigned: comparison.Assignment, response: comparison.Response) !void {
     try std.testing.expect(assigned.comparisons.len > 0);
     try std.testing.expectError(error.InvalidPreservationComparison, comparison.admit(a, assigned, assigned, prepared.context.inputs, .{ .assessments = response.assessments[0 .. response.assessments.len - 1] }));
@@ -406,7 +457,7 @@ fn consumeReceipt(a: std.mem.Allocator, schema: *const @import("../domain/model_
     defer if (derived) |value| packets.release(value.packet);
     const arm = try std.fmt.allocPrint(a, "handoff-{d}-{s}", .{ repetition, admitted.receipt.origin.response_sha256 });
     const previous_count = if (prior) |value| candidateOf(value).?.review.entries.len else 0;
-    const actual_finding = if (candidateOf(admitted.collection)) |candidate| if (candidate.review.entries.len > previous_count) candidate.review.entries[previous_count].value else null else null;
+    const actual_findings = if (candidateOf(admitted.collection)) |candidate| if (candidate.review.entries.len > previous_count) candidate.review.entries[previous_count..] else null else null;
     if (derived) |value| {
         try shared.writeAt(a, output, id, try std.fmt.allocPrint(a, "{s}.packet.json", .{arm}), value.packet.body());
         try shared.exportBodyAt(a, output, schema, id, arm, value.packet, value.packet.body(), try shared.read(a, "design/workflows/spec/support-loss.prompt.md"));
@@ -417,14 +468,15 @@ fn consumeReceipt(a: std.mem.Allocator, schema: *const @import("../domain/model_
         .source_review_origin = admitted.receipt.origin,
         .normalization = admitted.normalization,
         .native_origin_available = false,
-        .finding = actual_finding,
+        .findings = actual_findings,
+        .post_generation_advice = authority.assessmentPolicy(prepared.inputs.projection) == .advisory,
         .rejection = switch (admitted.collection) {
             .rejected => |value| value.rejection,
             else => null,
         },
         .loss_assignment = if (derived) |value| value.assignment else null,
         .loss_request = if (derived != null) try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ output, id, arm }) else null,
-        .repair_eligibility = "requires_connected_native_authorizer; attribution is not permission",
+        .repair_eligibility = if (authority.assessmentPolicy(prepared.inputs.projection) == .advisory) "forbidden_post_generation" else "requires_connected_native_authorizer; attribution is not permission",
     }, .{}));
 }
 fn pin(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !File {

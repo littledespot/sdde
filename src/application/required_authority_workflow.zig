@@ -7,6 +7,7 @@ const data = @import("../domain/pipeline_data.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const gate = @import("../domain/workflow_gate.zig");
+const generation_facts = @import("specification_generation_facts.zig");
 pub const inputs_schema = values.schema(.required_authority_inputs, owned.Value, 1, null);
 pub const ledger_schema = values.schema(.required_authority_ledger, owned.Value, 1, null);
 pub const raw_schema = values.schema(.raw_required_authority_observations, owned.Value, 1, null);
@@ -21,13 +22,24 @@ const structural_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok
 
 pub const SourcePreservationPolicy = struct {
     pub const Action = @import("../actions/validation/check_source_preservation_policy.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     action: Action = .{},
+    allocator: std.mem.Allocator,
     policy: ?*const @import("../domain/config.zig").ValidationConfig = null,
 
-    pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const policy = self.policy orelse return error.OperationExecutionFailed;
+        if (input.step.repair_permit) |permit| {
+            const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
+            var arena: std.heap.ArenaAllocator = .init(self.allocator);
+            defer arena.deinit();
+            const pending = @import("../domain/source_omission.zig").pendingReview(arena.allocator(), permit, sources.corpus.feature_id, sources.corpus.state_id) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => return .{ .outcome = .invalid, .delta = .{}, .diagnostic = error.InvalidRequiredAuthority },
+            };
+            if (pending == .source_preservation) return .{ .outcome = .ok, .delta = .{} };
+        }
         return .{ .outcome = self.action.execute(policy), .delta = .{} };
     }
 };
@@ -42,13 +54,13 @@ pub const ProjectSpecification = struct {
         const self = context.?;
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
         const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
-        const content = if (input.step.data.contains(.identified_specification_content)) owned.read(&input.step.data, content_schema, .content) catch |operation_error| return operation_error else null;
-        const current = if (input.step.data.contains(.specification_generation_session)) try @import("specification_workflow.zig").readSession(&input.step.data) else null;
-        const brief = if (current) |value| if (value.units[0]) |checked| checked.response.content.brief else null else null;
+        const generated = try generation_facts.read(&input.step.data);
+        const brief = generated.brief();
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
-        if (current) |value| owner.payload.inputs.revision = value.revision;
+        if (generated.phase() == .generation_started and (generated.content == null or brief == null)) return reject(self.allocator, inputs_schema, owner, error.InvalidRequiredAuthority);
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, generated.content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
+        if (generated.session) |value| owner.payload.inputs.revision = value.revision;
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };
@@ -65,8 +77,10 @@ pub const ProjectSourcePreservation = struct {
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
         const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
         const sources = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
+        const generated = try generation_facts.read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
+        if (generated.phase() != .pre_generation) return reject(self.allocator, inputs_schema, owner, error.InvalidRequiredAuthority);
         owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, sources.*) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| operation_error;
     }

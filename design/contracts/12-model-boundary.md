@@ -321,6 +321,13 @@ control. OpenAI rubric evaluation remains outside this amendment.
   unit and declares its semantic-review resources and transitions in YAML.
 - Its findings are labeled `model_assisted`, retain source citations, and never masquerade as
   deterministic evidence.
+- Under the approved [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+  every post-generation source/principle finding remains advice unless an
+  independent owning deterministic validator establishes the corresponding
+  defect. Complete current assessment is a native fact; semantic support is not.
+  Whole-unit/collection assignments retain one finding per native member, with
+  exact association, per-member origins and narrow correction. Pre-generation
+  source-readiness/preservation policy remains separate and mandatory.
 
 **Task-authorized Phase 6 amendment (11 October 2026):** an explicit pure native
 transition may re-admit an execution-local source-review assignment when its
@@ -765,11 +772,14 @@ authenticated answer acceptance and protected history (§23.2).
 - `resolved_exactly_one`, naming either one current existing authority or one candidate resolution supported by current authority, together with its evidence IDs;
 - `resolved_explicit_not_applicable`, naming either the deterministic rule or one authority-supported candidate disposition that proves why the required slot does not apply;
 - `resolved_explicit_exception`, naming a current authenticated exception whose scope exactly covers the requirement;
+- `assessment_complete`, naming the exact current subject/revision binding of
+  complete admitted advisory review; it neither asserts semantic support nor
+  discharges native authority/coverage defects;
 - `clarification_required`, with a closed reason and the earliest owning `spec | plan | tasks` stage;
 - `upstream_rework_required`, when a downstream stage encounters a gap owned by an earlier stage; or
 - `administrative_block`, when the kind/slot has no registered ownership/reconciliation policy or requires authority that the workflow is not authorized to create.
 
-- There is no unresolved-success, warning-only, inferred-default, closest-match,
+- There is no unresolved native-authority success, warning-only authority resolution, inferred-default, closest-match,
   conventional-choice, model-memory, or current-stage-fallback variant.
 - Exact equality and equivalence use the registered policy for that requirement kind.
 - If deterministic comparison cannot prove equivalence, a bounded YAML-declared semantic
@@ -790,10 +800,11 @@ authenticated answer acceptance and protected history (§23.2).
   it.
 
 - Detection time does not change resolution ownership. Spec's early principle
-  assessment (§17.3.1) must completely account for its assigned evidence and findings;
-  project-policy findings enter the existing mandatory Plan-obligation projection.
-  They are not inserted as policy-resolution requirements into the Spec ledger or
-  relabelled resolved. Plan's ledger consumes and resolves them under current authority.
+  assessment (§17.3.1) must completely account for its assigned evidence and findings.
+  Under ADR 0023, semantic policy findings remain cited advice and alone create
+  no mandatory Plan obligation. They are not inserted as policy-resolution
+  requirements into the Spec ledger or relabelled supported. Plan validates its
+  current native required policy decisions independently.
   Genuine business-intent gaps remain Spec-owned; missing/invalid assessment evidence
   follows the ordinary rejection path and cannot be deferred as a policy obligation.
 
@@ -805,7 +816,8 @@ authenticated answer acceptance and protected history (§23.2).
   IDs needed to reproduce every successful entry.
 - An open clarification retains its structural requirement/subject identity.
 - Successful workflow publication is invalid unless the projection is exhaustive and every
-  required entry is successfully resolved; any clarification/rework/block result instead follows
+  required entry is accounted under its native registered authority/assessment
+  policy; assessment completion is never semantic proof. Any clarification/rework/block result instead follows
   its typed lifecycle with no partial stage IR.
 
 This contract is deliberately domain-neutral. Adding a new requirement kind requires its schema, ownership entry, reconciliation policy, accepted and rejected fixtures, and stage-gate tests. It never authorizes a caller-specific workaround or a special continuation for one example.
@@ -880,7 +892,7 @@ authority. Specification generation has a corresponding `inconclusive` result wi
 eligible producer repair can cause a dependent reassessment. The approved D1 source
 schema variants follow §12.7; D2 verdict reassessment remains separate and unapproved.
 
-**Diagnostic evidence:** the existing evidence owner must admit source-backed loss
+**Pre-generation diagnostic evidence:** the existing evidence owner must admit source-backed loss
 against the selected producer even when its claims are ineligible for positive
 content. The loss owner validates the exact producer/claim/source combination;
 packet guidance, selected schemas, collection and readback project those same rules.
@@ -895,9 +907,11 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v15` contract in [§24.1](24-workflow-state.md#241-workflow-state)
-retains these native collections and authored associations, rejecting earlier
-snapshot contracts without supplying missing bindings. ADR 0020 governs exact lineage.
+The current `specification-state/v16` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+retains authorized pre-generation comparisons and authored associations. Generated
+source and principle findings instead retain advisory assessment bindings under
+ADR 0023 and reject attached loss-comparison authority. Earlier snapshot contracts
+reject without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
@@ -905,7 +919,7 @@ semantic finding, detail, and any genuinely selectable source. The approved
 10 October explicit-obligation amendment in [§22.1](22-repair.md) also requires
 `missing_obligation` for a source candidate omission, distinct from its diagnostic
 detail and bound to its selected sources. No other finding or principle review
-may supply it. The separate loss call assesses native-bound preservation
+may supply it. Before generation, the separate loss call assesses native-bound preservation
 views against that unchanged obligation without revising the finding or inferring
 its requirement from diagnostic prose. It returns complete evidenced comparisons,
 not a location; the same schema and immutable assignment govern protocol correction.
@@ -921,6 +935,19 @@ including a singleton, cannot establish positive support. Source IDs remain
 model-selected where the rule permits them; invariant empty clarification IDs
 and an unlocalized default loss are constructed by code. Readback validates
 stored evidence against its bound authority before accepting any projection.
+
+**Approved readiness evidence amendment — 17 October 2026:** under
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md), a positive finding
+for a native `source_readiness` source-purpose subject before any authored candidate
+exists requires explicitly selected, nonempty current original source IDs. Native
+code constructs an empty canonical claim, citation and clarification-response
+selection, independently of the eligible catalogue's cardinality. The packet,
+wire decoder, admission and stored validation use the same role. The method remains
+model-assisted and existing authority/applicability rules apply; this creates no
+supported-candidate resolution or authored `S`/`E`/`L`. Empty, duplicate, foreign or
+stale source selections and forged nonempty canonical provenance reject. Model
+wire provenance/group fields remain forbidden. Candidate-bound/generated evidence
+and source-preservation/reference exact claim sets retain their existing rules.
 
 Reconciliation supplies validated source-obligation groups and feature-field
 roles. The engine binds each record authoring task to one active group before

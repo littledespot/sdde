@@ -5,9 +5,10 @@ const ex = @import("../../domain/reference_extraction_repair.zig").Omission;
 const r = @import("../../domain/reference_reconciliation.zig");
 const Context = @import("../../domain/reference_reconciliation_validation.zig").TextContext;
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "merge-source-extraction-repair", .kind = .action, .requires = &loss.extraction_requires, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &loss.extraction_dependents, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "merge-source-extraction-repair", .kind = .action, .requires = &loss.extraction_requires, .optional = &@import("../../domain/specification_generation_phase.zig").optional, .produces = &.{}, .replaces = &.{.text_validated_reference_extraction}, .invalidates = &loss.extraction_dependents, .side_effect = .none };
     validator: r.text.Validator,
     pub fn execute(self: @This(), a: std.mem.Allocator, facts: ex.Facts, ctx: Context, repair: loss.Repair) ex.Error!r.extraction.TextValidated {
+        try loss.requireRepairPhase(facts.support.repair_phase);
         var canonical = try @import("../../domain/typed_text.zig").CanonicalText.fromInputs(a, self.validator.normalizer, facts.extraction.inputs);
         defer canonical.deinit(a);
         const response = repair.response orelse return error.InvalidAtomicRepair;

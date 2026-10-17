@@ -1,5 +1,26 @@
 # Actual reviewer-to-loss handoff preparation
 
+**Current advisory cutover — 17 October 2026:** post-generation source findings
+retain their actual detail as advice and cannot produce a loss or repair request.
+Current offline preparation uses complete native assignments and writes to
+`.zig-cache/source-review-handoff/current-advisory/`. Of the 12 frozen inputs,
+three have a runnable current subject: the existing two explicit collection
+fixtures exercise advisory admission, and the direct-signal fixture retains its
+actual pre-generation comparison controls. Seven partial-only historical
+candidates are recorded as `incomplete_candidate`, and the two B3 admission
+rejections remain separate. No qualification case is counted as currently
+prepared. Six diagnostic review trials and at most two pre-generation comparison
+trials are prepared; none is dispatched or authorized by running the tests.
+The current checks retain reviewer values, validate exact receipt bindings and
+foreign/stale negatives, and reject generated loss preparation. They do not
+measure semantic discovery, repair quality, or live success.
+
+Rerun the offline checks with `zig build test-specification-generation -j1
+--summary all`. The dated plan and evidence below remain historical and are
+superseded for current dispatch/admission by this cutover.
+
+## Historical preparation
+
 **B3 current-contract refresh — 17 October 2026:** fixture candidates now pass
 through current native raw-prose admission before canonical validation. The frozen
 `dual-ready` input has two eligible occurrences with identical exact bytes, so the

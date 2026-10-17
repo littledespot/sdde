@@ -1926,7 +1926,8 @@ test "required authority has capability-free registered bindings and no model co
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
     try std.testing.expectEqual(@import("domain/clarification_inputs.zig").Stage, authority.Stage);
-    try std.testing.expectEqual(@as(usize, 6), @typeInfo(authority.Outcome).@"union".fields.len);
+    try std.testing.expectEqual(@as(usize, 7), @typeInfo(authority.Outcome).@"union".fields.len);
+    try std.testing.expect(@FieldType(authority.Outcome, "assessment_complete") == authority.Assessment);
     try std.testing.expect(!@hasField(authority.Observation, "outcome"));
     try std.testing.expect(!@hasField(authority.Observation, "owner"));
     try std.testing.expect(!@hasField(authority.Observation, "score"));
@@ -2017,12 +2018,18 @@ test "candidate repairs share authority and expose only native scoped operations
     const reconciliation = @import("application/reference_reconciliation_repair_workflow.zig");
     const coverage = @import("application/specification_coverage_repair_workflow.zig");
     const support = @import("application/specification_support_repair_workflow.zig");
-    const omission = @import("application/specification_omission_repair_workflow.zig");
-    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, tokens.RetainClaimRejection, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, omission.Authorize, omission.BuildInput, omission.Parse, omission.Merge }) |T| {
+    const source_omission = @import("application/source_omission_repair_workflow.zig");
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, tokens.RetainClaimRejection, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
-    inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_coverage_repair.zig"), @embedFile("domain/specification_support_repair.zig") }) |source| {
+    inline for (.{ source_omission.Authorize, source_omission.BuildInput, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
+        try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &@import("domain/specification_generation_phase.zig").optional, T.Action.contract.optional);
+    }
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.Action.contract.replaces);
+    try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{}, coverage.Authorize.Action.contract.invalidates);
+    try std.testing.expectEqualSlices(@import("domain/workflow.zig").OutcomeTag, &.{ .blocked, .failed }, &coverage.Authorize.outcomes);
+    inline for (.{ @embedFile("domain/reference_extraction_repair.zig"), @embedFile("domain/specification_repair.zig"), @embedFile("domain/reference_extraction_text_repair.zig"), @embedFile("domain/reference_reconciliation_repair.zig"), @embedFile("domain/specification_support_repair.zig") }) |source| {
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic_repair.zig"));
         try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "atomic.checkMerge("));
         try expectAbsent(source, "candidate.revision + 1");

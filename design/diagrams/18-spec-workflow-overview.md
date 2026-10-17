@@ -1,60 +1,50 @@
 # Specification workflow overview
 
-High-level view of the proposed Specify workflow. The supplied workflow definition
-uses the ID `spec-generation`.
-Principle assessment and question preparation below include the accepted, pending
-[ADR 0015](../decisions/0015-specification-principle-review.md) additions.
+The supplied definition uses `spec-generation`. This view includes the accepted
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) amendment; the
+overall governing design remains proposed.
 
 ```mermaid
 flowchart TD
-    START["Run spec-generation<br/>with a feature directory and reference selector"]
-    START --> PREPARE["Load configuration and workflow;<br/>validate inputs and reuse applicable clarification answers"]
-    PREPARE --> REFERENCES["Read and account for every reference;<br/>extract and reconcile source claims"]
-    REFERENCES --> AUTHORITY{"Required source meaning<br/>and authority resolved?"}
-    AUTHORITY -->|Yes| POLICY["Assess requirement–principle consistency;<br/>preserve business intent and cite Plan policy obligations"]
-    PREPARE -. Canonical selected principle spans .-> POLICY
-    POLICY --> GENERATE["Generate the feature brief<br/>and business specification candidates"]
-    GENERATE --> REVIEW["Validate structure, citations and coverage;<br/>review source support and refresh affected policy assessments"]
-    REVIEW --> RESULT{"Candidate complete,<br/>supported and valid?"}
-    RESULT -->|Yes| OUTPUT["Render and verify spec.md and reference-context.md;<br/>validate the complete output, state and current inputs"]
-    OUTPUT -->|Valid; clarifications resolved| PUBLISH["Replace registered outputs;<br/>write workflow state last"]
-    PUBLISH -->|All writes succeed| DONE["Specification complete;<br/>available for user review and the Plan gate"]
-
-    AUTHORITY -->|Missing or conflicting business knowledge| CLARIFY
-    GENERATE -->|Clarification needed| CLARIFY
-    RESULT -->|Genuine knowledge gap| CLARIFY
-    OUTPUT -->|Unresolved clarification| CLARIFY
-    CLARIFY["Prepare the affected requirement, evidence and exact decision;<br/>refresh forms with stable IDs and preserve user-closed files"]
-    CLARIFY -->|Forms saved| NEEDSUSER["End needs_user;<br/>incomplete spec and question links published"]
-    NEEDSUSER -. User answers and starts a fresh run .-> START
-
-    RESULT -->|Repairable candidate defect| REPAIR["Repair only authorized content<br/>within the declared retry limit"]
-    REPAIR -->|Revalidate repaired candidate| REVIEW
-    REPAIR -->|Exhausted or disallowed| STOP["Stop without successful completion"]
-    AUTHORITY -->|Cannot establish ownership or policy| STOP
-    POLICY -->|Invalid or incomplete assessment evidence| STOP
-    OUTPUT -->|Invalid output or stale inputs| STOP
+    START["Run Specify with a feature directory and reference selector"]
+    START --> PREPARE["Load configuration and workflow;<br/>validate inputs and applicable answers"]
+    PREPARE --> REFERENCES["Account for sources;<br/>extract and reconcile claims"]
+    REFERENCES --> AUTHORITY{"Pre-generation preservation and<br/>required source authority resolved?"}
+    AUTHORITY -->|Yes| GENERATE["Generate brief, story, entities and records;<br/>native validation owns admission and bounded unit repair"]
+    AUTHORITY -->|Authorized source loss| SOURCE_REPAIR["Bounded source repair before generation;<br/>renew affected dependencies"]
+    SOURCE_REPAIR --> AUTHORITY
+    GENERATE --> REVIEW["Source and principle review by whole native assignment;<br/>retain original semantic findings as advice"]
+    REVIEW --> RESULT{"Native candidate valid and<br/>bound assessments complete?"}
+    RESULT -->|Yes, including adverse advice| OUTPUT["Render, reparse and validate outputs,<br/>canonical state and current inputs"]
+    OUTPUT --> PUBLISH["Replace registered outputs;<br/>write workflow state last"]
+    PUBLISH -->|All writes succeed| DONE["Specification available for user review and Plan gate"]
+    AUTHORITY -->|Required business decision missing| CLARIFY
+    GENERATE -->|Declared knowledge gap| CLARIFY
+    CLARIFY["Prepare exact required decision;<br/>refresh stable question IDs and protect resolved files"]
+    CLARIFY -->|Valid forms saved| NEEDSUSER["End needs_user; publish incomplete specification"]
+    NEEDSUSER -. User answers and starts a fresh invocation .-> START
+    RESULT -->|Correctable native metadata defect| CORRECTION["Bounded correction with current scope and unchanged verdict"]
+    CORRECTION --> RESULT
+    AUTHORITY -->|Unknown ownership or exhausted correction| STOP["Typed blocked or failed outcome"]
+    GENERATE -->|Unsafe or exhausted repair| STOP
+    RESULT -->|Invalid authority or exhausted correction| STOP
+    OUTPUT -->|Invalid output or stale input| STOP
     CLARIFY -->|Write failure or protected answer needs review| STOP
     PUBLISH -->|Write failure or interruption| STOP
 ```
 
-- The feature directory is relative to `paths.specs`; the reference selector is
-  relative to `paths.references`.
-- Model output remains a candidate. Semantic review is model-assisted; the engine
-  owns validation, repair authorization, rendering and publication.
-- Upstream omission repair uses [shared dependency renewal](../../fixes/archive/IMP_001.md#r32-follow-up--shared-protocol-progress-and-recurrence)
-  and complete rebuilding. Progress requires a stable semantic-subject join;
-  regenerated ordinals alone cannot establish recovery.
-- Clarifications persist across runs, but each rerun starts from the beginning.
-  Publication failure may leave replaced files without recording new completion.
-- Open Spec clarifications stop Plan before planning work; open Spec or Plan
-  clarifications stop Tasks before task generation. Policy obligations do not bypass
-  either gate. Once Spec is valid, Plan resolves its mandatory policy obligations.
-- Failures and cancellation can end any applicable step. The shared stop node
-  simplifies the picture; `invalid`, `blocked`, `failed` and `cancelled` remain
-  distinct outcomes.
+- Semantic review is advisory, including principle findings. It supplies no
+  automatic content repair, upstream rebuild, question or mandatory Plan obligation.
+- Native requiredness, provenance, exact coverage, citations, current authority
+  and publication gates remain mandatory. Source repair rejects once generation
+  starts, including direct use through a custom workflow.
+- Clarifications persist across invocations; fresh invocations start at `start`.
+  Failed publication may leave replaced files without recording new completion.
+- Open Spec questions stop Plan; open Spec or Plan questions stop Tasks. Plan
+  independently validates required current policy.
+- Failed, blocked, cancelled and completed remain distinct outcomes.
 
 See the [Specify contract](../contracts/17-specify.md),
 [workflow definition](../workflows/spec.workflow.yaml),
-[execution and publication decision](../decisions/0009-atomic-workflow-execution.md)
-and [detailed specification flow](10-spec-workflow.md).
+[publication decision](../decisions/0009-atomic-workflow-execution.md) and
+[detailed specification flow](10-spec-workflow.md).

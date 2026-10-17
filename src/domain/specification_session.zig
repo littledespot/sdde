@@ -18,7 +18,6 @@ pub const Session = struct {
     record_batches: []const g.Checked = &.{},
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
-    omission_target_bound: ?u32 = null,
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 

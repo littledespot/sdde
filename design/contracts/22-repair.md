@@ -5,6 +5,16 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 
 ### 22.1 Definition of atomic
 
+**Approved B2/W1 amendment — 17 October 2026:**
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) supersedes
+automatic content repair and upstream regeneration from post-generation semantic
+findings, including principle findings. Such findings remain advice with their
+original evidence and origins. Native defect validators retain their repair or
+blocked outcomes; valid citations or model-assisted comparisons do not establish
+semantic corroboration. A genuine native authority gap remains typed, never an
+automatic upstream rebuild after generation. Pre-generation source repair and
+native generation/protocol repair remain distinct authorized operations.
+
 An atomic repair changes the smallest independently valid IR unit associated with one diagnostic. It is not necessarily one character. The unit may be:
 
 - one scalar field, such as a proposed path;
@@ -23,13 +33,13 @@ permits one native-bound inseparable conflict-relation group across its affected
 dispositions/conflict records. No other cross-record repair is authorized.
 
 The user-approved chunk 14 amendment (18 September 2026) permits execution-private
-repair of source-backed candidate omissions. The owning contract must establish a
+pre-generation repair of source-backed candidate omissions. The owning contract must establish a
 unique defective producer and its smallest safe target from captured source and
 review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target.
 
 The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
-does not relax that prohibition. An inconclusive finding without an identifiable
+does not relax that prohibition. In required pre-generation assessment, an inconclusive finding without an identifiable
 user decision must reject when existing authority cannot correct it; completing
 its question text cannot grant clarification publication. Optional verdict
 reassessment remains a separate unapproved decision in FIX_002.
@@ -80,11 +90,10 @@ to choose a handle. Composition correction and retry limits remain unchanged.
 A lost obligation outside that association has an explicit unresolved-association
 outcome and blocks; this amendment adds no membership-changing rebuild permission.
 It cannot blame extraction, grouping or the removed presentation-role producer.
-Record omission insertion must bind one current accepted group occurrence and its
-complete ordered selection through the same resolver as canonical readback.
-Equal claim membership does not identify the group occurrence. Missing, ambiguous
-or foreign occurrence authority blocks; aggregate evidence from several groups
-cannot authorize an invented association or cross-group insertion.
+The former post-generation reviewed-omission insertion route is removed by
+ADR 0023. A semantic omission note cannot authorize an invented association or
+cross-group insertion. Independently authorized native membership repair retains
+its current accepted group occurrence, complete selection and readback checks.
 
 An omission must identify nonempty authorized sources at review admission, even
 when its subject also fixes claim evidence. Loss comparison retains that admitted
@@ -148,7 +157,7 @@ no-feature extraction owns its forced classifications;
 a separately classified claims collection does not identify a unique extraction
 or classification culprit merely because meaning is missing.
 
-Attribution is separate from atomic permission. Derived upstream locations supply
+Attribution is separate from atomic permission. Before generation, derived upstream locations supply
 the existing diagnostic claim sets and must pass the existing target, old-value,
 revision and dependency checks. Known authored-association or summary defects
 retain explicit unsupported-repair identities and cannot fall back to another
@@ -157,8 +166,9 @@ Unresolved attribution grants no upstream rebuilding; independently authorized
 candidate-local checks remain available. No new exact-reference, association-membership, summary,
 entity-decision, retry or verdict-reassessment permission is added.
 
-Collection, correction, authorization and readback use this one comparison
-contract. Canonical evidence retains native facts, bindings, the complete response
+Pre-generation collection, correction, authorization and readback use this one comparison
+contract. Post-generation advisory findings request no loss comparison and grant
+no content-repair authority. Canonical pre-generation evidence retains native facts, bindings, the complete response
 and its comparison-call origin separately from the review-finding origin. Rebuild
 bindings from current canonical facts before deriving any retained attribution;
 request logs and stored digests are not authority. Changed producers or candidate
@@ -314,8 +324,8 @@ The repair guidance contains:
 **Focused-review repair (approved 26 September 2026; task-authorized Phase 4
 transport/lifecycle amendment, 11 October 2026).** All produced findings are
 individually validated before the next native assignment is requested. The
-acceptance-criterion record assignment in §17 may produce its three existing
-Given/When/Then findings in one call. Exact complete native membership is checked
+whole-unit/collection assignment in §17 produces all its native member findings
+in one call for source and principle assessment. Exact complete native membership is checked
 before appending any member; partial, duplicate, foreign or misbound responses
 cannot contribute coverage. Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
@@ -328,10 +338,10 @@ same request assignment and selected schema. The collection's first admitted
 native-candidate origin stays fixed through later findings and repairs, while each
 finding retains its own origin. Batched siblings initially share their actual
 accepted review-call origin; a selected repair changes only its target's origin,
-never inventing a call for another field. A record protocol correction requests
-the same complete three-member assignment, while native detail/evidence repair
+never inventing a call for another field. Assignment protocol correction requests
+the same complete native member set, while native detail/evidence repair
 remains scoped to the selected singleton finding and retains its verdict.
-Multiple candidate omissions are localized serially from the earliest canonical
+In required pre-generation source preservation, multiple candidate omissions are localized serially from the earliest canonical
 finding with no preservation evidence. Each keeps its own unchanged obligation,
 complete comparison assignment and comparison-call origin; completing one does
 not clear another. Selection derives from retained canonical findings, not a
@@ -398,8 +408,10 @@ families; source-omission detail correction uses the coupled explanation and
 obligation shape in §22.1, and cannot change the verdict. The original source-group occurrence association, explicit `S`, effective evidence
 bound and siblings stay pinned by the existing atomic authorization. A value-only replacement cannot expand them;
 changing authored group membership requires separately authorized authored-unit
-rebuilding; none is added by this amendment. Genuine evidenced upstream loss
-retains its existing producer repair path. Malformed or corrupt stored evidence is rejected before
+rebuilding; none is added by this amendment. Before generation, genuine evidenced
+upstream loss retains its existing producer repair path. After generation starts,
+the native phase guard rejects authorization, packet preparation and merge under
+ADR 0023. Malformed or corrupt stored evidence is rejected before
 model-response reconstruction. Unbound authority is an engine block, not a
 model repair or user clarification.
 
@@ -475,12 +487,26 @@ Valid response:
 9. When no local diagnostics remain, run the full candidate validation suite.
 10. Only a full pass can authorize rendering or commit.
 
-Upstream omission repair invalidates every dependent projection. Extraction changes
-rebuild canonical token, claim and citation identities across the corpus, then
-reconciliation, support review and downstream specification evidence. Preserve raw
-candidate siblings even when their derived identities change. Semantic regeneration
-uses explicit registered workflow steps and the shared progress-sensitive retry/token
-accounting; repair does not create a hidden execution path or saved continuation.
+Pre-generation source omission repair rebuilds its affected reference projections
+and canonical token, claim and citation identities through registered steps.
+Authorization, packet construction and merge require the current native
+pre-generation phase, bound into existing dependency/CAS checks. Runner-owned
+bindings derive that phase from the actual optional generation session/content;
+model bytes and custom YAML routing cannot supply it. A retained authorization
+cannot be used after generation starts. The duplicate post-generation upstream
+merge operations, their subgraph and semantic specification-omission repair path
+are removed under W1/W2. Actual upstream changes require fresh validation; no
+review finding grants hidden execution or saved continuation.
+
+The native source-repair retry scope pins its original required review projection,
+producer, feature and captured reference state. After rebuilding, becoming
+generation-ready cannot skip that dependent review or substitute a different
+review purpose. Existing readiness/preservation gates require the matching
+pending review regardless of the optional preservation-scan setting. Only its
+admission can settle the repair obligation; advisory review cannot. Generation
+initialization blocks while any native repair permit remains active, including
+a child suspending a source-repair parent. Projection retirement leaves those
+runner-owned obligations intact.
 
 The engine never trusts a model field such as `valid: true`.
 

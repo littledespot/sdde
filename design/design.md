@@ -38,6 +38,9 @@ preserves the decision scope; subsequent defect reviews do not grant new authori
 
 [ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
 requirement–principle assessment and shared actionable-question preparation.
+[ADR 0023](decisions/0023-advisory-post-generation-review.md) makes all
+post-generation semantic findings advisory, including principle findings, with
+whole-unit/collection assessment and no automatic upstream rebuilding.
 Current implementation and semantic acceptance gaps are tracked in
 [FIX05](../fixes/FIX05.md). Business and policy ownership stay separate.
 
@@ -181,9 +184,9 @@ references, and normative resolutions are retained in the linked sections.
 17. Implementation cannot begin until the user has approved the current plan and current task graph.
 18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`. Prose and display content are inert: punctuation or a rendered link never authorizes a file, command or network operation. The approved typed-content amendment in §7.1 supersedes blanket path-shaped prose rejection.
 19. Every datum or decision marked required by a closed schema, obligation, policy, or accepted authority has exactly one current supported resolution before its owning stage can commit.
-20. Zero resolutions, multiple non-equivalent resolutions, semantic ambiguity, conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only continuation, or caller-local exception.
+20. Zero native authority resolutions, multiple non-equivalent resolutions, established authority ambiguity/conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only authority resolution, or caller-local exception. Under ADR 0023, a post-generation semantic finding alone establishes none of those facts: native assessment completion retains it as advice without declaring semantic support or discharging any native defect.
 21. Clarification ownership is derived from a compiler-locked requirement-kind/decision-slot registry. A model, prompt, caller, principle, preset, or configuration value cannot choose a more convenient stage.
-22. A downstream stage never answers an upstream gap. It invalidates affected descendants and returns to the earliest owning stage; implementation may repair code only when all governing upstream decisions are already resolved and the repair remains inside its authorization.
+22. A downstream stage never answers an upstream gap. A post-generation upstream finding retains its earliest producer and evidence in a typed outcome or an independently warranted clarification; it cannot automatically invalidate generated content, rebuild an upstream stage and regenerate the pipeline. Actual upstream authority changes invalidate descendants for fresh validation. Implementation may repair code only when all governing upstream decisions are already resolved and the repair remains inside its authorization.
 23. Domain-specific extractors and resolvers may contribute typed candidates and evidence, but all domains use the same reconciliation outcomes, ownership routing, clarification lifecycle, stage gates, and negative-test contract. No example, fixture, format, token kind, filename, framework, or caller receives a bypass or special continuation rule.
 24. A project workflow definition is closed declarative data, never executable
     code or an operational capability.
@@ -710,7 +713,8 @@ The package layout reflects the required dependency boundaries and native Zig di
 - Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
 - Integrate the shared reconciliation boundary for every specification-owned field, reference-meaning decision, and preserved obligation; specification-local rules may contribute requirements/candidates only.
 - Add the focused principle assessment in §17.3.1 using canonical principle selection;
-  retain policy conflicts as mandatory Plan obligations and prepare actionable needs.
+  retain semantic findings as cited advice under ADR 0023. Native required policy
+  and actionable missing decisions retain their owning gates.
 - Implement the complete `S01..S99` clarification lifecycle, exact subject deduplication, controlled forms, authority/user resolution, rerun regeneration, and the blocking plan gate.
 
 ### Increment 3: Plan
@@ -917,8 +921,9 @@ The new engine is ready for production evaluation when all of the following are 
     mechanically verifiable across restart without a content fingerprint.
 
 18. The one-use no-invention repair may produce `clarification_needed` only for an
-    admitted authority gap under §12.8.1. Candidate loss and inconclusive review
-    retain their repair/rejection outcome. Neither engine nor model invents a
+    admitted authority gap under §12.8.1. Post-generation semantic loss and
+    inconclusive findings remain advice under ADR 0023; native defects retain
+    their owning repair/rejection outcome. Neither engine nor model invents a
     requirement, architecture decision, task fact, path, command or resolution.
 
 19. **Clarification identity and stage gates.**
@@ -954,9 +959,11 @@ The new engine is ready for production evaluation when all of the following are 
     - The exact current principle registry is loaded, selected and cited for Spec's
       focused consistency assessment (§17.3.1), and at plan, tasks, implement and fresh
       clarification-rerun gates. It never invents or erases specification requirements.
-    - Spec proves assessment/evidence coverage and retains every Plan-owned policy
-      obligation. Plan rechecks current principles and resolves those obligations;
-      a successful Spec assessment does not certify policy approval.
+    - Spec proves complete current assessment/evidence coverage and retains
+      semantic principle findings as advice. Such a finding alone creates no
+      mandatory Plan obligation. Plan rechecks current principles and resolves
+      its native required policy decisions; Spec assessment completion does not
+      certify policy approval.
     - Exact `toolchain.yaml` is closed mechanical policy inherited from validated preset
       packages and never enters semantic guidance.
 
@@ -1097,6 +1104,7 @@ decision history:
 | [0020](decisions/0020-derived-exact-reference-lineage.md) | Native raw-byte recognition within current request eligibility derives exact occurrence handles and lineage using contextual delimiters; model-authored exact selections are removed. Selected support remains fixed, canonical field roles and repair bounds remain, and lexical evidence proves no semantic use. |
 | [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
+| [0023](decisions/0023-advisory-post-generation-review.md) | All post-generation semantic findings remain advice; native assessment completeness is distinct from semantic support, whole units/collections are reviewed together, and upstream source repair requires a current pre-generation witness. |
 
 Additional accepted feature boundaries:
 

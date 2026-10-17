@@ -88,111 +88,125 @@ pub fn Contract(comptime purpose: Purpose) type {
         // in the retained ledger. Only the applicable review subject reaches the model.
         const Requirement = struct { ordinal: u32, task: []const u8, permitted_not_applicable: ?a.Rule, evidence: admission.Requirements.Guidance };
 
-        pub const Applicability = union(enum) { required, not_applicable: a.Rule, review: a.Rule };
+        pub const Applicability = a.Applicability;
 
-        /// One projection of registered policy and current candidate facts, shared by
-        /// requests, admission, insertion repair and persisted evidence re-admission.
-        pub fn applicability(inputs: a.Inputs, id: a.Id) Error!Applicability {
-            if (purpose == .principles) return .required;
-            const policy = a.policy(id) orelse return error.InvalidRequiredAuthority;
-            const rule = policy.not_applicable orelse return .required;
-            return switch (rule) {
-                .no_business_data => if (inputs.specification) |content|
-                    if (content.entities.disposition == .not_applicable) .{ .not_applicable = rule } else .required
-                else
-                    .{ .review = rule },
-                .authenticated_exact_scope => error.InvalidRequiredAuthority,
-            };
-        }
+        /// Requests, admission, repair and readback use the registered owner.
+        pub const applicability = a.applicability;
 
-        pub const Scope = if (purpose == .source) union(enum) { finding: a.Id, correction: a.Id, record: a.Id } else union(enum) { finding: a.Id, correction: a.Id };
+        pub const Scope = union(enum) { finding: a.Id, correction: a.Id, assignment: a.Id };
 
-        /// Batch only the registered acceptance-criterion record's existing
-        /// scalar duties. Other source subjects and policy review stay focused.
         pub fn assignmentScope(inputs: a.Inputs, id: a.Id) Scope {
-            if (purpose == .source) if (inputs.projection == .specification and id.kind == .feature_intent and id.unit == .record and id.unit.record.kind == .acceptance_criterion and id.slot == .given) return .{ .record = id };
-            return .{ .finding = id };
+            return if (a.assessmentPolicy(inputs.projection) == .advisory) .{ .assignment = id } else .{ .finding = id };
         }
 
         pub fn assignmentSubjects(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id) Error![]const a.Id {
-            if (purpose != .source or assignmentScope(inputs, id) != .record) return error.InvalidRequiredAuthority;
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
-            const ledger = try a.build(arena.allocator(), inputs);
-            const start = for (ledger.requirements, 0..) |required, index| {
-                if (std.meta.eql(required.seed.id, id)) break index;
-            } else return error.InvalidRequiredAuthority;
-            const fields = @typeInfo(@FieldType(@import("specification.zig").Content(@import("specification.zig").BusinessValue), "acceptance_criterion")).@"struct".fields;
-            if (ledger.requirements.len - start < fields.len) return error.InvalidRequiredAuthority;
-            const end = start + fields.len;
-            if (end < ledger.requirements.len and std.meta.eql(ledger.requirements[end].seed.id.unit, id.unit)) return error.InvalidRequiredAuthority;
-            inline for (fields, 0..) |field_info, index| {
-                const target = ledger.requirements[start + index].seed.id;
-                if (!std.meta.eql(target.unit, id.unit) or target.slot != @field(a.Slot, field_info.name) or target.member != 0) return error.InvalidRequiredAuthority;
+            const scratch = arena.allocator();
+            const ledger = try a.build(scratch, inputs);
+            const owner = try subjects.assignmentUnit(scratch, inputs, id);
+            var selected: std.ArrayList(a.Id) = .empty;
+            var started = false;
+            for (ledger.requirements) |required| {
+                const current = required.seed.id;
+                const same = std.meta.eql(owner, try subjects.assignmentUnit(scratch, inputs, current));
+                if (!started) {
+                    if (!std.meta.eql(current, id)) {
+                        if (same) return error.InvalidRequiredAuthority;
+                        continue;
+                    }
+                    started = true;
+                }
+                if (!same) break;
+                try selected.append(allocator, current);
             }
-            const selected = try allocator.alloc(a.Id, fields.len);
-            for (selected, ledger.requirements[start..end]) |*target, required| target.* = required.seed.id;
-            return selected;
+            if (selected.items.len == 0) return error.InvalidRequiredAuthority;
+            return selected.toOwnedSlice(allocator);
         }
         pub fn acceptsProjection(projection: @FieldType(a.Inputs, "projection")) bool {
             return switch (purpose) {
-                .source => projection == .specification or projection == .source_preservation,
+                .source => projection == .source_readiness or projection == .specification or projection == .source_preservation,
                 .principles => projection == .principle_assessment,
             };
         }
         pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
+            if (scope == .assignment) return assignmentPacket(allocator, inputs, context, scope.assignment);
             if (purpose == .principles) return principles.packet(allocator, inputs, context, scope);
-            if (scope == .record) return recordPacket(allocator, inputs, context, scope.record);
             return packetForContext(allocator, inputs, context, scope);
         }
 
-        fn recordPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id) Error!*packets.Packet {
+        fn assignmentDefinition() @import("model_result_schema.zig").DefinitionId {
+            return .{ .bytes = if (purpose == .source) "assignment_findings" else "principle_assignment_findings" };
+        }
+
+        fn assignmentPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
             const selected = try assignmentSubjects(scratch, inputs, id);
+            const ledger = try a.build(scratch, inputs);
             var body: ?std.json.Value = null;
             var record: ?std.json.Value = null;
+            var business_context: ?std.json.Value = null;
             var assigned: std.ArrayList(std.json.Value) = .empty;
             const ordinals = try scratch.alloc(i64, selected.len);
             var sources: std.ArrayList(i64) = .empty;
             for (selected, ordinals) |target, *ordinal| {
-                const single = try packetForContext(scratch, inputs, context, .{ .finding = target });
+                const single = if (purpose == .source) try packetForContext(scratch, inputs, context, .{ .finding = target }) else try principles.packet(scratch, inputs, context, .{ .finding = target });
                 defer packets.release(single);
                 var parsed = try @import("strict_json.zig").decode(std.json.Value, scratch, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
-                var requirement = parsed.object.get("requirements").?.array.items[0];
-                ordinal.* = requirement.object.get("ordinal").?.integer;
+                ordinal.* = for (ledger.requirements, 0..) |required, index| {
+                    if (std.meta.eql(required.seed.id, target)) break @intCast(index + 1);
+                } else return error.InvalidRequiredAuthority;
+                var requirement: std.json.Value = if (purpose == .source) parsed.object.get("requirements").?.array.items[0] else .{ .object = .empty };
+                if (purpose == .principles) {
+                    try requirement.object.put(scratch, "ordinal", .{ .integer = ordinal.* });
+                    try requirement.object.put(scratch, "task", parsed.object.get("task").?);
+                }
                 var subject = parsed.object.get("subject").?;
-                if (record == null) record = subject.object.get("record").?;
-                _ = subject.object.orderedRemove("record");
+                if (purpose == .source) {
+                    if (subject.object.fetchOrderedRemove("record")) |entry| if (entry.value != .null) {
+                        record = entry.value;
+                    };
+                } else {
+                    if (subject.object.fetchOrderedRemove("context")) |entry| business_context = entry.value;
+                    if (subject.object.fetchOrderedRemove("record")) |entry| if (entry.value != .null) {
+                        record = entry.value;
+                    };
+                }
                 try requirement.object.put(scratch, "subject", subject);
-                try requirement.object.put(scratch, "assessment_scope", parsed.object.get("assessment_scope").?);
-                const rules = parsed.object.get("evidence_rules").?;
-                try requirement.object.put(scratch, "evidence_rules", rules);
-                for (rules.object.get("eligible_source_ids").?.array.items) |source| {
-                    if (std.mem.indexOfScalar(i64, sources.items, source.integer) == null) try sources.append(scratch, source.integer);
+                if (purpose == .source) {
+                    try requirement.object.put(scratch, "assessment_scope", parsed.object.get("assessment_scope").?);
+                    const rules = parsed.object.get("evidence_rules").?;
+                    try requirement.object.put(scratch, "evidence_rules", rules);
+                    for (rules.object.get("eligible_source_ids").?.array.items) |source| {
+                        if (std.mem.indexOfScalar(i64, sources.items, source.integer) == null) try sources.append(scratch, source.integer);
+                    }
                 }
                 try assigned.append(scratch, requirement);
                 if (body == null) body = parsed;
             }
             var payload = body.?;
             _ = payload.object.orderedRemove("subject");
+            _ = payload.object.orderedRemove("task");
             _ = payload.object.orderedRemove("assessment_scope");
             _ = payload.object.orderedRemove("evidence_rules");
             try payload.object.put(scratch, "requirements", .{ .array = std.array_list.Managed(std.json.Value).fromOwnedSlice(scratch, try assigned.toOwnedSlice(scratch)) });
-            try payload.object.put(scratch, "record", record.?);
-            const slot = try std.fmt.allocPrint(scratch, "{s}-record", .{try reviewSlot(scratch, inputs, id)});
+            if (record) |value| try payload.object.put(scratch, "record", value);
+            if (business_context) |value| try payload.object.put(scratch, "business_context", value);
+            const slot = try std.fmt.allocPrint(scratch, "{s}-assignment", .{try reviewSlot(scratch, inputs, id)});
             const state = (try p.items(context)).state_id;
-            const definition: @import("model_result_schema.zig").DefinitionId = .{ .bytes = "record_findings" };
+            const definition = assignmentDefinition();
             const base = try reviewPacket(allocator, inputs, state, try std.json.Stringify.valueAlloc(scratch, payload, .{}), slot, definition);
             defer packets.release(base);
-            const selected_packet = try packets.withIntegerChoices(allocator, base, &.{
-                .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals },
+            const ordinal_choice: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals };
+            const selected_packet = if (purpose == .source) try packets.withIntegerChoices(allocator, base, &.{
+                ordinal_choice,
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
-            });
+            }) else try packets.withIntegerChoices(allocator, base, &.{ordinal_choice});
             defer packets.release(selected_packet);
-            return withQuestionText(allocator, selected_packet, context.inputs, true);
+            return if (purpose == .source) withQuestionText(allocator, selected_packet, context.inputs, true) else packets.withBody(allocator, selected_packet, selected_packet.body());
         }
 
         fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
@@ -205,7 +219,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             if (!acceptsProjection(inputs.projection) or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
             const target: a.Id = switch (scope) {
                 .finding, .correction => |id| id,
-                .record => return error.InvalidRequiredAuthority,
+                .assignment => return error.InvalidRequiredAuthority,
             };
             const index = for (ledger.requirements, 0..) |requirement, ordinal| {
                 if (std.meta.eql(target, requirement.seed.id)) break ordinal;
@@ -398,7 +412,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             entries[ordinal - 1].value = try source_model.bindLoss(required, entries[ordinal - 1].value, owner.location(attribution), proof);
             var next = candidate;
             next.review.entries = entries;
-            next.pending_localization = pendingLocalization(entries);
+            next.pending_localization = pendingLocalization(inputs, entries);
             next.revision = std.math.add(u64, candidate.revision, 1) catch return error.InvalidRequiredAuthority;
             return if (next.working) validateWorking(allocator, inputs, context.inputs, next) else validate(allocator, inputs, context.inputs, next);
         }
@@ -415,7 +429,8 @@ pub fn Contract(comptime purpose: Purpose) type {
 
         /// Select outstanding omissions from admitted findings, not a second
         /// queue. Each receives its own current complete comparison assignment.
-        pub fn pendingLocalization(entries: []const Finding) ?u32 {
+        pub fn pendingLocalization(inputs: a.Inputs, entries: []const Finding) ?u32 {
+            if (a.assessmentPolicy(inputs.projection) == .advisory) return null;
             if (purpose == .source) for (entries) |finding| {
                 if (finding.value.kind == .candidate_omission and finding.value.preservation == null) return finding.requirement_ordinal;
             };
@@ -427,14 +442,14 @@ pub fn Contract(comptime purpose: Purpose) type {
         /// individual finding/evidence admission and narrow repair diagnostics.
         pub fn collectFocused(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
             const id = try nextSubject(allocator, inputs, prior);
-            const grouped = purpose == .source and packet.resultDefinition() != null and std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings");
-            const scope: Scope = if (purpose == .source and grouped) .{ .record = id } else .{ .finding = id };
+            const scope = assignmentScope(inputs, id);
+            const grouped = scope == .assignment;
             const expected = try packetFor(allocator, inputs, context, scope);
             defer packets.release(expected);
             try checkPacket(expected, packet);
             const previous: ?Candidate = if (prior) |result| result.pending else null;
             const length: usize = if (previous) |candidate| candidate.review.entries.len else 0;
-            const added = (if (purpose == .source and grouped) decodeRecord(allocator, inputs, context, id, length, bytes, origin) else decodeSingle(allocator, inputs, context, id, length, bytes)) catch |err| return switch (err) {
+            const added = (if (grouped) decodeAssignment(allocator, inputs, context, id, length, bytes, origin) else decodeSingle(allocator, inputs, context, id, length, bytes)) catch |err| return switch (err) {
                 error.InvalidJsonDocument => rejectedAssignment(allocator, id, .invalid_json, origin, if (previous) |old| old.revision else 1),
                 else => err,
             };
@@ -446,14 +461,15 @@ pub fn Contract(comptime purpose: Purpose) type {
         /// by model collection and execution-local retained native findings.
         pub fn appendAdmitted(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet, findings: []const Finding, origin: ?Origin) Error!Collection {
             const id = try nextSubject(allocator, inputs, prior);
-            const grouped = purpose == .source and packet.resultDefinition() != null and std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings");
-            const expected = try packetFor(allocator, inputs, context, if (purpose == .source and grouped) .{ .record = id } else .{ .finding = id });
+            const scope = assignmentScope(inputs, id);
+            const grouped = scope == .assignment;
+            const expected = try packetFor(allocator, inputs, context, scope);
             defer packets.release(expected);
             try checkPacket(expected, packet);
             const previous: ?Candidate = if (prior) |result| result.pending else null;
             const length: usize = if (previous) |candidate| candidate.review.entries.len else 0;
             const ledger = try a.build(allocator, inputs);
-            const assigned = if (purpose == .source and grouped) try assignmentSubjects(allocator, inputs, id) else try allocator.dupe(a.Id, &.{id});
+            const assigned = if (grouped) try assignmentSubjects(allocator, inputs, id) else try allocator.dupe(a.Id, &.{id});
             if (findings.len != assigned.len) return error.InvalidRequiredAuthority;
             for (findings, assigned, length..) |finding, subject, index| {
                 if (finding.requirement_ordinal != index + 1 or !std.meta.eql(ledger.requirements[index].seed.id, subject)) return error.InvalidRequiredAuthority;
@@ -486,7 +502,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .review = .{ .entries = entries },
                 .revision = if (previous) |old| std.math.add(u64, old.revision, 1) catch return error.InvalidRequiredAuthority else 1,
                 .working = true,
-                .pending_localization = pendingLocalization(entries),
+                .pending_localization = pendingLocalization(inputs, entries),
                 .origin = if (previous) |old| old.origin else origin,
                 .origins = origins,
                 .occurrences = occurrences,
@@ -506,9 +522,10 @@ pub fn Contract(comptime purpose: Purpose) type {
             return .{ .rejected = .{ .candidate = null, .rejection = .{ .diagnostics = try allocator.dupe(Diagnostic, &.{.{ .issue = issue, .requirement = id, .ordinal = null, .revision = revision, .origin = origin }}) } } };
         }
 
-        fn decodeRecord(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id, start: usize, bytes: []const u8, origin: ?Origin) Error!Added {
+        fn decodeAssignment(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id, start: usize, bytes: []const u8, origin: ?Origin) Error!Added {
             const ids = try assignmentSubjects(allocator, inputs, id);
-            const response = try @import("model_candidate_json.zig").decode(source_model.Batch, allocator, bytes);
+            const Batch = if (purpose == .source) source_model.Batch else struct { findings: []const Finding };
+            const response = try @import("model_candidate_json.zig").decode(Batch, allocator, bytes);
             var diagnostics: std.ArrayList(Diagnostic) = .empty;
             for (response.findings, 0..) |finding, index| {
                 const ordinal = finding.requirement_ordinal;
@@ -532,7 +549,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 const wire = for (response.findings) |entry| {
                     if (entry.requirement_ordinal == ordinal) break entry.value;
                 } else return error.InvalidRequiredAuthority;
-                finding.* = .{ .requirement_ordinal = ordinal, .value = try source_model.canonical(wire, try admission.requirements(allocator, inputs, context.inputs, target)) };
+                finding.* = .{ .requirement_ordinal = ordinal, .value = if (purpose == .source) try source_model.canonical(wire, try admission.requirements(allocator, inputs, context.inputs, target)) else wire };
             }
             return .{ .findings = findings };
         }
@@ -581,7 +598,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 };
             }
             const evidence = try allocator.alloc(a.Evidence, ledger.requirements.len);
-            const candidates = try allocator.alloc(a.Candidate, if (inputs.specification != null) ledger.requirements.len else 0);
+            const candidates = try allocator.alloc(a.Candidate, if (a.assessmentPolicy(inputs.projection) == .advisory or inputs.specification != null) ledger.requirements.len else 0);
             const origins = try allocator.alloc(?Origin, evidence.len);
             for (ledger.requirements, evidence, origins, 0..) |requirement, *entry, *entry_origin, index| {
                 const ordinal = try r.ordinal(index);
@@ -632,14 +649,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (rejection) |invalid| try diagnostics.append(allocator, invalid);
                     if (diagnostics.items.len != before) continue;
                     const not_applicable: ?a.Rule = if (purpose == .principles) null else if (required == .not_applicable) required.not_applicable else if (decisionOf(finding.value) == .not_applicable) required.review else null;
-                    if (inputs.specification != null) {
+                    if (candidates.len != 0) {
                         candidates[index] = .{ .id = .{ .ordinal = ordinal, .revision = inputs.revision }, .requirement = requirement.seed.id };
                     }
                     entry.* = .{
                         .id = .{ .ordinal = ordinal },
                         .requirement = requirement.seed.id,
                         .authorities = requirement.seed.input_authorities,
-                        .resolution = if (purpose == .principles) .{ .existing_authority = principles.policyAuthority(inputs.principle_context.?.registry) } else if (semantic == .candidate_invalid) .{ .existing_authority = .{ .reference = sources.corpus.state_id } } else if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
+                        .resolution = if (a.assessmentPolicy(inputs.projection) == .advisory) .{ .assessment = .{ .candidate = candidates[index].id, .not_applicable = not_applicable } } else if (purpose == .principles) .{ .existing_authority = principles.policyAuthority(inputs.principle_context.?.registry) } else if (semantic == .candidate_invalid) .{ .existing_authority = .{ .reference = sources.corpus.state_id } } else if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
                         .finding = semantic,
                         .review = reviewed.accepted,
                         .method = .model_assisted,
@@ -672,7 +689,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 try evidence_admission.validate(allocator, inputs, sources, evidence);
                 const review = evidence.review.?;
                 const required = try applicability(inputs, requirement.seed.id);
-                const decision = if (purpose == .source and required == .review and evidence.resolution == .not_applicable) blk: {
+                const decision = if (purpose == .source and required == .review and (evidence.resolution == .not_applicable or (evidence.resolution == .assessment and evidence.resolution.assessment.not_applicable != null))) blk: {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);

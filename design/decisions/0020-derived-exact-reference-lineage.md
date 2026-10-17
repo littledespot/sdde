@@ -314,6 +314,13 @@ their stage discriminators are unchanged. Previous versions reject without migra
 reader. Implementation and validation status are tracked in
 [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
 
+The later approved [ADR 0023](0023-advisory-post-generation-review.md) amendment
+advances completed and pending state to `specification-state/v16`. Source and
+principle findings after generation retain advisory assessment bindings; they
+cannot authorize content or upstream repair. Pre-generation preservation retains
+its required evidence contract. This review-policy change leaves the exact-value
+composition contract and the meanings of `S`, `E` and `L` unchanged.
+
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain
 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).

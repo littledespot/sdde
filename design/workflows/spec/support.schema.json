@@ -130,36 +130,6 @@
         }
       ]
     },
-    "record_findings": {
-      "type": "object",
-      "properties": {
-        "findings": {
-          "type": "array",
-          "minItems": 3,
-          "maxItems": 3,
-          "items": {
-            "type": "object",
-            "properties": {
-              "requirement_ordinal": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "value": {
-                "$ref": "#/$defs/finding"
-              }
-            },
-            "required": [
-              "requirement_ordinal",
-              "value"
-            ],
-            "additionalProperties": false
-          }
-        }
-      },
-      "required": [
-        "findings"
-      ],
-      "additionalProperties": false
-    },
     "applicability_finding": {
       "oneOf": [
         {
@@ -620,6 +590,66 @@
       "required": [
         "source_ids",
         "authority_gap_source_ids"
+      ],
+      "additionalProperties": false
+    },
+    "assignment_findings": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "value": {
+                "$ref": "#/$defs/applicability_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "findings"
+      ],
+      "additionalProperties": false
+    },
+    "principle_assignment_findings": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "value": {
+                "$ref": "#/$defs/principle_finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "findings"
       ],
       "additionalProperties": false
     }

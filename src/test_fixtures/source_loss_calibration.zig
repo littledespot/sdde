@@ -61,7 +61,7 @@ fn currentAssociationChecks(a: std.mem.Allocator, example: Case) !void {
     try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Case, a, try std.json.Stringify.valueAlloc(a, legacy, .{})));
     const prepared = try prepareContext(a, example);
     defer prepared.passive.deinit();
-    const field = prepared.inputs.brief.?.description;
+    const field = prepared.brief.description;
     const p = @import("../domain/specification_provenance.zig");
     const records = @import("../domain/reference_support.zig").records(prepared.context.references);
     const current = try p.validateAssociation(.canonical, a, prepared.context.inputs, records, field.source_group_ids, field.provenance, .content);
@@ -112,7 +112,11 @@ pub fn renderContent(a: std.mem.Allocator, schema: *const @import("../domain/mod
 /// replay receipt current, nor does it change the production packet or schema.
 pub fn baselineReviewBody(a: std.mem.Allocator, packet: *const packets.Packet) ![]const u8 {
     var body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
-    try std.testing.expect(body.object.orderedRemove("assessment_scope"));
+    var removed = body.object.orderedRemove("assessment_scope");
+    for (body.object.getPtr("requirements").?.array.items) |*member| {
+        removed = member.object.orderedRemove("assessment_scope") or removed;
+    }
+    try std.testing.expect(removed);
     return std.json.Stringify.valueAlloc(a, body, .{});
 }
 
@@ -228,6 +232,9 @@ pub fn sha256(a: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![
 pub const PreparedContext = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
+    /// Independently admitted diagnostic data. Its presence does not invent a
+    /// complete generated candidate or change a source-readiness projection.
+    brief: spec.Brief,
     passive: text.Prepared,
 };
 
@@ -303,6 +310,60 @@ pub fn writeAdmissionRejection(a: std.mem.Allocator, directory: []const u8, reje
         .model_calls = @as(usize, 0),
     }, .{}));
 }
+pub const Unavailable = struct { case_id: []const u8, reason: enum { incomplete_candidate } = .incomplete_candidate };
+pub fn writeUnavailable(a: std.mem.Allocator, directory: []const u8, value: Unavailable) !void {
+    try writeAt(a, directory, value.case_id, "unavailable.json", try std.json.Stringify.valueAlloc(a, .{ .case_id = value.case_id, .reason = value.reason, .current_admission = false, .model_calls = @as(usize, 0) }, .{}));
+}
+
+pub const Focus = struct { prior: ?support.Collection, packet: *packets.Packet };
+pub const SelectedReview = struct { target: authority.Id, value: @import("../domain/specification_support_model.zig").Value };
+
+/// Reach the actual complete native assignment containing the target. Mock
+/// siblings supply no semantic proof or provider-operation origin.
+pub fn focus(a: std.mem.Allocator, prepared: PreparedContext, target: authority.Id) !Focus {
+    var prior: ?support.Collection = null;
+    while (true) {
+        const first = try support.nextSubject(a, prepared.inputs, prior);
+        const packet = try support.packetFor(a, prepared.inputs, prepared.context, support.assignmentScope(prepared.inputs, first));
+        errdefer packets.release(packet);
+        const assigned = try support.assignmentSubjects(a, prepared.inputs, first);
+        const contains = for (assigned) |id| {
+            if (std.meta.eql(id, target)) break true;
+        } else false;
+        if (contains) return .{ .prior = prior, .packet = packet };
+        const next = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, try reviewResponse(a, prepared, packet, null), null);
+        if (next != .pending) return error.InvalidCalibrationPrefix;
+        packets.release(packet);
+        prior = next;
+    }
+}
+
+/// Populate exactly the request's native ordinals. An optional selected value
+/// stays unchanged; all other values are explicitly scripted diagnostic data.
+pub fn reviewResponse(a: std.mem.Allocator, prepared: PreparedContext, packet: *const packets.Packet, selected: ?SelectedReview) ![]const u8 {
+    const ledger = try authority.build(a, prepared.inputs);
+    const input = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
+    const assigned = input.object.get("requirements").?.array.items;
+    var findings: std.ArrayList(std.json.Value) = .empty;
+    var single: ?[]const u8 = null;
+    for (assigned) |requirement| {
+        const ordinal = std.math.cast(u32, requirement.object.get("ordinal").?.integer) orelse return error.InvalidCalibrationTarget;
+        if (ordinal == 0 or ordinal > ledger.requirements.len) return error.InvalidCalibrationTarget;
+        const id = ledger.requirements[ordinal - 1].seed.id;
+        const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, prepared.inputs, prepared.context.inputs, id);
+        const bytes = if (selected != null and std.meta.eql(selected.?.target, id)) try codec.encode(@import("../domain/specification_support_model.zig").Value, a, selected.?.value) else try mockPrefix(a, rules);
+        single = bytes;
+        var finding: std.json.ObjectMap = .{};
+        try finding.put(a, "requirement_ordinal", .{ .integer = ordinal });
+        try finding.put(a, "value", try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{}));
+        try findings.append(a, .{ .object = finding });
+    }
+    if (!std.mem.eql(u8, packet.resultDefinition().?.bytes, "assignment_findings")) return single orelse error.InvalidCalibrationTarget;
+    var result: std.json.ObjectMap = .{};
+    try result.put(a, "findings", .{ .array = std.array_list.Managed(std.json.Value).fromOwnedSlice(a, try findings.toOwnedSlice(a)) });
+    return std.json.Stringify.valueAlloc(a, std.json.Value{ .object = result }, .{});
+}
+
 const Prepared = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
@@ -374,8 +435,8 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
         brief = try admitBrief(a, provenance_context, brief);
         try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
     } else brief = try admitBrief(a, provenance_context, brief);
-    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (example.mode == .signal) null else brief);
-    return .{ .inputs = inputs, .context = provenance_context, .passive = passive };
+    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (candidate != null) brief else null);
+    return .{ .inputs = inputs, .context = provenance_context, .brief = brief, .passive = passive };
 }
 
 /// A diagnostic prefix cannot invent an authored association. Absent canonical
@@ -394,6 +455,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     const prepared = try prepareContext(a, example);
     errdefer prepared.passive.deinit();
     const inputs = prepared.inputs;
+    if (example.mode != .signal or authority.assessmentPolicy(inputs.projection) != .required) return error.InvalidCalibrationAssignment;
     const provenance_context = prepared.context;
     const sources = provenance_context.inputs;
     const ledger = try authority.build(a, inputs);
@@ -572,17 +634,35 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     const prompt = try read(a, "design/workflows/spec/support-loss.prompt.md");
     var admission_rejections: std.ArrayList(AdmissionRejection) = .empty;
+    var unavailable: std.ArrayList(Unavailable) = .empty;
     var prepared_cases: usize = 0;
+    var advisory_cases: usize = 0;
+    var pre_generation_cases: usize = 0;
     for (cases) |example| {
-        const prepared = prepare(a, example) catch |err| {
+        const current = prepareContext(a, example) catch |err| {
             const rejection: AdmissionRejection = .{ .case_id = example.id, .reason = admissionReason(err) orelse return err };
             try admission_rejections.append(a, rejection);
             try writeAdmissionRejection(a, output, rejection);
             continue;
         };
-        defer prepared.passive.deinit();
+        defer current.passive.deinit();
+        if (example.mode == .candidate and current.inputs.specification == null) {
+            const missing: Unavailable = .{ .case_id = example.id };
+            try unavailable.append(a, missing);
+            try writeUnavailable(a, output, missing);
+            continue;
+        }
         prepared_cases += 1;
         if (prepared_cases == 1) try currentAssociationChecks(a, example);
+        if (authority.assessmentPolicy(current.inputs.projection) == .advisory) {
+            advisory_cases += 1;
+            const target: authority.Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = if (example.target == .primary_user_story) .primary_user_story else .description };
+            try advisoryProbe(a, example.id, current, target, .{ .candidate_omission = .{ .source_ids = try sourceIds(a, current), .detail = example.missing, .missing_obligation = example.missing_obligation } });
+            continue;
+        }
+        pre_generation_cases += 1;
+        const prepared = try prepare(a, example);
+        defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
         const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
         defer packets.release(packet);
@@ -646,14 +726,52 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
         .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
     }), admission_rejections.items);
-    try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len);
+    try std.testing.expectEqual(@as(usize, 1), advisory_cases);
+    try std.testing.expectEqual(@as(usize, 1), pre_generation_cases);
+    try std.testing.expectEqual(@as(usize, 9), unavailable.items.len);
+    try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len + unavailable.items.len);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/native-admission.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .input_cases = cases.len,
         .prepared_cases = prepared_cases,
+        .current_advisory_cases = advisory_cases,
+        .current_pre_generation_comparisons = pre_generation_cases,
         .pre_review_rejections = admission_rejections.items,
+        .unavailable_cases = unavailable.items,
+        .historical_panel = "Unchanged. Candidate labels lacking a complete native candidate are not reinterpreted as pre-generation judgments.",
         .model_calls = @as(usize, 0),
     }, .{}) });
     try prepareHandoffControls(a, schema);
+}
+
+fn sourceIds(a: std.mem.Allocator, prepared: PreparedContext) ![]const r.extraction.identity.SourceId {
+    const result = try a.alloc(r.extraction.identity.SourceId, prepared.context.inputs.corpus.sources.len);
+    for (prepared.context.inputs.corpus.sources, result) |source, *id| id.* = source.id;
+    return result;
+}
+
+fn advisoryProbe(a: std.mem.Allocator, id: []const u8, prepared: PreparedContext, target: authority.Id, value: @import("../domain/specification_support_model.zig").Value) !void {
+    const focused = try focus(a, prepared, target);
+    defer packets.release(focused.packet);
+    const bytes = try reviewResponse(a, prepared, focused.packet, .{ .target = target, .value = value });
+    const result = try support.collectFocused(a, prepared.inputs, prepared.context, focused.prior, focused.packet, bytes, null);
+    const candidate = switch (result) {
+        .pending => |candidate| candidate,
+        .accepted => |accepted| accepted.candidate,
+        .rejected => return error.InvalidCalibrationAdvice,
+    };
+    try std.testing.expect(candidate.pending_localization == null);
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, candidate));
+    const ledger = try authority.build(a, prepared.inputs);
+    const selected = for (ledger.requirements, 0..) |required, index| {
+        if (std.meta.eql(required.seed.id, target)) break candidate.review.entries[index].value;
+    } else return error.InvalidCalibrationTarget;
+    try std.testing.expect(selected.preservation == null and selected.loss == .unlocalized);
+    if (value == .candidate_omission) {
+        try std.testing.expectEqualStrings(value.candidate_omission.missing_obligation, selected.missing_obligation.?);
+        try std.testing.expectEqualStrings(value.candidate_omission.detail, selected.detail);
+        try std.testing.expectEqualDeep(value.candidate_omission.source_ids, selected.source_ids);
+    }
+    try write(a, id, "current-advisory.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .current_assignment = focused.packet.body(), .response = bytes, .finding = selected, .pending_localization = false, .loss_request = @as(?[]const u8, null), .publication_authority = false, .model_calls = @as(usize, 0) }, .{}));
 }
 
 fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
@@ -665,6 +783,10 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
     };
     const controls = try codec.decode([]const Control, a, try read(a, root ++ "/handoff.controls.associated.json"));
     for (controls) |control| {
+        if (control.fixture.mode == .candidate and control.fixture.candidate_file == null) {
+            try writeUnavailable(a, output, .{ .case_id = control.fixture.id });
+            continue;
+        }
         const prepared = try prepare(a, control.fixture);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);

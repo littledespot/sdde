@@ -105,6 +105,9 @@ pub const Batch = struct { findings: []const BatchFinding };
 /// Resolve only subject-bound or diagnostic claims. An unlocalized negative
 /// finding may use source-only evidence, never an arbitrary eligible subset.
 fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) json.Error![]const r.ClaimId {
+    // The native pre-authoring source-purpose rule fixes an empty claim set;
+    // its model-selected source IDs are validated separately. No catalogue is
+    // promoted into a positive authored association.
     if (required.rule(kind.finding(), location).fixedClaims()) |claims| return claims;
     if (kind == .candidate_omission) return &.{};
     if (required.supported_provenance) |provenance| return provenance.claim_ids;

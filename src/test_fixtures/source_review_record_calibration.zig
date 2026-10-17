@@ -53,7 +53,7 @@ pub fn run() !void {
         const first: authority.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = .acceptance_criterion, .ordinal = 1 } }, .slot = .given };
         const subjects = try support.assignmentSubjects(a, prepared.inputs, first);
         try std.testing.expectEqual(@as(usize, 3), subjects.len);
-        const record = try support.packetFor(a, prepared.inputs, prepared.context, .{ .record = first });
+        const record = try support.packetFor(a, prepared.inputs, prepared.context, .{ .assignment = first });
         defer packets.release(record);
         const single_requests = try a.alloc(Request, subjects.len);
         for (subjects, single_requests, 0..) |subject, *request, member| {
@@ -124,7 +124,7 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
     var prepared = try shared.prepareContext(a, base);
     errdefer prepared.passive.deinit();
     if (example.record) |record| {
-        const brief = prepared.inputs.brief orelse return error.MissingCalibrationSource;
+        const brief = prepared.brief;
         const references = @import("../domain/reference_support.zig").records(prepared.context.references);
         if (brief.description.source_group_ids.len != 1) return error.InvalidCalibrationRecord;
         const assigned = try @import("../domain/specification_source_binding.zig").resolveGroups(a, references, prepared.context.inputs, brief.description.source_group_ids, .content);
@@ -141,7 +141,7 @@ fn business(a: std.mem.Allocator, value: []const u8) !spec.BusinessValue {
 fn pairedAssignment(a: std.mem.Allocator, member: usize, single: *const packets.Packet, record: *const packets.Packet) !void {
     const left = try std.json.parseFromSliceLeaky(std.json.Value, a, single.body(), .{});
     const right = try std.json.parseFromSliceLeaky(std.json.Value, a, record.body(), .{});
-    try std.testing.expectEqualStrings("record_findings", record.resultDefinition().?.bytes);
+    try std.testing.expectEqualStrings("assignment_findings", record.resultDefinition().?.bytes);
     try std.testing.expect(!right.object.contains("subject"));
     const assignments = right.object.get("requirements").?.array.items;
     try std.testing.expectEqual(@as(usize, 3), assignments.len);
@@ -164,11 +164,13 @@ fn schemaProbe(a: std.mem.Allocator, schema: *const schema_owner.Schema, packet:
     const body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
     var findings: std.ArrayList(@import("../domain/specification_support_model.zig").BatchFinding) = .empty;
     for (body.object.get("requirements").?.array.items) |requirement| try findings.append(a, .{ .requirement_ordinal = @intCast(requirement.object.get("ordinal").?.integer), .value = .{ .supported = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment." } } });
-    for ([_]usize{ 3, 2 }) |length| {
+    // The shared batch schema allows variable nonempty units. Exact member
+    // cardinality is checked by native assignment admission, not an AC-only schema.
+    for ([_]usize{ 3, 2, 0 }) |length| {
         var document = try @import("../domain/model_envelope.zig").parseContent(a, try codec.encode(@import("../domain/specification_support_model.zig").Batch, a, .{ .findings = findings.items[0..length] }), null);
         defer document.deinit();
         const invalid = @import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root());
-        try std.testing.expect((invalid == null) == (length == 3));
+        try std.testing.expect((invalid == null) == (length != 0));
     }
 }
 fn sameJson(a: std.mem.Allocator, left: std.json.Value, right: std.json.Value) !void {

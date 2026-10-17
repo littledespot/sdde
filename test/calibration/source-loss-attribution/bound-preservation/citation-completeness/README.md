@@ -1,5 +1,20 @@
 # Citation completeness comparison and actual reviewer handoff
 
+**Current advisory cutover — 17 October 2026:** the frozen panel remains intact.
+Current offline checks prepare the complete captured-story candidate as advisory
+review without localization, and retain the direct-signal fixture's actual
+pre-generation comparisons and negative controls. Nine historical partial-only
+candidate subjects are explicitly unavailable (`incomplete_candidate`); they are
+not reinterpreted as pre-generation duties. The two B3 raw-admission rejections
+remain separate. All 13 primary inputs stay accounted for in
+`.zig-cache/source-loss-citation-completeness-current-contract/native-admission.json`.
+The two historical partial-only handoff controls also receive unavailable records.
+These mechanical checks provide no new semantic result, publication authority,
+or live-call authorization. Rerun them with
+`zig build test-specification-generation -j1 --summary all`.
+
+## Historical comparison and consumed handoff
+
 **B3 current-contract refresh — 17 October 2026:** current diagnostic candidates
 are rebuilt through native prose/occurrence admission; frozen historical payloads
 are not read as new canonical authority. The independent `dual-ready` input now
