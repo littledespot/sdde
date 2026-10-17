@@ -2,14 +2,10 @@
 
 **Status:** Proposed feature design
 
-**Implementation:** The generic workflow-definition increment is complete; concrete
-domain operations and initial definitions have separate contracts. See [implementation
-status](#implementation-status).
-
-**Accepted operation-ID amendment:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
-requires one current unversioned contract per operation. The formal schema,
-runtime parser, registry, compiler and runner use that contract. Tests reject
-version suffixes and separate operation-version fields, with no aliases.
+[ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
+requires one current unversioned contract per operation; tests reject version
+suffixes and separate operation-version fields, with no aliases. See
+[implementation status](#implementation-status).
 
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
@@ -179,7 +175,7 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
 
 ### 3.2 Root shape
 
-[ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the implemented
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
 typed JSON-composition resource through the existing `resources` and operation
 parameter boundary. It references one complete result schema and owns only the
 part partition/dependencies. YAML continues to own calls, resources and transitions;
@@ -362,9 +358,9 @@ For a complete current test fixture, see
 ## 4. Compiler-owned bounds
 
 These are the current compiler-owned, non-configurable implementation limits,
-enforced before allocation or continued traversal can exceed them. The user-approved
-[ADR 0016 graph-capacity amendment](../decisions/0016-configured-json-response-composition.md#graph-capacity)
-raises the finite step ceiling to 1,024. The schema validator, subgraph expander,
+enforced before allocation or continued traversal can exceed them.
+[ADR 0016](../decisions/0016-configured-json-response-composition.md#graph-capacity)
+sets the finite step ceiling to 1,024. The schema validator, subgraph expander,
 compiled-graph validator and runner derive their capacities from the same native
 constant; no workflow configuration can override it.
 
@@ -421,8 +417,8 @@ directory elsewhere has no reserved status. Normalization, case-fold,
 portable-name, or physical aliases of a reserved child are rejected rather
 than treated as another spelling.
 
-Implemented: the filesystem loader reuses the inventory's single reserved-child
-rule. Regression tests cover ordinary directory traversal, nested names,
+The filesystem loader reuses the inventory's single reserved-child rule. Regression
+tests cover ordinary directory traversal, nested names,
 reserved-root rejection, and unregistered-file rejection in the packaged engine.
 
 - The engine recursively encounters every other directory, regular file, symlink, and
@@ -488,12 +484,12 @@ service is published.
 - The compiler retains the typed binding requirements; the runner rejects divergence
   from the registered contract.
 - F0006 owns exact slot/model/control/schema compatibility, not provider-size policy.
-- This capacity-free projection is implemented through the registry, compiler and
-  runner; the typed slot is the only new-binding selection.
+- The registry, compiler and runner carry this capacity-free projection; the typed slot
+  is the only new-binding selection.
 
 - The existing compiled model projection represents an immutable binding requirement
-  independently of operational capabilities (ADR 0004, amended 2026-09-05, further
-  amended by [ADR 0012](../decisions/0012-workflow-owned-model-request.md)).
+  independently of operational capabilities (ADR 0004 and
+  [ADR 0012](../decisions/0012-workflow-owned-model-request.md)).
 - A request origin has exactly one required typed model slot.
 - Pure operations may receive immutable bindings without a provider port.
 - Registered consumers of the prepared-request/ledger data contracts retain the
@@ -506,7 +502,7 @@ service is published.
 - Registered accounting permissions are compiled alongside data effects and compared
   against the live immutable operation registry at execution.
 - YAML cannot author them.
-- The implemented attempt-accounting binding consumes the retained request, requires an
+- The attempt-accounting binding consumes the retained request, requires an
   explicit operation-local `retry-limit`, and publishes only runner-applied typed
   attempt evidence.
 - Its next visit requires the previous evidence to have been consumed/invalidated
@@ -1005,13 +1001,13 @@ Implementation tests must cover the owning boundaries:
 - F0005 accepts only the concise closed schema, captures declared workflow resources,
   compiles through the single generic operation registry, and publishes an immutable
   graph registry.
-- ADR 0003's generic runner now executes only those compiled transitions.
+- ADR 0003's generic runner executes only those compiled transitions.
 - The selected policy's positive total-token budget and each retry-capable operation
   instance's explicit `retry-limit` are compiled into that immutable authority; initial
   execution is separate from the declared retry count.
 - No legacy reader, generic loop budget, or split invocation/step registry remains.
-- Concrete domain operations and initial workflow definitions remain separately governed
-  increments.
+- Concrete domain operations and workflow definitions have their own feature contracts
+  (for example [F0100](F0100-SpecWorkflow.md)).
 ## 13. Traceability
 
 | Concern | Authority |

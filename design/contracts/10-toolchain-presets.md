@@ -1,7 +1,7 @@
 # 10. Development-environment presets
 
-Part of the [proposed design](../design.md#10-development-environment-presets). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#10-development-environment-presets), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - The runtime preset root is exactly `<projectRoot>/<paths.toolchainPreset>`, resolved directly
   from the root `.sddtoolkit.json`.

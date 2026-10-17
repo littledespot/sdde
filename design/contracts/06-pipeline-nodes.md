@@ -1,7 +1,7 @@
 # 6. Common action and orchestrator contract
 
-Part of the [proposed design](../design.md#6-common-action-and-orchestrator-contract). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#6-common-action-and-orchestrator-contract), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - Every action **and** every orchestrator conforms to the same runtime contract.
 - There is one envelope, one result vocabulary, and one dependency declaration mechanism across
@@ -165,8 +165,8 @@ but grants no resolution of its parent.
 
 #### Execution-local information stack
 
-The user-approved Chunk 18 implementation extends this same envelope; no second
-registry or workflow action is introduced. Each selected workflow execution owns
+Configured response composition (ADR 0016) uses this same envelope; there is no
+second registry or workflow action. Each selected workflow execution owns
 a fresh stack. Steps, compiled subgraphs and retries share it; a new invocation
 starts empty, including after `needs_user` (ADR 0009).
 
@@ -192,8 +192,8 @@ starts empty, including after `needs_user` (ADR 0009).
 
 ### 6.1 Action rules
 
-[ADR 0016](../decisions/0016-configured-json-response-composition.md) adds the
-implementation of generic JSON composition within this same envelope. Configured JSON
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) places
+generic JSON composition within this same envelope. Configured JSON
 schemas do not define native pipeline keys: sealed registered values retain the
 compiled parts, current dependencies and real producer origins. Assembly proposes
 one candidate delta; the runner alone applies it. Staging is retired in the candidate-installation delta; its immutable owners

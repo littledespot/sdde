@@ -563,7 +563,7 @@ schema the bound steps can send) or per request is part of the ADR.
 
 | Alternative | Decision | Reason |
 | --- | --- | --- |
-| Server-side refusal fallback (`fallbacks`) | Rejected | It reruns a refused request on another model inside the same call. Output would be attributed to a model the slot did not select, violating the no-substitution rule ([§12.3.1](../design/contracts/12-model-boundary.md#1231-bedrock-converse--user-directed-transport-amendment-15-october-2026)). A refusal is a typed non-candidate stop. |
+| Server-side refusal fallback (`fallbacks`) | Rejected | It reruns a refused request on another model inside the same call. Output would be attributed to a model the slot did not select, violating the no-substitution rule ([§12.3.1](../design/contracts/12-model-boundary.md#1231-bedrock-converse)). A refusal is a typed non-candidate stop. |
 | Automatic prompt-only fallback when a schema is too complex | Rejected | A per-request mode switch is a hidden fallback. Response mode stays fixed per catalogue entry; an oversized schema fails typed (§5.7). |
 | Engine default for `max_tokens` | Rejected | A silent default is a fallback, and [ADR 0011](../design/decisions/0011-provider-owned-request-limits.md) leaves limits to the provider and explicit configuration. Binding rejects the slot instead. |
 | Registering `count_tokens` as the exact counter | Rejected | The API documents it as an estimate (§3.7). |
@@ -645,7 +645,7 @@ external behavior. Each step ends with all existing tests passing.
   accounting, acceptance evidence, structured like
   [F0007](../design/features/F0007-AWSBedrockProvider.md). F0009 is currently unused.
 - **Contract amendments:** a §12.3.2 Anthropic section beside
-  [§12.3.1](../design/contracts/12-model-boundary.md#1231-bedrock-converse--user-directed-transport-amendment-15-october-2026);
+  [§12.3.1](../design/contracts/12-model-boundary.md#1231-bedrock-converse);
   [§9 configuration](../design/contracts/09-configuration.md) for the provider ID,
   `empty_object` configuration and the required `maxOutputTokens`; updates to
   [F0006](../design/features/F0006-LLMProviderInterface.md),

@@ -1,7 +1,7 @@
 # 19. Tasks stage design
 
-Part of the [proposed design](../design.md#19-tasks-stage-design). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#19-tasks-stage-design), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 19.1 Inputs and preconditions
 

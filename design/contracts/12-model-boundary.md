@@ -1,7 +1,7 @@
 # 12. LLM interaction boundary
 
-Part of the [proposed design](../design.md#12-llm-interaction-boundary). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#12-llm-interaction-boundary), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 12.1 Discrete LLM components
 
@@ -24,8 +24,7 @@ provider observation contract, including missing final text. Only complete conte
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-- Optional `CountModelInputTokensAction` is implemented and fake-provider tested.
-- It forwards the exact request, binding, invoked count operation and single-use lease through
+- Optional `CountModelInputTokensAction` forwards the exact request, binding, invoked count operation and single-use lease through
   the existing provider port once, preserving counts, failures and cancellation.
 - The port owns call checks and cleanup; the action adds no capacity gate, inference
   prerequisite, retry, token charge or lifecycle transition.
@@ -61,7 +60,7 @@ storage does not change retry eligibility or the execution-wide token ledger.
 - JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
   `end.invalid`; non-complete observations keep their failure/cancellation outcome without
   parsing.
-- The approved [Phase 1A.3 composition amendment](text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
+- The [composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit)
   also checks each native-bound text field at this shared admission boundary.
   A rejection retains every violating field's concrete pointer and typed reason
   for the existing bounded protocol correction. Pure syntax parsing stays separate
@@ -122,19 +121,17 @@ Each generation request contains only what the current unit needs:
 - Source-document names remain citation metadata. Only captured source-body occurrences
   make filenames available as passive content choices; semantic relevance still requires review.
 - Native availability facts may exclude unavailable tagged alternatives from the selected
-  compiled schema (approved 25 September 2026). The existing schema owner derives a narrower
+  compiled schema. The existing schema owner derives a narrower
   view; it never adds fields, values or semantic decisions. Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
-  Under [ADR 0020's approved 17 October amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026),
+  Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   all model-response wire contracts and schemas omit `exact_copy`. The model types required
   values verbatim; the native packet retains current snapshot-bound eligible
   occurrences and exact bytes separately from model-visible guidance. Fixed repair
   scopes cannot borrow eligibility outside their fixed owning-unit `S+E` bound. That scope and the
   native field-role metadata govern raw-byte recognition before normalization;
   matching text or a projected catalogue cannot create the scope.
-- The integer-choice amendment approved on 26 September 2026, extended by the
-  approved FIX_003 follow-up on 7 October 2026, narrows scalar and collection ID
-  selectors to their native owner's eligible set. Typed atoms use their declared
+- Integer-choice restriction narrows scalar and collection ID selectors to their native owner's eligible set. Typed atoms use their declared
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
@@ -197,7 +194,7 @@ Raw whole-repository listings, principle categories not selected by the configur
 - Request construction and candidate validation reuse that same compiled contract.
 
 - Native structured output uses a registered structural projection of that same compiled schema
-  (ADR 0006's 2026-09-12 amendment).
+  (ADR 0006).
 - The complete schema remains model guidance and the sole acceptance contract;
   provider-unsupported bounds are still enforced by the engine.
 - Provider projections retain closed fields, types and disjoint alternatives and cannot be
@@ -206,8 +203,7 @@ Raw whole-repository listings, principle categories not selected by the configur
   validation.
 - Native schema compliance, an echoed ID or a model claim never proves correctness or authority.
 
-- The approved ADR 0006 compact-wire amendment permits nested alternatives proven
-  disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
+- ADR 0006 permits nested alternatives proven disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
   repeated primitive types and overlapping alternatives reject before invocation.
 - The shared candidate codec maps declared ordinal wrappers to integers, ordinary
   prose to strings and explicit typed composition to closed `fragments` objects. Explicit
@@ -224,7 +220,7 @@ Raw whole-repository listings, principle categories not selected by the configur
   data.
 - See the [compact response example](../code.md#model-response-envelope).
 
-#### 12.3.1 Bedrock Converse — user-directed transport amendment, 15 October 2026
+#### 12.3.1 Bedrock Converse
 
 All Bedrock consumers use one canonical
 [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
@@ -262,8 +258,7 @@ not acquire it merely because the API exists.
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
 repair and grading, registered temperature `0.1`, and an optional provider output
-allowance. The prospective comparison protocol records these exact settings.
-The separately registered Luna profile retains its strict-output field, omitted
+allowance. The separately registered Luna profile retains its strict-output field, omitted
 temperature/reasoning controls and unavailable CountTokens capability.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
@@ -294,7 +289,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
 - strict JSON schema with enums and `additionalProperties: false`;
 - temperature `0.1` whenever the selected registered model supports temperature; omit
-  the control only when unsupported, without relying on it for correctness;
+  the control only when unsupported, without relying on it for correctness (workflow
+  definitions cannot select or override it; prepared requests, retries and provider
+  authorization retain and validate it; Bedrock rubric evaluation uses the same policy,
+  OpenAI evaluation does not);
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
   nested alternatives and constraints, without synthetic candidate examples;
@@ -306,13 +304,6 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
 
-The user-approved 2026-10-11 amendment replaces the 2026-09-19 fixed temperature
-`0` with `0.1` for every engine model request and Bedrock rubric evaluation.
-Provider binding derives the control from registered capabilities; workflow
-definitions cannot select or override it.
-Prepared requests, retries and provider authorization retain and validate that
-control. OpenAI rubric evaluation remains outside this amendment.
-
 ### 12.6 Semantic review
 
 - Some current gates—testability, ambiguity, minimality, unsupported behavior, and conflict
@@ -321,7 +312,7 @@ control. OpenAI rubric evaluation remains outside this amendment.
   unit and declares its semantic-review resources and transitions in YAML.
 - Its findings are labeled `model_assisted`, retain source citations, and never masquerade as
   deterministic evidence.
-- Under the approved [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+- Under [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
   every post-generation source/principle finding remains advice unless an
   independent owning deterministic validator establishes the corresponding
   defect. Complete current assessment is a native fact; semantic support is not.
@@ -329,8 +320,7 @@ control. OpenAI rubric evaluation remains outside this amendment.
   exact association, per-member origins and narrow correction. Pre-generation
   source-readiness/preservation policy remains separate and mandatory.
 
-**Task-authorized Phase 6 amendment (11 October 2026):** an explicit pure native
-transition may re-admit an execution-local source-review assignment when its
+**Review retention:** an explicit pure native transition may re-admit an execution-local source-review assignment when its
 complete assessment dependencies are unchanged. The original terminal accepted
 request, epoch and actual inference origin remain the witness; reuse creates no
 request, attempt, provider receipt or token charge. Compare the native unit and
@@ -371,20 +361,21 @@ reuse, not provider caching or deterministic semantic proof.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies
   prompt content and its closed result-schema resource.
 
-**Focused semantic reviews (approved 26 September 2026).** For a review whose
-required subjects are known natively, the review owner selects one subject from
-its ordered ledger and binds its typed ID, purpose, parent and current dependencies
-to the request. The response is one semantic value under the selected canonical
-finding schema; it does not return the assigned ID, ordinal, expected count or
-collection-completion flag. Source-preservation, candidate-support and principle
-reviews use this shared contract. The review packet owner derives a bounded slot
-from the purpose prefix and SHA-256 of the existing canonical typed-subject
-snapshot, and binds that same slot as unit owner and semantic-review purpose.
-Request identity excludes attempt, mutable text and revision; the exact dependency
-binding rejects stale responses. The runner retires each completed request before
-another subject is selected. Native review progress retains admitted findings and
-their origins; pending subjects are work, not missing findings. Only complete
-native collection validation permits authority advancement.
+**Focused semantic reviews.** For a review whose required subjects are known
+natively, the review owner selects one complete native assignment from its ordered
+ledger (a whole unit or collection, or one selected principle set; ADR 0023) and
+binds its ordered members, purpose, parent and current dependencies to the request.
+The response returns exactly one finding per assigned member, keyed by its
+assignment ordinal, under the selected canonical finding schema; it returns no
+expected count or completion flag. Source-preservation, candidate-support and
+principle reviews use this shared contract. The review packet owner derives a
+bounded slot from the purpose prefix and SHA-256 of the existing canonical
+typed-subject snapshot, and binds that same slot as unit owner and semantic-review
+purpose. Request identity excludes attempt, mutable text and revision; the exact
+dependency binding rejects stale responses. The runner retires each completed
+request before another assignment is selected. Native review progress retains
+admitted findings and their origins; pending assignments are work, not missing
+findings. Only complete native collection validation permits authority advancement.
 
 - The workflow-selected slot must resolve through `.sddtoolkit.json` `models.slots`,
   `ValidatedRepositoryModelAllowlist`, the validated `.sddproviders.json` catalogue entry, and
@@ -453,7 +444,7 @@ native collection validation permits authority advancement.
   records.
 - Those operations remain explicit separate YAML work.
 
-- Native `prepare-provider-operation-authorization` now consumes that same request, attempt and
+- Native `prepare-provider-operation-authorization` consumes that same request, attempt and
   assignment through a separate YAML step with required positive `timeout-ms`.
 - The runner derives one absolute monotonic deadline, allocates the existing private lease slot
   and validates exact result correlation before publication.
@@ -465,7 +456,7 @@ native collection validation permits authority advancement.
 - Invocation and observed completion are separately selected YAML operations; no token charge or
   persistent record is added here.
 
-- Native `advance-model-request-lifecycle` with `transition: invoked` now exposes the existing
+- Native `advance-model-request-lifecycle` with `transition: invoked` exposes the existing
   logical-request `assigned -> invoked` action.
 - The runner requires the exact prepared authorization and validates one direct immutable
   successor before replacing the request ledger.
@@ -575,10 +566,7 @@ native collection validation permits authority advancement.
   The engine derives its enclosing member IDs from the supplied partition; model-authored
   statements select supporting claims, and validators require complete partition coverage.
 - The final global partition assembles one `ReferenceReconciliationProposal` from
-  separate disposition, signal-grouping, authoring-role, and conflict responses.
-  Role assignments select an already grouped signal by its exact claim IDs; they
-  cannot change its content or grouping. The engine validates their allowed uses
-  and resolves selected claims through the reference ledger.
+  separate disposition, signal-grouping and conflict responses (ADR 0022).
   Conflict resolution is `unresolved` until a separate authorized decision exists, so
   model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical
@@ -589,8 +577,9 @@ native collection validation permits authority advancement.
 - The feature-brief result schema selected by the workflow yields a `FeatureBriefProposal`
   grounded only in the completed reference claim/citation registries, or a typed specification
   clarification need, or the approved `inconclusive` diagnostic result.
-- The model supplies a business title, description, and primary goal plus existing
-  claim/citation or resolved clarification-response IDs; it cannot supply the `featureId`, any
+- The model supplies a business title, description, and primary goal plus selected
+  source-group handles (`signal_ids`, ADR 0020) or resolved clarification-response IDs;
+  it cannot supply the `featureId`, any
   workflow or project path, or a reference selector.
 - Before the call, the engine binds `featureId` to the validated supplied directory's lossless
   `paths.specs`-relative key under [ADR 0010](../decisions/0010-explicit-feature-directory.md).
@@ -650,16 +639,16 @@ an unresolved status, copied rejection prose or an answer byte limit does not su
 that decision. Correct malformed/incomplete review data through existing bounded
 review handling; substantive uncertainty remains a clarification only when an
 actual user decision is identified. Formatting must not perform a second semantic
-review. The user-approved 20 September amendment adds optional `question` to
-source-review findings and canonical review evidence. It is required for genuine negative source
+review. Source-review findings and canonical review evidence carry an optional
+`question`. It is required for genuine negative source
 findings and absent for supported/applicability/candidate-defect findings. Existing
 `detail` carries the facts/reason. Initial admission, insertion, selected detail
 correction and persisted validation share this contract; detail correction retains
 the verdict/provenance. Its selected schema requires both `detail` and `question`
 for a retained negative finding, and permits only `detail` otherwise. Diagnostics
 identify missing, invalid or forbidden questions separately from invalid detail;
-they retain one repair unit and retry family. The user-approved D1 amendment uses
-closed `kind`-discriminated source findings for initial reviews and insertion:
+they retain one repair unit and retry family. Initial reviews and insertion use
+closed `kind`-discriminated source findings:
 `ambiguous`, `conflicting` and `unsupported` require `detail` and `question`;
 `supported`, `not_applicable`, `candidate_omission` and `inconclusive` forbid
 `question`. Shared fields remain schema references; `kind` is the sole source
@@ -667,13 +656,12 @@ decision field. Principle findings retain their separate `decision` contract.
 The existing codec decodes source candidates with `kind`; native candidates retain
 optional question data for diagnostics and the same decision-dependent checks.
 Persisted evidence retains its existing finding/resolution representation.
-Missing/forbidden questions now reject at schema admission, before native collection.
+Missing/forbidden questions reject at schema admission, before native collection.
 Existing protocol correction resubmits the whole assigned review under its original
 assignment allowance, including otherwise correct siblings; insertion still corrects
 only its selected finding. No partial-response merge, new counter or verdict
 reassessment is introduced. Selected native text repairs retain their narrow scope.
-Remove the superseded source `decision` wire format without a compatibility reader.
-Generation uses its existing question shape. Presence and association checks are structural,
+There is no source `decision` wire format or compatibility reader. Generation uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
 
 **User-facing output:** reuse the current controlled form and fields:
@@ -840,7 +828,7 @@ authenticated answer acceptance and protected history (§23.2).
 
 This contract is deliberately domain-neutral. Adding a new requirement kind requires its schema, ownership entry, reconciliation policy, accepted and rejected fixtures, and stage-gate tests. It never authorizes a caller-specific workaround or a special continuation for one example.
 
-- The native H-008 implementation is `src/domain/required_authority.zig`, with Specify's
+- The shared authority owner is `src/domain/required_authority.zig`, with Specify's
   schema/reference projection in `specification_authority.zig` and five generic YAML bindings
   documented in [F0100
   §3.10](../features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
@@ -852,8 +840,7 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - A captured value carries its complete current-authority frontier into every successor;
   retiring or replacing its transport slot does not invalidate that evidence.
 - Conflicting source generations remain stale.
-- The user-requested Chunk 14 renewal amendment distinguishes repair evidence from
-  current dependencies. After exact native authorization/revision/old-value checks,
+- Renewal distinguishes repair evidence from current dependencies. After exact native authorization/revision/old-value checks,
   a merge requiring dependent review renews only its declared replacements. Its
   native invalidation set and replaced generations become historical inputs;
   every other source/policy dependency must still be current and conflict-free.
@@ -872,16 +859,11 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
   successors own their data; capture never grants semantic support.
 - This handoff is in memory only, with no snapshot files or recovery subsystem.
 - Production generation, support review and registered publication use this boundary.
-  [F0100](../features/F0100-SpecWorkflow.md#implementation-status) tracks remaining
-  clarification and workflow acceptance work; the shared gate alone does not establish it.
 
 #### 12.8.1 Clarification admission and candidate-failure precedence
 
-**Corrective contract — 22 September 2026.**
-This section replaces blanket unsupported/uncertain → clarification interpretations
-in §§12, 17 and 21. The overall design remains Proposed. It does not authorize
-verdict reassessment prohibited by §22.1. [FIX_002](../../fixes/archive/FIX_002.md)
-retains the separate decision history; [FIX05](../../fixes/FIX05.md) tracks current work.
+This section governs every unsupported/uncertain → clarification decision in
+§§12, 17 and 21. It does not authorize verdict reassessment (§22.1).
 
 **Admission:** `needs_user` requires a current required subject and an identifiable
 decision the user can supply. Existing review/generation evidence must establish
@@ -903,12 +885,11 @@ record it as model-assisted. Do not add keyword heuristics, a second reviewer by
 default, or a parallel gap certificate/store. A known inconclusive review cannot
 enter clarification just because the wire shape has no uncertainty alternative:
 its owner must expose a closed rejection through the existing invalid-result path.
-The user-approved focused amendment adds `inconclusive` to source-review decisions
-and native findings: nonempty `detail`, no `question`, no localized loss or repair
+Source-review decisions and native findings include `inconclusive`: nonempty `detail`, no `question`, no localized loss or repair
 authority. Specification generation has a corresponding `inconclusive` result with
 `detail`. Existing invalid-result handling retains diagnostics and terminates if no
-eligible producer repair can cause a dependent reassessment. The approved D1 source
-schema variants follow §12.7; D2 verdict reassessment remains separate and unapproved.
+eligible producer repair can cause a dependent reassessment. Source schema variants
+follow §12.7; verdict reassessment is not approved.
 
 **Pre-generation diagnostic evidence:** the existing evidence owner must admit source-backed loss
 against the selected producer even when its claims are ineligible for positive
@@ -925,16 +906,15 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v18` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+The current specification-state contract in [§24.1](24-workflow-state.md#241-workflow-state)
 retains authorized pre-generation comparisons and authored associations. Generated
 source and principle findings instead retain advisory assessment bindings under
 ADR 0023 and reject attached loss-comparison authority. Earlier snapshot contracts
 reject without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
-**Source-review response contract (28 September 2026):** the model chooses a
-semantic finding, detail, and any genuinely selectable source. The approved
-10 October explicit-obligation amendment in [§22.1](22-repair.md) also requires
+**Source-review response contract:** the model chooses a semantic finding, detail,
+and any genuinely selectable source. [§22.1](22-repair.md) also requires
 `missing_obligation` for a source candidate omission, distinct from its diagnostic
 detail and bound to its selected sources. No other finding or principle review
 may supply it. Before generation, the separate loss call assesses native-bound preservation
@@ -954,7 +934,7 @@ model-selected where the rule permits them; invariant empty clarification IDs
 and an unlocalized default loss are constructed by code. Readback validates
 stored evidence against its bound authority before accepting any projection.
 
-**Approved readiness evidence amendment — 17 October 2026:** under
+**Readiness evidence:** under
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md), a positive finding
 for a native `source_readiness` source-purpose subject before any authored candidate
 exists requires explicitly selected, nonempty current original source IDs. Native
@@ -967,8 +947,7 @@ stale source selections and forged nonempty canonical provenance reject. Model
 wire provenance/group fields remain forbidden. Candidate-bound/generated evidence
 and source-preservation/reference exact claim sets retain their existing rules.
 
-Reconciliation supplies validated source-obligation groups and feature-field
-roles. The engine binds each record authoring task to one active group before
+Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
 several records; overlapping or multi-claim groups preserve many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
@@ -1020,7 +999,7 @@ preserve prior artifacts/protected forms and retain diagnostics/logs. Pending fo
 remain questions/answers, not semantic proof: readback checks current bindings and
 fresh invocations rebuild the review/gate rather than trusting stored question prose.
 
-This contract closes specified unsafe transitions once implemented. It cannot
+This contract closes the specified unsafe transitions. It cannot
 guarantee that every model judgment is true. False-gap recognition requires the
 offline and separately approved live evidence in §28.9; documentation alone is not
 an implementation or a reliability result.
@@ -1030,8 +1009,7 @@ an implementation or a reliability result.
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) owns the
 user-directed decomposition contract: configured shapes and partitions, derived
 part schemas, explicit independent request bindings, deterministic prompt-free
-assembly and complete validation. It also records the approved finite graph-limit
-increase. The closed `json-composition/v1` resource is compiled through the existing
+assembly and complete validation, and sets the 1,024-step workflow ceiling. The closed `json-composition/v1` resource is compiled through the existing
 resource boundary and selects parts through ordinary request preparation.
 The optional composition `definition` selects an existing named definition in its
 `result` resource; otherwise the resource root is selected. Compilation rejects
@@ -1043,7 +1021,7 @@ into `assignment` through the shared request preparation owner. The complete
 evidence packet and declared prerequisites remain available; missing contexts
 reject before inference. Corrections retain the selected presentation. Contexts
 carry applicable guidance, not independent validation, repair or gap policy
-(ADR 0016's approved assignment-context amendment).
+(ADR 0016).
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage
@@ -1067,11 +1045,10 @@ Their current-phase assignment projections follow ADR 0022: complete evidence
 remains available, while semantic authoring receives only eligible claim IDs.
 Protocol corrections retain the same projection and acceptance rules.
 
-### Source invalid-content finding — approved 14 October 2026
+### Source invalid-content finding
 
-The implementation request following the architectural review authorizes one
-source-only `candidate_invalid` finding for invented additions and contradictions
-that retain the original obligation. Its closed response contains `source_ids`,
+One source-only `candidate_invalid` finding covers invented additions and
+contradictions that retain the original obligation. Its closed response contains `source_ids`,
 `detail` and required nullable `authority_gap`. A non-null gap retains the existing
 `unsupported`, `ambiguous` or `conflicting` kind, its own source IDs, explanation
 and actionable question. Native admission validates both evidence selections
@@ -1086,19 +1063,18 @@ omission-repair support, and evaluates a nested gap through its existing gap
 rules. Candidate failure continues to prevent clarification and completion.
 Structural detail, source-selection and question correction preserves both verdict
 kinds. It cannot erase the defect, invent an omission or reassess the finding.
-This amendment grants no new semantic repair or verdict-reassessment permission.
+It grants no new semantic repair or verdict-reassessment permission.
 The finding, explanation, original evidence and native repair denial together
 describe an actionable failure; structural admission is not semantic proof.
 
-The same request authorizes the declared typed-text wire contract in §7.1:
-ordinary prose is a string, and explicit composition is
+The typed-text wire contract in §7.1 applies: ordinary prose is a string, and explicit composition is
 `{"fragments":[text, typed-reference, ...]}`. Native conversion preserves declared
 fragments, whitespace and exact occurrence identity. Initial input/output,
 protocol correction and authorized content repair use that one conversion.
-Canonical arrays remain native data; superseded bare model arrays reject.
+Canonical arrays remain native data; bare model arrays reject.
 
-The approved 17 October B3 amendment applies the same model-wire conversion to
-generation, clarification and repair. It removes `exact_copy` from both shared
+Under ADR 0020 the same model-wire conversion applies to generation,
+clarification and repair, and `exact_copy` is absent from both shared
 response-codec directions and every selected response schema. Explicit native-evidence
 encoding may retain sealed identities as read-only facts, never response alternatives. Current native `exact_scope`
 metadata binds the reference snapshot and eligible occurrence bytes, while field

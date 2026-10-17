@@ -1,24 +1,17 @@
 # ADR 0022: Native reference phase handoffs
 
-The approved 17 October [B8 amendment](0024-native-exact-token-authority.md)
-supersedes model-owned preserved-token dispositions and relevance for candidates
-with a native requirement-byte witness. Its shared policy governs phase assembly,
-repair and stored accounting; the other native phase handoffs remain unchanged.
-
 - **Status:** Accepted
 - **Date:** 2026-10-06
-- **Authority:** User approval of all changes in FIX_003.
-- **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
-- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement [FIX03 Phase 5](../../fixes/archive/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending), removing the independent role phase and moving semantic source selection into authoring under ADR 0020.
-- **10 October 2026 amendment authority:** Explicit user instruction to implement
-  summary union coverage and proven duplicate normalization, followed by validated
-  single-child carry-forward, under
-  [FIX01 §9.20 recommendations 1–2](../../fixes/Z_FIX01.md#920-completed-summary-recommendations-and-supporting-review--10-october-2026).
-- **10 October 2026 iteration correction authority:** Explicit user instruction
-  to replace the summary-reuse retry limit with iteration bounded by validated
-  partitions and required forward progress; amends pipeline contracts §§6.2–6.3.
+- **Authority:** User approval of FIX_003, with user-approved amendments for
+  summary union coverage, duplicate normalization and single-child carry-forward,
+  and for partition-bounded summary iteration (10 October 2026); and for authored
+  associations replacing the independent role phase (11 October, ADR 0020).
 - **Amends:** Reference ingestion §16.4, model boundary §12.9, repair §22,
-  ADRs 0016 and 0020 for extraction/reconciliation handoffs.
+  pipeline contracts §§6.2–6.3, and ADRs 0016 and 0020 for
+  extraction/reconciliation handoffs.
+- **Amended by:** [ADR 0024](0024-native-exact-token-authority.md): native code,
+  not the model, owns preserved-token dispositions and relevance for candidates
+  with a native requirement-byte witness.
 
 Semantic decisions remain model candidates. YAML explicitly requests, collects,
 validates and repairs each reconciliation phase before requesting its descendants.
@@ -38,7 +31,7 @@ Final canonical IDs follow validated array order. The three global semantic
 assignments are dispositions, signals and conflicts; no presentation-role request
 or pending role assessment remains. Authoring receives canonical accepted group
 occurrences and selects its support while drafting under
-[ADR 0020](0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026).
+[ADR 0020](0020-derived-exact-reference-lineage.md#authored-associations).
 Changed upstream facts retire affected groups and their dependent authored
 associations; engine staleness is never attributed to a model's semantic decision.
 
@@ -143,8 +136,8 @@ outcome-changing repair retires forced classifications and returns through the
 classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
 
-The user-authorized FIX01-01 Phase 2 cutover uses current accepted claims,
-dispositions, groups and admitted authored associations to bind preservation comparisons.
+Preservation comparisons bind current accepted claims, dispositions, groups and
+admitted authored associations.
 Comparisons assess actual consumed collections; supporting signal prose does not
 replace original authoring claims. Upstream changes retire affected comparison
 evidence along with existing descendants. Native attribution is checked again
@@ -153,7 +146,3 @@ full-candidate coverage and publication rules.
 
 Principle citation granularity is unchanged: selecting a narrower policy passage
 remains semantic. No precision-losing citation catalogue is introduced.
-
-Offline unit, integration, architecture and packaged checks establish mechanical
-behavior only. Each live E2E run still needs separate explicit approval and rubric
-evaluation. This decision does not accept the overall Proposed design.

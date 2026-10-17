@@ -1,25 +1,23 @@
 # ADR 0016: Configure smaller JSON responses and assemble them deterministically
 
-- **Status:** Accepted; configured object-part composition implemented
+- **Status:** Accepted
 - **Date:** 2026-09-19
 - **Decision authority:** User instructions to design and implement generic, configured response
   decomposition and prompt-free reconstitution across JSON shapes. Higher input
   token counts are acceptable; existing execution-budget enforcement remains.
 - **Amends:** §§6, 12, 14, 16.4, 22 and 28 for configured response composition;
   ADRs 0012–0013 retain request, resource and compiler ownership.
-- **Additional approved direction:** the user explicitly permits increasing the
-  finite compiler graph limit; 512 is not an architectural invariant.
+- **Additional approved direction:** the user explicitly permitted raising the
+  finite compiler step limit (now 1,024; §3).
 - **Does not approve:** an unbounded graph, hidden request dispatcher, new semantic
   repair authority, production dependency or live run.
 
 ## 1. Problem and intended outcome
 
-R34 failed before extraction admission: malformed JSON was followed by repeated
-misplacement of token classifications inside a claim. R33 accepted an identical
-initial extraction request, then failed on a generation response. The retained
-[audit](../../fixes/archive/FIX_001.md#shared-contract-assessment--19-september-2026) found
-intact evidence and schema delivery. Smaller output responsibilities are a
-reliability hypothesis, not a demonstrated cure.
+Live runs failed extraction admission through malformed JSON and token
+classifications misplaced inside a claim, despite intact evidence and schema
+delivery. Smaller output responsibilities are a reliability hypothesis, not a
+demonstrated cure.
 
 One configured semantic assignment may produce several independently schema-checked
 JSON parts. Each model request returns its complete assigned part. Native code
@@ -118,7 +116,7 @@ Contexts may present applicable rules and field purposes; they cannot filter
 evidence, alter identities, choose roles, weaken coverage or create continuation
 policy. Canonical native validators and requirement descriptions remain the sole
 rule and purpose owners. Reconciliation uses this mechanism for summary,
-disposition, signal, role and conflict assignments, not a call-number-specific
+disposition, signal and conflict assignments, not a call-number-specific
 path. Atomic repairs keep their existing authorized scope and projection owner.
 
 Request preparation selects either its existing schema/definition binding or one
@@ -207,15 +205,13 @@ required. New part revisions or schema selections cannot replenish retry attempt
 
 ### Graph capacity
 
-The integrated Spec graph compiles to **577 operations**, compared with 519 after
-extraction decomposition and 498 before composition. Global reconciliation now uses
-three whole-array parts selected from the existing `global` definition. Summaries
-use one part selected from `summary`, sharing assembled-candidate collection. All
-requests reuse the lifecycle body; retention and complete assembly/validation use
-shared subgraphs with independent compiled call sites.
+Global reconciliation uses three whole-array parts selected from the existing
+`global` definition. Summaries use one part selected from `summary`, sharing
+assembled-candidate collection. All requests reuse the lifecycle body; retention
+and complete assembly/validation use shared subgraphs with independent compiled
+call sites.
 
-The user explicitly permits raising this arbitrary implementation limit. The bound
-is now **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
+The step bound is **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
 expansion, compiled validation and runner storage use that same constant. The runner's
 fixed `u64` retry array increases from 4,096 to 8,192 bytes. Graph tables and validation
 working sets remain allocator-backed. Boundary coverage compiles and executes a full
@@ -223,12 +219,10 @@ working sets remain allocator-backed. Boundary coverage compiles and executes a 
 length and checks execution-limit arithmetic overflow. Qualified step identities
 retain their existing validated string representation with a 128-byte compiler-owned
 bound; authored local IDs remain 64 bytes. Retry-exhaustion evidence derives its
-owned name storage from the same compiled bound. The measured Spec graph fits this
-bound; no additional capacity configuration is introduced. Verification and measured
-resource/request costs are recorded in [Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition)
-and its [R36 delivery](../../fixes/archive/IMP_001.md#r36-follow-up--validated-slices-before-cross-slice-reconciliation).
+owned name storage from the same compiled bound. No additional capacity
+configuration is introduced.
 
-Do not introduce request orchestration machinery solely to preserve 512. Detailed
+Do not introduce request orchestration machinery solely to fit the ceiling. Detailed
 operations and distinct request identities remain visible. Consolidate only where
 there is a separate cohesive responsibility; neither a larger ceiling nor call
 frames reduce the number of operations or model calls. Token and retry budgets
@@ -336,8 +330,8 @@ completeness.
 Parsing retains distinct content/classification producers through initial decoding,
 text validation, selected repair, evidence assembly and reporting. The first
 admitted producer anchors native recurrence identity and remains unchanged by
-repairs. Initial extraction and its protocol corrections use composition; the
-combined generation prompt and call path have been removed. Atomic/additive repair keeps its existing selected-unit
+repairs. Initial extraction and its protocol corrections use composition; there is
+no combined generation prompt or call path. Atomic/additive repair keeps its existing selected-unit
 response and merge authority. It neither invokes full composition nor replaces
 unrelated classifications. These are distinct generation and repair responsibilities,
 not compatibility formats. The canonical assembled domain payload remains unchanged.
@@ -353,10 +347,9 @@ classification or a claim's citations cannot relabel unaffected values. Collecti
 diagnostics derive attribution from current values; no parallel mutable origin map
 or invented producer for an absent entry is introduced.
 
-The feedback API is an existing unimplemented feature, not a new Chunk 18 deliverable.
-Its future whole-chunk re-extraction must use this composition; `add_claim` remains
-exactly one authorized claim with citations. Contract conformance does not authorize
-implementing that entire API or a second extraction path in this change.
+A future feedback API's whole-chunk re-extraction must use this composition;
+`add_claim` remains exactly one authorized claim with citations. This decision
+does not authorize that API or a second extraction path.
 
 ### Persisted contract readiness
 
@@ -369,8 +362,8 @@ changed authority rejects with `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`.
 
 No separate partition configuration, schema copy used as authority, provider
 checkpoint or recovery store is introduced. Readback retains full native validation;
-a fresh invocation starts at `start`. This closes the metadata binding requirement,
-not the separately deferred native-to-part feedback API.
+a fresh invocation starts at `start`. The native-to-part feedback API remains
+separately deferred.
 
 This example does not limit the mechanism. Conformance must also demonstrate
 unrelated configured nested objects, tagged variants and whole-array properties.
@@ -397,7 +390,7 @@ safe boundaries require their own dependency/coverage analysis using this contra
   failed handoff leaves prior envelope state unchanged without exposing the proposed candidate.
   In a three-part fork A → B and A → C, retaining B must not invalidate unchanged A
   or C. Mismatched prerequisite placements and changed external source/policy reject.
-- R34's wrong-level classifications reject within the content part. Cover bounded
+- Wrong-level classifications reject within the content part. Cover bounded
   correction and exhaustion, successful claims retained during classification
   retries, complete recovery and unrelated JSON contracts. Full validation rejects
   invalid citations and incompatible classifications; source-preservation review
@@ -423,9 +416,4 @@ safe boundaries require their own dependency/coverage analysis using this contra
   and clean native packaging when implemented.
 - A separately approved live run must publish and score output before claiming
   E2E closure or demonstrated reliability improvement.
-- Report persisted-contract/feedback readiness separately. A scored output cannot
-  stand in for the still-missing exact-contract readback evidence described above.
-
-The overall design remains **Proposed design**. Implementation, measurements and
-verification of this accepted amendment are recorded in
-[Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition).
+- Report feedback-API readiness separately; a scored output cannot stand in for it.

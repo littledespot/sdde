@@ -15,7 +15,6 @@ contains `level` and `console`; the superseded `promptCapture` field is removed 
 rejected, with no compatibility reader or migration. Since debug/trace selects all
 bodies and higher thresholds exclude the registered debug prompt rows, retaining
 direction/class switches would leave configuration with no effect.
-The governing design retains its Proposed status.
 
 Capture the full model-facing request after assembly, including system/task
 instructions, response-format guidance, schema, reference inputs and code inputs.

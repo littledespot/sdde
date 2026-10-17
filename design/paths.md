@@ -65,8 +65,11 @@ The engine derives these paths; they are not separate configuration fields.
 | `<paths.workflows>/features/<feature-directory>/state/workflow.json` | Fixed workflow-state singleton. |
 | `<paths.workflows>/features/<feature-directory>/state/clarifications.json` | Native clarification registry and response input. |
 
+- Proposed Implement execution also derives an execution-private
+  `<paths.workflows>/features/<feature-directory>/execution/final-validation-overlays/`
+  workspace (§20); it holds no continuation state.
 - [F0100 §3.12](features/F0100-SpecWorkflow.md#312-clarification-refresh-and-registered-publication)
-  owns Specify's separate capture/validation of `specification-state/v6`.
+  owns Specify's separate capture and validation of its versioned `specification-state`.
 - [F0100 §3.2](features/F0100-SpecWorkflow.md#32-read-only-artifact-and-clarification-inputs)
   owns read-only clarification preparation, closed schema and limits.
 

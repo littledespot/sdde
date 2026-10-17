@@ -1,7 +1,7 @@
 # 14. Orchestrator composition
 
-Part of the [proposed design](../design.md#14-orchestrator-composition). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#14-orchestrator-composition), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 [View the Orchestrator composition sample](../code.md#orchestrator-composition).
 
@@ -90,9 +90,9 @@ Configured JSON part composition is specified once in
 model-request subgraphs with explicit part call sites and ordinary typed transitions.
 The compiler proves declared part dependencies; the composition resource schedules
 nothing. Generic assembly is a pure child action with no model port or prompt.
-The approved finite graph-capacity increase preserves visible detailed operations
-and independent retry identities; it introduces no hidden dispatcher. The initial
-extraction workflow uses this shared implementation.
+The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
+independent retry identities; there is no hidden dispatcher. Extraction uses this
+shared implementation.
 
 ### 14.2 `StageGateOrchestrator`
 
@@ -239,8 +239,8 @@ This instrumentation-internal orchestrator is entered once for a feature-sink fa
   true`, including mixed specification/planning changes.
 - Before refresh, startup reconstructs the historical policy solely from the current persisted
   `BootstrapAuthorityState.components.compiledEnginePolicy.loggingPolicyFragment`; until
-  feature-WAL recovery and that authority validation finish, only bounded content-free emergency
-  telemetry is available.
+  that authority validation finishes, only bounded content-free emergency telemetry is
+  available.
 - Ordinary feature events continue under that historical binding while the successor bootstrap
   candidate is evaluated.
 

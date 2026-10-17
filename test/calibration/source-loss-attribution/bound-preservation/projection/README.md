@@ -70,7 +70,7 @@ candidate against the current production packet and prompt. Regression tests cov
 resolved exact/passive values, role choices, subject projections and request memory
 ownership. Full verification includes production correction and repair paths.
 
-After explicit bounded approval under [§28.8](../../../../../design/contracts/28-testing.md#288-model-protocol-correction-and-semantic-calibration):
+After explicit bounded approval under [§28.8](../../../../../design/contracts/28-testing.md#288-model-conformance-comparisons):
 
 1. Verify every manifest hash and exact parent/settings before any send. Use the
    existing [isolated debugger replay procedure](../../README.md#bounded-replay-procedure).

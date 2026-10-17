@@ -1,7 +1,7 @@
 # 29. Suggested package/module structure
 
-Part of the [proposed design](../design.md#29-suggested-packagemodule-structure). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#29-suggested-packagemodule-structure), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 The logical dependency boundaries map to this Zig source/build layout:
 

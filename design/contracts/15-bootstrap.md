@@ -1,7 +1,7 @@
 # 15. Bootstrap flow
 
-Part of the [proposed design](../design.md#15-bootstrap-flow). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#15-bootstrap-flow), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Bootstrap has a fixed engine-startup portion and workflow-owned setup:
 
@@ -32,4 +32,4 @@ Bootstrap has a fixed engine-startup portion and workflow-owned setup:
 - A config, workflow-definition, toolchain-layer, preset, reader, parser, project, or command
   ambiguity is an engine/environment problem and does not consume a repair attempt.
 
-The new engine uses typed filesystem and process adapters. It does not reproduce the predecessor `eval $(get_feature_paths)` pattern (`.specify/scripts/bash/common.sh:71-88`), hard-code `specs/`, or delegate state construction to a shell script.
+The new engine uses typed filesystem and process adapters. It does not evaluate shell-produced paths, hard-code `specs/`, or delegate state construction to a shell script.

@@ -8,8 +8,8 @@ observations remain diagnostic evidence under their original policies.
 **Approved and implemented 17 October 2026; full offline verification passed.** The user chose
 current native request-eligible occurrence scope, allowing recognized `E` beyond
 unchanged selected support `S`, and contextual complete-value delimiters. The
-accepted [ADR 0020 amendment](../../../design/decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
-and [composition contract](../../../design/contracts/text-field-composition.md#native-exact-values--approved-17-october-2026)
+accepted [ADR 0020 amendment](../../../design/decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+and [composition contract](../../../design/contracts/text-field-composition.md#native-exact-values)
 govern the cutover. `zig build verify -j1 --summary all` passed 163/163 steps and
 1,818/1,818 tests, including clean native packaging smoke checks. B2 and W1 remain
 separate, unapproved decisions. No live fidelity, cost or publication improvement

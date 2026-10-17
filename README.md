@@ -297,7 +297,7 @@ remain separate from E2E and workflow authority.
 | [Contract samples](design/code.md) | Illustrative shapes and links to their owners; not an alternate runtime schema. |
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
-| [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
+| [Harness overview](design/harness/README.md) | Harness purpose, authority boundary and commands; open work is in FIX05. |
 | [FIX05](fixes/FIX05.md) | Architecture review, current corrective focus, remaining work and required acceptance evidence. |
 | [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 

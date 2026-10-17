@@ -17,19 +17,18 @@
   repair or clarification authority.
 
 - The originating step declares the repository slot, prompt, result
-  schema and optional input resource once. The user-approved 2026-09-19 amendment
-  in §12.5 makes temperature engine-owned. The user-approved 2026-10-11 amendment
-  replaces its fixed value `0` with `0.1` when the registered model supports it,
-  omitted otherwise; workflow temperature parameters reject.
-- The user-directed 2026-09-21 amendment makes the required per-model `json`
-  boolean in `.sddproviders.json` the sole response-mode selector. `true` selects
+  schema and optional input resource once. Temperature is engine-owned (§12.5):
+  `0.1` when the registered model supports it, omitted otherwise; workflow
+  temperature parameters reject.
+- The required per-model `json` boolean in `.sddproviders.json` is the sole
+  response-mode selector (user-directed, 2026-09-21). `true` selects
   native schema output, `false` prompt-only; registered capabilities still constrain
   support. Workflow `response-mode` is removed and rejected. Binding, preparation,
   correction, authorization and replay retain/verify the selected mode. Full engine
   validation, retries and token accounting remain unchanged.
 - Registered identity, binding-validation and request-building operations exchange
-  immutable typed pipeline values. The 2026-09-18 user-approved preparation amendment
-  also permits `prepare-model-request` to reuse those domain owners and publish
+  immutable typed pipeline values. `prepare-model-request` (user-approved,
+  2026-09-18) may also reuse those domain owners and publish
   assignment, validation and preparation together in one runner-validated delta.
 - Both forms retain the same originating identity, selected resources and validation
   rules. Failed consolidated preparation publishes no partial state. Detailed
@@ -83,34 +82,32 @@
 
 YAML selects each operation; request preparation may use either the detailed
 operations or the consolidated pure preparation operation. This does not combine
-provider authorization, invocation, retries or accounting. The detailed catalogue retains
-its input, transition, ownership, rejection and cleanup rules. All integrations
-below were recorded as implemented on **2026-09-06**; accounting also retains
-its **2026-09-12** protocol-retry and **2026-09-18** validated repair-progress amendments.
+provider authorization, invocation, retries or accounting. The
+[detailed catalogue](../contracts/model-request-operations.md) owns each operation's
+input, transition, ownership, rejection and cleanup rules.
 
-The 2026-09-18 user-approved response-admission amendment also permits
-`admit-model-response` to combine JSON decoding and selected-schema validation.
+`admit-model-response` (user-approved, 2026-09-18) may combine JSON decoding and selected-schema validation.
 It reuses their existing owners and publishes the existing envelope and payload
 results together in one runner-validated delta. Detailed operations remain
 available. No provider call, lifecycle change, retry, accounting, semantic review
-or child-node execution is added; the 512-step expansion limit remains unchanged.
+or child-node execution is added, and the compiled step ceiling (ADR 0016) is unchanged.
 
 | Operation contract | Detailed rules |
 | --- | --- |
-| <a id="accounting-integration-implemented-2026-09-06"></a>Accounting | [Contract](model-request-operation-contracts.md#accounting-integration-implemented-2026-09-06) |
-| <a id="operation-assignment-integration-implemented-2026-09-06"></a>Operation assignment | [Contract](model-request-operation-contracts.md#operation-assignment-integration-implemented-2026-09-06) |
-| <a id="authorization-preparation-integration-implemented-2026-09-06"></a>Authorization preparation | [Contract](model-request-operation-contracts.md#authorization-preparation-integration-implemented-2026-09-06) |
-| <a id="request-invocation-state-integration-implemented-2026-09-06"></a>Request invocation-state | [Contract](model-request-operation-contracts.md#request-invocation-state-integration-implemented-2026-09-06) |
-| <a id="provider-operation-invocation-state-integration-implemented-2026-09-06"></a>Provider-operation invocation-state | [Contract](model-request-operation-contracts.md#provider-operation-invocation-state-integration-implemented-2026-09-06) |
-| <a id="inference-integration-implemented-2026-09-06"></a>Inference | [Contract](model-request-operation-contracts.md#inference-integration-implemented-2026-09-06) |
-| <a id="observation-validation-integration-implemented-2026-09-06"></a>Observation validation | [Contract](model-request-operation-contracts.md#observation-validation-integration-implemented-2026-09-06) |
-| <a id="json-decoding-integration-implemented-2026-09-06"></a>JSON decoding | [Contract](model-request-operation-contracts.md#json-decoding-integration-implemented-2026-09-06) |
-| <a id="payload-schema-validation-integration-implemented-2026-09-06"></a>Payload-schema validation | [Contract](model-request-operation-contracts.md#payload-schema-validation-integration-implemented-2026-09-06) |
-| Consolidated response admission | [Contract](model-request-operation-contracts.md#consolidated-response-admission) |
-| <a id="provider-operation-completion-integration-implemented-2026-09-06"></a>Provider-operation completion | [Contract](model-request-operation-contracts.md#provider-operation-completion-integration-implemented-2026-09-06) |
-| <a id="pre-call-operation-termination-integration-implemented-2026-09-06"></a>Pre-call operation termination | [Contract](model-request-operation-contracts.md#pre-call-operation-termination-integration-implemented-2026-09-06) |
-| <a id="logical-request-closure-integration-implemented-2026-09-06"></a>Logical-request closure | [Contract](model-request-operation-contracts.md#logical-request-closure-integration-implemented-2026-09-06) |
-| <a id="pre-call-logical-request-closure-integration-implemented-2026-09-06"></a>Pre-call logical-request closure | [Contract](model-request-operation-contracts.md#pre-call-logical-request-closure-integration-implemented-2026-09-06) |
+| Accounting | [Contract](../contracts/model-request-operations.md#accounting-integration) |
+| Operation assignment | [Contract](../contracts/model-request-operations.md#operation-assignment-integration) |
+| Authorization preparation | [Contract](../contracts/model-request-operations.md#authorization-preparation-integration) |
+| Request invocation-state | [Contract](../contracts/model-request-operations.md#request-invocation-state-integration) |
+| Provider-operation invocation-state | [Contract](../contracts/model-request-operations.md#provider-operation-invocation-state-integration) |
+| Inference | [Contract](../contracts/model-request-operations.md#inference-integration) |
+| Observation validation | [Contract](../contracts/model-request-operations.md#observation-validation-integration) |
+| JSON decoding | [Contract](../contracts/model-request-operations.md#json-decoding-integration) |
+| Payload-schema validation | [Contract](../contracts/model-request-operations.md#payload-schema-validation-integration) |
+| Consolidated response admission | [Contract](../contracts/model-request-operations.md#consolidated-response-admission) |
+| Provider-operation completion | [Contract](../contracts/model-request-operations.md#provider-operation-completion-integration) |
+| Pre-call operation termination | [Contract](../contracts/model-request-operations.md#pre-call-operation-termination-integration) |
+| Logical-request closure | [Contract](../contracts/model-request-operations.md#logical-request-closure-integration) |
+| Pre-call logical-request closure | [Contract](../contracts/model-request-operations.md#pre-call-logical-request-closure-integration) |
 
 ## Acceptance
 
@@ -155,8 +152,8 @@ or child-node execution is added; the 512-step expansion limit remains unchanged
   operations, missing/foreign/stale/duplicate inputs, forged successors/reasons,
   suppressed failures, compiler/registry rejection, allocation and cancellation cleanup,
   owner lifetime, and closure without a live lease at token exhaustion.
-- Production Bedrock is connected through the same retained-request bindings; shared
-  fake/adapter and YAML tests prove the production handoff.
+- Production Bedrock uses the same retained-request bindings; shared fake/adapter
+  and YAML tests must prove the production handoff.
 
 - Pre-call termination cases cover both operation kinds, failure/cancellation,
   prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock terminal

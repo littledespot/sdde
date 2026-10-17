@@ -72,8 +72,7 @@ original report, human record and deterministic JSON/Markdown decision. It never
 rewrites the original report. Exit 0 means accepted, 1 rejected/error, 2 unresolved.
 The human proposal is revalidated against the report's captured published inputs;
 case outcome, publication, admission audit and rubric policy are reapplied. Stale
-report hashes, unsupported evidence and substituted identities reject. No existing
-run has been human-adjudicated by this implementation.
+report hashes, unsupported evidence and substituted identities reject.
 
 The baseline useful-completion calculation reuses rubric acceptance. It retains supplied model assessments as advisory diagnostics requiring human
 adjudication, including any calibrated model. Human assessments stay explicit. Historical
@@ -126,8 +125,7 @@ and qualification. No real grader is currently qualified by these pending record
 - `spec-e2e-case/v2`: required expected outcome.
 - `spec-e2e-report/v5`: the single total token budget and aggregate actual usage,
   expected outcome, captured evaluation inputs, replayable admission evidence and
-  separate acceptance. No advisory budget, usage subtotal or consumption-class
-  token accounting is retained.
+  separate acceptance.
 - `human-spec-adjudication/v1`, `spec-adjudication/v1`: bound human judgment and
   derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,
@@ -143,4 +141,4 @@ Required checks are `zig build test-rubric-evaluator`, `zig build test-integrati
 includes `smoke-adjudicator`, which runs the copied native adjudicator in an empty
 environment, alongside the existing packaged-engine and harness smoke checks.
 These prove mechanics and isolation; they do not prove semantic quality or grader
-accuracy. Contract review found no remaining blockers.
+accuracy.

@@ -146,7 +146,7 @@ accepts the same Converse input where the selected model supports counting.
 
 ## Request and schema projection
 
-- Under the user-directed 2026-10-15 amendment, inference uses only
+- Inference uses only
   `/model/<encoded-model>/converse`; CountTokens uses
   `/model/<encoded-model>/count-tokens`.
 - The canonical [Converse codec](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
@@ -157,7 +157,7 @@ accepts the same Converse input where the selected model supports counting.
   `additionalModelRequestFields`. It omits inference/output controls absent from
   the [count input contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseTokensRequest.html).
   A model without exact-count support rejects before dispatch.
-- Supported temperature is `0.1` (§12.5, amended 2026-10-11), serialized under
+- Supported temperature is `0.1` (§12.5), serialized under
   `inferenceConfig.temperature`; unsupported temperature is omitted.
 - The compiled `BedrockRequestProfile` selects verified model-specific request
   fields: `.openai_oss` projects GPT-OSS `reasoning_effort`, while `.openai_luna`
@@ -203,8 +203,7 @@ accepts the same Converse input where the selected model supports counting.
   equal `totalTokens`. Implicit caching can occur without explicit cache points.
   Optional validated `metrics.latencyMs` remains provider-reported metadata.
 - `usage.serverToolUsage` is optional and accepts only a closed empty object.
-  This supported wire shape comes from the captured native Converse response on
-  16 October 2026 (07:29 Melbourne), retained as an
+  This supported wire shape comes from a captured native Converse response, retained as an
   [offline regression fixture](../../src/test_fixtures/bedrock_converse_usage/response.json).
   AWS's published [TokenUsage schema](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html)
   does not describe this field. No nonempty member contract is inferred: null,

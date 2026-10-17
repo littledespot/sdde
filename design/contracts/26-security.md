@@ -1,7 +1,7 @@
 # 26. Security and safety
 
-Part of the [proposed design](../design.md#26-security-and-safety). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#26-security-and-safety), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 26.1 LLM trust boundary
 

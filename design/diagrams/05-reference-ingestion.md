@@ -1,7 +1,6 @@
 High-level flow for turning selected reference material into supported workflow inputs.
-
-The configured split below is the pending [ADR 0016](../decisions/0016-configured-json-response-composition.md)
-design; the current executable still requests extraction in one combined response.
+Extraction uses the configured content/classification split of
+[ADR 0016](../decisions/0016-configured-json-response-composition.md).
 
 ```mermaid
 flowchart TD

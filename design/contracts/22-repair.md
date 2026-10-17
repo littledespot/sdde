@@ -1,15 +1,15 @@
 # 22. Atomic repair protocol
 
-Part of the [proposed design](../design.md#22-atomic-repair-protocol). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#22-atomic-repair-protocol), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 22.1 Definition of atomic
 
-**Approved B2/W1 amendment — 17 October 2026:**
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md) supersedes
-automatic content repair and upstream regeneration from post-generation semantic
-findings, including principle findings. Such findings remain advice with their
-original evidence and origins. Native defect validators retain their repair or
+**Post-generation findings:** under
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md), post-generation
+semantic findings, including principle findings, authorize no automatic content
+repair or upstream regeneration. They remain advice with their original evidence
+and origins. Native defect validators retain their repair or
 blocked outcomes; valid citations or model-assisted comparisons do not establish
 semantic corroboration. A genuine native authority gap remains typed, never an
 automatic upstream rebuild after generation. Pre-generation source repair and
@@ -27,13 +27,12 @@ An atomic repair changes the smallest independently valid IR unit associated wit
 - one complete file only when a parser/tool cannot localize the failure;
 - one explicitly declared coupled group of pointers within one authorized IR record or one authorized file when those pointers cannot be valid separately.
 
-Atomicity means unrelated valid units cannot change. The explicitly approved
-20 September amendment in [§16.4](16-reference-ingestion.md#false-conflict-repair-boundary--approved-extension)
+Atomicity means unrelated valid units cannot change. [§16.4](16-reference-ingestion.md#false-conflict-repair-boundary)
 permits one native-bound inseparable conflict-relation group across its affected
 dispositions/conflict records. No other cross-record repair is authorized.
 
-The user-approved chunk 14 amendment (18 September 2026) permits execution-private
-pre-generation repair of source-backed candidate omissions. The owning contract must establish a
+Execution-private pre-generation repair of source-backed candidate omissions is
+permitted. The owning contract must establish a
 unique defective producer and its smallest safe target from captured source and
 review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target.
@@ -42,7 +41,7 @@ The [clarification-admission boundary](12-model-boundary.md#1281-clarification-a
 does not relax that prohibition. In required pre-generation assessment, an inconclusive finding without an identifiable
 user decision must reject when existing authority cannot correct it; completing
 its question text cannot grant clarification publication. Optional verdict
-reassessment remains a separate unapproved decision in FIX_002.
+reassessment is not approved.
 
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
   token-classification collection, one invalid source selection, or an empty claim-citation
@@ -53,7 +52,7 @@ reassessment remains a separate unapproved decision in FIX_002.
   construction, ledger validation and full-candidate publication.
 - Missing semantic support remains an authority gap, not a selection repair.
 
-**ADR 0022 reference handoff amendment (approved 6 October 2026):** use native
+**Reference handoffs ([ADR 0022](../decisions/0022-native-reference-phase-handoffs.md)):** use native
 occurrence-bound selections and group catalogues in initial and repaired
 reconciliation. Signal changes retire dependent authored associations; disposition
 changes retire affected signals while preserving independent groups. Rebuild through the same
@@ -76,8 +75,8 @@ with content under ADR 0020. Fixed repairs retain required canonical
 `source_group_ids`; their wire responses stay value/content-only. Value-only repair
 cannot change group IDs, explicit `S`, effective evidence bounds or siblings.
 
-The approved 17 October [B3 amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
-removes model-authored exact-copy selections. Fixed replacements type exact values
+Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+there are no model-authored exact-copy selections. Fixed replacements type exact values
 in prose. Their retained native request scope derives eligible occurrences from
 the authorization's current snapshot and effective-evidence bounds, never a sibling
 or broader authoring catalogue. Raw-byte contextual recognition precedes canonical
@@ -88,10 +87,9 @@ missing or stale native scope is an engine rejection, not permission for a model
 to choose a handle. Composition correction and retry limits remain unchanged.
 
 A lost obligation outside that association has an explicit unresolved-association
-outcome and blocks; this amendment adds no membership-changing rebuild permission.
-It cannot blame extraction, grouping or the removed presentation-role producer.
-The former post-generation reviewed-omission insertion route is removed by
-ADR 0023. A semantic omission note cannot authorize an invented association or
+outcome and blocks; no membership-changing rebuild permission exists, and the
+outcome cannot blame extraction or grouping. There is no post-generation
+reviewed-omission insertion (ADR 0023). A semantic omission note cannot authorize an invented association or
 cross-group insertion. Independently authorized native membership repair retains
 its current accepted group occurrence, complete selection and readback checks.
 
@@ -99,7 +97,7 @@ An omission must identify nonempty authorized sources at review admission, even
 when its subject also fixes claim evidence. Loss comparison retains that admitted
 omission, its subject, detail, selected sources and revision.
 
-**Explicit source-obligation handoff (approved 10 October 2026):** the existing
+**Explicit source-obligation handoff:** the existing
 source reviewer supplies a required nonblank `missing_obligation` for
 `candidate_omission`. This is a direct statement of the omitted source requirement,
 including its conditions, negation and obligation strength; `detail` explains the
@@ -233,7 +231,7 @@ Configuration and environment errors never consume LLM repair attempts.
   origin, original value or absence anchor, and complete dependency snapshot.
   Reconciliation loss cannot authorize inserting an already extracted claim.
 
-**Approved redundant-projection amendment (25 September 2026):** native
+**Redundant projections:** native
 reconciliation may delete one misbound extra summary statement or signal when
 its current, unique, nonempty claim selection is valid (and non-conflicting for a
 signal), every selected claim remains represented, the complete surviving
@@ -244,7 +242,7 @@ semantic inference. Bind the original diagnostic, old value, revision and comple
 dependencies; retain surviving values/origins and rerun normal full validation.
 No proof means no deletion. Existing retry and token accounting remain unchanged.
 
-**Approved summary-coverage amendment (10 October 2026):** the
+**Summary coverage:** the
 [§16.4 summary contract](16-reference-ingestion.md#164-semantic-extraction-flow) validates
 coverage by membership union and permits overlapping statements. Its exact-duplicate
 normalization produces a validated summary projection before canonical identities;
@@ -256,8 +254,7 @@ same normalization. A new array position is never a new repair allowance. Existi
 redundant-projection deletion keeps its separate authorization and proof; overlap
 alone authorizes neither deletion nor coupled replacement.
 
-**Conditional entity membership (25 September 2026, amended by approved B9 on
-17 October 2026):** the feature-wide entities unit's fixed applicability decision
+**Conditional entity membership:** the feature-wide entities unit's fixed applicability decision
 may authorize deletion of one contradictory entity or insertion of one missing
 required entity. Record batches cannot author entities or use this authorization.
 Repair may not change the decision, reclassify an entity as another record family,
@@ -290,7 +287,7 @@ The repair algebra is closed:
 
 ### 22.4 Repair request and response
 
-**Accepted Phase 1A amendment, 16 October 2026:** every repaired text value
+Every repaired text value
 passes the same [composition policy](text-field-composition.md) as initial
 authoring and readback. Canonical equality with the rejected old value, under
 the exact active permit and defect key, produces shared typed exhaustion
@@ -298,15 +295,13 @@ the exact active permit and defect key, produces shared typed exhaustion
 retains actual consumption and prevents later work on the exhausted key. It does
 not advance candidate revision, invalidate dependents, request semantic review
 or resolve the defect. Changed repairs retain existing dependent/full validation.
-This supersedes allowing an unchanged rejected replacement to merge and trigger
-re-review; it adds no route-specific rule or retry allowance.
+This adds no route-specific rule or retry allowance.
 
-**Approved Phase 1A.3 amendment, implemented offline 16 October 2026:**
-composition defects (required prose, prohibited insertions and embedded insertion
+Composition defects (required prose, prohibited insertions and embedded insertion
 syntax) are no longer repair targets. They are rejected at response admission and
 corrected through the existing bounded protocol correction with the complete
 original request, as defined in the
-[composition contract](text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit).
+[composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit).
 Repair responses apply the same admission rule within their own request's
 correction bound. Other repair kinds and `unchanged_repair` exhaustion are
 unchanged.
@@ -322,8 +317,7 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
-**Focused-review repair (approved 26 September 2026; task-authorized Phase 4
-transport/lifecycle amendment, 11 October 2026).** All produced findings are
+**Focused-review repair.** All produced findings are
 individually validated before the next native assignment is requested. The
 source unit/collection assignment in §17 produces all its native member findings
 in one call; principle assessment produces the complete current subject set of
@@ -355,8 +349,7 @@ runner owns request retirement, per-assignment and native-defect retry allowance
 and global actual-token accounting; successful independent work does not reset an
 unresolved target or replenish the finite budget.
 
-**Within-execution review retention (task-authorized Phase 6 amendment,
-11 October 2026).** Candidate-local repairs still retire current support and
+**Within-execution review retention.** Candidate-local repairs still retire current support and
 authority projections. An execution-private receipt reservoir may preserve clean
 admitted `supported`/`not_applicable` source assignments as historical evidence.
 It cannot satisfy a gate. Reconstruct the complete current assignment through
@@ -410,7 +403,7 @@ families; source-omission detail correction uses the coupled explanation and
 obligation shape in §22.1, and cannot change the verdict. The original source-group occurrence association, explicit `S`, effective evidence
 bound and siblings stay pinned by the existing atomic authorization. A value-only replacement cannot expand them;
 changing authored group membership requires separately authorized authored-unit
-rebuilding; none is added by this amendment. Before generation, genuine evidenced
+rebuilding, which does not exist. Before generation, genuine evidenced
 upstream loss retains its existing producer repair path. After generation starts,
 the native phase guard rejects authorization, packet preparation and merge under
 ADR 0023. Malformed or corrupt stored evidence is rejected before
@@ -438,12 +431,8 @@ still limit writable content. Recover original source meaning within that scope 
 preserving correct surrounding content. Mechanical repair acceptance does not prove
 semantic recovery; full coverage and the existing semantic review remain mandatory.
 
-The historical 25 September FIX_002 §36 coupled-evidence authorization applied to
-the superseded model token/citation tuple. ADR 0020 retired that tuple-specific
-trigger; the approved native-recognition amendment retains current value-only
-bounds and grants no general
-coupled evidence add/remove repair. Independently authorized membership,
-reviewed insertion and native exact reconstruction keep their own targets.
+ADR 0020 grants no general coupled evidence add/remove repair. Independently
+authorized membership repair keeps its own targets.
 Revalidate the full unit, affected dependencies, coverage, semantic/principle
 review and publication/readback before acceptance. The engine derives reference
 citations from permitted selections; it never chooses semantic support to make
@@ -457,9 +446,7 @@ invalid model-proposed citation. Principle citation diagnostics identify the cit
 index, rejected chunk/line field and value, using the existing selection for allowed
 IDs and the captured span for inclusive line bounds. These same facts reach repair
 and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
-native evidence repair. The diagnostic and optional repeat-feedback work in
-[FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review)
-is not authority to change retry limits, reconsider verdicts or persist new policy.
+native evidence repair, change retry limits, reconsider verdicts or persist new policy.
 
 Example:
 
@@ -495,9 +482,8 @@ Authorization, packet construction and merge require the current native
 pre-generation phase, bound into existing dependency/CAS checks. Runner-owned
 bindings derive that phase from the actual optional generation session/content;
 model bytes and custom YAML routing cannot supply it. A retained authorization
-cannot be used after generation starts. The duplicate post-generation upstream
-merge operations, their subgraph and semantic specification-omission repair path
-are removed under W1/W2. Actual upstream changes require fresh validation; no
+cannot be used after generation starts. There is no post-generation upstream merge
+or semantic specification-omission repair. Actual upstream changes require fresh validation; no
 review finding grants hidden execution or saved continuation.
 
 The native source-repair retry scope pins its original required review projection,
@@ -514,8 +500,7 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
-**Approved model-response normalization (21 September, extended 8 October 2026):**
-first parse the original complete response strictly. Only after a `SyntaxError`,
+**Model-response prefix normalization:** first parse the original complete response strictly. Only after a `SyntaxError`,
 the shared model-envelope decoder may recognize one of these exact opening
 artifacts immediately followed by a JSON object:
 
@@ -566,8 +551,7 @@ separate from changing per-field producer origins. This integration changes
 no retry counter or global token rule.
 
 When a model response fails JSON decoding or its bound result schema, no valid
-IR is available. The user-approved missing-answer amendment also permits the
-same continuation when sealed provider evidence establishes `missing_final_text`
+IR is available. The same continuation applies when sealed provider evidence establishes `missing_final_text`
 after wire, association and usage validation. Reasoning is never answer text;
 no empty candidate, adapter retry or blanket provider-failure retry is introduced.
 The YAML-declared protocol-retry builder prepares a narrowly
@@ -586,15 +570,13 @@ defined response-level correction containing:
   a distinct JSON Pointer locating the exact expected node in the complete selected
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
-  constraint; correction does not repeat its subtrees. This focused amendment was
-  explicitly approved on 19 September 2026. Syntax correction uses that same complete
-  schema. Guidance never selects a semantic branch, moves fields or synthesizes values.
-  For an integer-enum rejection, the approved 26 September 2026 amendment uses
-  the exact schema locator and a short integer-type outline; it does not copy
+  constraint; correction does not repeat its subtrees. Syntax correction uses that
+  same complete schema. Guidance never selects a semantic branch, moves fields or
+  synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.
 
-The [approved child-object amendment](#2261-child-object-requirements)
-below adds required names to immediate child-object descriptors only.
+[§22.6.1](#2261-child-object-requirements) adds required names to immediate
+child-object descriptors only.
 
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
@@ -621,8 +603,7 @@ passes ordinary admission. Missing answers, JSON and schema failures share one
 assignment allowance, including selected native-repair parents. Charge every exchange
 before continuation; unknown usage or an exhausted global budget prohibits a new
 call. All inference and corrections share the same `totalModelTokenBudget` and
-aggregate usage ledger; no advisory token calculation or allowance applies.
-Global-budget rejection remains fatal during advisory repair and cannot be
+aggregate usage ledger. Global-budget rejection remains fatal during advisory repair and cannot be
 converted into incomplete advice.
 
 Ordinary runner retry exhaustion retains the owning compiled operation, declared
@@ -641,8 +622,7 @@ is not itself a publication veto. Whole-stage regeneration is not used.
 
 #### 22.6.1 Child-object requirements
 
-**Explicitly approved by the user on 20 September 2026.** Extend the
-existing schema-derived correction outline at one boundary: every immediate field
+Extend the existing schema-derived correction outline at one boundary: every immediate field
 descriptor whose compiled type is `object` also lists that object's required
 property names, in compiled order. Derive these names in the shared schema
 projection; the protocol builder consumes the result without inspecting candidates
@@ -665,14 +645,10 @@ or selecting additional diagnostics. Reuse the existing required-field projectio
 
 All other §22.6 behavior remains unchanged, including complete-response correction,
 schema/native validation, request ownership, accounting and terminal rejection.
-The [feasibility trace](../reference-notes/model-request-guidance.md#nested-correction-feasibility)
-and [historical Chunk 18 plan](../../fixes/archive/IMP_001.md#focused-226-decision--child-object-requirements)
-record evidence, limits and required verification. This amendment grants no new
-repair capability and does not claim improved model compliance.
+This grants no new repair capability and does not claim improved model compliance.
 
 #### 22.6.2 Explicit error guidance
 
-**User-requested amendment, implemented 20 September 2026.**
 Extend the existing `build-model-protocol-retry` action, not the set of repair
 actions. Its single responsibility remains preparing the corrected request.
 
@@ -714,21 +690,18 @@ and selected native-repair responses. They do not make native semantic defects,
 user clarifications, transport failures, invalid associations or runner failures
 eligible for protocol correction. Existing authorization, full validation, retry
 identities/limits, token accounting and terminal no-publication rules remain in
-force. See [request-level tests](28-testing.md#284-model-fault-injection-tests) and
-the [historical R45 implementation plan](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
+force. See [request-level tests](28-testing.md#284-model-fault-injection-tests).
 Improved model compliance still requires separately approved live measurement.
 
 ### 22.7 Repair retry limit and escalation
 
-The user-approved 2026-09-18 amendment makes successful repair progress independent
-of another target's retry allowance:
+Successful repair progress is independent of another target's retry allowance:
 
 - Each retry-capable operation instance still declares `retry-limit` in YAML.
   Atomic repair requests and repair merges count visits by compiled operation and
   native defect key. Ordinary model requests count visits by compiled operation
   and immutable assignment; other operations retain invocation-wide counts.
-- The user-requested R32 amendment defines an assignment by execution, immutable
-  unit, model operation and purpose, excluding request ordinal. Context followups
+- An assignment is identified by execution, immutable unit, model operation and purpose, excluding request ordinal. Context followups
   retain their parent's assignment and native followup ordinal. Equal payload
   bytes do not merge unrelated units. Reassignment cannot reset history.
 - Successful JSON and schema admission completes protocol correction. Changed
@@ -750,7 +723,8 @@ of another target's retry allowance:
 - Registered capability-free bindings publish typed authorization, merge and validation
   facts with their candidate delta. The runner validates that transition before applying
   it and owns all counters. Domain owners never grant retries or reset accounting.
-- Semantic omission progress requires complete dependent rebuilding and admitted review.
+- Pre-generation semantic omission progress requires complete dependent rebuilding
+  and admitted review.
   Required child repairs may run while that validation is pending; resolving a child
   restores the pending parent, without declaring the semantic defect resolved.
   Rebuilding requests use that native pending parent's key and immutable assignment;
@@ -770,7 +744,7 @@ of another target's retry allowance:
   call is permitted at or above the workflow budget.
 - Exhaustion blocks/fails without changing validation or broadening repair scope.
 
-- Exhaustion returns:
+Exhaustion returns:
 
 - last schema-valid candidate, if one exists;
 - all stable diagnostics;
@@ -819,16 +793,15 @@ A code repair requires an undeclared second file. This is not treated as a large
 
 ### Typed-content repair conformance
 
-The approved [§7.1 amendment](07-domain-representations.md#71-shared-types) uses the
-same ordered segment shape for initial business values and selected value repairs.
-An invalid reference diagnostic retains its segment location and rejected IDs;
+Initial business values and selected value repairs share the
+[§7.1](07-domain-representations.md#71-shared-types) text wire. An invalid reference diagnostic retains its segment location and rejected IDs;
 permitted choices derive from the bound evidence under ADR 0020. Literal punctuation is not a
 repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
 full validation, retry identities and token accounting with their existing owners.
-Native coverage repair remains limited to its existing whole-display equality proof;
-this amendment does not authorize substring guessing or rewriting meaning.
+Mechanical coverage defects have no independently supported repair target and
+block; nothing guesses substrings or rewrites meaning.
 
-### Meaning and repair ownership amendment — approved 14 October 2026
+### Meaning and repair ownership
 
 A source `candidate_invalid` finding (§12) reports unsupported additions or
 retained-obligation contradictions without claiming missing source meaning.
@@ -842,8 +815,8 @@ and current evidence instead of manufacturing an omission or user question.
 Aggregate membership repair must establish the source occurrence and writable
 unit independently of dispatch order. The final record task is not evidence of
 ownership. If the established semantic association cannot be represented within
-the current authorized group, retain an explicit ownership denial. This amendment
-adds no cross-batch mutation, association change or retry allowance.
+the current authorized group, retain an explicit ownership denial. There is no
+cross-batch mutation, association change or extra retry allowance.
 
 The declared text wire conversion in §7.1 governs initial content and fixed
 value/record repair together. Strings denote ordinary prose; a named fragments

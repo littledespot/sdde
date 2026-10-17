@@ -1,12 +1,9 @@
 # Model-request operation contracts
 
-These detailed contracts belong to [ADR 0012](0012-workflow-owned-model-request.md).
-They retain each integration's recorded implementation date and the
-2026-09-12 protocol-retry amendment. The dates identify implementation history;
-the contracts describe the explicit YAML operations and their shared boundaries.
-No new decision or implementation claim is introduced here.
+Detailed contracts for the explicit YAML model-request operations governed by
+[ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
-## Accounting integration (implemented 2026-09-06)
+## Accounting integration
 
 - The explicitly selected `advance-model-attempt-accounting` step consumes the prepared
   request and declares `retry-limit` (`0` permits only its initial execution).
@@ -18,7 +15,7 @@ No new decision or implementation claim is introduced here.
   requests, also bound to a pending native parent for dependent requests, and
   operation/native-defect counts for atomic repairs under the user-requested
   2026-09-18 amendment in
-  [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
+  [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
   never become a second retry counter.
 - Retry authority names the accounting step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence
@@ -38,7 +35,7 @@ No new decision or implementation claim is introduced here.
 - No provider call, lifecycle advancement, lease preparation or token charge is hidden
   in this integration.
 
-## Operation assignment integration (implemented 2026-09-06)
+## Operation assignment integration
 
 - `assign-provider-operation` consumes the same prepared request and applied attempt;
   `kind` explicitly selects `inference` or `input-token-count`.
@@ -51,7 +48,7 @@ No new decision or implementation claim is introduced here.
   implicit.
 - Later lifecycle phases use the separate YAML operations described below.
 
-## Authorization preparation integration (implemented 2026-09-06)
+## Authorization preparation integration
 
 - Authorization preparation is also integrated through the existing
   `prepare-provider-operation-authorization` action and runner-private lease table.
@@ -65,7 +62,7 @@ No new decision or implementation claim is introduced here.
   destroys remaining capabilities at execution cleanup.
 - No additional ledger, persisted handoff, implicit retry or token charge is introduced.
 
-## Request invocation-state integration (implemented 2026-09-06)
+## Request invocation-state integration
 
 - Request invocation state is integrated by `advance-model-request-lifecycle` with
   explicit `transition: invoked`.
@@ -83,7 +80,7 @@ No new decision or implementation claim is introduced here.
 - Request terminalization and the provider call use the separate explicit operations
   below.
 
-## Provider-operation invocation-state integration (implemented 2026-09-06)
+## Provider-operation invocation-state integration
 
 - `advance-provider-operation-lifecycle` with `transition: invoked` reuses the existing
   action for one assigned operation under an already-invoked request.
@@ -99,7 +96,7 @@ No new decision or implementation claim is introduced here.
 - No additional capability, timeout, retry, token charge, persistence or recovery
   mechanism is introduced.
 
-## Inference integration (implemented 2026-09-06)
+## Inference integration
 
 - `invoke-model` consumes the same request, applied attempt, invoked operation and
   single-use lease without selection parameters.
@@ -115,7 +112,7 @@ No new decision or implementation claim is introduced here.
 - Native composition requires an explicitly bound provider; fake implementations remain
   test-only.
 
-## Observation validation integration (implemented 2026-09-06)
+## Observation validation integration
 
 - `validate-provider-invocation-observation` is a parameter-free pure YAML step.
 - It consumes the retained raw result and exact request/attempt/invocation inputs; the
@@ -129,7 +126,7 @@ No new decision or implementation claim is introduced here.
 - No token reconciliation, decoding, schema validation, retry or terminalization is
   implicit.
 
-## JSON decoding integration (implemented 2026-09-06)
+## JSON decoding integration
 
 - Native `decode-model-envelope` is also integrated as a parameter-free pure step.
 - It consumes the same prepared request and sealed observation, parses only its complete
@@ -141,7 +138,7 @@ No new decision or implementation claim is introduced here.
 - No schema check, new identity, byte limit, token charge, retry or lifecycle transition
   is introduced.
 
-## Payload-schema validation integration (implemented 2026-09-06)
+## Payload-schema validation integration
 
 - `validate-model-payload-schema` is a parameter-free pure step consuming the retained
   decoded result, prepared request and request ledger.
@@ -173,7 +170,7 @@ No new decision or implementation claim is introduced here.
   provider call, retry, accounting, semantic authority or runtime coordinator is
   introduced. Correction, closure and retirement remain explicit operations.
 
-## Provider-operation completion integration (implemented 2026-09-06)
+## Provider-operation completion integration
 
 - `complete-provider-operation` is a parameter-free binding of the existing lifecycle
   action.
@@ -205,7 +202,7 @@ No new decision or implementation claim is introduced here.
 - These parameter-free bindings add no count prerequisite, capacity gate, token charge,
   retry authority or completion ledger.
 
-## Pre-call operation termination integration (implemented 2026-09-06)
+## Pre-call operation termination integration
 
 - `terminate-provider-operation` is a parameter-free binding of the existing provider
   lifecycle action.
@@ -232,7 +229,7 @@ No new decision or implementation claim is introduced here.
 - Request closure uses the explicit binding below.
 - Runtime cancellation abandons execution without a hidden step.
 
-## Logical-request closure integration (implemented 2026-09-06)
+## Logical-request closure integration
 
 - `complete-model-request` is a parameter-free binding of
   `AdvanceModelRequestLifecycleAction`.
@@ -259,7 +256,7 @@ No new decision or implementation claim is introduced here.
 - Pure closure needs no remaining token budget or unexpired provider deadline; runtime
   cancellation still abandons execution without inserting a hidden closure step.
 
-## Pre-call logical-request closure integration (implemented 2026-09-06)
+## Pre-call logical-request closure integration
 
 - `terminate-model-request` is a parameter-free binding of
   `AdvanceModelRequestLifecycleAction`.

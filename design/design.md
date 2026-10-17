@@ -4,78 +4,28 @@
 
 **Status:** Proposed design
 
-**Authority:** This is the proposed implementation baseline. The
-[decision index in §32](#32-accepted-and-deferred-implementation-choices) records
-accepted amendments without accepting the remainder of the design. Current
-implementation and known gaps are tracked in the [feature contracts](features/)
-and [FIX05](../fixes/FIX05.md); design requirements are not
-claims that the engine already satisfies them.
+**Authority:** This is the proposed implementation baseline. Accepted ADRs, indexed
+in [§32](#32-accepted-and-deferred-implementation-choices), amend only their stated
+scope and do not accept the remainder. Requirements here are not claims that the
+engine already meets them; [FIX05](../fixes/FIX05.md) tracks implementation gaps.
+[Engine intent](intent.md) orients judgment but is not contract authority.
 
-**22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
-owns clarification admission and candidate-failure precedence;
-[FIX_002](../fixes/archive/FIX_002.md) retains the historical implementation record;
-[FIX05](../fixes/FIX05.md) tracks remaining work. Shared admission and repair
-precedence have offline verification; the
-approved D1 response shapes follow §12.7. Verdict reassessment remains unapproved.
-The overall design remains Proposed.
-
-**Reading this design:** Sections 1, 3, 4, 30–32 retain the overview, invariants,
-responsibility boundary, delivery sequence and acceptance criteria. Other sections
-link to focused contracts below. Those contracts are part of this same proposed
-baseline; moving them does not change their authority or accept a proposal.
-Original section links remain available in the reading map.
-
-**Execution:** ADR 0009 makes one whole workflow the computation/validation unit.
-A new invocation starts at `start`; there is no transaction, checkpoint or
-saved-execution recovery subsystem. Publication failure may leave replaced
-files but cannot record new successful completion (§25). Reruns replace registered
-outputs and unresolved forms, retaining clarification identities/applicable
-answers and protecting user-closed form bytes (§23.2).
-
-**Recent approved guidance:** FIX_001 A1–A3 amend §§12.5, 17.3 and 22.6. The
-[approval record](../fixes/archive/IMP_001.md#5-design-amendment-decisions)
-preserves the decision scope; subsequent defect reviews do not grant new authority.
-
-[ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
-requirement–principle assessment and shared actionable-question preparation.
-[ADR 0023](decisions/0023-advisory-post-generation-review.md) makes all
-post-generation semantic findings advisory, including principle findings, with
-whole-unit/collection assessment and no automatic upstream rebuilding.
-Current implementation and semantic acceptance gaps are tracked in
-[FIX05](../fixes/FIX05.md). Business and policy ownership stay separate.
-
-[ADR 0016](decisions/0016-configured-json-response-composition.md) records the
-user-directed generic JSON response decomposition and deterministic assembly design.
-Shapes and partitions are workflow configuration; assembly needs no LLM prompt.
-The configured compiler, runner integration and initial extraction split are
-implemented. The finite graph ceiling is 1,024. The separately approved §12.7
-amendment derives persisted comparison evidence from existing compiled bindings;
-current registry authority governs readback. The approved §§12.7/22.6 amendment
-permits bounded missing-final-answer correction through existing retry owners.
-Measured live improvement remains outstanding.
+Sections 1, 3, 4 and 30–32 are stated here. Every other section links to its
+detailed contract in [contracts/](contracts/), which carries the same proposed
+authority.
 
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
-version-control integration and artifact fingerprinting remain outside the
-initial suite. A future explicitly selected `init` may materialize principle
-templates only under its separately accepted contract.
+version-control integration and artifact fingerprinting are outside the initial
+suite.
 
 **Source material:** [paths](paths.md), [schemas](schemas/),
 [configuration examples](examples/), [legacy preset examples](toolchainPresets/)
-and [principle templates](templates/). They are not runtime fallback data.
-The [preset authoring guide](toolchainPresets/README.md) distinguishes the source
-examples from current runtime inputs.
-References below to predecessor `prompts/`, `.specify/`, `docs/` and old README
-line ranges describe historical toolkit inputs outside this checkout; they
-are not current-source links or execution authorization.
+and [principle templates](templates/) are not runtime configuration or fallback
+data.
 
 ---
 
 ## 1. Executive summary
-
-[ADR 0013](decisions/0013-workflow-input-reuse.md) amends workflow authoring
-and model-input representation with compiler-expanded local subgraphs, local
-schema reuse, compact schema transport and typed result/evidence projections.
-Its accepted amendment preserves the validation and authority boundaries below.
 
 - The new engine must treat an LLM as an untrusted semantic content generator, not as the
   workflow runtime.
@@ -117,16 +67,28 @@ The resulting boundary is:
 
 ---
 
-## 2. Existing workflow used as the design basis
+## 2. Normative resolutions
 
-The predecessor toolkit supplies the behavioral basis. Historical observations, source
-references, and normative resolutions are retained in the linked sections.
+The predecessor toolkit left these operational choices to model instructions. The
+engine fixes them:
 
-[Complete §2 contract](contracts/02-workflow-basis.md).
-
-- <a id="21-behavior-to-preserve"></a>[2.1 Behavior to preserve](contracts/02-workflow-basis.md#21-behavior-to-preserve)
-- <a id="22-why-a-new-engine-is-needed"></a>[2.2 Why a new engine is needed](contracts/02-workflow-basis.md#22-why-a-new-engine-is-needed)
-- <a id="23-normative-resolutions-for-the-new-engine"></a>[2.3 Normative resolutions for the new engine](contracts/02-workflow-basis.md#23-normative-resolutions-for-the-new-engine)
+| Concern | Rule |
+| --- | --- |
+| Feature identity | The normalized supplied directory, relative to `paths.specs` and outside `paths.specsArchive`, identifies the feature ([ADR 0010](decisions/0010-explicit-feature-directory.md)). No generated slug, auto-selection or ownership registry. |
+| Workflow selection | `sdde <workflowId> ...` resolves exactly one validated `WorkflowId` with no default or filename inference. The compiled workflow's YAML-named invocation operation produces its run context. |
+| SDD sequence | `specify -> plan -> tasks -> implement` is enforced by those workflows' predecessor gates, not an engine-wide role list. |
+| Specify launch | `--feature <feature-directory>` and `--reference <relative-selector>` are independent and both required; neither is inferred from business prose. Every specification has one non-empty selector beneath `paths.references`; there is no reference-free mode. Missing or invalid reference input blocks before activation, logging, model calls or writes. |
+| Reference precedence | Every decoded reference artifact is an authoritative peer within the feature-intent domain. `README.md` may organize them but has no precedence. Conflicts become blocking questions. |
+| Artifact paths | The engine assigns `spec.md`, `plan.md`, `tasks.md` and every other canonical artifact location. |
+| Editability | `spec.md` is the only user-editable stage output. `clarify/SNN.md`, `PNN.md` and `TNN.md` accept edits only in their status/answer regions. `reference-context.md`, plan/design views and `tasks.md` are read-only projections. |
+| User validation | Plan views require explicit approval before Tasks; the tasks view requires approval before Implement. Rejection supplies feedback through the engine. |
+| Planning artifacts | `plan.md`, `research.md` and `quickstart.md` are required. `data-model.md` and `contracts/` need an explicit `required` or `not_applicable` decision; absence is never interpreted. |
+| Verification order | A verification task precedes dependent implementation only when the resolved preset, repository and plan support it; otherwise the plan names an executable manual verification. |
+| Completion states | `completed`, `failed`, `blocked` and `cancelled` are distinct; failure never routes to success. |
+| Paths | Canonical absolute paths stay inside the engine; model contracts and persistent artifacts use repository-relative POSIX paths. Foreign absolute paths reject. |
+| Platform | Presets define executable/argument arrays through platform-neutral ports; prompts never hard-code shell scripts. |
+| Fingerprinting | No cross-stage content fingerprints. Stage gates reload and revalidate predecessor artifacts. |
+| Required authority | Every required datum and decision reconciles through one shared contract (§12.8). Gaps go to the earliest owning stage, never to a downstream substitute. |
 
 ---
 
@@ -182,7 +144,7 @@ references, and normative resolutions are retained in the linked sections.
 15. The same normalized engine input and the same accepted structured model payload produce byte-stable rendered artifacts.
 16. Only `spec.md` accepts free user edits as a stage artifact. A registered clarification form accepts edits only in its declared status/answer regions; generated plan/task/reference views are never parsed as authoritative state.
 17. Implementation cannot begin until the user has approved the current plan and current task graph.
-18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`. Prose and display content are inert: punctuation or a rendered link never authorizes a file, command or network operation. The approved typed-content amendment in §7.1 supersedes blanket path-shaped prose rejection.
+18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`. Prose and display content are inert (§7.1): punctuation or a rendered link never authorizes a file, command or network operation.
 19. Every datum or decision marked required by a closed schema, obligation, policy, or accepted authority has exactly one current supported resolution before its owning stage can commit.
 20. Zero native authority resolutions, multiple non-equivalent resolutions, established authority ambiguity/conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only authority resolution, or caller-local exception. Under ADR 0023, a post-generation semantic finding alone establishes none of those facts: native assessment completion retains it as advice without declaring semantic support or discharging any native defect.
 21. Clarification ownership is derived from a compiler-locked requirement-kind/decision-slot registry. A model, prompt, caller, principle, preset, or configuration value cannot choose a more convenient stage.
@@ -227,18 +189,13 @@ references, and normative resolutions are retained in the linked sections.
       unresolved clarification forms at the same paths. Form replacement retains the subject
       ID, not the old form bytes.
     - Section 23.2 owns rerun replacement and protection.
-32. Provider APIs own model-call size limits. SDDE adds no engine-enforced
-    byte/token capacity ceilings, including renamed transport/memory budgets.
-    An optional slot `maxOutputTokens` requests a provider-enforced output allowance
-    under [ADR 0011](decisions/0011-provider-owned-request-limits.md); omission
-    delegates the provider default without a size-fit check or reservation.
-    It records and propagates provider failures/stops and accounts actual input
-    plus output tokens against only the execution's total-token budget. Calls
-    at or above that budget are prohibited; retries remain explicitly local.
-    Post-generation advice has no separate allowance; the 17 October 2026
-    advisory pool was withdrawn (ADR 0011). No advisory-token subtotal is
-    calculated. Global budget rejection remains fatal for every inference purpose;
-    it cannot become incomplete advice.
+32. Provider APIs own model-call size limits; SDDE adds no byte/token capacity
+    ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). An
+    optional slot `maxOutputTokens` requests a provider-enforced output allowance;
+    omission delegates the provider default. Actual input plus output tokens count
+    against one total-token budget per execution, shared by all inference,
+    including advice. No call starts at or above it, and budget rejection is fatal
+    for every inference purpose. Retries remain explicitly local.
 
 - Runner rejections retain their closed diagnostics through the top-level workflow result rather
   than selecting YAML outcome edges.
@@ -306,12 +263,8 @@ validated deltas; declared data dependencies and barriers govern composition.
 Typed intermediate representations hold canonical data. Markdown presents validated state;
 identity, provenance, and immutable ownership are explicit contracts.
 
-The user-approved 17 October [native exact-value amendment](decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
-removes model-authored exact-copy selections. Current native request eligibility
-and contextual raw-byte recognition derive canonical occurrences and `E` beyond
-unchanged `S`; field roles, semantic review and repair bounds remain. The overall
-design remains Proposed, and [FIX05 B3](../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
-tracks implementation and validation separately from approval.
+Exact values are recognized natively from raw model prose; models never select
+exact copies ([ADR 0020](decisions/0020-derived-exact-reference-lineage.md)).
 
 [Complete §7 contract](contracts/07-domain-representations.md).
 
@@ -419,7 +372,7 @@ all actions follow [§6](#6-common-action-and-orchestrator-contract) and
 - <a id="135-artifact-renderer-and-traceability-actions"></a>[13.5 Artifact, renderer, and traceability actions](contracts/actions/13-05-artifacts-rendering-traceability.md)
 - <a id="136-project-path-and-static-validation-actions"></a>[13.6 Project path and static-validation actions](contracts/actions/13-06-project-paths-validation.md)
 - <a id="137-task-and-implementation-actions"></a>[13.7 Task and implementation actions](contracts/actions/13-07-tasks-implementation.md)
-- <a id="138-whole-workflow-output-boundary"></a>[13.8 Whole-workflow output boundary](contracts/actions/13-08-whole-workflow-output.md)
+- 13.8 has no actions: §25 owns the whole-workflow output boundary.
 - <a id="139-feature-logging-actions"></a>[13.9 Feature logging actions](contracts/actions/13-09-logging.md)
 - <a id="1310-cross-stage-authority-reconciliation-actions"></a>[13.10 Cross-stage authority-reconciliation actions](contracts/actions/13-10-authority-reconciliation.md)
 
@@ -875,18 +828,16 @@ The new engine is ready for production evaluation when all of the following are 
     be used to obtain a broader capability.
 
 12. **Model results, limits, and retries.**
-    - Under the user-approved 2026-10-11 amendment to §12.5, every engine inference
-      request uses temperature `0.1` when supported by its registered model and
-      omits it otherwise. Workflow overrides reject; preparation, authorization
-      and retries preserve this policy. Bedrock evaluation uses the same policy;
-      OpenAI evaluation remains unchanged.
+    - Every engine inference request uses temperature `0.1` when its registered
+      model supports it and omits it otherwise (§12.5). Workflow overrides reject;
+      preparation, authorization and retries preserve this policy.
     - Every YAML-declared model operation—including implementation and repair—conforms with a
       nano-class model and has an ADR 0006 compact closed response schema, complete
       evidence/guidance packet, and deterministic runner-owned request identity/accounting
       without model echoes.
     - The selected workflow policy supplies one positive `totalModelTokenBudget`,
       currently 100,000 tokens, initialized for each execution and shared by all
-      inference calls. No advisory pool, usage subtotal or reservation is calculated.
+      inference calls, with no per-purpose pool, subtotal or reservation.
     - Every retry-capable operation instance supplies its own explicit compiler-validated
       `retry-limit`; no workflow policy, configuration, provider, adapter, or runner supplies a
       retry default or global attempt ceiling. Atomic repair counts follow the native
@@ -1086,8 +1037,8 @@ The new engine is ready for production evaluation when all of the following are 
 ---
 ## 32. Accepted and deferred implementation choices
 
-Accepted ADRs amend only their stated scope. The superseded record remains for
-decision history:
+Accepted ADRs amend only their stated scope. ADR 0008 (reference-derived feature
+naming) was superseded by 0010 and removed.
 
 | Record | Current decision |
 | --- | --- |
@@ -1098,15 +1049,14 @@ decision history:
 | [0005](decisions/0005-workflow-defined-operations.md) | Workflow-owned operation topology/resources and unversioned operation IDs. |
 | [0006](decisions/0006-minimal-model-response.md) | Compact closed responses with runner-owned correlation and canonical schema validation. |
 | [0007](decisions/0007-unicode-normalization.md) | Pinned utf8proc NFC, statically packaged Unicode data and license notices. |
-| [0008](decisions/0008-feature-naming-policy.md) | Superseded by 0010; reference-derived naming is withdrawn. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
 | [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, optional requested output allowances and actual execution-token accounting. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
-| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable questions; configuration/capture/review and shared question preparation implemented; final readiness pending. |
-| [0016](decisions/0016-configured-json-response-composition.md) | User-directed configured JSON decomposition and prompt-free assembly; finite graph-limit increase approved. Configured object-part compiler and extraction integration implemented; live improvement pending. |
+| [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable-question preparation. |
+| [0016](decisions/0016-configured-json-response-composition.md) | Configured JSON response decomposition, prompt-free native assembly and a 1,024-step workflow ceiling. |
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
@@ -1162,7 +1112,6 @@ explicit decision/approval rules before dependent implementation:
 - concrete JSON Schema, Markdown AST, tree-sitter/compiler, PDF, office, image/OCR, and overlay libraries;
 - the UI/API used to record manual verification evidence;
 - which binary reference readers ship in the first release versus plugins;
-- completion of remaining workflow publication/clarification integration; the shared writer is implemented and follows ADR 0009, with current gaps tracked in F0100;
 - when concurrency above one becomes enabled by default;
 - whether model-assisted semantic warnings block by default in development versus CI.
 
@@ -1176,22 +1125,7 @@ They must not weaken the invariants, path policy, command safety, repair scoping
 
 ---
 
-## 33. Prompt-to-engine migration matrix
-
-The migration matrix assigns predecessor prompt responsibilities to engine components and
-identifies the governing repair and authority rules.
-
-[Complete §33 contract](contracts/33-prompt-migration.md).
-
-- <a id="330-cross-cutting-responsibilities-removed-from-prompts"></a>[33.0 Cross-cutting responsibilities removed from prompts](contracts/33-prompt-migration.md#330-cross-cutting-responsibilities-removed-from-prompts)
-- <a id="331-specify-prompt"></a>[33.1 Specify prompt](contracts/33-prompt-migration.md#331-specify-prompt)
-- <a id="332-plan-prompt"></a>[33.2 Plan prompt](contracts/33-prompt-migration.md#332-plan-prompt)
-- <a id="333-tasks-prompt"></a>[33.3 Tasks prompt](contracts/33-prompt-migration.md#333-tasks-prompt)
-- <a id="334-implement-prompt"></a>[33.4 Implement prompt](contracts/33-prompt-migration.md#334-implement-prompt)
-
----
-
-## 34. Final design position
+## 33. Final design position
 
 The predecessor toolkit supplied the high-level workflow shape but delegated operational authority to model instructions. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
 

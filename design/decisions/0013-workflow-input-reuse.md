@@ -1,6 +1,6 @@
 # ADR 0013: Reuse workflow structure and compact model inputs
 
-- **Status:** Accepted; implemented
+- **Status:** Accepted
 - **Date:** 2026-09-07
 - **Decision authority:** Explicit user instruction to implement TODO001's recommendations with single responsibility, no duplicate authority, and removal of superseded code
 - **Amends:** ADRs 0005, 0006 and 0012; Design Sections 7, 9, 12.7, 14.1 and 28; F0005, F0006 and F0100
@@ -127,10 +127,7 @@
   token/cost-saving claims or live provider evaluation without its separate
   authorization.
 
-- The removed TODO001 is not a current status source.
-- The implemented authoring contract is documented in [F0005
-  §3.4](../features/F0005-WorkflowDefinitionRegistryService.md#34-definition-local-reuse);
-  model-input ownership and remaining Specify work are tracked in
-  [F0100](../features/F0100-SpecWorkflow.md).
+- [F0005 §3.4](../features/F0005-WorkflowDefinitionRegistryService.md#34-definition-local-reuse)
+  documents the authoring contract.
 - Input optimization alone does not establish workflow completion or measured quality
   improvement.

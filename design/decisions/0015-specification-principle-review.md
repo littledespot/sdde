@@ -1,28 +1,24 @@
 # ADR 0015: Review project principles during Specify
 
-- **Status:** Accepted design amendment; native implementation present, full readiness pending
+- **Status:** Accepted design amendment
 - **Date:** 2026-09-18
 - **Decision authority:** User instruction to update the design and fixes so including
   principles improves Spec outcomes, preserving shared owners and single responsibility
-- **Amends:** Design §§9.4, 12.7–12.8, 17, 24.5, 28 and 33, and their linked acceptance criteria
+- **Amends:** Design §§9.4, 12.7–12.8, 17, 24.5 and 28, and their linked acceptance criteria
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): semantic
+  principle findings are advice and never become mandatory Plan obligations
 
 ## Decision
-
-**17 October 2026 amendment:** the user explicitly selected all post-generation
-semantic reviews for the B2/W1 change, including principle findings.
-[ADR 0023](0023-advisory-post-generation-review.md) supersedes promotion of a
-semantic conflict/uncertainty finding into a mandatory Plan obligation. Retain
-complete current assessment and advice; native principle capture, selection,
-citation and currentness checks remain mandatory. Plan still validates current
-policy under its own required authority. This amendment grants no content-repair,
-upstream-rebuild or model-selection permission.
 
 Specify includes a focused requirement–principle consistency assessment using the
 canonical principle capture/selection/guidance contracts. The assessment detects
 conflicts early; principles do not become business-source claims or permission to
 change requirements. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution)
 owns selection and [§17.3.1](../contracts/17-specify.md#1731-requirementprinciple-consistency-review)
-owns the assessment, evidence and handoff to Plan.
+owns the assessment and its retained evidence and advice. Native principle
+capture, selection, citation and currentness checks remain mandatory; Plan still
+validates current policy under its own required authority. This grants no
+content-repair, upstream-rebuild or model-selection permission.
 
 Source-preservation review, policy assessment, authority reconciliation and
 clarification preparation retain separate responsibilities. Reuse the shared
@@ -44,12 +40,12 @@ a policy obligation never reclassifies or bypasses an unresolved business questi
 The shared [clarification contract](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
 requires actionable questions prepared through existing builders and fields.
 Identical wording does not authorize one answer to resolve different subjects.
-Multi-subject answer authority and H-011 authentication remain separate decisions.
+Multi-subject answer authority and answer authentication (FIX05 R2) remain
+separate decisions.
 
 ## Selection-policy input amendment — 18 September 2026
 
-**Explicitly approved:** the user approved the [selection-authority proposal](../../fixes/archive/IMP_001.md#chunk-13-selection-authority-decision)
-and instructed implementation. This amends §9.1 and F0001's closed config
+**Explicitly approved** by the user, 18 September 2026. This amends §9.1 and F0001's closed config
 shape: one optional `principles` section in the existing `.sddtoolkit.json` owns
 `filenameHints` and `selections`. No separate policy file or registry owns a copy.
 
@@ -67,13 +63,8 @@ This does not amend the separate lineage-repair or answer-authentication decisio
 ## Scope and evidence
 
 This supersedes technical-stage-only principle selection for the assessment above;
-reference extraction and business-content generation retain reference/validated-answer authority.
-The overall design remains **Proposed design**. The implementation adds native
-capture and assessment operations. This amendment does not change project principles,
-approve a live run or amend the pending shared-lineage repair decision.
-
-[§28](../contracts/28-testing.md) owns conformance requirements;
-[historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
-retains implementation evidence, and [FIX05](../../fixes/FIX05.md) tracks remaining work. Better conflict
+reference extraction and business-content generation retain reference/validated-answer
+authority. This amendment does not change project principles or approve a live run.
+[§28](../contracts/28-testing.md) owns conformance requirements. Better conflict
 detection is the intended improvement; fewer clarifications or live success is not
 guaranteed.

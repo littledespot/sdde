@@ -1,6 +1,6 @@
 # ADR 0024: Own exact-token authority and record scheduling natively
 
-- **Status:** Accepted amendment; implemented and verified offline
+- **Status:** Accepted amendment
 - **Date:** 2026-10-17
 - **Decision authority:** The user's explicit instruction to implement FIX05 B5
   and B8 together, followed by approval of native exact duties independent of
@@ -80,20 +80,13 @@ choice cannot become authority through a later merge or stored readback.
 
 ## Persistence and verification
 
-Completed and clarification-pending state advance to `specification-state/v17`;
-earlier versions reject without a migration or compatibility reader. Canonical
-specification content remains `specification/v3`. Readback recomputes native
-appearance, dispositions, duplicate identities, exact eligibility and complete
-coverage; it does not fill corrupt state with a reconstructed success value.
+Completed and clarification-pending specification state persists these facts;
+earlier state versions reject without a migration or compatibility reader.
+Canonical specification content remains `specification/v3`. Readback recomputes
+native appearance, dispositions, duplicate identities, exact eligibility and
+complete coverage; it does not fill corrupt state with a reconstructed success value.
 
-The required offline capture scan found no correct, non-obvious model token
-decision that this change must retain. Its live captures cover only hello-world
-and loan-renewal; archived provider-shaped copies have weaker provenance. That
-scan does not qualify arbitrary kinds, Unicode, source conflicts or semantic
-fidelity. FIX05 records its scope and hashes. Regression evidence must include
-unrelated values, mixed kinds, cross-source duplicates and semantic conflicts,
-missing forced tokens, forged native entries, repair bounds and stored forgery.
-Targeted tests, integration, architecture and full native packaging verification
-passed on 17 October 2026; FIX05 records exact commands and results. Independent
-contract review has no remaining findings. No live call, budget change or
-rewording sub-phase is authorized; output quality remains unqualified.
+Regression evidence must include unrelated values, mixed kinds, cross-source
+duplicates and semantic conflicts, missing forced tokens, forged native entries,
+repair bounds and stored forgery. This decision authorizes no live call or budget
+change; FIX05 records the implementation evidence.

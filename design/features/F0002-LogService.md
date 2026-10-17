@@ -2,13 +2,10 @@
 
 **Status:** Proposed feature design
 
-**Implementation:** The service and stream lifecycle are implemented; production Specify
-integration remains open under F0100. See [implementation
-status](#implementation-status).
-
-[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) is the accepted amendment
-for complete production model-exchange capture at `debug`/`trace`. Its verification
-must cover the production invocation path, not only the E2E evidence wrapper.
+[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) governs complete
+production model-exchange capture at `debug`/`trace`; its verification must cover the
+production invocation path, not only the E2E evidence wrapper. See
+[implementation status](#implementation-status).
 
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas are updated
@@ -790,7 +787,7 @@ rather than copied into this feature document.
 **Implementation**
 
 - The logging service and stream lifecycle are implemented; production Specify
-  integration remains open under F0100.
+  integration remains open ([FIX05](../../fixes/FIX05.md)).
 - The workflow-definition schema supplies `WorkflowShortcode`, the registry validates
   uniqueness, and the runner-created `WorkflowLog` producer binding carries it.
 - The F0001 logging shape supplies every configurable user choice, and all operational

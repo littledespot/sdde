@@ -1,13 +1,7 @@
 # 16. Reference ingestion and normalization
 
-Part of the [proposed design](../design.md#16-reference-ingestion-and-normalization). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
-
-The accepted [B5/B8 amendment](../decisions/0024-native-exact-token-authority.md)
-supersedes model relevance for exact values present in canonical extracted
-business/scope prose and model ownership of preserved-token dispositions.
-Native duties, byte-only duplicates and complete stored accounting follow that
-decision; unmatched candidates retain their existing semantic classification.
+Part of the [proposed design](../design.md#16-reference-ingestion-and-normalization), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 “Reference requirements in any format” is implemented as an extensible reader system, not as a promise to interpret arbitrary bytes. The invariant is that no reference is silently ignored.
 
@@ -202,8 +196,7 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
   and renderers emit the exact scalar sequence through deterministic Markdown escaping without
   Unicode normalization.
 
-- The approved [§7.1 typed-content amendment](07-domain-representations.md#71-shared-types)
-  registers `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
+- [§7.1](07-domain-representations.md#71-shared-types) registers `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
   `markdown_link_destination_v1`: raw inline interiors, fenced bodies and explicit
   inline-link destinations. Ordinary prose or quotation marks do not create candidates.
 - The bounded source-range parser does not claim a complete Markdown AST. Opaque
@@ -233,16 +226,16 @@ The linked diagram and this sequence are normative; an orchestrator must require
 5. Validate the selected target and keep the complete reference candidate inside the current execution. No reference-ID transaction, journal scan or recovered-feature prerequisite precedes canonicalization.
 6. For each `ReferenceChunk`, use the configured [ADR 0016 composition](../decisions/0016-configured-json-response-composition.md#5-first-use-extraction): claims/outcome with citations, then dependent token classifications (native when forced under ADR 0022), then prompt-free native assembly. Keep source/token evidence in both requests where required. Validate the complete extraction proposal, every captured-blob/source-map/chunk-bounded citation, and exactly one preserve/irrelevant classification per supplied token candidate. The engine assigns/builds canonical citation/token/claim records only after validation; a preserved token deterministically produces a claim. Repair only the invalid proposal/classification unit.
 7. Record exactly one claims/positive-`no_feature_claim`/blocked outcome for every identified chunk. Positive empty is forbidden when any model or preserved-token claim exists. Validate the expected chunk set is complete, then derive each block's final status from all chunks; neither one successful chunk nor a file-level status can hide an unprocessed range. Only then build a decoded-entry candidate.
-8. Merge identified claims into a per-document claim set. A compact reconciliation item retains the existing typed claim payload, claim ID, block/chunk IDs, canonical source citations and preserved-token references—not an ID without meaning. Reconciliation does not invent modality or subject/object identities absent from the extraction contract (approved 2026-09-06).
-9. Reconcile bounded groups hierarchically: within document, across the documents in the selected reference directory, then across compact group summaries. The selected directory is the related-document set; no inferred affinity or filename priority applies (approved 2026-09-06). The workflow explicitly supplies `group-size` (at least two). Group in stable source/claim order, then in preceding-summary order; recursively group global summaries until one global partition remains. The bound counts immediate claims/summaries, not model bytes or tokens. Every summary retains total original claim membership, payloads needed to decide conflict, and citations. Empty accounted corpora have an explicit empty global partition, not fabricated claims.
-10. Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md), validate dispositions before requesting signals, signals before requesting roles, and roles before requesting conflict explanations. Native code supplies preserved-token retained/direct-duplicate entries by exact bytes and earliest original claim ordinal; models dispose only extracted semantic claims. Token IDs are not model disposition subjects, relationship targets or conflict members. Each phase receives native validated prerequisite facts, bound to the exact current assignment. Models select semantic conflict groups once; native code expands reciprocal edges without transitive closure. Models assign roles through native signal occurrence handles and explain conflicts through native group handles, without copying membership. Native code adds mandatory singleton projections for every preserved-token occurrence, including duplicates. Summary semantic response order precedes native token statements in partition claim order; model local keys and token metadata are absent. Full closed-proposal validation still requires authorized IDs, total dispositions, matching signal content and valid conflict joins.
+8. Merge identified claims into a per-document claim set. A compact reconciliation item retains the existing typed claim payload, claim ID, block/chunk IDs, canonical source citations and preserved-token references—not an ID without meaning. Reconciliation does not invent modality or subject/object identities absent from the extraction contract.
+9. Reconcile bounded groups hierarchically: within document, across the documents in the selected reference directory, then across compact group summaries. The selected directory is the related-document set; no inferred affinity or filename priority applies. The workflow explicitly supplies `group-size` (at least two). Group in stable source/claim order, then in preceding-summary order; recursively group global summaries until one global partition remains. The bound counts immediate claims/summaries, not model bytes or tokens. Every summary retains total original claim membership, payloads needed to decide conflict, and citations. Empty accounted corpora have an explicit empty global partition, not fabricated claims.
+10. Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md), validate dispositions before requesting signals, and signals before requesting conflict explanations. Native code supplies preserved-token retained/direct-duplicate entries by exact bytes and earliest original claim ordinal; models dispose only extracted semantic claims. Token IDs are not model disposition subjects, relationship targets or conflict members. Each phase receives native validated prerequisite facts, bound to the exact current assignment. Models select semantic conflict groups once; native code expands reciprocal edges without transitive closure. Models explain conflicts through native group handles, without copying membership. Native code adds mandatory singleton projections for every preserved-token occurrence, including duplicates. Summary semantic response order precedes native token statements in partition claim order; model local keys and token metadata are absent. Full closed-proposal validation still requires authorized IDs, total dispositions, matching signal content and valid conflict joins.
 11. Build/validate the canonical claim ledger; assign engine conflict/signal IDs; and build canonical `SourceConflict`/`ReferenceSignal` records. Current-spec claim dispositions refer to open-question signals by `signalId`.
 12. Build the manifest from the ordered inventory and exactly one final entry variant per source; validate that every inventory entry and decoded block has a final accounting state, both budget ledgers are closed, every source map is complete, and every passive/claim/context join resolves. Assemble and fully validate the immutable `ReferenceSnapshot` candidate before deciding its next branch.
 13. If source review establishes genuine behavior-changing source conflicts that remain unresolved, deterministically create or reuse exactly one conflict-bound `SNN` for every unique structural subject coordinate, render their engine-owned current claim-ID choices, and use one `SpecificationClarificationPauseEntries` variant to validate and publish under §§23.2 and 25 the conflict-bearing snapshot, current authorities, complete clarification-set transition, complete controlled-form set, reference view, and `spec_clarification_pending` state. Snapshot-local conflict/claim/citation IDs are binding data, not clarification subject identity. No completed feature brief or specification authority is persisted; ADR 0017 additionally publishes the validated incomplete `spec.md` projection alongside the pending state. A closed authenticated response is first committed through the complete clarification-response publication, then checked against a fully and independently recaptured successor snapshot. Only a validated total old-option-to-current-claim correspondence for the exact same structural subject may feed the decision-ID allocator and decision builder; full accounting, set reconciliation, and snapshot validation run again. Otherwise generate/validate the specification, rebuild the current `SpecificationProvenanceState.claimDispositions`, and persist bootstrap-authority/request/passive-literal-registry/acknowledgement/reference/provenance/spec/views/workflow state with the complete successful Specify output.
 
 `README.md` is flagged as an organizer for presentation, but its claims remain peer authoritative. A conflict with a sibling is treated like any other authoritative conflict.
 
-**Approved summary-coverage amendment (10 October 2026):** a summary's statement
+**Summary coverage:** a summary's statement
 membership union must equal its complete partition membership. Each statement still
 selects a nonempty, unique subset of authorized claims and passes the existing
 category, citation, exact-token and lineage checks. Combined, split and overlapping
@@ -259,11 +252,11 @@ and allocate canonical identities from the normalized projection. The raw respon
 candidate, stable repair occurrences, old values, revisions and retry accounting
 remain unchanged. Invalid entries, different source occurrences and merely similar
 or paraphrased text cannot disappear through normalization. Admission, history and
-repaired candidates enforce the same coverage rule. This amendment neither adds a
+repaired candidates enforce the same coverage rule. This neither adds a
 summary semantic reviewer nor proves supported meaning from coverage alone; it
 authorizes no new coupled repair or continuation outcome.
 
-**Approved summary carry-forward amendment (10 October 2026):** before requesting
+**Summary carry-forward:** before requesting
 a non-final summary, the workflow explicitly checks whether its nonempty partition
 contains one current validated child with unchanged claim membership. Resolve that
 child from canonical execution history and verify its projection, source evidence
@@ -289,7 +282,7 @@ check the classification against captured evidence before treating it as a missi
 user decision; it must not assume the earlier model's conflict label is correct.
 
 Source-preservation review may identify an established-source candidate omission.
-Under the user-approved chunk 14 amendment (18 September 2026), §22 permits repair
+Before generation, §22 permits repair
 only when captured evidence identifies a unique defective producer and minimal safe
 target. Repair extraction loss in extraction; repair reconciliation loss in
 reconciliation. Preserve unrelated raw units, rebuild all dependent identities and
@@ -299,10 +292,9 @@ Retain unlocalized findings while attempting other authorized targets; unresolve
 candidate failures cannot be published as user questions. Only admitted missing
 source decisions enter clarification.
 
-#### False-conflict repair boundary — approved extension
+#### False-conflict repair boundary
 
-**Approved by the user on 20 September 2026:** the existing omission-repair owner
-may replace one native-bound conflict group: the selected conflict's claims,
+The existing omission-repair owner may replace one native-bound conflict group: the selected conflict's claims,
 their disposition entries and associated conflict records. This amends §22.1/§22.3's
 single-record boundary. Reconciliation labels are candidate assertions, so authority
 projection records them as candidate defects. Source review establishes a genuine
@@ -319,8 +311,8 @@ identities, coverage and support before publication; missing signals use ordinar
 coverage repair. No new model call type, continuation policy or retry budget applies.
 
 ADR 0022 retires signals that depend on changed dispositions, retaining unrelated
-accepted groups, and rebuilds role assignments after signal membership or meaning
-changes. Coupled conflict repairs select semantic groups once inside the authorized
+accepted groups, and retires dependent authored associations after signal
+membership or meaning changes. Coupled conflict repairs select semantic groups once inside the authorized
 membership; native code rebuilds reciprocal edges and explanation memberships.
 YAML requests pending phases and repeats full validation. This introduces no
 alternate continuation or retry owner.
@@ -341,10 +333,9 @@ candidate defect; repair cannot invent source precedence or force a positive ver
 - `correct_claim_classification` copies the existing canonical claim content/citations into the user-selected closed `newClaimKind`; `remove_claim` tombstones only the named existing claim. Neither intent invokes a model or accepts replacement prose.
 - `correct_token` takes no model-authored replacement value: its required `replacementCitationId` must resolve to one exact scalar in the current snapshot, and the builder copies those captured bytes.
 
-These feedback operations remain design requirements, not implemented features.
-ADR 0016 defines their composition compatibility but does not add the feedback API
-to Chunk 18. Persisted re-extraction must reject unavailable exact extraction
-contracts under §12.7; its missing metadata/readback implementation remains explicit.
+These feedback operations are not implemented; ADR 0016 defines their composition
+compatibility. Persisted re-extraction must reject unavailable exact extraction
+contracts under §12.7.
 
 - A later correction conflict resolution may use the authenticated reference-feedback API; an
   initial behavior-changing conflict always uses its controlled `SNN` form.

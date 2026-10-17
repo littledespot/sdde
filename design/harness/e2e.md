@@ -1,10 +1,9 @@
 # Live Spec E2E test
 
-Run one live case from the repository root:
-
 The checked-in [greeting](../../test/e2e/wf-001-hello-world/node-vitest/workflow.case.json)
 and [loan-renewal](../../test/e2e/wf-002-loan-renewal/workflow.case.json) cases have
-separate sources and rubrics and reference the same workflow/model configuration.
+separate sources and rubrics and share one workflow/model configuration. To run one
+live case from the repository root:
 
 1. Review the case's explicit Bedrock `openai.gpt-oss-20b-1:0` generation
    selection from `ap-southeast-2`, then configure the same GPT-OSS-20B judge under
@@ -152,15 +151,13 @@ The command measures the provider boundary, not record-generation quality.
 After separate explicit approval for this one-send live diagnostic, use:
 
 ```sh
-zig build provider-compatibility -- \
-  --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json --live
+zig build provider-compatibility -- --case <case> --live
 ```
 
 The development launcher accepts the same selectors:
 
 ```sh
-./scripts/provider-compatibility.sh \
-  --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json --live
+./scripts/provider-compatibility.sh --case <case> --live
 ```
 
 `--case` is mandatory and repository-relative; there is no default or latest-run
@@ -179,9 +176,10 @@ the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
 low reasoning and registered temperature `0.1`. The request inherits its configured
-provider-requested output allowance and must match Phase 0's frozen 16,384 tokens,
-as the supplied Spec slot does. This is an experiment setting, not an engine size
-ceiling. Any supplied reasoning remains separately captured diagnostic data.
+provider-requested output allowance, which must equal the frozen experiment binding
+of 16,384 tokens. This is an experiment setting, not an engine size ceiling. The
+shipped wf-001/wf-002 configuration requests 2,048 tokens (ADR 0011, B9), so
+preflight rejects those cases with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
 No historical request is retargeted and no alternative model or response mode
 is substituted.
 
@@ -222,10 +220,7 @@ remain opaque and never become source or workflow authority. Semantic quality
 and useful publication are not assessed.
 A compatible first exchange qualifies only that observed request/settings; it
 does not qualify every workflow request shape or establish complete E2E acceptance.
-
-The [FIX04 Phase 1 gate](../../fixes/Z_FIX02.md#phase-1-implementation-and-live-gate)
-requires both offline checks and an authentic retained exchange. Implementing and
-testing this command offline does not close the live gate or authorize a run.
+Offline tests of this command do not authorize a run.
 
 ## Environment setup
 
@@ -305,8 +300,8 @@ credentials. No model answer means no evidence yet about schema conformance.
   [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
   The evaluator supplies no output allowance and delegates the provider default.
 - The engine accounts every inference, including post-generation advice and
-  correction, once against one execution budget and aggregate usage total. It
-  calculates no advisory token subtotal. The evaluator has its own cumulative budget.
+  correction, once against one execution budget. The evaluator has its own
+  cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
@@ -334,9 +329,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 ## Case and publication contract
 
-- The closed `spec-e2e-case/v1` declares workflow/feature/reference selection,
+- The closed `spec-e2e-case/v2` declares workflow/feature/reference selection,
   configuration, explicit file mappings, empty directories, all four expected artifact
-  kinds, `evaluation_case` and `evaluation_config`.
+  kinds, `expected_outcome`, `evaluation_case` and `evaluation_config`.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
 - Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and
@@ -583,9 +578,7 @@ The current closed report formats are `spec-e2e-report/v5`,
 assessor documents retain numeric schema `2`. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
-Feasibility evidence retains the single total budget and aggregate actual usage;
-it contains no advisory pool or usage subtotal. The separate advisory allowance
-was withdrawn on 17 October 2026 (ADR 0011).
+Feasibility evidence retains the single total budget and aggregate actual usage.
 
 ### Reliability assessment
 
@@ -674,19 +667,14 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   establish engine generation.
 - See [evaluator.md](evaluator.md).
 
-- Human rubric calibration and broader workflow/rerun/failure acceptance remain tracked
-  in [H-016 and H-017](03-harness-verification.md).
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
 
-Active corrective work and required evidence are tracked in [FIX05](../../fixes/FIX05.md).
-
 The report records one 100,000-token total budget for all model work, with
-aggregate actual usage including full overshoots. The separate 20,000-token
-advisory allowance first recorded with B4 was withdrawn on 17 October 2026
-(ADR 0011). Global-budget rejection remains a workflow failure during advice;
-it cannot produce incomplete advice or publication. An explicitly incomplete
-review from an eligible non-budget stop does not establish acceptance:
-R8's rubric thresholds, expected publication and pending human adjudication remain
-independent. Earlier report versions have no compatibility reader. No new billed
-run is implied by this offline contract change.
+aggregate actual usage including full overshoots. Global-budget rejection is a
+workflow failure during advice too. An explicitly incomplete review from an
+eligible non-budget stop does not establish acceptance: R8's rubric thresholds,
+expected publication and human adjudication remain independent.
+
+Human calibration and broader rerun/failure acceptance are tracked in
+[FIX05](../../fixes/FIX05.md).

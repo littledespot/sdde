@@ -158,7 +158,7 @@ a typed phase error. A custom YAML route cannot reopen consumed source authority
 Post-generation semantic findings cause no localization, source rebuilding,
 generated-content repair, mandatory Plan obligation or clarification.
 
-Phase 6 retains only clean admitted source assignments with unchanged complete
+Within one execution, review retention keeps only clean admitted source assignments with unchanged complete
 packet, native requirements/applicability, sources, schema, guidance and model
 settings in the same execution. A receipt retains its complete native assignment.
 The pure reuse operation consumes a finite unchanged prefix, stopping at the first

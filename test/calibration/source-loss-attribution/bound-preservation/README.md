@@ -94,7 +94,7 @@ revisions require a new frozen plan and new bounded approval.
    verify native assignments and frozen provider bodies. This is offline evidence,
    not semantic performance.
 2. Obtain fresh explicit approval for these 32 sends under
-   [§28.8](../../../../design/contracts/28-testing.md#288-model-protocol-correction-and-semantic-calibration).
+   [§28.8](../../../../design/contracts/28-testing.md#288-model-conformance-comparisons).
 3. Follow the existing [debugger replay procedure](../README.md#bounded-replay-procedure)
    in an isolated copy of the recorded parent project. Resolve the exact recorded
    run/call ID from the manifest, not the API array index or latest replay.

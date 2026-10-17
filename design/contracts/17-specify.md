@@ -1,13 +1,7 @@
 # 17. Specify stage design
 
-Part of the [proposed design](../design.md#17-specify-stage-design). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
-
-The accepted [B5/B8 amendment](../decisions/0024-native-exact-token-authority.md)
-excludes all-preserved-token groups from record scheduling while retaining their
-source/coverage authority. Native exact duties are independent of semantic kind
-and survive equal-byte duplicate grouping; prior conflicting population/kind
-wording below is superseded by that decision.
+Part of the [proposed design](../design.md#17-specify-stage-design), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 ### 17.1 Inputs
 
@@ -83,8 +77,7 @@ append, activation registry, transaction directory or recovery scan precedes it.
 
 ### 17.3 LLM work
 
-**Accepted Phase 1A amendment, 16 October 2026:** the
-[field-composition contract](text-field-composition.md) owns the complete native
+The [field-composition contract](text-field-composition.md) owns the complete native
 text-field inventory, prose requirements and insertion roles. The same policy
 drives presentation, admission, repair, exact coverage and stored readback.
 Structurally invalid values stop before semantic review; legitimate exact
@@ -118,7 +111,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
 - Source selections remain explicit under their own contract. Under
-  [ADR 0020's approved native-recognition amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026),
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   the model types exact values in meaningful prose and never returns `exact_copy`.
   Native code recognizes unambiguous raw-byte occurrences within the current
   request's eligible scope and contextual delimiters, retaining canonical handles.
@@ -138,7 +131,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file. After generation the
   judgment remains advice; independent native defects retain their typed routes.
-- **Post-generation assessment — approved 17 October 2026:**
+- **Post-generation assessment:**
   [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
   and principle review. Source review assesses one whole canonical unit or
   complete collection per call: the brief, story, entity applicability, all
@@ -146,7 +139,6 @@ Typed content covers these concerns; each concern does not require a separate ca
   collection/reference subject. Principle review assesses the complete generated
   requirement set together, carrying the selected principle corpus once. Native
   ownership defines each complete member set; a model cannot choose a subset.
-  This supersedes acceptance-criterion-only grouping and per-unit principle calls.
   Each closed assignment response contains exactly one finding per assigned
   requirement. Missing, duplicate, foreign or partial membership rejects before
   any member is appended. Canonical ledger order, per-member evidence, origins,
@@ -156,8 +148,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   Retention must compare the complete current assignment and dependencies;
   reuse creates neither a new call nor semantic proof.
   All inference, including post-generation review and correction, counts once
-  against the single 100,000-token workflow budget (ADR 0011). No advisory usage
-  subtotal or allowance is calculated. Global exhaustion, overshoot or unavailable
+  against the single 100,000-token workflow budget (ADR 0011). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`, including during advice; it cannot publish or
   become incomplete advice. Eligible provider stops, exhausted protocol correction
@@ -211,7 +202,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
 
-The approved [ADR 0020 authored-association amendment](../decisions/0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026)
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#authored-associations)
 couples semantic support selection with the existing authoring assignments. There
 is no independent presentation-role classifier or mandatory role-prebinding gate.
 A current complete reconciled reference state with a nonempty retained group
@@ -265,15 +256,14 @@ fixed value and record repairs do not. Protocol correction preserves the initial
 catalogue and schema. Value-only repair preserves the existing authored association,
 `S`, effective evidence bounds, siblings, revision and retry identity. Changing
 group membership requires separately authorized authored-unit rebuilding, which
-this amendment does not add. An unresolved association blocks; it cannot be
+does not exist. An unresolved association blocks; it cannot be
 rerouted to extraction, grouping or a removed role producer. A missing required
 entity may be inserted only in the feature entities unit,
 using the existing applicability basis's exact selected association; it cannot
 choose a new group or borrow a writable record batch. Contradictory entities under
 `not_applicable` are removed from that collection; they are never converted into
 another content family. Coupled entity correction preserves the fixed association,
-its native effective evidence bound, siblings and retry identity. This replaces
-the earlier batch-scoped entity-insertion/replacement permission.
+its native effective evidence bound, siblings and retry identity.
 Upstream changes invalidate affected groups, authored associations and dependent
 review/attribution evidence. Canonical readback recomputes projections from captured
 groups and rejects inconsistency; no parallel binding store or legacy reader applies.
@@ -288,8 +278,7 @@ source associations, never inferred from headings or claim ordinals.
 
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
-- **Consolidated generation (user-directed simplification, 25 September 2026):**
-  the shipped workflow requests brief, primary story, feature entities and
+- **Consolidated generation:** the shipped workflow requests brief, primary story, feature entities and
   source-group records as four sequential task types through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
@@ -351,8 +340,7 @@ For each feature-brief or specification unit, the declared model operation retur
   as its subject, preserving identities across reruns instead of merging all record
   questions into a new generic subject. This changes no clarification admission rule.
 
-- **Draft-first sequencing (user-approved simplification, 24 September 2026):**
-  complete validated references with a nonempty selectable retained group catalogue admit
+- **Draft-first sequencing:** complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a
   model review of specification fields that do not yet exist. The existing source
   review/repair route still handles blocked references or absence of selectable
@@ -400,8 +388,8 @@ rebuilding. Post-generation semantic findings retain advisory status under
 
 ### 17.3.1 Requirement–principle consistency review
 
-**Accepted design amendment; native implementation present, full readiness pending** under
-[ADR 0015](../decisions/0015-specification-principle-review.md).
+Governed by [ADR 0015](../decisions/0015-specification-principle-review.md) as
+amended by [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
 
 After references and applicable validated answers establish business intent, compare
 that intent with the current principle selection from
@@ -419,9 +407,7 @@ specific to their existing typed purposes; the same shared review orchestration
 and each purpose's guidance serve initial review, insertion and selected repair.
 A policy finding explains the relation between business behavior and a cited policy
 passage. A source-comparison concern alone does not establish a policy conflict,
-and a citation's existence does not prove semantic support. Historical implementation
-is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review);
-[FIX05](../../fixes/FIX05.md) tracks remaining semantic validation.
+and a citation's existence does not prove semantic support.
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,
@@ -552,7 +538,7 @@ After validation:
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
 3. render the mandatory `reference-context.md`, including completed requirement-to-source occurrence links;
-4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/obligations within their existing canonical owners;
+4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/advice within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;
 7. stage the complete artifact set, exact workflow-artifact registry, bootstrap-authority state, feature-request state, passive-literal registry state, specification ID ledger, acknowledgement and clarification-registry states, writable clarification forms plus preservation preconditions for retained user-closed forms, specification-provenance state, canonical reference state, and next workflow-state record as one candidate output set;
@@ -579,8 +565,8 @@ first parent and is always rendered in this form:
   superseded multiline uppercase form.
 - Exact code spans may contain label-shaped text without becoming structure.
 
-- The user-approved 2026-09-11 amendment restores the original template's `Feature
-  Specification:` title prefix and omission of inapplicable sections.
+- The H1 uses the `Feature Specification:` title prefix, and inapplicable sections are
+  omitted.
 - Mandatory parents, primary story, acceptance criteria and functional requirements remain
   present; optional empty families and an empty scope parent are omitted.
 - The shared required-authority projection requires supported acceptance criteria, functional
@@ -615,7 +601,7 @@ first parent and is always rendered in this form:
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.
 
-### Shared authoring and diagnosis amendment — approved 14 October 2026
+### Shared authoring and diagnosis
 
 Model-assisted review distinguishes invalid additions from missing original
 meaning using the source-only finding in §12. A mixed source gap remains visible
@@ -636,10 +622,5 @@ the request. These facts apply to the assembled specification; an individual
 group may return an empty batch. Presence does not establish semantic coverage.
 An aggregate defect does not acquire an owner from the last dispatched group.
 Repair must retain its evidence and current authorized unit; unsupported ownership
-produces an explicit diagnostic rather than an invented association.
-
-Whole-collection authoring and coherent units supported by several groups remain
-alternatives to compare. This amendment does not add a semantic classifier to the
-generic engine or select an unqualified replacement for the existing record pass.
-Qualification must measure actual authoring, reviewer handoff, repair and rendered
-meaning separately from mechanical admission, through the complete production path.
+produces an explicit diagnostic rather than an invented association. Alternative
+authoring units are evaluated under FIX05 B5; none is adopted here.

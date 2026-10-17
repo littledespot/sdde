@@ -526,7 +526,7 @@ allocator, checkpoint or provider journal is implied.
 - Clarification outcomes require [§12.8.1 admission](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
   The sample's gap enum alone grants no publication authority; candidate/review
   failures retain their separate native rejection path.
-- [`required_authority.zig`](../src/domain/required_authority.zig) owns H-008's
+- [`required_authority.zig`](../src/domain/required_authority.zig) owns the shared
   execution-local types and compiler-locked policies.
 - Closed observations reference supplied evidence; they cannot author rules,
   ownership, evidence records or continuation.
@@ -753,11 +753,12 @@ Native [content contract](../src/domain/specification.zig) interpretation:
   `{"functional_requirement":{"text":...}}`; canonical values retain their
   native-admitted associations and provenance.
 - Canonical `BusinessValue` holds ordered prose, passive-ID and engine-derived
-  `exact_copy` claim-occurrence segments. Under ADR 0020's 17 October amendment,
-  model prose contains verbatim exact values; native recognition owns those segments.
+  `exact_copy` claim-occurrence segments. Under ADR 0020, model prose contains
+  verbatim exact values; native recognition owns those segments.
   Requirement wording carries modality; there is no separate modality field.
-- Parsing yields a candidate. H-008/H-010/H-012 must assemble and validate current
-  reference, passive, clarification, identity and provenance state before it
+- Parsing yields a candidate. The shared authority gate, generation validation and
+  publication must assemble and validate current reference, passive, clarification,
+  identity and provenance state before it
   becomes canonical specification authority.
 - Questions use `clarification_needed`, never specification content.
   `ReferenceContextIR.openQuestions` belongs only to reference context.

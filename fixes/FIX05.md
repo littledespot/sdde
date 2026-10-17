@@ -48,6 +48,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | First run passing every native generation check (20:33) | 42 calls and 100,884 tokens; budget exceeded during re-review; review 75.6% |
 | Pre-B3 retained run (22:00, modified `3303498`) | `RetryLimitExhausted` at brief generation after 10 calls and 13,797 tokens: `embedded_insertion_syntax`, and a `{"token{` envelope prefix on call 2 |
 | B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
+| B5/B8/R8 live diagnostics, 17 October (AEDT), committed `8ed40ba` | Both reach post-generation review. Hello-world exhausts the budget in principle review (30 calls, 103,873 tokens); loan-renewal fails on a runaway review response at the provider output limit (13 calls, 45,322 tokens). Neither publishes (§1). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -183,6 +184,70 @@ Both runs stopped explicitly, with typed outcomes and no invented success, as th
 intent requires. Until B5 and B8 change, further billed reruns add little
 information: hello-world will block on B5, and B2/W1 stays unobserved unless a run
 reaches review.
+
+### Post-R8 live diagnostics — 17 October 2026
+
+Both runs used committed `8ed40ba`, which adds B5, B8 and R8 on top of B2/W1/W2.
+The build was unmodified; each run was separately approved and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Duration | Furthest point | Terminal | R8 acceptance |
+| --- | --- | --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T02-28-48Z-98d2a6fa251a2fda83c0720101e8bf93/report.json) | 17 Oct 13:28 | 30 / 103,873 | About 44 s | Principle review | Budget (`WorkflowTokenBudgetExceeded`) | Failed: no publication |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T02-30-17Z-40047cad83559d7eacc1b9a991f60a7c/report.json) | 17 Oct 13:30 | 13 / 45,322 | About 66 s | Third source-review call | Provider `output_limit` | Failed: no publication |
+
+Admission escape is zero in both runs (14 and 16 admitted values). Neither run
+published, so no human adjudication applied. Useful completion is 0 of 14 runs
+since 16 October.
+
+**Verdict: real progress upstream; the blocker is now review cost and runaway
+output.**
+
+What improved:
+
+- **B5 and B8 work as designed.** Each run authored exactly one record batch, so the
+  token-only batch is gone, and with it the duplicate-record block and the
+  duplicated review. Both runs preserved their exact values, and reconciliation
+  disposed only the business claim.
+- **Both runs reached post-generation review.** Hello-world finished source review
+  and entered principle review, the furthest any hello-world run has reached.
+- **Source review cost less and raised no false findings here.**
+  - Hello-world's source review took 13 calls and 39,025 tokens, against 29 sends and
+    77,933 tokens on 16 October at 09:18.
+  - All 13 calls returned `supported`, with no mis-typed omissions.
+  - These are unlabelled model judgments on simple content.
+- **No rebuild loop.** No upstream rebuild or loss-localization call occurred (W1).
+
+What blocks now:
+
+- **Advisory review spends the budget and fails the run.**
+  - Hello-world's review used 89,283 tokens (86% of the run) to return only
+    `supported` and `compatible`.
+  - Under ADR 0023 those verdicts can't change the specification. Yet spending the
+    budget on them prevented publication of a candidate whose content looked
+    faithful.
+  - Principle review alone took 7 calls and 50,258 tokens, because every call
+    resends all seven principle documents (567 lines, about 6,800 input tokens).
+- **Runaway output, now in review (B9).**
+  - Loan-renewal's third source-review call began a `supported` finding, broke its
+    JSON close, then emitted about 48,500 characters of blank lines until the
+    16,384-token limit. That one call cost 20,587 tokens.
+  - Runaways have now ended 2 of the 3 loan-renewal runs since B3 (records, then
+    review) and none of the hello-world runs.
+- **Known content gaps remain.**
+  - Extraction still collapses each list into one claim, and loan-renewal still
+    says "may renew" (B7).
+  - Loan-renewal again has no acceptance criterion for refusal. The runaway
+    finding accepted refusal coverage from the brief and description, which the
+    scenario scope disallows.
+  - Hello-world adds a business rule that duplicates its functional requirement, and
+    loan-renewal's title is a whole paragraph.
+
+**Direction and alignment.** B5 and B8 applied the intent's principle and removed
+their failure classes on the first live attempt. The remaining misalignment is with
+"useful, faithful outputs at an acceptable total cost". An advisory stage that
+cannot change the output now consumes most of the budget and decides whether
+anything publishes. That inverts the intent: advice should inform, not gate, and it
+should not cost more than producing the output. B4 records the options.
 
 ## 2. Why the engine is hard to implement
 
@@ -509,8 +574,8 @@ The user then explicitly approved both concrete choices from the
    a delimiter. A reference-adjacent literal-run edge is not a field edge.
 
 The coordinated native implementation is complete and verified offline. Governing
-amendments are recorded in [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
-and the [composition contract](../design/contracts/text-field-composition.md#native-exact-values--approved-17-october-2026).
+amendments are recorded in [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+and the [composition contract](../design/contracts/text-field-composition.md#native-exact-values).
 
 **Offline completion checks — 17 October 2026:** the final ladder passed in order:
 
@@ -1392,6 +1457,20 @@ repair workload.
 - **Retained-memory and scale evidence.** Measure growing review sets, retained
   bytes, allocations, validation and teardown time, cancellation and OOM, and
   dependent rebuilding.
+- **Harness acceptance (former design/harness tickets H-012, H-013, H-017).**
+  Publication process-interruption evidence; production Specify feature-log
+  integration; live negative-path evidence for malformed generation, real
+  missing/conflicting authority, clarification, cancellation and judge failure;
+  and rerun replacement covering shorter output with no trailing bytes,
+  unsubmitted drafts, concurrent closes, no duplicate subject IDs and an unrelated
+  workflow. Also open: an unchanged prior `spec.md` must not be labelled new output
+  after a blocked rerun; compiler rejection of skipped gates and undeclared
+  resources; packaged execution without a `design/` fallback; the H-017 live
+  generation-plus-grading milestone with stale-artifact rejection; live evaluator
+  demonstration (H-004/H-006); and the provider-compatibility diagnostic, whose
+  frozen 16,384-token binding rejects the shipped 2,048-token cases. H-011's answer
+  authentication is R2 and H-002/H-016 calibration is R8. The ticket text remains
+  in git at `8ed40ba`.
 - **Direct Anthropic provider.** [claude_connector.md](claude_connector.md) remains an
   unaccepted proposal. It needs an ADR, its §10 decisions and a changed live-test
   policy.
@@ -1509,6 +1588,8 @@ bounded approval, and each E2E run needs its own explicit approval
   total limit. Recorded the removal in B4, §6 and §9, ADRs 0011 and 0023, design
   §§3.3 and 31, contracts 12, 22 and 27, and the harness docs. The code removal
   and its completed offline verification are recorded in §9.
+- **17 October 2026, after the post-R8 runs:** added §1's post-R8 diagnostics and
+  B4's post-R8 evidence, generalized B9 to all runaway output, and updated §6.
 - **17 October 2026, after the B2/W1 reruns:** added §1's post-B2/W1 diagnostics and
   the B9 item, extended B8 to token classification, and updated B5, B7 and §6.
 - **Not carried forward:**
@@ -1518,6 +1599,8 @@ bounded approval, and each E2E run needs its own explicit approval
   - superseded Luna-target research;
   - historical F1–F8 analysis, kept here only as the B5 constraints.
 - **Retrieving the full text:** both deleted records remain in git at `b2f10a3`.
+- **17 October 2026, design documentation review:** the design/harness ticket
+  backlog was deleted and its open items carried into §5 "Wider scope retained".
 
 ## 9. B4/B9 implementation — 17 October 2026
 

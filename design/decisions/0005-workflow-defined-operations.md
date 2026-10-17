@@ -66,8 +66,6 @@ workflow behavior without duplicating large resources at every node.
   legacy contract is retained.
 - The compiler and runner enforce the current closed contract.
 - Workflow-definition, data-schema, policy and preset versions are unchanged.
-- Runtime parsing, registration, compiled references, bindings and fixtures now
-  implement this amendment.
 - Tests reject retired spellings and version fields; the packaged executable also
   rejects suffixed invocation and step IDs.
 
@@ -122,8 +120,7 @@ An originating generic model-request step declares in YAML:
   `retry-limit` in `with`; the registered operation contract bounds that value and the
   compiler rejects a missing limit or an unbounded retry cycle.
 - An operation with no retry path does not acquire a hidden retry.
-- The user-approved 2026-09-18 amendment scopes atomic repair counts to native defects
-  with validated progress, as defined in [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
+- Atomic repair counts are scoped to native defects with validated progress, as defined in [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
   Registered contracts declare that scope; YAML supplies allowances, not defect identity.
 
 - The workflow never names a provider or model directly.
@@ -161,9 +158,6 @@ An originating generic model-request step declares in YAML:
 - Workflow definitions stay compact through mappings, native scalars, local resource
   aliases, and reuse.
 - Large prompts and schemas are not copied into each step.
-- The concise workflow-definition schema/parser/compiler, declared-resource boundary,
-  single operation registry, and generic transition runner implement this decision.
-- Concrete domain and model operations remain separate reviewed increments; no legacy
-  syntax, built-in route fallback, or dual authority is retained.
+- No legacy syntax, built-in route fallback, or dual authority is retained.
 - This decision does not make project YAML executable code, allow dynamic plugins, or
   weaken validation, path, provider, command, publication, or capability boundaries.

@@ -1,7 +1,7 @@
 # 28. Testing strategy
 
-Part of the [proposed design](../design.md#28-testing-strategy). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#28-testing-strategy), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Automated unit, integration, fault-injection, harness and packaging checks must
 make no live LLM calls. Native model connections are disabled in test binaries;
@@ -486,8 +486,9 @@ for integration/fault-injection evidence. They are not E2E results:
 
 ### 28.8 Model-conformance comparisons
 
-Assess the [request-guidance proposals](../reference-notes/model-request-guidance.md#proposed-conformance-improvements--20-september-2026)
-through existing request capture, provider binding, validators and the harness.
+Assess request-guidance changes (assignment-specific instructions, correction
+guidance, model or response-mode choice, further response decomposition) through
+existing request capture, provider binding, validators and the harness.
 Scripted fault/recovery tests establish enforcement, sibling/provenance preservation,
 dependency freshness and exact accounting; they do not establish live reliability.
 
@@ -528,8 +529,8 @@ that inject a correct diagnosis do not establish complete recovery.
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |
 | Inconclusive or malformed need | Existing bounded correction only where authorized; exhaustion or no safe correction fails with no new spec/forms, including when other valid questions exist |
-| Optional applicability | No-conflict preserved source → unjustified negative → D1 question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
-| Approved D1 | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
+| Optional applicability | No-conflict preserved source → unjustified negative → question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
+| Source finding variants | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
 | Freshness and publication | Source/policy/answer changes rebuild affected evidence; pending readback does not trust question prose; protected forms survive; logs/report distinguish error, incomplete publication and completed scoring |
 
 Include unrelated business domains and cases with no surviving positive business
@@ -546,7 +547,7 @@ claim universal semantic correctness or successful E2E from fake-provider tests.
 
 ### Bound preservation lifecycle verification
 
-Offline tests supply semantic labels to prove §22.1 assignment, admission, native
+Offline tests supply semantic labels to prove §22.1's pre-generation assignment, admission, native
 attribution, correction, exact repair scope, origin retention, currentness and
 readback mechanics. Cover inherited absence, joint evidence, empty collections,
 role defects without repair permission, distinct occurrences and stale facts.
@@ -560,7 +561,5 @@ and the following comparison's attribution, uncertainty and evidence adequacy.
 Include embedded literals, equivalent wording, genuine extraction loss, wrong-role
 selection, negation, conditions, obligation strength and joint claim support in
 unrelated domains. Hand-written obligations test only comparison, not the complete
-handoff. Historical culprit-selection
-comparisons retain their original requests/results; they do not validate the new
-contract. Freeze new production-generated comparison requests before approved
+handoff. Earlier culprit-selection comparisons do not validate this contract. Freeze new production-generated comparison requests before approved
 live trials. Publication and rubric quality still require separately approved E2E.

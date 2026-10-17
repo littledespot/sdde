@@ -1,14 +1,10 @@
 # Supplied-spec rubric evaluator
 
-Implements the evaluator-only path in [H-001–H-006](01-rubric-evaluator.md).
-It sends captured requirements, a supplied specification and its rubric to
-the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and writes
-JSON/Markdown reports. The retained OpenAI adapter is tested offline.
+The evaluator sends captured requirements, a supplied specification and its rubric
+to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and
+writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
-
-The [live E2E harness](e2e.md) now joins production generation to this evaluator.
-Human rubric calibration and broader live acceptance
-are not claimed as completed or prerequisites for offline implementation.
+The [live E2E harness](e2e.md) joins production generation to this evaluator.
 
 ## Run
 
@@ -89,21 +85,14 @@ The internal test environment supplies the evaluation selection:
 | `total_token_budget` | Positive integer allowance for reported input + output tokens across this evaluation. |
 
 - For reasoning effort and OpenAI temperature, `null` omits the API control.
-- Under the user-approved 2026-10-11 §12.5 amendment, Bedrock temperature always
-  resolves to `0.1` when supported, otherwise omission. The resolved value is retained
-  in reports and validated before request encoding; callers cannot clear or alter it.
-  OpenAI evaluation remains unchanged.
+- Bedrock temperature always resolves to `0.1` when supported and is otherwise
+  omitted (§12.5). The resolved value is retained in reports and validated before
+  request encoding; callers cannot clear or alter it.
 - Unsupported model/settings combinations are configuration errors, not permission to
   choose another model.
 - Judge settings/accounting are independent of generation.
 - The operator supplies the exact judge selection through the test environment; the
   implementation has no model default.
-
-- This internal configuration change follows the user's 2026-09-08 direction to prefix
-  both test credentials with `TEST_` and put evaluation provider/model selection in the
-  test environment.
-- The same day's Bedrock extension adds the explicit region and selected-provider
-  credential.
 - Reports retain the complete resolved configuration, including `api:
   "openai_responses"` or `"bedrock_converse"`, `region` and the selected `model`;
   credentials remain separate and never enter a request body or report.
@@ -250,15 +239,13 @@ For scored criteria, the percentage is:
   clarity/testability, organization and proportionate business scope.
 - It does not demand Node/Vitest implementation details, invented entities or filler for
   empty sections.
-- Human review and live calibration remain open under H-002/H-016.
 
 - The [calibration set and review
   procedure](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/README.md)
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in
-  judge inputs.
-- Human approval and live results remain pending.
+  judge inputs. Human review and live calibration are tracked in FIX05 R8.
 
 ## Attempts and failures
 
@@ -378,6 +365,3 @@ zig build verify
 
 - Passing mechanical tests does not establish that a live judge grades correctly.
 - Live execution evidence is recorded with the [E2E results](e2e.md).
-- Human H-016 calibration remains outstanding.
-- The handoff is implemented, but the latest live generation failed before a
-  specification was available to grade.

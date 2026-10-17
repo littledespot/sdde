@@ -1,7 +1,7 @@
 # 23. Rendering and editability strategy
 
-Part of the [proposed design](../design.md#23-rendering-and-editability-strategy). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#23-rendering-and-editability-strategy), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - The engine, not the LLM, renders persistent artifacts.
 - `spec.md` is the only freely editable stage artifact.

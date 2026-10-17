@@ -1,7 +1,7 @@
 # 11. Filename and path validation algorithm
 
-Part of the [proposed design](../design.md#11-filename-and-path-validation-algorithm). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#11-filename-and-path-validation-algorithm), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Workflow artifacts and project files use two separate policy domains:
 
@@ -56,7 +56,7 @@ For every model-returned path-like field, the engine executes these checks in or
   filesystem/network adapter.
 - Business specification fields cannot carry operational file/source nodes.
 - An exact-copy value resolves only through the current snapshot's token/citation registry.
-  Under the approved [native-recognition amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026),
+  Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   model prose supplies raw bytes; only scoped native recognition may derive an exact
   occurrence. Model assertions or textual markers cannot grant that authority.
 - Renderers resolve valid nodes and tokens to engine-controlled display labels/bytes.

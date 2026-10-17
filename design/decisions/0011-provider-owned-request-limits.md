@@ -8,10 +8,7 @@
 - **B9 amendment:** 2026-10-17, explicit user approval for feature-owned entities
   and diagnostic slot allowances of 2,048 tokens; no new cardinality caps or
   `output_limit` correction.
-- **Advisory token pool withdrawn:** 2026-10-17. The separate required and advisory
-  token pools recorded with the B9 amendment were not requested by the user and are
-  removed. There is one total limit; no advisory token subtotal is calculated.
-  See "Workflow token accounting" below.
+- **Advisory pool withdrawn:** 2026-10-17, by user direction; one total token limit.
 - **Transport amendment:** 2026-10-15, explicit user direction to use Bedrock
   Converse for model switching. This replaces the previous chat wire mapping only.
 - **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
@@ -59,14 +56,12 @@
 
 ### Workflow token accounting
 
-**Removal record — 17 October 2026.** A separate 20,000-token advisory allowance
-beside a 100,000-token required-work budget was recorded here on 17 October 2026.
-The user did not request it, and it is withdrawn. There is one total limit: the
-native workflow policy's positive `totalModelTokenBudget`, currently **100,000
-tokens**, initialized freshly for every execution. It covers all model work,
-including post-generation source and principle advice. Advice has no pool or
-allowance of its own. Native advisory classification controls only the permitted
-non-budget incomplete-assessment outcome; it does not classify or partition token usage.
+There is one total limit: the native workflow policy's positive
+`totalModelTokenBudget`, currently **100,000 tokens**, initialized freshly for every
+execution. It covers all model work, including post-generation source and principle
+advice, which has no pool or allowance of its own. Native advisory classification
+controls only the permitted non-budget incomplete-assessment outcome; it does not
+partition token usage.
 
 - Record actual API-reported input plus output tokens after every inference call,
   including retries and stopped output, exactly once against that total.
@@ -86,9 +81,8 @@ non-budget incomplete-assessment outcome; it does not classify or partition toke
   calls. Missing usage during advice records incomplete advice and may continue
   through native validation and publication; missing usage during required work
   retains its ordinary workflow failure.
-- No pre-call token reservation, mandatory counting, capacity prediction or
-  budget-derived output allowance is introduced. There are no advisory-token
-  calculations, separate budgets or per-class usage subtotals. Trusted association,
+- No pre-call token reservation, mandatory counting, capacity prediction,
+  budget-derived output allowance or per-class usage subtotal exists. Trusted association,
   native validation, security, cancellation, deadline, logging and operational failures
   remain blocking; incomplete advice is not a blanket failure-to-success route.
 
@@ -98,11 +92,9 @@ The per-slot provider request allowance remains the existing optional control.
 Both current diagnostic cases share the source configuration at
 `test/e2e/wf-001-hello-world/.sddtoolkit.json`, which explicitly requests **2,048**
 output tokens for `spec_generation` and `repair`. This is a diagnostic setting,
-not an engine default, provider-maximum assertion or size ceiling. Retained
-complete diagnostic responses measured at most 564 output tokens before this
-change; that observation is headroom evidence for these cases, not a promise that
-future assignments fit. Historical captures and frozen calibration settings remain
-unchanged and cannot acquire current binding authority by substitution.
+not an engine default, provider-maximum assertion or size ceiling, and no promise
+that future assignments fit. Historical captures and frozen calibration settings
+remain unchanged and cannot acquire current binding authority by substitution.
 
 No per-family record cardinality cap is added. Under §17, entity records are
 instead authored once by the feature-wide entities unit, with independent support
@@ -126,22 +118,11 @@ otherwise remain unchanged.
   keep their separate responsibilities; they cannot be repurposed as model-call size
   ceilings.
 
-## Implementation status and acceptance
+## Acceptance
 
-- Implemented across operation registration, workflow compilation, binding, request
-  construction, authorization, provider observations and decoding.
 - The typed model-slot parameter is the sole new-binding selection; ADR 0012 allows
-  consumers to retain that request through typed data dependencies.
-- Capacity fields, intersections, wire budgets and the static-capacity action/evidence
-  are removed.
-- Request construction reuses existing identity/schema/control validators, and
-  observation validation retains the exact prepared request.
-- No replacement capacity service or authority exists.
-- Native YAML request preparation is now implemented under ADR 0012, including the
-  `invoke-model` binding and unconditional post-call usage accounting.
-- Production Bedrock uses the same boundary and accounting, with no additional
-  request/response size ceilings.
-
+  consumers to retain that request through typed data dependencies. No capacity
+  field, intersection, wire budget or static-capacity service exists.
 - Fake-provider and compiler tests cover rejected retired size parameters,
   registration/preparation without capacity configuration, complete valid payloads
   beyond former byte ceilings, preserved size failures/stops and schema rejection.
@@ -154,10 +135,6 @@ otherwise remain unchanged.
   execution isolation and explicit-only retries. Global-budget failures must stay
   fatal during advice as well as required work. Native advisory continuation must
   retain current incomplete-assessment evidence and all mandatory publication checks.
-  The corrected single-budget contract passes 168/168 verification steps and
-  1,890/1,890 tests, including clean packaged-executable checks. Exact commands and
-  review evidence are recorded in [FIX05 §9](../../fixes/FIX05.md#9-b4b9-implementation--17-october-2026).
-  Results for the superseded separate-pool implementation remain historical only.
 - Architecture tests require the retired capacity fields and local size-failure variants
   to remain absent.
 - Configuration/resource capture bounds retain separate negative tests.

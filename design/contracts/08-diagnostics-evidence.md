@@ -1,7 +1,7 @@
 # 8. Diagnostics and evidence
 
-Part of the [proposed design](../design.md#8-diagnostics-and-evidence). This section retains the
-baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
+Part of the [proposed design](../design.md#8-diagnostics-and-evidence), as amended by the
+[accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 Every deterministic failure is represented consistently:
 

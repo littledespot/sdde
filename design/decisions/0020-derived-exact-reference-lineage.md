@@ -1,35 +1,23 @@
 # ADR 0020: Derive exact-reference lineage from one selected claim
 
-The approved 17 October [B5/B8 amendment](0024-native-exact-token-authority.md)
-supersedes token-only record scheduling and kind-only exact eligibility/coverage.
-It adds native requirement-byte duties and token dispositions while preserving
-original occurrence identities, selected support and the B3 recognition rule.
-
 - **Status:** Accepted
 - **Date:** 2026-09-26
-- **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
-- **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
-- **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
-- **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
-- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement FIX03 Phase 5 and its resolved replacement in [§5.2.1](../../fixes/archive/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending); supersedes the presentation-role classifier and prebinding gate.
-- **9 October 2026 loss-evidence amendment authority:** Explicit user instruction to implement R7 authoring-input projection and R6 retained producer-loss evidence; no change to exact-reference lineage or retry policy.
-- **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
-- **16 October 2026 Phase 1A amendment authority:** explicit user instruction to
-  settle and implement shared composition admission, field-specific exact-copy
-  coverage, source-aware wire syntax and unchanged-repair exhaustion.
-- **16 October 2026 Phase 1A.2 amendment authority:** explicit user approval of
-  [FIX04 Phase 1A.2](../../fixes/Z_FIX02.md#phase-1a2-plan-decisions-and-results)
-  decision 1, prohibiting exact-copy insertions in descriptive fields whose
-  occurrences cannot satisfy coverage. Implemented offline, 16 October 2026;
-  separately approved live diagnostics remain required by
-  [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
-- **17 October 2026 B3 amendment authority:** explicit user approval of both
-  native request-eligible occurrence scope beyond selected support and contextual
-  complete-value delimiters, after the offline policy comparison. This supersedes
-  model-authored exact-copy selection and the prototype's selected-membership and
-  whole-word criteria. B2 and W1 remain separate from this amendment.
+- **Decision authority:** Explicit user approval, with user-approved amendments:
+  provenance-free source-bound per-unit assignments (27 September 2026); R6/R7
+  loss evidence and authoring-input projection (9 October); authored
+  associations, replacing the presentation-role classifier and prebinding gate
+  (11 October); shared composition admission, field-specific exact-copy coverage,
+  source-aware wire syntax and no exact copies in descriptive fields (16 October);
+  native-bound preservation-comparison attribution (FIX01-01 Phase 2) and the shared
+  invalid-content diagnosis (14 October); and native exact-value recognition,
+  replacing model-authored exact-copy selection (17 October).
+- **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1.
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
+  (post-generation findings are advice) and
+  [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
+  record task; native exact duties are independent of semantic kind).
 
-## Native exact-value recognition amendment — approved 17 October 2026
+## Native exact-value recognition
 
 The model writes required exact values verbatim in ordinary prose. `exact_copy`
 is absent from model-response wire contracts, decoding, encoding and schemas; neither an
@@ -91,34 +79,28 @@ revision, dependency, effective-evidence and sibling bounds remain unchanged.
 Canonical readback validates occurrence bindings and recomputes lineage; it never
 uses request logs, model-wire conversion or a matching display substring to repair
 missing stored authority. Earlier state/description contracts reject without a
-production compatibility reader. The coordinated implementation and complete
-offline checks passed on 17 October 2026; [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
-records the exact command and results. This is not evidence of live fidelity,
-cost or publication improvement; the live gate remains open and requires separate E2E approval.
+production compatibility reader.
 
-## Composition and coverage amendment — 16 October 2026
+## Composition and coverage
 
 The accepted [field inventory](../contracts/text-field-composition.md) determines
 whether a field requires prose and whether its exact-copy occurrences are
 prohibited, incidental or obligation-bearing. All exact occurrences retain the
 same handle, lineage, scope and byte-resolution contracts below. Only occurrences
 in successfully validated obligation-bearing fields satisfy behavioral exact-copy
-coverage. An incidental entity-name occurrence cannot discharge that duty. Under the
-approved [Phase 1A.2 amendment](../contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation),
-titles and the other descriptive fields in the inventory's second row carry no
-exact-copy occurrence at all. This supersedes counting an occurrence
-in any field. The
-policy is shared across generation, correction, repair and stored readback; it is
-not another model role classifier or support decision. Wire syntax embedded in
-prose never creates an occurrence and follows the source-aware protocol rule.
+coverage. An incidental entity-name occurrence cannot discharge that duty.
+Titles and the other descriptive fields in the inventory's second row carry no
+exact-copy occurrence at all. The policy is shared across generation, correction,
+repair and stored readback; it is not another model role classifier or support
+decision. Wire syntax embedded in prose never creates an occurrence and follows
+the source-aware protocol rule.
 
 ## Boundary and representation
 
 For a registered typed-content operation with one bound, validated reference
 ledger, canonical exact segments use `{"kind":"exact_copy","claim_id":N}`.
 `N` identifies one eligible preserved-token **occurrence**, not matching bytes.
-The 17 October amendment makes this an engine-derived canonical shape, never a
-model selection. The reference owner resolves each recognized occurrence to its
+This is an engine-derived canonical shape, never a model selection. The reference owner resolves each recognized occurrence to its
 token, citation, source scope and exact bytes. Missing, ambiguous or stale trusted
 ledger/binding rejects; the model cannot repair that authority.
 
@@ -147,7 +129,7 @@ operational paths, file IDs, commands, approvals and copy-source IDs remain
 separate. Reference lineage establishes no semantic entailment or operational
 capability.
 
-## Provenance-free response amendment (approved 27 September 2026)
+## Provenance-free responses
 
 Reconciliation retains validated semantic groups without presentation-role lists.
 Initial attributed Spec values select nonempty unique canonical `signal_ids`
@@ -181,29 +163,21 @@ to source reconciliation as an engine defect, never as missing user information.
 Similar prose, a singleton eligible claim, a document name and shared batch
 membership cannot establish a source association.
 
-This amends the earlier equality of model and canonical selection fields,
-while preserving `S`, `E`, `L` and their evidence bounds. Semantic grouping and
-generated meaning remain model-assisted and independently reviewed. Native
-group validation, source-review admission, exact coverage and publication
-remain separate gates. Value-only repair retains its group association and original explicit and
+Model and canonical selection fields therefore differ, while `S`, `E`, `L` and
+their evidence bounds are preserved. Semantic grouping and generated meaning
+remain model-assisted and independently reviewed. Native group validation,
+source-review admission, exact coverage and publication remain separate gates.
+Value-only repair retains its group association and original explicit and
 effective evidence bounds. Changing authored group membership requires separately
-authorized authored-unit rebuilding; no such permission is added here. Unresolved
-association defects block without being rerouted to an upstream producer. Readback validates captured groups and recomputes lineage. The
-cutover must update the closed schemas, parser, packet, repair, workflow
-progress, reference snapshot, the shared specification-state version, renderers and tests
-together, without a compatibility reader, second provenance store or new retry
-system.
+authorized authored-unit rebuilding; no such permission exists. Unresolved
+association defects block without being rerouted to an upstream producer.
+Readback validates captured groups and recomputes lineage. There is no
+compatibility reader, second provenance store or new retry system.
 
-The coordinated runtime cutover implements this amendment. Offline schema,
-repair, readback and workflow checks establish mechanical conformance; live
-semantic quality and reliability require separately approved execution.
+## Authored associations
 
-## Authored association amendment (approved 11 October 2026)
-
-This supersedes the 9 October complete-role-decision wire contract, its independent
-role request, positive `generation_roles`, role-coverage gate and unsupported-role
-repair identity. Original captures retain their historical decoder and scores;
-production has no legacy reader, classifier fallback or dual binding registry.
+There is no role classifier, independent role request, `generation_roles` field,
+role-coverage gate, legacy reader or dual binding registry.
 
 Initial attributed values use `{signal_ids:[...],value:BusinessValue}`. Brief
 requires title, description and goal; story requires its selected value; entities
@@ -269,67 +243,30 @@ full validation. An unknown canonical claim `9`, invalid `S` or a stale bound
 ledger rejects; value-only repair cannot turn it into current authority. A new
 claim cannot enter on retry, and an unfulfilled exact obligation still blocks.
 
-The former FIX_002 §36 authorization for a misbound token/citation tuple is
-retired when this format activates; its old tuple trigger cannot become blanket
-coupled add/remove authority. Existing separately authorized membership,
-reviewed insertion and native exact reconstruction remain. Positive Spec source
+No misbound token/citation tuple authorization exists, and no tuple trigger can
+become blanket coupled add/remove authority. Existing separately authorized membership
+repair remains. Positive Spec source
 findings compare with derived `L`; negative/loss evidence retains its distinct
 rules. The engine derives citations only from explicit selections and exact
 handles, never chooses semantic support or adds citations to satisfy a review.
 
-## Coordinated cutover and readback
+## Persistence and readback
 
-The original exact-reference cutover activated `specification/v2` and
-`specification-state/v6`. The provenance-free amendment coordinates the
-model/canonical shape, schema projection, native validation, repair,
-rendering and `specification-state/v7` readback. Reject earlier versions without
-a migration, dual reader or fallback. Completed readback resolves handles from
-the captured ledger and rejects inconsistent lineage, coverage or review
-projections. Pending state keeps its reference and clarification contract under
-the bumped shared state version; it does not fabricate completed attributed
-content. Changed reference or contract authority invalidates dependent state
-through the existing runner and stage gates. No new retry mechanism, schema
-registry, evidence store, provider mode or model prompt for reassembly is
-authorized.
+Canonical content is `specification/v3`; completed and clarification-pending
+specification state share one version and reject earlier versions without
+migration, dual reader or fallback. Canonical reference snapshots persist no
+presentation roles. Completed readback resolves handles from the captured ledger,
+recomputes lineage and rejects inconsistent lineage, coverage or review
+projections. Pending state keeps its reference and clarification contract and
+never fabricates completed attributed content. Changed reference or contract
+authority invalidates dependent state through the existing runner and stage gates.
 
-The user-authorized FIX01-01 Phase 2 amendment supersedes the R6 culprit-selection
-contract and advances the shared state to `specification-state/v10`. Native-bound
-preservation comparisons derive attribution under §22.1. Findings retain canonical
-facts and comparison evidence; collection and readback reconstruct the same bindings
-and reject mismatched derived locations. Finding and comparison origins remain
-distinct. Earlier versions reject. This changes neither `S`, `E`, `L` nor exact
-reference representation or repair permissions.
-
-The approved 11 October authored-association cutover advances canonical content
-to `specification/v3` and both completed and clarification-pending state to
-`specification-state/v13`. Previous shapes/versions reject without migration;
-canonical reference snapshots no longer persist presentation roles.
-
-The approved 14 October shared diagnosis amendment advances the enclosing state
-to `specification-state/v14`, retaining invalid-content evidence and its nullable
-source authority gap under §12. Canonical content and occurrence lineage remain
-`specification/v3`; the model text wire changes neither segment identity nor
-persisted text meaning. Bare model arrays are replaced by plain prose or explicit
-named composition under §7.1. Fixed repair cannot derive support from dispatch
-order or expand an association to remedy an aggregate gap.
-
-The approved 17 October native-recognition cutover advances completed and
-clarification-pending state to `specification-state/v15`, retaining canonical
-`specification/v3` exact segments and field roles. Native request diagnostics use
-`model-request-debug/v6` to retain the immutable exact-occurrence scope with the
-selected field metadata. These captures are diagnostic evidence, never readback
-or continuation authority. Pending and completed state share the same version;
-their stage discriminators are unchanged. Previous versions reject without migration or a dual
-reader. Implementation and validation status are tracked in
-[FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
-
-The later approved [ADR 0023](0023-advisory-post-generation-review.md) amendment
-advances completed and pending state to `specification-state/v16`. Source and
-principle findings after generation retain advisory assessment bindings; they
-cannot authorize content or upstream repair. Pre-generation preservation retains
-its required evidence contract. This review-policy change leaves the exact-value
-composition contract and the meanings of `S`, `E` and `L` unchanged.
-
-This decision records the runtime contract, not a claim that live quality
-evaluation has passed. The baseline and test checkpoints remain
-in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
+Native-bound preservation comparisons derive attribution under §22.1; collection
+and readback reconstruct the same bindings, keep finding and comparison origins
+distinct and reject mismatched derived locations. Invalid-content evidence keeps
+its nullable source authority gap under §12. Fixed repair cannot derive support
+from dispatch order or expand an association to remedy an aggregate gap. Native
+request diagnostics (`model-request-debug/v6`) retain the immutable
+exact-occurrence scope; they are evidence, never readback or continuation
+authority. No new retry mechanism, schema registry, evidence store, provider mode
+or reassembly prompt is authorized.
