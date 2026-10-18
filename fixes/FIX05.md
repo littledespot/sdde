@@ -629,7 +629,8 @@ subjects kept separate, one protocol-correction allowance and atomic stop per fa
 unchanged. The user also chose to send each Bedrock model's documented maximum output
 from its provider configuration, because Bedrock otherwise stops GPT-OSS-20B at 4,096
 output tokens (§1) and a 21-record family needs about 5,800. That needs an ADR 0011
-amendment. Neither is implemented yet.
+amendment. The maximum-output change is implemented offline (§16); record families
+are not yet implemented.
 
 **Additional approval — 17 October 2026:** the user approved source-only positive
 readiness evidence before an authored candidate exists. The native source-purpose
@@ -1712,10 +1713,10 @@ The approved follow-up and remaining proposals below authorize no live calls:
      loan-renewal membership block, and the 15:31/15:33 pair on `96fb905` confirms
      it no longer blocks (§1).
    - Done offline: the grader's one mechanical correction (§15).
-   - Next: send each Bedrock model's documented maximum output (ADR 0011
-     amendment), then review records per family (B2 approval of 18 October).
-     Loan-renewal's 21 assignments exhaust the 100,000-token budget before
-     publication.
+   - Done offline: each Bedrock model's documented maximum output is sent, for
+     generation and the grader (§16).
+   - Next: review records per family (B2 approval of 18 October). Loan-renewal's
+     21 assignments exhaust the 100,000-token budget before publication.
    - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
      §10-style schema exclusion needs no ADR change.
    - Adjudicate its reports under `human-spec-adjudication/v2`.
@@ -1805,6 +1806,8 @@ bounded approval, and each E2E run needs its own explicit approval
   updated §6.
 - **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
   and §6.
+- **18 October 2026, model maximum output:** added §16 and updated the B2 approval
+  note and §6.
 - **18 October 2026, grader correction and B2 approvals:** added §15, recorded the
   record-family and maximum-output approvals under B2, and updated §6 and §7.
 - **18 October 2026, after the §14 runs:** added §1's §14 live diagnostics and
@@ -2541,3 +2544,133 @@ observed failures had a single defect.
 
 No live grading ran; whether GPT-OSS-20B fixes its own evidence omission is still
 unmeasured.
+
+## 16. Model maximum output — 18 October 2026
+
+**Decision.** ADR 0011 had removed every output allowance on the premise that an
+omitted Bedrock `maxTokens` applies the model's own maximum. The 10:44 loan-renewal
+run disproved it: call 22 sent no allowance and stopped at exactly 4,096 output
+tokens (`stopReason: max_tokens`). On 18 October the user chose to "Send model's max
+output", extended it to the grader ("yes, allow the max"), and, after the contract
+review found retained runs that reached a 16,384 allowance on this model and
+region, chose 16,384 over 16,000 for `openai.gpt-oss-20b-1:0` (AWS documents
+"16K"). The user also chose to record the maximum in the frozen protocol and check
+it.
+
+**Change:**
+- **Catalogue.** Each Bedrock catalogue entry requires
+  `config.maxOutputTokens`: positive, exact, with no default, lookup or clamp
+  (`llm_provider_config_schema`, `ValidatedProviderConfig.aws_bedrock`).
+- **One maximum type.** The value is a `ModelMaximumOutput`: one non-zero integer
+  admitted only through its single parse rule. The catalogue, persisted
+  descriptions, grader configuration, frozen protocol and encoder share it, so no
+  decoder re-checks zero by hand. Its wire form is one integer-written JSON number,
+  as the catalogue requires, whichever JSON decoder runs. `strict_json` checks a
+  wrapper's declared scalar wire kind before its parse hook runs. A wrapper that
+  declares a wire kind without a parse hook, or names a non-scalar kind, fails to
+  compile.
+- **Encoder.** Every Bedrock inference request sends it as
+  `inferenceConfig.maxTokens`, after `temperature`; CountTokens carries none. The
+  adapter takes the value from the selected binding, so no slot or request can
+  narrow it.
+- **Replay.** Request descriptions advance to `model-request-debug/v9`, whose
+  provider configuration carries the value, so replay sends the same request. No
+  v8 reader remains. Production replay authorization compares a description with
+  the current binding through one `Description.matchesBinding`, so a capture
+  whose maximum or region no longer matches the catalogue is refused.
+- **Grader.** `evaluation-config/v2` requires the judge model's
+  `max_output_tokens`, sent as Bedrock `maxTokens` or OpenAI `max_output_tokens`.
+  The reports that embed that configuration advance: `evaluation-report/v6`,
+  `spec-e2e-report/v8` and `baseline-acquisition/v6`. No retained report uses the
+  superseded labels.
+- **Persisted descriptions.** A description recording a zero, negative, quoted,
+  fractional or nested maximum is refused at readback by the same type.
+- **Shipped configs.** The shipped catalogue, design example, E2E evaluator config
+  and packaged smoke config record 16,384.
+- **Frozen protocol.** The semantic-simplicity protocol advances to schema 2 with
+  a required `max_output_tokens` of 16,384. Frozen-binding checks compare the whole
+  provider configuration and the sent `maxTokens` against it, so a drifted
+  catalogue maximum is rejected before transport.
+- **Historical evidence.** Attribution replay reads retained v5 captures through
+  an explicit historical provider configuration. Retained v5 request bytes are
+  reproduced exactly, except that the retired allowance is replaced by the frozen
+  model's maximum. That maximum is read from the frozen protocol. The source-loss
+  projection resolves it from the shipped catalogue through the production decode,
+  registry build and validation, so no code literal restates the value.
+- **Docs.** ADR 0011 (new "Model maximum output" section), ADR 0019, ADR 0023,
+  design invariant 32 and §31.12, §12, §24, F0006, F0007, e2e.md, evaluator.md,
+  acceptance.md and the semantic-simplicity README match. ADR 0011 names the
+  catalogue as the authority for the maximum: the engine does not verify the
+  recorded value against the provider.
+
+**Open points from the contract review:**
+- **Shipped value: resolved.** The user switched to 16,384 after the review found
+  retained runs that reached it
+  (`test/calibration/authoring-associations/remediations/results.md`, and the
+  insertion-presentation request sources).
+- **Frozen binding: resolved.** The protocol now records the maximum and the
+  binding checks it.
+- **Second review: resolved.** A second contract review found nothing blocking.
+  Its seven minor findings were all fixed:
+  - an allocation failure while reading a frozen wire body stays `OutOfMemory`;
+  - three stale doc sentences (evaluator.md, ADR 0011, the semantic-simplicity
+    README);
+  - two restated 16,384 literals;
+  - six scattered zero checks, replaced by `ModelMaximumOutput`;
+  - an untested production replay match, now `Description.matchesBinding` with
+    accepted and rejected tests.
+- **Third review: resolved.** A third review confirmed those fixes. It found no
+  blocker and four minor items, all fixed:
+  - a missing `controls` rejection case;
+  - float-written maxima (`16384.0`, `1.6384e4`) that strict decoding accepted;
+  - no compile-time guard or owning-boundary test for the wrapper wire rule;
+  - a stale test comment.
+
+  An optional nit was also applied: the source-loss maximum now uses the full
+  registry path.
+
+**Regression evidence:**
+- **Catalogue.** It accepts `{"region","maxOutputTokens":16000}` (a test value)
+  and rejects a
+  missing, zero, negative, oversized, string or fractional maximum, as well as
+  unknown fields beside a valid maximum.
+- **The value comes from configuration.** Every boundary is proven with 8,192 as
+  well as 16,000: the adapter's sent body through the fake transport, the replay
+  body from the description, and the grader's Bedrock and OpenAI bodies. Replay
+  authorization rejects a description whose maximum differs from the catalogue's.
+- **Encoder.** Every registered model's inference request carries exactly
+  the configured `maxTokens`, with temperature where supported; Luna's inference
+  config holds only the maximum; CountTokens carries none.
+- **Maximum type.** `ModelMaximumOutput.parse` accepts 1 through the u32 maximum
+  and rejects zero, negatives and out-of-range values. Strict decoding accepts a
+  plain integer and round-trips it. It rejects zero, negative, oversized, quoted,
+  fractional, float-written (`16384.0`, `1.6384e4`, `16384e0`), `-0`, null,
+  boolean, nested and missing values. Plain `std.json` decoding also rejects quoted
+  and float-written values. Description readback rejects the same malformed values.
+- **Wrapper wire rule.** A `strict_json` test uses an unrelated boolean wrapper. It
+  accepts `true` and rejects `false` (refused by the hook), quoted, numeric,
+  object, null and missing values. A struct without a declared wire kind keeps its
+  closed object shape.
+- **Replay authority.** `Description.matchesBinding` accepts the exact binding. It
+  rejects a drifted maximum, a drifted region, a non-Bedrock configuration, and a
+  changed slot, provider, model, reasoning effort, controls or response mode.
+- **Replay and records.** Replay requests carry the description's value. The v8
+  label is refused. Integration and compatibility probe requests carry the shipped
+  16,384.
+- **Frozen protocol.** It rejects a missing, zero or string maximum and schema 1. A
+  description or sent body with 4,096, or with no `maxTokens`, fails the frozen
+  binding.
+- **Grader.** The grader config rejects a missing, zero, negative or string
+  maximum. OpenAI and Bedrock grader requests carry the configured value.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-provider-conformance test-rubric-evaluator test-e2e-call test-attribution-replay` | Pass. |
+| `zig build test-integration --summary all` | 8/8 steps; 127/127 tests. |
+| `zig build test-architecture --summary all` | 3/3 steps; 156/156 tests. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,909/1,909 tests, including clean packaged-executable checks. |
+
+Retained calibration runs show Bedrock accepted 16,384 for GPT-OSS-20B; no run on
+this build has yet confirmed it.

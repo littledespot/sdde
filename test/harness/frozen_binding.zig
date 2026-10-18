@@ -19,6 +19,12 @@ pub fn validateModels(a: std.mem.Allocator, models: *const @import("../../src/do
     try validateGeneration(try protocol(arena.allocator()), models);
 }
 
+/// The frozen protocol's maximum output: the only value a frozen-registration
+/// request sends (ADR 0011). The shipped catalogue must record the same value.
+pub fn maximumOutput(a: std.mem.Allocator) !@import("../../src/domain/llm_provider_contracts.zig").ModelMaximumOutput {
+    return (try protocol(a)).max_output_tokens;
+}
+
 pub fn validateWire(a: std.mem.Allocator, wire: transport.Request) !void {
     try @import("model_cost_policy.zig").require(.{ .bytes = "aws-bedrock" }, wire.model);
     var arena: std.heap.ArenaAllocator = .init(a);
@@ -26,6 +32,12 @@ pub fn validateWire(a: std.mem.Allocator, wire: transport.Request) !void {
     const frozen = try protocol(arena.allocator());
     if (wire.kind != .inference or !std.mem.eql(u8, @tagName(wire.region), frozen.region) or
         !std.mem.eql(u8, wire.model.bytes, frozen.model)) return error.FrozenBindingRejected;
+    // The frozen maximum output is a bound setting: a drifted catalogue cannot send another.
+    const body = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), wire.body, .{}) catch |err|
+        return if (err == error.OutOfMemory) error.OutOfMemory else error.FrozenBindingRejected;
+    const config = if (body == .object) body.object.get("inferenceConfig") else null;
+    const sent = if (config != null and config.? == .object) config.?.object.get("maxTokens") else null;
+    if (sent == null or sent.? != .integer or sent.?.integer != frozen.max_output_tokens.tokens) return error.FrozenBindingRejected;
 }
 
 pub fn validateDescription(a: std.mem.Allocator, description: Description, wire: transport.Request, expected_models: *const @import("../../src/domain/config.zig").ModelsConfig) !void {
@@ -42,7 +54,7 @@ pub fn validateDescription(a: std.mem.Allocator, description: Description, wire:
         !@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
         !std.mem.eql(u8, description.provider, expected.provider) or !std.mem.eql(u8, description.model, expected.model) or
         !std.meta.eql(temperature, @as(?f64, frozen.temperature)) or
-        description.provider_config != .aws_bedrock or description.provider_config.aws_bedrock.region != wire.region or
+        !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = wire.region, .max_output_tokens = frozen.max_output_tokens } }) or
         !std.mem.eql(u8, description.model, wire.model.bytes)) return error.FrozenBindingRejected;
     if (std.mem.eql(u8, description.model_slot, frozen.generation_slot) and
         (description.reasoning_effort == null or !std.mem.eql(u8, description.reasoning_effort.?, @tagName(frozen.reasoning_effort)))) return error.FrozenBindingRejected;
@@ -64,7 +76,7 @@ test "frozen slot controls retain each role's effort without substituting genera
         const description: Description = .{
             .provider = frozen.provider,
             .model = frozen.model,
-            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = frozen.max_output_tokens } },
             .model_slot = example.slot,
             .workflow_id = "current-native-workflow",
             .workflow_version = 1,
@@ -77,7 +89,7 @@ test "frozen slot controls retain each role's effort without substituting genera
             .reasoning_effort = example.effort,
             .operation_kind = .inference,
         };
-        const wire: transport.Request = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model }, .kind = .inference, .body = "{}", .api_key = "", .deadline_monotonic_ms = 1 };
+        const wire: transport.Request = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model }, .kind = .inference, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "", .deadline_monotonic_ms = 1 };
         try validateDescription(a, description, wire, &models);
         var changed = description;
         changed.reasoning_effort = "medium";
@@ -88,6 +100,15 @@ test "frozen slot controls retain each role's effort without substituting genera
         changed = description;
         changed.controls.temperature = null;
         try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
+        // A drifted maximum, recorded or sent, is rejected before transport.
+        changed = description;
+        changed.provider_config.aws_bedrock.max_output_tokens = .{ .tokens = 4096 };
+        try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
+        for ([_][]const u8{ "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":4096}}", "{\"inferenceConfig\":{\"temperature\":0.1}}", "{}" }) |body| {
+            var drifted = wire;
+            drifted.body = body;
+            try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, description, drifted, &models));
+        }
         if (example.effort == null) {
             // A role cannot be relabelled as generation without its frozen effort.
             changed = description;

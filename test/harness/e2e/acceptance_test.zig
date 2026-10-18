@@ -39,7 +39,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
         .protocol_sha256 = "4" ** 64,
     };
     const config: @import("../configuration.zig").Config = .{
-        .schema = "evaluation-config/v1",
+        .schema = "evaluation-config/v2",
         .api = .openai_responses,
         .model = "MOCK-independent-judge",
         .region = null,
@@ -49,9 +49,10 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
         .retry_limit = 0,
         .retry_delay_ms = 0,
         .total_token_budget = 1000,
+        .max_output_tokens = .{ .tokens = 16000 },
     };
     return .{
-        .schema = .@"spec-e2e-report/v7",
+        .schema = .@"spec-e2e-report/v8",
         .started_at_utc = "2026-10-17T00:00:00Z",
         .execution_id = "MOCK-run",
         .case_id = "MOCK-workflow-case",
@@ -112,7 +113,7 @@ test "E2E model evaluation stays advisory and status or stored pass never accept
     try gate.apply(a, &complete);
     try std.testing.expectEqual(.human_adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
-        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
+        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
         try std.testing.expect(!try gate.commandSucceeded(a, asserted));
     }
     complete.expected_outcome = null;

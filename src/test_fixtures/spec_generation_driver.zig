@@ -237,7 +237,7 @@ pub const Driver = struct {
                     .compiled_steps = self.runner.selected.graph.authority.steps.len,
                     .content = parts,
                     .schema = current_request.prepared().?.response_schema.modelBytes(),
-                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable,
+                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, current_request.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 }) catch unreachable,
                     .composition = if (current_request.part()) |part| .{
                         .part = part.plan.parts()[part.part].id.bytes,
                         .canonical_schema = part.plan.completeSchema().modelBytes(),
@@ -808,7 +808,7 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     try std.testing.expect(@import("../domain/model_exact_values.zig").same(packet.exactScope(), request.exact_scope));
     try std.testing.expectEqualDeep(packet.fieldPolicies(), request.field_policies);
     // Exercise the real provider serializer, without making a network call.
-    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy);
+    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy, .{ .tokens = 16000 });
     const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
     const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
     try std.testing.expectEqualStrings(current.input().?, user);

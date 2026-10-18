@@ -9,6 +9,8 @@ pub const Wire = struct {
     result: ?transport.Response = null,
     cancelled: bool = false,
     inference_body: []const u8 = complete,
+    /// When set, inference must send exactly this maximum and counting none.
+    expected_max_tokens: ?u32 = null,
 
     pub fn port(self: *Wire) transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -23,6 +25,18 @@ pub const Wire = struct {
             };
             defer parsed.deinit();
             std.debug.assert(parsed.value.object.contains("outputConfig") == enabled);
+        }
+        if (self.expected_max_tokens) |maximum| {
+            var parsed = std.json.parseFromSlice(std.json.Value, allocator, request.body, .{}) catch |err| return switch (err) {
+                error.OutOfMemory => error.OutOfMemory,
+                else => @panic("provider emitted malformed JSON"),
+            };
+            defer parsed.deinit();
+            const sent = if (parsed.value.object.get("inferenceConfig")) |config| config.object.get("maxTokens") else null;
+            switch (request.kind) {
+                .inference => std.debug.assert(sent != null and sent.?.integer == maximum),
+                .input_token_count => std.debug.assert(std.mem.indexOf(u8, request.body, "maxTokens") == null),
+            }
         }
         std.debug.assert(request.api_key.len != 0);
         std.debug.assert(std.mem.indexOf(u8, request.body, request.api_key) == null);

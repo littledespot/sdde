@@ -49,13 +49,18 @@ entries, never an absent entry. No model or region is a runtime default.
   "providers": [{
     "provider": "aws-bedrock",
     "models": [{
-      "model": "global.openai.gpt-6-luna",
+      "model": "openai.gpt-oss-20b-1:0",
       "json": true,
-      "config": {"region": "ap-southeast-2"}
+      "config": {"region": "ap-southeast-2", "maxOutputTokens": 16384}
     }]
   }]
 }
 ```
+
+`maxOutputTokens` is the model's documented maximum output (AWS documents "16K" for
+GPT-OSS-20B, and retained runs show Bedrock accepts and reaches 16,384). It is
+required, positive and
+sent unchanged; there is no default.
 
 `json: true` uses Converse with `outputConfig.textFormat.type: "json_schema"`
 and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string
@@ -164,10 +169,12 @@ accepts the same Converse input where the selected model supports counting.
   supplies the required native JSON strict-format flag and admits no explicit
   reasoning override. `.none` supplies no additional profile fields. Neither the
   project nor a model-name prefix selects the wire contract.
-- Requests never include `inferenceConfig.maxTokens`, so the API applies the
-  model's own maximum, which thinking and final text share
-  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
-  No local limit, reservation or silent control substitution is introduced.
+- Every inference request sends the catalogue's `maxOutputTokens`, the model's
+  documented maximum, as `inferenceConfig.maxTokens`; thinking and final text share
+  it. Omitting it let Bedrock apply a smaller default (GPT-OSS-20B stopped at 4,096)
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
+  No local limit below that maximum, reservation or silent control substitution is
+  introduced.
 - No streaming, tools, stop sequences or arbitrary request parameters are added.
 - Both response modes add the complete compiled result schema once to guidance.
   Native mode also sends its registered structural projection as a JSON string in
@@ -275,8 +282,10 @@ attempt and lease. The adapter does not back off, refresh, reroute or replay.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
   usage rejection, secret redaction, native projection, unsupported
   counting, status/type agreement and growing HTTP headers.
-- Fixtures prove no request carries `maxTokens` and CountTokens retains identical
-  model-visible input without inference controls or clamping.
+- Fixtures prove every inference request carries exactly the configured `maxTokens`,
+  that a missing, zero, negative or oversized catalogue value rejects, and that
+  CountTokens retains identical model-visible input without inference controls or
+  clamping.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 

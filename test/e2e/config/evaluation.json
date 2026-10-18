@@ -1,9 +1,10 @@
 {
-  "schema": "evaluation-config/v1",
+  "schema": "evaluation-config/v2",
   "reasoning_effort": "low",
   "temperature": null,
   "timeout_ms": 120000,
   "retry_limit": 0,
   "retry_delay_ms": 0,
-  "total_token_budget": 150000
+  "total_token_budget": 150000,
+  "max_output_tokens": 16384
 }

@@ -111,7 +111,7 @@ test "static JSON guidance stays separate from dynamic input in both preparation
             try std.testing.expectEqualStrings(context_bytes, prepared.content[0].guidance);
             try std.testing.expectEqualStrings(prompt_bytes, prepared.content[1].guidance);
             try std.testing.expectEqualStrings(body, prepared.content[2].user);
-            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null }, .inference);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 16000 } }, .inference);
             var parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             defer parsed.deinit();
             const messages = parsed.value.object.get("messages").?.array.items;
@@ -3425,8 +3425,8 @@ test "response admission preserves selected requests captured authority and seri
         try std.testing.expectEqualStrings(before.response_schema.modelBytes(), after.response_schema.modelBytes());
         try std.testing.expectEqualDeep(before.model_operation_id, after.model_operation_id);
         const encode = @import("adapters/provider/bedrock_request.zig").encode;
-        const before_wire = try encode(allocator, before, .inference, (try currentRequest(&first)).binding().registry_entry.bedrock_request_profile);
-        const after_wire = try encode(allocator, after, .inference, (try currentRequest(&second)).binding().registry_entry.bedrock_request_profile);
+        const before_wire = try encode(allocator, before, .inference, (try currentRequest(&first)).binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
+        const after_wire = try encode(allocator, after, .inference, (try currentRequest(&second)).binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
         try std.testing.expectEqualStrings(before_wire, after_wire);
         for ([_][]const u8{ before_wire, after_wire }, [_][]const u8{ "before", "after" }) |wire, label| {
             const path = try std.fmt.allocPrint(allocator, ".zig-cache/chunk13-admission-{s}-{s}.json", .{ if (selected) "selected" else "root", label });
@@ -4383,7 +4383,7 @@ test "protocol repetition requires the current correction association and same t
         try std.testing.expectEqual(@as(u32, @intCast(index + 1)), correction_origin.model_attempt_ordinal.value);
         if (prior_correction) |stale| try std.testing.expect(!correction_origin.eql(stale));
         prior_correction = correction_origin;
-        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference, correction.binding().registry_entry.bedrock_request_profile);
+        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference, correction.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
         defer std.testing.allocator.free(wire);
         try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
         try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
@@ -7467,7 +7467,7 @@ pub fn providerServices(allocator: std.mem.Allocator, production: ?usize, slots:
     var candidate = try registry.Candidate.init(allocator, 1);
     defer candidate.deinit();
     const contract = registered.entries[0];
-    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .json = json, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
+    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .json = json, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
@@ -7816,7 +7816,7 @@ test "production capture attributes count and inference bodies to the existing r
                 try body.appendSlice(a, fragment.content);
             }
             const expected = if (direction == .request)
-                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind, request.binding().registry_entry.bedrock_request_profile)
+                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind, request.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 })
             else if (kind == .input_token_count)
                 "{\"inputTokens\":10}"
             else
@@ -8068,10 +8068,10 @@ test "production missing-answer observation retains usage and can close without 
             const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
             const encode = @import("adapters/provider/bedrock_request.zig").encode;
             const policy = fixture.services.registry().resolveId(evidence.request().binding_id.registry_entry_id).?.bedrock_request_profile;
-            const before = try encode(std.testing.allocator, evidence.request(), .inference, policy);
+            const before = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
             defer std.testing.allocator.free(before);
             _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
-            const after = try encode(std.testing.allocator, evidence.request(), .inference, policy);
+            const after = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
             defer std.testing.allocator.free(after);
             try std.testing.expectEqualStrings(before, after);
             try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });

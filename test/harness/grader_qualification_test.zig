@@ -12,7 +12,7 @@ const specimen_paths = [_][]const u8{ "faithful-a.md", "faithful-b.md", "wrong-v
 const report_paths = [_][]const u8{ "judge-a.json", "judge-b.json", "judge-wrong.json" };
 const specimen_texts = [_][]const u8{ "After startup, the application shows READY.", "The startup outcome includes the displayed value READY.", "After startup, the application shows FINISHED." };
 const config: configuration.Config = .{
-    .schema = "evaluation-config/v1",
+    .schema = "evaluation-config/v2",
     .api = .bedrock_converse,
     .model = "openai.gpt-oss-20b-1:0",
     .region = .@"ap-southeast-2",
@@ -22,6 +22,7 @@ const config: configuration.Config = .{
     .retry_limit = 0,
     .retry_delay_ms = 0,
     .total_token_budget = 1000,
+    .max_output_tokens = .{ .tokens = 16000 },
 };
 const rubric_bytes =
     \\{"schema":"evaluation-rubric/v2","id":"startup-value","revision":1,"minimum_score":0,"maximum_score":4,"pass_threshold_percent":80,"criteria":[{"id":"value-fidelity","description":"Preserve the displayed startup value.","evidence":"Compare the original and specified behavior.","weight":1,"anchors":[{"score":0,"description":"Absent or contradicted"},{"score":1,"description":"Mostly lost"},{"score":2,"description":"Material omission"},{"score":3,"description":"Minor ambiguity"},{"score":4,"description":"Preserved"}],"allow_not_applicable":false,"minimum_acceptable_score":3}]}
@@ -73,7 +74,7 @@ const Fixture = struct {
                 .missing_from_specification = false,
             }} };
             result.* = .{
-                .schema = "evaluation-report/v5",
+                .schema = "evaluation-report/v6",
                 .protocol_sha256 = try q.protocolSha256(a),
                 .capture = input,
                 .configuration = config,

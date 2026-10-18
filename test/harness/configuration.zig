@@ -19,6 +19,9 @@ pub const Config = struct {
     retry_limit: u16,
     retry_delay_ms: u32,
     total_token_budget: u64,
+    /// The judge model's documented maximum output, sent so the provider cannot
+    /// apply a smaller default (ADR 0011). It is never a narrower allowance.
+    max_output_tokens: contracts.ModelMaximumOutput,
 };
 
 /// Closed JSON input: provider/model and credentials cannot be supplied here.
@@ -30,6 +33,7 @@ const Settings = struct {
     retry_limit: u16,
     retry_delay_ms: u32,
     total_token_budget: u64,
+    max_output_tokens: contracts.ModelMaximumOutput,
 };
 
 /// Values borrow from the caller-owned selection and JSON decoding arena.
@@ -46,6 +50,7 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Er
         .retry_limit = settings.retry_limit,
         .retry_delay_ms = settings.retry_delay_ms,
         .total_token_budget = settings.total_token_budget,
+        .max_output_tokens = settings.max_output_tokens,
     };
     if (selection.api == .bedrock_converse) {
         const required = try bedrockTemperature(selection.model);
@@ -57,7 +62,7 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Er
 }
 
 pub fn validate(value: Config) c.Error!void {
-    if (!std.mem.eql(u8, value.schema, "evaluation-config/v1") or c.ModelId.parse(value.model) == null or value.timeout_ms == 0 or
+    if (!std.mem.eql(u8, value.schema, "evaluation-config/v2") or c.ModelId.parse(value.model) == null or value.timeout_ms == 0 or
         value.total_token_budget == 0 or (value.retry_limit != 0 and value.retry_delay_ms == 0)) return error.InvalidEvaluationContract;
     if (value.temperature) |temperature| if (!std.math.isFinite(temperature) or temperature < 0 or temperature > 2) return error.InvalidEvaluationContract;
     switch (value.api) {
@@ -65,7 +70,7 @@ pub fn validate(value: Config) c.Error!void {
         .bedrock_converse => {
             const region = value.region orelse return error.InvalidEvaluationContract;
             const model = registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(value.model).?) orelse return error.InvalidEvaluationContract;
-            if (!model.acceptsConfig(.{ .aws_bedrock = .{ .region = region } }) or
+            if (!model.acceptsConfig(.{ .aws_bedrock = .{ .region = region, .max_output_tokens = value.max_output_tokens } }) or
                 !model.capabilities.supports(.native_schema, model.capabilities.inferenceControls()) or
                 !contracts.supportsReasoningEffort(model.supported_reasoning_efforts, if (value.reasoning_effort) |effort| @tagName(effort) else null)) return error.InvalidEvaluationContract;
             if (!std.meta.eql(value.temperature, try bedrockTemperature(c.ModelId.parse(value.model).?))) return error.InvalidEvaluationContract;

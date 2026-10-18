@@ -31,9 +31,42 @@ pub const BedrockRegion = enum { @"ap-southeast-2", @"us-west-2" };
 // select supported models but cannot supply an encoding implementation.
 pub const BedrockRequestProfile = enum { none, openai_oss, openai_luna };
 
+/// A model's documented maximum output, sent as its request ceiling because
+/// Bedrock otherwise applies a smaller default (ADR 0011). It is never zero.
+/// Every decoder admits it through `parse`; on the wire it is one integer-written
+/// JSON number, as the catalogue decoder requires.
+pub const ModelMaximumOutput = struct {
+    tokens: u32,
+
+    /// The closed wire kind `strict_json` checks before `jsonParse` runs.
+    pub const ClosedJsonWire = u32;
+
+    pub fn parse(tokens: i64) ?ModelMaximumOutput {
+        const value = std.math.cast(u32, tokens) orelse return null;
+        return if (value == 0) null else .{ .tokens = value };
+    }
+
+    /// No quoted, fractional or exponent form names a maximum, whichever JSON
+    /// decoder runs.
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!ModelMaximumOutput {
+        const token = try source.nextAllocMax(a, .alloc_if_needed, options.max_value_len orelse std.json.default_max_value_len);
+        const written = switch (token) {
+            .number => |bytes| bytes,
+            .allocated_number => |bytes| bytes,
+            else => return error.UnexpectedToken,
+        };
+        if (!std.json.isNumberFormattedLikeAnInteger(written)) return error.InvalidNumber;
+        return parse(try std.fmt.parseInt(i64, written, 10)) orelse error.InvalidNumber;
+    }
+
+    pub fn jsonStringify(self: ModelMaximumOutput, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.write(self.tokens);
+    }
+};
+
 pub const ValidatedProviderConfig = union(enum) {
     empty_object,
-    aws_bedrock: struct { region: BedrockRegion },
+    aws_bedrock: struct { region: BedrockRegion, max_output_tokens: ModelMaximumOutput },
 };
 
 pub const ProviderModelContract = struct {

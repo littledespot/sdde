@@ -69,7 +69,7 @@ fn parseOriginal(a: std.mem.Allocator, bytes: []const u8) Error!native.Report {
     defer tree.deinit();
     if (tree.value != .object or !tree.value.object.contains("schema") or !tree.value.object.contains("origin")) return error.InvalidHumanAdjudication;
     const report = strict.decode(native.Report, a, bytes, limits) catch |err| return invalid(err);
-    if (report.schema != .@"spec-e2e-report/v7" or report.origin != .live) return error.InvalidHumanAdjudication;
+    if (report.schema != .@"spec-e2e-report/v8" or report.origin != .live) return error.InvalidHumanAdjudication;
     return report;
 }
 

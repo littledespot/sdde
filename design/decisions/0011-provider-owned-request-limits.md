@@ -13,6 +13,12 @@
   should be no output token limits". This supersedes the 2026-10-10 optional slot
   allowance and B9's 2,048-token diagnostic allowances. Provider-applied stops must
   be logged.
+- **Model maximum output:** 2026-10-18, by explicit user direction ("Send model's
+  max output"; 16,384 for `openai.gpt-oss-20b-1:0`; "yes, allow the max" for the
+  grader). Omitting `maxTokens` did not apply the model's maximum: a live Bedrock
+  response stopped at exactly 4,096 output tokens with no allowance sent. Each
+  Bedrock model's documented maximum is now recorded and sent. See "Model maximum
+  output".
 - **Transport amendment:** 2026-10-15, explicit user direction to use Bedrock
   Converse for model switching. This replaces the previous chat wire mapping only.
 - **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
@@ -41,21 +47,46 @@
 ### No output-token allowance
 
 Amended 2026-10-18 by explicit user direction. A requested allowance truncates
-output and degrades results, so SDDE never sends one.
+output and degrades results, so SDDE never sends one below the model's documented
+maximum (see "Model maximum output").
 
-- No configuration, slot, model contract, binding, prepared request, replay or
-  evaluator setting can carry an output-token allowance.
+- No slot, model contract, binding, prepared request, correction or replay can
+  narrow the output maximum. The provider catalogue (and the grader's evaluator
+  configuration) is the stated authority for that maximum and must record the
+  model's documented value; the engine does not verify it against the provider.
 - The closed configuration rejects `models.slots.<slot>.maxOutputTokens`.
-- Bedrock `Converse` requests omit `inferenceConfig.maxTokens`, so the provider
-  applies the model's own maximum.
-- Request descriptions advance to `model-request-debug/v7`, which has no allowance
+- Request descriptions advanced to `model-request-debug/v7`, which had no allowance
   field. Older captures stay historical evidence, read only by their explicit
   historical readers.
-- The provider's own maximum is the only output ceiling. When a provider stops a
+- The model's own maximum is the only output ceiling. When a provider stops a
   response for any non-candidate reason, including that maximum, the runner logs
   `model.provider_stopped` at warning level with the exact stop reason. Actual usage
   is still accounted, and the typed outcome is unchanged. SDDE does not retry,
   clamp, truncate or invent a fallback because of a stop.
+
+### Model maximum output
+
+Amended 2026-10-18 by explicit user direction. Bedrock applies a default smaller
+than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
+(GPT-OSS-20B stopped at exactly 4,096), so omission is itself a hidden limit.
+
+- Each Bedrock entry in the provider catalogue records the model's documented
+  maximum output as `providers[].models[].config.maxOutputTokens`: required,
+  positive and exact, with no default, runtime lookup, clamp or fallback. The
+  shipped value for `openai.gpt-oss-20b-1:0` is 16,384: AWS documents "16K", and
+  retained calibration runs show Bedrock accepts and reaches a 16,384 allowance for
+  this model in `ap-southeast-2`.
+- The frozen semantic-simplicity protocol (schema 2) records the same maximum, and
+  its binding checks reject a request or description carrying any other value.
+- Every Bedrock inference request sends that value as `inferenceConfig.maxTokens`
+  unchanged; CountTokens requests carry none. All slots selecting the entry share
+  it, and no slot, binding or request can narrow it.
+- The development grader's `evaluation-config/v2` records its judge model's
+  documented maximum as `max_output_tokens`, sent the same way.
+- Request descriptions advance to `model-request-debug/v9`, whose provider
+  configuration carries the value, so replay sends the same request.
+- A value the provider rejects is a typed provider rejection. A stop at the
+  maximum is still logged as `model.provider_stopped`.
 
 ### Workflow token accounting
 
@@ -93,7 +124,8 @@ partition token usage.
 
 B9's 2,048-token `spec_generation` and `repair` allowances were withdrawn on
 2026-10-18 with the whole control (see "No output-token allowance"). Runaway output is
-now bounded only by the model's own maximum and the execution's total token budget.
+now bounded only by the model's own documented maximum, sent explicitly (see "Model
+maximum output"), and the execution's total token budget.
 Each stop is logged as `model.provider_stopped`. Historical captures and frozen
 calibration settings remain unchanged and cannot acquire current binding authority
 by substitution.
@@ -128,11 +160,11 @@ otherwise remain unchanged.
 - Fake-provider and compiler tests cover rejected retired size parameters,
   registration/preparation without capacity configuration, complete valid payloads
   beyond former byte ceilings, preserved size failures/stops and schema rejection.
-- Tests cover rejection of a configured `maxOutputTokens`, the absence of
-  `maxTokens` from every Bedrock request, rejection of a description carrying the
-  retired field, and `model.provider_stopped` for every closed stop reason,
-  including log-failure propagation. Provider maxima are not encoded as local
-  capacity checks.
+- Tests cover rejection of a slot `maxOutputTokens`, the catalogue maximum's
+  required positive value, its exact `maxTokens` in every Bedrock inference request
+  and absence from CountTokens, rejection of a description carrying the retired
+  field, and `model.provider_stopped` for every closed stop reason, including
+  log-failure propagation. Provider maxima are not encoded as local capacity checks.
 - Accounting tests must cover the single aggregate ledger across all inference,
   full overshoot retention, global subsequent-call prohibition, unavailable usage,
   execution isolation and explicit-only retries. Global-budget failures must stay

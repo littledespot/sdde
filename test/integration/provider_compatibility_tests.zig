@@ -127,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v7",
+        .schema = .@"spec-e2e-report/v8",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -231,7 +231,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expect(readback.call.request_complete);
     try std.testing.expect(readback.call.source_snapshot != null);
     try std.testing.expectEqualStrings(selected.workflow_id, readback.call.description.?.workflow_id);
-    try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, "maxTokens") == null);
+    try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, "\"maxTokens\":16384") != null);
     try std.testing.expectEqualStrings("low", readback.call.description.?.reasoning_effort.?);
     try std.testing.expectEqual(.fixed, readback.call.description.?.controls.temperature.?);
     try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, key) == null);
@@ -541,7 +541,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
         .purpose = .whole_workflow,

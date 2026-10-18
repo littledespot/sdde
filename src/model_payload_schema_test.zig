@@ -124,7 +124,7 @@ test "loss protocol correction preserves the complete selected contract in both 
             request.response_guidance_mode = mode;
             // This synthetic request probes the registered OpenAI Bedrock wire
             // policy; its fake provider identity remains test-only lineage.
-            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss), .{});
+            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss, .{ .tokens = 16000 }), .{});
             var occurrences: usize = 0;
             for (wire.value.object.get("system").?.array.items) |part|
                 occurrences += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, selected.modelBytes()));
@@ -188,7 +188,7 @@ test "child requirements stay inside selected definitions parts and repair schem
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = retry.request.*;
             request.response_guidance_mode = mode;
-            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss);
+            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss, .{ .tokens = 16000 });
             const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
             var count: usize = 0;
             for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
@@ -433,7 +433,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
             // Retry-owned content retains task guidance only; serialization adds framing.
             for (request.content) |part| try std.testing.expect(std.mem.indexOf(u8, part.bytes(), framing) == null);
             for ([_]provider.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
-                const bytes = try encoding.encode(std.testing.allocator, request, kind, .openai_oss);
+                const bytes = try encoding.encode(std.testing.allocator, request, kind, .openai_oss, .{ .tokens = 16000 });
                 defer std.testing.allocator.free(bytes);
                 const decoded_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
                 defer std.testing.allocator.free(decoded_body);
@@ -804,7 +804,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const projected = try projection.value(a, result.invalid.expected, .complete);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, located, .{}));
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, try projection.outline(a, result.invalid.expected), .{}), try std.json.Stringify.valueAlloc(a, expected.get("shape").?, .{}));
-            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .openai_oss);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .openai_oss, .{ .tokens = 16000 });
             const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             var occurrences: usize = 0;
             for (request.value.object.get("system").?.array.items) |part|

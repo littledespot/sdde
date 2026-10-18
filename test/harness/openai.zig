@@ -26,6 +26,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .input = input,
         .text = .{ .format = .{ .type = "json_schema", .name = "rubric_judgment", .strict = true, .schema = schema } },
         .reasoning = if (config.reasoning_effort) |effort| @as(?Reasoning, .{ .effort = @tagName(effort) }) else null,
+        .max_output_tokens = config.max_output_tokens,
         .temperature = config.temperature,
         .tools = [_]struct {}{},
         .store = false,

@@ -55,7 +55,8 @@ test "decodes the closed structure directly into the owned type" {
 }
 
 test "slots configure no output-token allowance" {
-    // ADR 0011: SDDE never requests one; the closed contract rejects the field.
+    // ADR 0011: a slot cannot narrow the catalogue's recorded model maximum;
+    // the closed contract rejects the field.
     const a = std.testing.allocator;
     for ([_][]const u8{ "1", "2048", "16384", "null" }) |raw| {
         const replacement = try std.fmt.allocPrint(a, "\"model\": \"gpt-5.4-mini\", \"maxOutputTokens\": {s}", .{raw});

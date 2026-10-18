@@ -126,12 +126,13 @@ and qualification. No real grader is currently qualified by these pending record
 
 - `evaluation-case/v2`: required qualification paths.
 - `evaluation-rubric/v2`: required nullable critical minima.
-- `evaluation-report/v5`: raw assessment, line-locator evidence, per-attempt purpose
-  and diagnostic, and explicit grader/acceptance evidence.
+- `evaluation-report/v6`: raw assessment, line-locator evidence, per-attempt purpose
+  and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
+  grader/acceptance evidence.
 - `spec-e2e-case/v2`: required expected outcome.
-- `spec-e2e-report/v7`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v8`: the single total token budget and aggregate actual usage,
   expected outcome, captured evaluation inputs, replayable admission evidence,
-  separate acceptance and an embedded `evaluation-report/v5`.
+  separate acceptance and an embedded `evaluation-report/v6`.
 - `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and
   derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,

@@ -527,7 +527,7 @@ test "native exact occurrence scope is deep owned and bound across request descr
     const encoded = try std.json.Stringify.valueAlloc(a, description.from(owned.request, &fixture.provider_binding, .inference), .{});
     const restored = try description.decode(a, encoded);
     try std.testing.expect(exact.same(scope, restored.exact_scope));
-    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v8", "model-request-debug/v5");
+    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v9", "model-request-debug/v5");
     try std.testing.expectError(error.InvalidJsonDocument, description.decode(a, old));
 }
 
@@ -573,4 +573,46 @@ test "native exact packet scopes must match reference-backed owner snapshots" {
         defer packets.release(bound);
         try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(std.testing.allocator, base, .{ .reference_state = .{ .bytes = "FOREIGN" }, .occurrences = &.{} }));
     }
+}
+
+test "replay authority matches a description only to its exact current binding and catalogue maximum" {
+    const Description = @import("domain/model_request_description.zig").Description;
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16384 } } };
+    const described = Description.from(&fixture.request, &fixture.provider_binding, .inference);
+    try std.testing.expect(described.matchesBinding(&fixture.provider_binding));
+
+    // A catalogue whose maximum or region moved no longer authorizes the capture.
+    for ([_]@import("domain/llm_provider_contracts.zig").ValidatedProviderConfig{
+        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 4096 } } },
+        .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16384 } } },
+        .empty_object,
+    }) |drifted| {
+        fixture.registry_entry.config = drifted;
+        try std.testing.expect(!described.matchesBinding(&fixture.provider_binding));
+    }
+    fixture.registry_entry.config = described.provider_config;
+    try std.testing.expect(described.matchesBinding(&fixture.provider_binding));
+
+    // Every other bound identity is compared too.
+    var other = described;
+    other.model_slot = "repair";
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+    other = described;
+    other.provider = "openai";
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+    other = described;
+    other.model = "other-model";
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+    other = described;
+    other.reasoning_effort = null;
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+    other = described;
+    other.controls.temperature = if (described.controls.temperature == null) .fixed else null;
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+    other = described;
+    other.response_mode = if (described.response_mode == .native_schema) .prompt_only else .native_schema;
+    try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
 }

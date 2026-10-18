@@ -35,6 +35,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .temperature = if (config.temperature != null) .fixed else null,
         .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
         .request_profile = supported.bedrock_request_profile,
+        .max_output_tokens = config.max_output_tokens,
     }, .inference) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidRequest => error.InvalidEvaluationContract,

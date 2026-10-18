@@ -199,7 +199,7 @@ const test_selection: configuration.Selection = .{ .api = .openai_responses, .mo
 const bedrock = @import("bedrock.zig");
 const bedrock_selection: configuration.Selection = .{ .api = .bedrock_converse, .model = c.ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" };
 const config_bytes =
-    \\{"schema":"evaluation-config/v1","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100}
+    \\{"schema":"evaluation-config/v2","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100,"max_output_tokens":16000}
 ;
 const Fake = struct {
     observations: []const provider.Observation,
@@ -251,7 +251,8 @@ test "API request has one native-derived schema, complete data, no tools or serv
     try std.testing.expectEqual(@as(usize, 0), root.object.get("tools").?.array.items.len);
     try std.testing.expect(root.object.get("temperature") == null);
     try std.testing.expect(root.object.get("reasoning") == null);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "max_output_tokens") == null);
+    // The judge model's documented maximum is sent (ADR 0011).
+    try std.testing.expectEqual(@as(i64, 16000), root.object.get("max_output_tokens").?.integer);
     const schema = root.object.get("text").?.object.get("format").?.object.get("schema").?;
     try std.testing.expectEqual(false, schema.object.get("additionalProperties").?.bool);
     const item = schema.object.get("properties").?.object.get("results").?.object.get("items").?;
@@ -260,12 +261,32 @@ test "API request has one native-derived schema, complete data, no tools or serv
     try std.testing.expectEqualStrings(try packet.input(a, input), message);
 }
 
+test "grader requests send the configured judge maximum for both providers" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    for ([_][]const u8{ "8192", "16000" }) |maximum| {
+        const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"max_output_tokens\":16000", try std.mem.concat(a, u8, &.{ "\"max_output_tokens\":", maximum }));
+        const expected = try std.fmt.parseInt(i64, maximum, 10);
+        const openai_body = try c.decode(std.json.Value, a, try wire.request(a, try configuration.parse(a, bytes, test_selection), inputs, null));
+        try std.testing.expectEqual(expected, openai_body.object.get("max_output_tokens").?.integer);
+        const bedrock_body = try c.decode(std.json.Value, a, try bedrock.request(a, try configuration.parse(a, bytes, bedrock_selection), inputs, null));
+        try std.testing.expectEqual(expected, bedrock_body.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
+    }
+}
+
 test "configuration has no hidden model budget timeout retry or score defaults" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][2][]const u8{
-        .{ "evaluation-config/v1", "evaluation-config/v2" },
+        .{ "evaluation-config/v2", "evaluation-config/v1" },
+        // The judge model's documented maximum is required and positive.
+        .{ ",\"max_output_tokens\":16000", "" },
+        .{ "\"max_output_tokens\":16000", "\"max_output_tokens\":0" },
+        .{ "\"max_output_tokens\":16000", "\"max_output_tokens\":-1" },
+        .{ "\"max_output_tokens\":16000", "\"max_output_tokens\":\"16000\"" },
         .{ "\"timeout_ms\":1000", "\"timeout_ms\":0" },
         .{ "\"timeout_ms\":1000", "\"timeout_ms\":\"1000\"" },
         .{ "\"retry_delay_ms\":1", "\"retry_delay_ms\":0" },
@@ -436,7 +457,8 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
         const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
         switch (entry.bedrock_request_profile) {
             .openai_luna => {
-                try std.testing.expect(baseline.object.get("inferenceConfig") == null);
+                // No temperature; only the judge model's documented maximum.
+                try std.testing.expectEqual(@as(usize, 1), baseline.object.get("inferenceConfig").?.object.count());
                 const additional = baseline.object.get("additionalModelRequestFields").?.object;
                 try std.testing.expect(additional.get("text").?.object.get("format").?.object.get("strict").?.bool);
                 try std.testing.expect(additional.get("reasoning") == null);
@@ -457,7 +479,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
                 }
                 const temperature = entry.capabilities.inferenceControls().temperature;
                 if (temperature) |fixed| try std.testing.expectEqual(fixed.wireValue(), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
-                try std.testing.expect(std.mem.indexOf(u8, encoded, "maxTokens") == null);
+                try std.testing.expectEqual(@as(i64, config.max_output_tokens.tokens), root.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
             }
         }
     }
@@ -524,9 +546,11 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded, framing));
         try std.testing.expectEqualStrings(try packet.resultSchema(a), root.object.get("system").?.array.items[2].object.get("text").?.string);
         try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string);
+        const inference_config = root.object.get("inferenceConfig").?.object;
+        try std.testing.expectEqual(@as(i64, config.max_output_tokens.tokens), inference_config.get("maxTokens").?.integer);
         if (entry.capabilities.inferenceControls().temperature) |temperature| {
-            try std.testing.expectEqual(temperature.wireValue(), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
-        } else try std.testing.expect(root.object.get("inferenceConfig") == null);
+            try std.testing.expectEqual(temperature.wireValue(), inference_config.get("temperature").?.float);
+        } else try std.testing.expect(!inference_config.contains("temperature"));
         switch (entry.bedrock_request_profile) {
             .openai_luna => try std.testing.expect(root.object.get("additionalModelRequestFields").?.object.get("text").?.object.get("format").?.object.get("strict").?.bool),
             .none, .openai_oss => {},
@@ -536,7 +560,8 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         const native = format.get("structure").?.object.get("jsonSchema").?.object;
         try std.testing.expectEqualStrings("rubric_judgment", native.get("name").?.string);
         try std.testing.expectEqualStrings(try packet.resultSchema(a), native.get("schema").?.string);
-        for ([_][]const u8{ "tools", "toolConfig", "maxTokens", "reasoning" }) |forbidden| try std.testing.expect(std.mem.indexOf(u8, encoded, forbidden) == null);
+        for ([_][]const u8{ "tools", "toolConfig", "reasoning" }) |forbidden| try std.testing.expect(std.mem.indexOf(u8, encoded, forbidden) == null);
+        try std.testing.expect(std.mem.indexOf(u8, encoded, "\"maxTokens\":16000") != null);
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("evidence.zig").Store = .{ .io = std.testing.io, .allocator = a, .run = evidence_run.dir, .secrets = &.{&socket.canary} };
@@ -944,7 +969,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence and a fai
         try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
         try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
         const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
-        try std.testing.expectEqualStrings("evaluation-report/v5", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings("evaluation-report/v6", encoded.get("schema").?.string);
         try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("attempts").?.array.items[0].object.get("diagnostic").?.object.get("reason").?.string);
         try std.testing.expect(!encoded.contains("judgment_diagnostic"));
         const markdown = try reports.markdown(a, report);

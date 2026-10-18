@@ -5,13 +5,14 @@ pub const Error = std.mem.Allocator.Error || error{InvalidRequest};
 
 pub const ReasoningEffort = enum { low, medium, high, xhigh, max };
 pub const RequestProfile = @import("../../domain/llm_provider_contracts.zig").BedrockRequestProfile;
+const ModelMaximumOutput = @import("../../domain/llm_provider_contracts.zig").ModelMaximumOutput;
 
 pub fn reasoningEffort(value: ?[]const u8) error{InvalidRequest}!?ReasoningEffort {
     const selected = value orelse return null;
     return std.meta.stringToEnum(ReasoningEffort, selected) orelse error.InvalidRequest;
 }
 
-pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, profile: RequestProfile) Error![]const u8 {
+pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, profile: RequestProfile, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
     const schema: TextSchema = switch (request.response_guidance_mode) {
         .prompt_only => .{ .prompt_only = request.response_schema.modelBytes() },
         .native_schema => .{ .native = .{
@@ -27,6 +28,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .temperature = request.controls.temperature,
         .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
         .request_profile = profile,
+        .max_output_tokens = max_output_tokens,
     }, kind);
 }
 
@@ -49,6 +51,8 @@ pub const TextRequest = struct {
     temperature: ?@import("../../domain/model_controls.zig").Temperature,
     reasoning_effort: ?ReasoningEffort,
     request_profile: RequestProfile = .none,
+    /// The model's documented maximum output (ADR 0011); never a smaller allowance.
+    max_output_tokens: ModelMaximumOutput,
 };
 
 // Shared text serialization; callers supply validated settings and schema.
@@ -84,14 +88,17 @@ fn writeConverse(writer: *std.Io.Writer, request: TextRequest, kind: operation.P
     try writeInput(&json, request);
     try writeModelFields(&json, request, kind);
     if (kind == .inference) {
-        // No output allowance is sent: the model's own maximum applies (ADR 0011).
+        // The model's documented maximum is sent, because Bedrock otherwise
+        // applies a smaller default; no slot can narrow it (ADR 0011).
+        try json.objectField("inferenceConfig");
+        try json.beginObject();
         if (request.temperature) |temperature| {
-            try json.objectField("inferenceConfig");
-            try json.beginObject();
             try json.objectField("temperature");
             try json.write(temperature.wireValue());
-            try json.endObject();
         }
+        try json.objectField("maxTokens");
+        try json.write(request.max_output_tokens.tokens);
+        try json.endObject();
         if (request.schema == .native) {
             try json.objectField("outputConfig");
             try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.native.structure } } } });

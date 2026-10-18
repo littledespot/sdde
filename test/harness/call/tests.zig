@@ -39,7 +39,7 @@ test "call selectors require an explicit run workflow physical ordinal model and
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 1,
@@ -132,7 +132,7 @@ test "call trial uses canonical serializer and validation with one send and immu
     try std.testing.expectEqualStrings("MOCK original immutable request", parent.request.?);
     const body = try @import("../contracts.zig").decode(std.json.Value, a, fixture.request.?.body);
     try std.testing.expectEqualStrings("high", body.object.get("additionalModelRequestFields").?.object.get("reasoning_effort").?.string);
-    try std.testing.expect(!body.object.get("inferenceConfig").?.object.contains("maxTokens"));
+    try std.testing.expectEqual(@as(i64, 16000), body.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
     try std.testing.expect(body.object.contains("outputConfig"));
 }
 

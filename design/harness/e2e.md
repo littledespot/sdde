@@ -174,8 +174,9 @@ credential access. Production preparation validates the catalogue and selected r
 the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
-low reasoning and registered temperature `0.1`. No request carries an output-token
-allowance ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+low reasoning and registered temperature `0.1`. Each request sends the catalogue's
+recorded model maximum and no smaller allowance
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 The shipped wf-001/wf-002 configuration selects exactly these slot controls and
 passes preflight; a drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
 No historical request is retargeted and no alternative model or response mode
@@ -294,16 +295,17 @@ credentials. No model answer means no evidence yet about schema conformance.
   total-budget settings; no provider or model is selected by a fallback.
 - Judge settings and credentials are validated before generation starts.
 
-- Neither generation nor the evaluator requests an output-token allowance; the
-  model's own maximum applies, and every provider stop is logged with its reason
-  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+- Generation and the evaluator both send the model's documented maximum output
+  (16,384 for GPT-OSS-20B) from their configuration, never a smaller allowance, and
+  every provider stop is logged with its reason
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The engine accounts every inference, including post-generation advice and
   correction, once against one execution budget. The evaluator has its own
   cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
-  and temperature `0.1`, and never sends `inferenceConfig.maxTokens`. Provider
+  and temperature `0.1`, and sends `inferenceConfig.maxTokens` 16,384. Provider
   reasoning counts toward output usage;
   the engine accounts actual reported tokens separately from provider quotas.
   The separate registered Luna profile retains its strict JSON flag and omitted
@@ -572,13 +574,15 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v7`,
-`baseline-acquisition/v5`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
+The current closed report formats are `spec-e2e-report/v8`,
+`baseline-acquisition/v6`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
 `rubric-judgment/v2` because they embed its judgments or the E2E report.
 `spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
-`evaluation-report/v5`, which records per-attempt purpose and diagnostics. The compatibility report's outer
+`evaluation-report/v5`, which records per-attempt purpose and diagnostics, and
+`spec-e2e-report/v8`, `baseline-acquisition/v6` and `evaluation-report/v6` with the
+`evaluation-config/v2` judge maximum. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
 Feasibility evidence retains the single total budget and aggregate actual usage.

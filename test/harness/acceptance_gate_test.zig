@@ -73,7 +73,7 @@ fn report() reports.Report {
             .generation = .{ .origin = .live_generation, .workflow_status = .completed, .execution_id = "execution-example", .models = &.{generation} },
         },
         .configuration = .{
-            .schema = "evaluation-config/v1",
+            .schema = "evaluation-config/v2",
             .api = .bedrock_converse,
             .model = generation.model,
             .region = .@"ap-southeast-2",
@@ -83,6 +83,7 @@ fn report() reports.Report {
             .retry_limit = 0,
             .retry_delay_ms = 0,
             .total_token_budget = 150000,
+            .max_output_tokens = .{ .tokens = 16000 },
         },
         // An evaluated outcome is its successful final attempt's.
         .attempts = &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = null, .identity = .unavailable, .usage = .{ .input_tokens = 1, .output_tokens = 1, .total_tokens = 2 }, .failure = null }},
@@ -140,7 +141,7 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
     const a = arena.allocator();
     const bytes = try reports.json(a, report());
     const parsed = try reports.parse(a, bytes);
-    try std.testing.expectEqualStrings("evaluation-report/v5", parsed.schema);
+    try std.testing.expectEqualStrings("evaluation-report/v6", parsed.schema);
     try std.testing.expectEqualDeep(report().acceptance, parsed.acceptance);
     for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
         var tree = try @import("../../src/domain/strict_json.zig").parse(a, bytes, c.json_limits, false, null);
@@ -149,7 +150,7 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
         try std.testing.expectError(error.InvalidEvaluationContract, reports.parse(a, try std.json.Stringify.valueAlloc(a, tree.value, .{})));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-report/v5", "evaluation-report/v4" },
+        .{ "evaluation-report/v6", "evaluation-report/v5" },
         .{ @import("packet.zig").revision, "old-prompt" },
         .{ judgment.schema_revision, "old-judgment" },
         .{ digest, "bad-digest" },

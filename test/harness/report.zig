@@ -34,7 +34,7 @@ pub const Attempt = struct {
     unconstrained: ?@import("correction.zig").Unconstrained = null,
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
-pub const schema_version = "evaluation-report/v5";
+pub const schema_version = "evaluation-report/v6";
 pub const Report = struct {
     schema: []const u8 = schema_version,
     prompt_revision: []const u8 = @import("packet.zig").revision,

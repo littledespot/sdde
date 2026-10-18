@@ -249,17 +249,18 @@ ProviderModelDefinition {
 - The current source example selects the registered Sydney Bedrock model; it is still
   not an automatic runtime configuration or fallback.
 
-- There are no common provider-catalogue `endpoint`, `contextWindow`, `maxOutputTokens`,
-  `supportsTemperature`, `structuredOutput`, `tokenizer`, or wire-parameter fields.
+- There are no common (provider-independent) catalogue `endpoint`, `contextWindow`,
+  `maxOutputTokens`, `supportsTemperature`, `structuredOutput`, `tokenizer`, or
+  wire-parameter fields; Bedrock's closed `config` carries its own `maxOutputTokens`.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
-  No slot, binding or request carries an output-token allowance ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+  No slot, binding or request carries an output allowance below the model's own maximum; a Bedrock catalogue entry records that documented maximum ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
   permitted by that provider's closed `config` variant.
 - Catalogue membership alone does not make that model repository-authorized.
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
 validated enclosing provider. For example, `provider: "aws-bedrock"` requires
-the exact F0007 configuration `{ "region": <validated-region> }`.
+the exact F0007 configuration `{ "region": <validated-region>, "maxOutputTokens": <documented-model-maximum> }`.
 
 - Every root, provider, model, and resolved provider-specific configuration object is
   closed at its owning boundary.
@@ -344,8 +345,9 @@ LLMProviderDispatch = union(enum) {
 ```
 
 - Production installs the Bedrock contracts in
-  `composition/provider_model_contracts.zig` with the closed `aws_bedrock { region }`
-  configuration and exhaustive concrete dispatch.
+  `composition/provider_model_contracts.zig` with the closed
+  `aws_bedrock { region, maxOutputTokens }` configuration and exhaustive concrete
+  dispatch.
 - The exact supported models, regions and modes are listed in F0007.
 - The empty-object variant belongs only to private test contracts, not production.
 - External catalogue and slot selection remain mandatory; registration supplies support
@@ -501,9 +503,10 @@ Resources and outcomes remain in the existing concise workflow structure.
   size estimates.
 - Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
   reject; do not replace them with another engine capacity limit.
-- No request carries an output-token allowance, so the model's own maximum applies.
-  A provider stop at that maximum, or for any other non-candidate reason, is logged
-  as `model.provider_stopped` with its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+- No request carries an output allowance below the model's own maximum; Bedrock
+  requests send the catalogue's documented maximum. A provider stop at that maximum,
+  or for any other non-candidate reason, is logged as `model.provider_stopped` with
+  its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The runner checks identity, slot, schema, response mode and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
 - Providers report oversized requests, output stops and context errors through the
@@ -1213,8 +1216,8 @@ F0006 does not:
       reservations.
     - Reject retired size parameters.
     - Provider APIs own their size limits and the engine propagates their errors/stops.
-    - No slot or request carries an output-token allowance; a provider stop is logged
-      with its reason.
+    - No slot or request carries an output allowance below the model's maximum; a
+      provider stop is logged with its reason.
     - Model-request IDs are engine-assigned from one immutable run-local ledger by exact
       revision; execution, originating compiled step, unit/purpose authority where
       required, and ordinal validate before construction.
@@ -1414,7 +1417,7 @@ Implementation evidence must cover:
 - one invalid slot rejecting the complete allowlist
 - unauthorized unreferenced models
 - unsupported options, targets, data policy and structured schemas
-- a configured `maxOutputTokens` rejection, no request `maxTokens`, unsupported
+- a slot `maxOutputTokens` rejection, the catalogue maximum sent as request `maxTokens`, unsupported
   selections and altered controls across binding, authorization, correction, capture
   and replay, and a logged reason for every provider stop
 - registration without capacity fields

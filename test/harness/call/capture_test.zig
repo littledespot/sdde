@@ -8,7 +8,7 @@ const body = "{\"MOCK\":\"captured wire body\"}";
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "MOCK-model",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 3,
@@ -301,6 +301,6 @@ test "capture rejects evidence redaction and legacy descriptions instead of reco
     try write(root.dir, run_path ++ "/evidence/generation/call-000009/request.json", body);
     const path = run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log";
     const bytes = try @import("../files.zig").read(io, a, root.dir, path);
-    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v8", "model-request-debug/v2"));
+    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v9", "model-request-debug/v2"));
     try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
 }

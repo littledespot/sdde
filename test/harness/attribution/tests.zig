@@ -95,7 +95,7 @@ test "attribution historical metadata cannot acquire current exact scope or vers
     try value.object.put(a, "exact_scope", .null);
     try std.testing.expectError(error.InvalidJsonDocument, strict.decode(p.CapturedDescription, a, try p.json(a, value), .{ .maximum_depth = 64 }));
     _ = value.object.orderedRemove("exact_scope");
-    value.object.getPtr("version").?.* = .{ .string = "model-request-debug/v8" };
+    value.object.getPtr("version").?.* = .{ .string = "model-request-debug/v9" };
     try std.testing.expectError(error.InvalidJsonDocument, strict.decode(p.CapturedDescription, a, try p.json(a, value), .{ .maximum_depth = 64 }));
 
     const record: s.CapturedRequestRecord = .{

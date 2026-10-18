@@ -105,7 +105,7 @@ const Native = struct {
     field_policies: []const @import("../../../src/domain/model_text_field.zig").Binding,
     prose_fields: []const @import("../../../src/domain/model_text_wire.zig").ProseField,
     original_sources: ?[]const @import("../../../src/domain/model_text_wire.zig").SourceText = null,
-    metadata_contract: c.MetadataContract = .current_v8,
+    metadata_contract: c.MetadataContract = .current_v9,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
     artifact: Artifact,
@@ -217,7 +217,7 @@ fn version(value: std.json.Value) ?[]const u8 {
     return string(member(value, "version")) orelse string(member(value, "schema"));
 }
 fn metadataContract(bytes: []const u8) ?c.MetadataContract {
-    inline for (.{ .{ "model-request-debug/v8", c.MetadataContract.current_v8 }, .{ "model-request-debug/v5", c.MetadataContract.historical_v5 }, .{ "model-request-debug/v4", c.MetadataContract.historical_v4 }, .{ "model-request-debug/v3", c.MetadataContract.historical_v3 } }) |entry| {
+    inline for (.{ .{ "model-request-debug/v9", c.MetadataContract.current_v9 }, .{ "model-request-debug/v5", c.MetadataContract.historical_v5 }, .{ "model-request-debug/v4", c.MetadataContract.historical_v4 }, .{ "model-request-debug/v3", c.MetadataContract.historical_v3 } }) |entry| {
         if (std.mem.eql(u8, bytes, entry[0])) return entry[1];
     }
     return null;
@@ -391,7 +391,7 @@ fn prompt(state: *State, path: []const u8) !void {
             try appendRow(state, unsupported);
             continue;
         };
-        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current_v8, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members });
+        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current_v9, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members });
     }
 }
 fn nativeFor(state: *State, a: std.mem.Allocator, path: []const u8, content: []const u8, schema: []const u8, step: []const u8, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?Native {
@@ -472,7 +472,7 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
         try appendRow(state, base);
         return;
     };
-    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v8) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, try json(a, description)) else null;
+    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v9) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, try json(a, description)) else null;
     const policies = if (current) |known| known.field_policies else if (member(description, "field_policies")) |value| try strict.decode([]const @import("../../../src/domain/model_text_field.zig").Binding, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
     const prose = if (current) |known| known.prose_fields else if (member(description, "prose_fields")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").ProseField, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
     const sources = if (current) |known| known.original_sources else if (member(description, "original_sources")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").SourceText, a, try json(a, value), .{ .maximum_depth = 64 }) else null;
@@ -531,14 +531,14 @@ fn embeddedChild(state: *State, a: std.mem.Allocator, source: Artifact, capture:
     const policies = try strict.decode([]const @import("../../../src/domain/model_text_field.zig").Binding, a, try json(a, member(capture, "field_policies") orelse return error.InvalidCaptureProjection), .{ .maximum_depth = 64 });
     const prose = try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").ProseField, a, try json(a, member(capture, "prose_fields") orelse return error.InvalidCaptureProjection), .{ .maximum_depth = 64 });
     const sources = if (string(member(capture, "description"))) |description_bytes| sources: {
-        if (std.mem.eql(u8, string(member(capture, "description_version")) orelse "", "model-request-debug/v8")) {
+        if (std.mem.eql(u8, string(member(capture, "description_version")) orelse "", "model-request-debug/v9")) {
             const description = try @import("../../../src/domain/model_request_description.zig").Description.decode(a, description_bytes);
             break :sources description.original_sources;
         }
         break :sources null;
     } else null;
     const contract = metadataContract(string(member(capture, "description_version")) orelse "") orelse .unavailable;
-    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v8) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, string(member(capture, "description")) orelse return error.InvalidCaptureProjection) else null;
+    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v9) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, string(member(capture, "description")) orelse return error.InvalidCaptureProjection) else null;
     if (current) |known| {
         if (!std.mem.eql(u8, schema, known.schema) or !@import("../../../src/domain/model_text_field.zig").same(policies, known.field_policies) or !@import("../../../src/domain/model_text_wire.zig").sameProseFields(prose, known.prose_fields)) return error.InvalidCaptureProjection;
     }

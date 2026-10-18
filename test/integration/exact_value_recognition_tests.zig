@@ -39,7 +39,7 @@ fn fixture(a: std.mem.Allocator) !Fixture {
         try std.testing.expectEqual(@as(usize, 64), sample.description_sha256.len);
         try std.testing.expect(sample.prompt_logs.len != 0);
         try std.testing.expect(field.valid(sample.field_policies));
-        if (std.mem.eql(u8, sample.description_version, "model-request-debug/v8")) {
+        if (std.mem.eql(u8, sample.description_version, "model-request-debug/v9")) {
             const description = try @import("../../src/domain/model_request_description.zig").Description.decode(a, sample.description);
             var packets: usize = 0;
             for (description.content) |content| if (content == .user) {
@@ -55,7 +55,7 @@ fn fixture(a: std.mem.Allocator) !Fixture {
     return value;
 }
 fn measure(a: std.mem.Allocator, sample: Sample) !corpus.Measurement {
-    const originals: ?[]const wire.SourceText = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v8"))
+    const originals: ?[]const wire.SourceText = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v9"))
         (try @import("../../src/domain/model_request_description.zig").Description.decode(a, sample.description)).original_sources
     else
         null;

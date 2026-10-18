@@ -3,15 +3,15 @@ const binding = @import("diagnostic_binding.zig");
 const debug = @import("../../src/domain/request_debugger.zig");
 
 const catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2"}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2"}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
 ;
 const prompt_catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2"}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2"}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
 ;
 const captured: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "MOCK-generation",
     .workflow_id = "MOCK-workflow",
     .workflow_version = 1,
@@ -80,11 +80,11 @@ test "diagnostic binding rejects the entire malformed duplicate or unsupported c
         ,
         \\{"providers":[],"providers":[]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2"}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2"}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"us-west-2"}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2"}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2"}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}}]}]}
         ,
         "not-json",
     };
@@ -101,12 +101,14 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
     edited.content = &.{.{ .user = "MOCK changed prompt" }};
     edited.schema = "MOCK changed schema";
     try std.testing.expectEqual(.openai_oss, try binding.Authorization.authorize(context, edited));
-    for (0..7) |mode| {
+    for (0..8) |mode| {
         var rejected = captured;
         switch (mode) {
+            // A description cannot replay with a maximum other than the catalogue's.
+            7 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 4096 } } },
             0 => rejected.provider = "unknown-provider",
             1 => rejected.model = "anthropic.claude-3-5-haiku-20241022-v1:0",
-            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2" } },
+            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } },
             3 => rejected.reasoning_effort = "high",
             4 => rejected.controls.temperature = null,
             5 => rejected.response_mode = .prompt_only,
@@ -123,7 +125,7 @@ test "diagnostic authorization derives request profile from each validated regis
         var selected = captured;
         selected.provider = entry.provider.bytes;
         selected.model = entry.model.bytes;
-        selected.provider_config = .{ .aws_bedrock = .{ .region = entry.bedrock_regions[0] } };
+        selected.provider_config = .{ .aws_bedrock = .{ .region = entry.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } };
         selected.controls = entry.capabilities.inferenceControls();
         selected.response_mode = if (entry.capabilities.structured_response == .bedrock_json_schema) .native_schema else .prompt_only;
         selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];

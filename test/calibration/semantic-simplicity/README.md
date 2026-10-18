@@ -71,12 +71,14 @@ On 16 October 2026 the user switched the selected test model back to
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, using Converse, native JSON
 Schema, explicit low reasoning and the engine's fixed temperature `0.1` on the
 protocol's explicit `generation_slot` (`spec_generation`). No role requests an
-output-token allowance (ADR 0011, 18 October 2026). Every other role retains the
+allowance below the model maximum: since 18 October 2026 the protocol (schema 2)
+records `max_output_tokens` 16,384, every request sends it, and the frozen binding
+rejects any other value (ADR 0011 "Model maximum output"). Every other role retains the
 exact model and effort in the frozen `.sddtoolkit.json`; the current `repair` role
 selects low effort. Capture, budget-evidence import and scoring validate each request
 against its own configured slot, while retaining the selected cohort's model,
-region, native schema and fixed temperature. They do not copy the generation
-allowance onto other roles. The registered GPT-OSS
+region, native schema and fixed temperature. Every role sends the same frozen
+maximum. The registered GPT-OSS
 profile sends `additionalModelRequestFields.reasoning_effort: "low"`; it does not
 send Luna's additional strict-output field. This selection does not qualify model
 quality. Record the evaluation date and exact binding/capture, and stop for

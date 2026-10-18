@@ -12,7 +12,7 @@ const generator: contracts.GenerationModel = .{
 
 fn judge() configuration.Config {
     return .{
-        .schema = "evaluation-config/v1",
+        .schema = "evaluation-config/v2",
         .api = .bedrock_converse,
         .model = generator.model,
         .region = .@"ap-southeast-2",
@@ -22,6 +22,7 @@ fn judge() configuration.Config {
         .retry_limit = 0,
         .retry_delay_ms = 0,
         .total_token_budget = 150000,
+        .max_output_tokens = .{ .tokens = 16000 },
     };
 }
 

@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v8" } = .@"model-request-debug/v8",
+    version: enum { @"model-request-debug/v9" } = .@"model-request-debug/v9",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -47,6 +47,20 @@ pub const Description = struct {
             .exact_scope = request.exact_scope,
             .members = request.response_schema.memberChoices(),
         };
+    }
+
+    /// Replay authority: the description names exactly the current binding,
+    /// including the catalogue's provider configuration and recorded maximum
+    /// output, so a drifted catalogue cannot replay a stale capture.
+    pub fn matchesBinding(self: Description, selected: *const binding.ValidatedProviderModelBinding) bool {
+        const debug = @import("request_debugger.zig");
+        return std.mem.eql(u8, selected.slot_id.bytes, self.model_slot) and
+            std.mem.eql(u8, selected.registry_entry.provider.bytes, self.provider) and
+            std.mem.eql(u8, selected.registry_entry.model.bytes, self.model) and
+            std.meta.eql(selected.registry_entry.config, self.provider_config) and
+            debug.sameOptional(selected.reasoning_effort, self.reasoning_effort) and
+            std.meta.eql(selected.controls, self.controls) and
+            selected.registry_entry.responseMode() == self.response_mode;
     }
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("strict_json.zig").Error!Description {

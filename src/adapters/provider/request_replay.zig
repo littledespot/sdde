@@ -40,6 +40,7 @@ pub const Adapter = struct {
             .temperature = description.controls.temperature,
             .reasoning_effort = request.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay,
             .request_profile = request_profile,
+            .max_output_tokens = description.provider_config.aws_bedrock.max_output_tokens,
         }, .inference) catch return error.InvalidReplay;
         // A modified request must not persist an authorization secret as content.
         var material = @import("../system/bedrock_api_key_source.zig").read(a, self.environment);

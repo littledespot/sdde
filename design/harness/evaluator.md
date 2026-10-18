@@ -70,19 +70,20 @@ The internal test environment supplies the evaluation selection:
 
 ### Judge configuration
 
-- The closed `evaluation-config/v1` JSON object requires every field below.
+- The closed `evaluation-config/v2` JSON object requires every field below.
 - Provider/model selection now belongs exclusively to the test environment: JSON `api`,
   `provider`, `model`, `region` and credential fields reject as unknown fields.
 
 | Field | Value / responsibility |
 | --- | --- |
-| `schema` | `"evaluation-config/v1"` |
+| `schema` | `"evaluation-config/v2"` |
 | `reasoning_effort` | The selected GPT-OSS-20B judge uses explicit `"low"`. The closed parser retains other registered effort values for adapter conformance; reports retain the independently configured judge setting. |
 | `temperature` | The selected GPT-OSS-20B judge uses `0.1`, derived from the engine's fixed supported-temperature control. Bedrock resolves explicit `null` to the same required `0.1`; other values reject. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
 | `total_token_budget` | Positive integer allowance for reported input + output tokens across this evaluation. |
+| `max_output_tokens` | Positive integer: the judge model's documented maximum output (16,384 for GPT-OSS-20B), sent on every request so the provider cannot apply a smaller default ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)). Never a smaller allowance. |
 
 - For reasoning effort and OpenAI temperature, `null` omits the API control.
 - Bedrock temperature always resolves to `0.1` when supported and is otherwise
@@ -155,8 +156,9 @@ The internal test environment supplies the evaluation selection:
   - Human adjudication proposals are not model output and stay strictly parsed.
   - Raw `model_output.txt` evidence is unchanged. The evaluation report adds no
     separate normalization fact.
-- The evaluator supplies no output allowance, so its requests omit
-  `inferenceConfig.maxTokens`. No tools, truncation or provider-specific retry policy is added.
+- The evaluator sends its configured `max_output_tokens`, the judge model's
+  documented maximum, as Bedrock `inferenceConfig.maxTokens` or OpenAI
+  `max_output_tokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 
@@ -190,8 +192,8 @@ calibration retains raw scores while acceptance remains unresolved.
   [configuration.zig](../../test/harness/configuration.zig),
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
-- Cases and rubrics use distinct `/v2` identifiers; configuration remains `/v1`.
-  Reports use `evaluation-report/v5` with typed judgment and acceptance evidence.
+- Cases, rubrics and configuration use distinct `/v2` identifiers.
+  Reports use `evaluation-report/v6` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -285,7 +287,7 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v5` records each attempt's purpose (`judgment` or `correction`)
+- `evaluation-report/v6` records each attempt's purpose (`judgment` or `correction`)
   and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
   and Markdown: parser byte/line/column for invalid JSON, or the affected
   criterion, zero-based evidence index and document ID for an unknown document,

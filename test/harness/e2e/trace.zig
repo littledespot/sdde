@@ -571,7 +571,7 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         if (self.pending) |pending| {
             const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
@@ -698,7 +698,7 @@ const ProbeWire = struct {
 };
 
 fn probeWireRequest() transport.Request {
-    return .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = .inference, .body = "{}", .api_key = "unit-credential", .deadline_monotonic_ms = 1 };
+    return .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = .inference, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "unit-credential", .deadline_monotonic_ms = 1 };
 }
 
 test "single-exchange guard consumes its only send before transport and never retries any delivery" {
@@ -749,7 +749,7 @@ test "single-exchange capture requires the frozen native response settings and e
     const description: Description = .{
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
-        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16384 } } },
         .model_slot = "spec_generation",
         .workflow_id = "unit-workflow",
         .workflow_version = 1,
@@ -991,7 +991,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1017,7 +1017,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",

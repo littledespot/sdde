@@ -173,7 +173,7 @@ it never converts an assessment into semantic proof.
 - **Exhaustion keeps the existing advisory outcome:** that assignment's advice ends
   as incomplete (`protocol_exhausted`), keeping the admitted prefix and leaving
   publication to the native gates.
-- **Diagnostics:** request descriptions (`model-request-debug/v8`, ADR 0019) record
+- **Diagnostics:** request descriptions (`model-request-debug/v8` and later, ADR 0019) record
   each applied member set, so debugger inspection and replay enforce the same
   admission as the original request.
 - **Unchanged:**
