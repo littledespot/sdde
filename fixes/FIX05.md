@@ -52,6 +52,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | B4/B9 live diagnostics, 17 October (AEDT), committed `f086dd1` | Hello-world publishes for the first time (26 calls, 70,830 tokens); human adjudication is pending and the advisory grader fails to parse. Loan-renewal blocks on a forbidden source-review verdict (23 calls, 64,636 tokens), fixed offline in §10 (§1). |
 | §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All three grader runs fail `quote_not_found` (§1); line locators replace quotes in §13. |
 | §13 live diagnostics, 18 October (AEDT), committed `fb0f670` | Hello-world publishes (24 calls, 62,894 tokens); the grader's line locators all resolve, but it omits source evidence for one criterion. Loan-renewal blocks at its first source-review assignment, which omitted one member (11 calls, 21,989 tokens); fixed offline in §14 (§1). |
+| §14 live diagnostics, 18 October (AEDT), committed `96fb905` | Hello-world publishes (25 calls, 65,728 tokens); the grader again omits source evidence for one criterion. Loan-renewal no longer blocks: source review runs 21 assignments without a membership defect, then exhausts the token budget (31 calls, 100,441 tokens) (§1). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -391,6 +392,34 @@ retried.
     `UnsafeSupportRepair` and the workflow ended `blocked`.
   - This is the second advisory block of this class after 17 October's
     `invalid_decision`. §14 fixes it offline.
+
+### §14 live diagnostics — 18 October 2026
+
+Both runs used committed `96fb905` (`modified: false`). The user approved the pair,
+and each case ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Terminal | Grader |
+| --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-18T04-31-59Z-3be140e05e0a4438b7b8032623a9f278/report.json) | 18 Oct 15:31 | 25 / 65,728 | Published | `missing_source_evidence` (`clarity-testability`) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-18T04-33-30Z-1f61f06f029c491beac9698bcfd21026/report.json) | 18 Oct 15:33 | 31 / 100,441 | Failed: `WorkflowTokenBudgetExceeded` in post-generation source review | Not run |
+
+Admission escape is zero in both runs (18 and 63 admitted values).
+
+- **The membership block did not recur.** Loan-renewal's source review completed
+  21 assignment calls (calls 11–31) with no membership defect and no retry. No
+  response needed the §14 correction, so this pair shows the block is gone. It
+  does not show live that the correction recovers.
+- **Loan-renewal now fails on budget.** Records generation (call 10) produced
+  duplicate records, which native atomic deletions removed without a model call
+  (B7). Post-generation source review then spent 80,901 tokens on 21 assignments
+  before the 100,000-token budget stopped it (B2). This matches the
+  10:00 run's budget failure (§10–§12 diagnostics).
+- **Hello-world** corrected one malformed JSON response in source review (call 23,
+  a syntax error at byte 4) on its second attempt, then published.
+- **The grader failed for the second run in a row.** It cited no source lines for
+  `clarity-testability`, after `organization` at 12:10. The grader still has no
+  correction for an invalid judgment, so this open decision now blocks every
+  grade.
 
 ## 2. Why the engine is hard to implement
 
@@ -1670,9 +1699,12 @@ The approved follow-up and remaining proposals below authorize no live calls:
    **After the 18 October runs:** both cases publish (§1), and §13 replaces quote
    matching with line locators.
    - Done: the 12:10/12:11 v6 pair confirmed live locators. §14 fixes the
-     loan-renewal membership block.
-   - Next: run a separately approved pair on §14, and decide whether the grader gets
-     a bounded correction for an invalid judgment.
+     loan-renewal membership block, and the 15:31/15:33 pair on `96fb905` confirms
+     it no longer blocks (§1).
+   - Next: decide whether the grader gets a bounded correction for an invalid
+     judgment. Two consecutive grades failed on missing source evidence.
+   - Reduce post-generation source-review cost (B2). Loan-renewal's 21 assignments
+     exhaust the 100,000-token budget before publication.
    - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
      §10-style schema exclusion needs no ADR change.
    - Adjudicate its reports under `human-spec-adjudication/v2`.
@@ -1760,6 +1792,8 @@ bounded approval, and each E2E run needs its own explicit approval
   updated §6.
 - **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
   and §6.
+- **18 October 2026, after the §14 runs:** added §1's §14 live diagnostics and
+  updated §6.
 - **18 October 2026, membership at admission:** the user directed applying the best
   recommendation for the loan-renewal block. Added §1's §13 diagnostics and §14, and
   updated §6. After four contract reviews and the user's explicit confirmation, §14
