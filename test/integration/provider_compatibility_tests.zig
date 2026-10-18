@@ -106,7 +106,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
 
     const shipped = try contracts.parse(a, try files.read(io, a, .cwd(), case_path));
     var selected = if (binding == .frozen_protocol) try @import("frozen_protocol_fixture.zig").select(a, shipped) else shipped;
-    if (binding == .drifted_protocol) selected.config = @import("frozen_protocol_fixture.zig").drifted_config_source;
+    if (binding == .drifted_protocol) selected.config = @import("frozen_protocol_fixture.zig").mock_bad_input_config_source;
     const case_bytes = try std.json.Stringify.valueAlloc(a, selected, .{});
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);

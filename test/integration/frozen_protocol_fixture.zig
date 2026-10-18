@@ -5,9 +5,10 @@ const contracts = @import("../harness/e2e/contracts.zig");
 
 pub const config_source = "test/integration/fixtures/baseline/protocol.sddtoolkit.json";
 pub const template_case = "test/integration/fixtures/baseline/protocol.workflow.case.json";
-/// The protocol configuration with one still-bound control changed: the
-/// generation slot's reasoning effort. It must reject before any send.
-pub const drifted_config_source = "test/integration/fixtures/baseline/drifted.sddtoolkit.json";
+/// MOCK bad input, never runtime configuration: the protocol configuration with
+/// one still-bound control changed (the generation slot's reasoning effort). Tests
+/// use it to prove the frozen binding rejects drift before any billed send.
+pub const mock_bad_input_config_source = "test/integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json";
 
 pub fn select(a: std.mem.Allocator, source: contracts.Case) !contracts.Case {
     const bytes = try @import("../harness/files.zig").read(std.testing.io, a, .cwd(), config_source);

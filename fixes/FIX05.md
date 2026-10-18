@@ -50,6 +50,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
 | B5/B8/R8 live diagnostics, 17 October (AEDT), committed `8ed40ba` | Both reach post-generation review. Hello-world exhausts the budget in principle review (30 calls, 103,873 tokens); loan-renewal fails on a runaway review response at the provider output limit (13 calls, 45,322 tokens). Neither publishes (§1). |
 | B4/B9 live diagnostics, 17 October (AEDT), committed `f086dd1` | Hello-world publishes for the first time (26 calls, 70,830 tokens); human adjudication is pending and the advisory grader fails to parse. Loan-renewal blocks on a forbidden source-review verdict (23 calls, 64,636 tokens), fixed offline in §10 (§1). |
+| §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All four graders fail `quote_not_found` (§1). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -300,6 +301,69 @@ What blocks or misleads now:
   renew".
 - **Truncated-key prefix.** `{"find{` cost one protocol retry in each run (B6),
   later normalized (§12).
+
+### §10–§12 live diagnostics — 18 October 2026
+
+All four runs used an uncommitted build on `85556b2` (`modified: true`). It included
+§10–§12 and another party's unfinished reference-extraction edits. Each run was
+separately approved and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Retries | Terminal | Grader |
+| --- | --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T22-58-49Z-4e3589f14a064581bd107bf4a73d00e4/report.json) | 18 Oct 09:58 | 24 / 64,489 | 0 | Published | `quote_not_found` |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T23-00-08Z-5210055c5d2617259529446984f05612/report.json) | 18 Oct 10:00 | 31 / 111,880 | 5 | `WorkflowTokenBudgetExceeded` in principle review | Not run |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T23-43-23Z-050dc69173887cb5f0b9d63922650155/report.json) | 18 Oct 10:43 | 27 / 72,434 | 0 | Published | `quote_not_found` |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T23-44-18Z-9f793695f5dc438e28b7d9f4b8a5f8d9/report.json) | 18 Oct 10:44 | 23 / 93,621 | 0 | **Published** (first loan-renewal publication) | `quote_not_found` |
+
+Admission escape is zero in all four runs (19, 48, 20 and 55 admitted values).
+
+What improved:
+
+- **§10:** loan-renewal finished source review in both runs. No forbidden verdict was
+  offered, and nothing blocked.
+- **§11, grader:** the grader parsed every judge response.
+- **§11, output allowance:** no stop occurred while the allowance was absent and the
+  largest legitimate output was 2,772 tokens.
+- **§12:** at 10:00, the truncated `{"find{` prefix appeared six times and cost five
+  retries and 18,802 tokens. At 10:44 the engine normalized the one occurrence and
+  logged a `REMOVED_PARTIAL_FIELD_PREFIX` warning, with no retry.
+- **Principle review completed** in every run that reached it.
+
+What blocks or misleads now:
+
+- **The grader cannot match its quotes.**
+  - None of the eight specification quotes at 10:44 appear in the captured bytes,
+    even after removing Markdown backslash escapes.
+  - The judge also drops inline code, bold labels and emphasis markers, and changes
+    case.
+  - Decision needed: what the judge is shown and how quotes are matched.
+- **Bedrock caps output when no allowance is sent.**
+  - At 10:44, source-review call 22 stopped at exactly 4,096 output tokens
+    (`OUTPUT_LIMIT`). The runner logged it as `model.provider_stopped`.
+  - When no `maxTokens` is sent, Bedrock's default for this model is therefore 4,096,
+    not the 16,384 that requests used to reach.
+  - Here the cap only cut a whitespace runaway (about 96% whitespace after a broken
+    JSON close), holding it to 6,758 tokens. That assignment's advice closed
+    incomplete and publication continued.
+  - Decision deferred: keep the default unless a stop cuts legitimate output.
+- **Loan-renewal duplicates records (B7).**
+  - Extraction produced one claim.
+  - The single record call generated 74 records, and 32 published, with heavy
+    paraphrase duplication: AC-003 repeats AC-001, there are five overlapping
+    user-visible outcomes, six overlapping edge cases, and FR-003 to FR-005 restate
+    FR-001.
+  - Every record traces to one claim, so native normalization cannot tell distinct
+    duties from paraphrases.
+  - AS-001 adds an implementation assumption (a renewal flag), and the title is a
+    paragraph.
+- **The budget margin is thin.** Loan-renewal finished at 93,621 of 100,000 tokens,
+  with review at 78% of usage.
+
+Content gains: loan-renewal preserved all five duties, including "must allow", for
+the first time with a refusal acceptance criterion (AC-002) and both exact
+messages. Hello-world's title and earlier unsupported assumption are fixed. It still
+merges the three requirements and invents a "Greeting" entity. Human adjudication is
+pending for every published report.
 
 ## 2. Why the engine is hard to implement
 
@@ -1576,6 +1640,12 @@ The approved follow-up and remaining proposals below authorize no live calls:
    parsing, the output-allowance removal and provider-stop logging are implemented
    offline (§11). The next billed pair still needs separate approval for each run.
    B7 is then the main requirement-preservation risk.
+   **After the 18 October runs:** both cases publish (§1).
+   - Next: decide how the grader is shown the specification and how it matches
+     quotes.
+   - Adjudicate the published reports.
+   - Address B7, which also drives loan-renewal's record duplication.
+   - Repeat both cases before claiming improvement (§7).
 5. Consider A4's broader evidence gaps and W5's identical sibling steps separately
    from the debugging-only A4 scope above.
 6. The experiment's Phase 2 budget/scope decision remains separate from B4's
@@ -1652,6 +1722,8 @@ bounded approval, and each E2E run needs its own explicit approval
   B4's post-R8 evidence, generalized B9 to all runaway output, and updated §6.
 - **18 October 2026, after the post-B4/B9 runs:** added §1's post-B4/B9 diagnostics
   and §10's forbidden-verdict fix, and updated §6.
+- **18 October 2026, after the §10–§12 runs:** added §1's §10–§12 live diagnostics and
+  updated §6.
 - **18 October 2026, prefix decision:** approved normalizing the truncated Bedrock
   GPT-OSS member-name prefix, logged as an engine fix. Added §12 and updated B6.
 - **18 October 2026, user decisions:** approved routing the grader through the
@@ -1898,10 +1970,10 @@ opening-artifact exception, before judgment validation.
 - The shared E2E configuration and the protocol fixture drop their allowances, and
   the semantic-simplicity protocol drops `max_output_tokens`. The shipped cases
   therefore now satisfy the frozen binding.
-- Drift coverage now uses a new fixture,
-  `test/integration/fixtures/baseline/drifted.sddtoolkit.json`, whose generation slot
-  changes a still-bound control: `reasoningEffort: "medium"`. The fixture must be
-  committed with this change.
+- Drift coverage now uses a new MOCK bad-input fixture,
+  `test/integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json`, whose generation
+  slot changes a still-bound control: `reasoningEffort: "medium"`. It is test input
+  only, never runtime configuration, and must be committed with this change.
 - The historical v5 attribution reader keeps a frozen controls shape for reading
   retained evidence. Nothing encodes the retired field. Fidelity checks compare the
   current encoding with the retained bytes minus their single `maxTokens` member, a

@@ -65,7 +65,7 @@ test "test.integration.baseline drifted slot controls cannot silently change the
     };
     const template_bytes = try files.read(std.testing.io, a, .cwd(), current_paths.template_case);
     var template = try @import("../harness/e2e/contracts.zig").parse(a, template_bytes);
-    template.config = @import("frozen_protocol_fixture.zig").drifted_config_source;
+    template.config = @import("frozen_protocol_fixture.zig").mock_bad_input_config_source;
     const captured = try fixture.capture(std.testing.io, a, .cwd(), template);
     const path_policy = try @import("../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(std.testing.io, .cwd()).resolve(a);
     try std.testing.expectError(error.FrozenBindingRejected, frozen_inputs.create(a, build, try files.read(std.testing.io, a, .cwd(), paths.protocol), try files.read(std.testing.io, a, .cwd(), paths.cases), template_bytes, try files.read(std.testing.io, a, .cwd(), paths.rubric), captured, current_paths, path_policy));

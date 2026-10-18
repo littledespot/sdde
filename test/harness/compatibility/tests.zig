@@ -143,7 +143,7 @@ test "compatibility preflight rejects unpermitted slots and incomplete capture s
     try preflight(a, config);
     // The shipped cases now select the frozen protocol's exact slot controls.
     try preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json"));
-    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/drifted.sddtoolkit.json")));
+    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json")));
     const disallowed = try std.mem.replaceOwned(u8, a, config, "openai.gpt-oss-20b-1:0", "unpermitted-model");
     try std.testing.expectError(error.DisallowedTestModel, preflight(a, disallowed));
     const metadata_only = try std.mem.replaceOwned(u8, a, config, "\"level\": \"debug\"", "\"level\": \"info\"");
