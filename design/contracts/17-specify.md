@@ -140,8 +140,11 @@ Typed content covers these concerns; each concern does not require a separate ca
   requirement set together, carrying the selected principle corpus once. Native
   ownership defines each complete member set; a model cannot choose a subset.
   Each closed assignment response contains exactly one finding per assigned
-  requirement. Missing, duplicate, foreign or partial membership rejects before
-  any member is appended. Canonical ledger order, per-member evidence, origins,
+  requirement. Missing, duplicate, foreign or partial membership rejects at
+  response admission, before any member is appended. The existing bounded protocol
+  correction resubmits the complete assignment. Assignments exist only under
+  advisory policy, so on exhaustion that assignment's advice closes as incomplete
+  (ADR 0023, 18 October 2026). Canonical ledger order, per-member evidence, origins,
   current candidate revision and full assignment context remain bound. Initial
   admission cannot fall back to a singleton response for a required batch.
   Narrow finding correction preserves the verdict and every sibling.

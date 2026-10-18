@@ -51,6 +51,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | B5/B8/R8 live diagnostics, 17 October (AEDT), committed `8ed40ba` | Both reach post-generation review. Hello-world exhausts the budget in principle review (30 calls, 103,873 tokens); loan-renewal fails on a runaway review response at the provider output limit (13 calls, 45,322 tokens). Neither publishes (§1). |
 | B4/B9 live diagnostics, 17 October (AEDT), committed `f086dd1` | Hello-world publishes for the first time (26 calls, 70,830 tokens); human adjudication is pending and the advisory grader fails to parse. Loan-renewal blocks on a forbidden source-review verdict (23 calls, 64,636 tokens), fixed offline in §10 (§1). |
 | §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All three grader runs fail `quote_not_found` (§1); line locators replace quotes in §13. |
+| §13 live diagnostics, 18 October (AEDT), committed `fb0f670` | Hello-world publishes (24 calls, 62,894 tokens); the grader's line locators all resolve, but it omits source evidence for one criterion. Loan-renewal blocks at its first source-review assignment, which omitted one member (11 calls, 21,989 tokens); fixed offline in §14 (§1). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -365,6 +366,32 @@ messages. Hello-world's title and earlier unsupported assumption are fixed. It s
 merges the three requirements and invents a "Greeting" entity. These reports are
 `spec-e2e-report/v5`, which the current adjudicator no longer reads (§13).
 
+### §13 live diagnostics — 18 October 2026
+
+Both runs used committed `fb0f670` (`modified: false`). Each was separately approved
+and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Terminal | Grader |
+| --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-18T01-10-09Z-2c88ca9292b1d2df35136bd8c47b830d/report.json) | 18 Oct 12:10 | 24 / 62,894 | Published | `missing_source_evidence` (`organization`) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-18T01-11-19Z-2c6a7e7aa61b7090db33fb3bfabc2b6b/report.json) | 18 Oct 12:11 | 11 / 21,989 | Blocked: `UnsafeSupportRepair` | Not run |
+
+Admission escape is zero in both runs (18 and 19 admitted values). Neither run
+retried.
+
+- **Line locators work.** All 13 of the judge's citations resolve to in-range lines
+  that have text. The judgment failed only because `organization` cited no source
+  lines, while the contract requires source evidence. The grader still has no
+  correction for an invalid judgment, which is an open decision.
+- **Loan-renewal blocked on a membership defect.**
+  - Its first source-review assignment (display name, description, primary goal)
+    returned findings for two members and none for `primary_goal`.
+  - Native collection rejected the whole assignment and kept no candidate.
+    Support repair cannot authorize without a candidate, so authorization returned
+    `UnsafeSupportRepair` and the workflow ended `blocked`.
+  - This is the second advisory block of this class after 17 October's
+    `invalid_decision`. §14 fixes it offline.
+
 ## 2. Why the engine is hard to implement
 
 ### A1. Engine lifecycle mechanics live in workflow YAML
@@ -433,8 +460,8 @@ AGENTS.md lists unbounded `anyopaque` at boundaries as a prohibited shortcut.
 
 **Proposal:** where an orchestrator's sequence is fixed, as in bootstrap and feature
 logging, call typed steps with explicit inputs and outputs. Keep spy tests through a
-typed interface. This changes the §14 orchestrator pattern, so confirm its scope
-first.
+typed interface. This changes design §14's orchestrator pattern, so confirm its
+scope first.
 
 ### A4. Rejections do not say why
 
@@ -738,7 +765,7 @@ test-helper diagnostic-path lifetime defect was fixed before the final checks.
 The shared recognizer, native request scope, response composition, value and
 membership repair bounds, progress comparison and stored readback are integrated.
 Completed/pending state now use `specification-state/v15`; current diagnostic
-requests use `model-request-debug/v6`. Superseded contracts reject; frozen older
+requests use `model-request-debug/v6` (since advanced to v8, §11 and §14). Superseded contracts reject; frozen older
 captures remain historical observations and cannot acquire current authority.
 
 **Approved live baselines — 17 October 2026 (AEDT):** both separately approved
@@ -1642,8 +1669,12 @@ The approved follow-up and remaining proposals below authorize no live calls:
    B7 is then the main requirement-preservation risk.
    **After the 18 October runs:** both cases publish (§1), and §13 replaces quote
    matching with line locators.
-   - Next: run a separately approved v6 pair, which also checks that the judge cites
-     valid locators live.
+   - Done: the 12:10/12:11 v6 pair confirmed live locators. §14 fixes the
+     loan-renewal membership block.
+   - Next: run a separately approved pair on §14, and decide whether the grader gets
+     a bounded correction for an invalid judgment.
+   - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
+     §10-style schema exclusion needs no ADR change.
    - Adjudicate its reports under `human-spec-adjudication/v2`.
    - Address B7, which also drives loan-renewal's record duplication.
    - Repeat both cases before claiming improvement (§7).
@@ -1729,6 +1760,12 @@ bounded approval, and each E2E run needs its own explicit approval
   updated §6.
 - **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
   and §6.
+- **18 October 2026, membership at admission:** the user directed applying the best
+  recommendation for the loan-renewal block. Added §1's §13 diagnostics and §14, and
+  updated §6. After four contract reviews and the user's explicit confirmation, §14
+  also covers parent-scoped guidance, the v8 request description and harness, the
+  restriction guards, principle and preservation-comparison membership, and route 4
+  as an open item.
 - **18 October 2026, user decisions:** approved routing the grader through the
   canonical envelope parser. Directed that there be no output token limits and that
   provider-applied limits be logged. Added §11 and updated §1, B9, §5, §6 and §9.
@@ -1969,7 +2006,7 @@ opening-artifact exception, before judgment validation.
 - `InferenceControls.isValid` had nothing left to check and is removed with its
   callers.
 - Request descriptions advance to `model-request-debug/v7`. No committed evidence
-  used v6.
+  used v6. §14 later advanced them to v8.
 - The shared E2E configuration and the protocol fixture drop their allowances, and
   the semantic-simplicity protocol drops `max_output_tokens`. The shipped cases
   therefore now satisfy the frozen binding.
@@ -2197,3 +2234,142 @@ October runs.
 
 No billed calls are included. The first v6 run is the live check that the judge
 cites valid locators.
+
+## 14. Assignment membership at response admission — 18 October 2026
+
+**Decision.** On 18 October the user directed: "perform detail analysis on the issue,
+and apply best recommendation, keeping with the code design principles". After the
+first contract review, the user explicitly confirmed the ADR 0023 policy change and
+chose to fix every review finding, including opting preservation comparisons into
+the same admission rule.
+
+**Analysis.** Four routes let a post-generation review-response defect stop a
+workflow:
+
+1. A whole-assignment membership defect (missing, repeated or foreign member).
+   Native collection rejects the assignment with no candidate, support repair cannot
+   authorize, and the run blocks. This was the 12:11 run.
+2. A finding-level defect that native repair cannot authorize. This was 17
+   October's `invalid_decision`, now excluded by §10's schema narrowing.
+3. Exhausted finding repair, which ends the run with `retry_limit`.
+4. A schema-valid positive verdict (`supported` or `not_applicable`) for a member
+   whose claim set canonicalization cannot resolve: an eligible-subset rule with
+   bound-claim evidence and no candidate provenance, whatever the eligible claim
+   count. `claimsFor` raises a decode error before `admit`, which owns the typed
+   `invalid_selection` rejection, sees the finding. The assignment is therefore
+   rejected as `invalid_json` with no candidate and blocks. The contract review
+   found this route; no run has observed it.
+
+Accepted authority listed membership only as a native failure (ADR 0023's
+assignment and principle-handoff paragraphs), with no non-terminal classification
+for an advisory response defect (design-router gap C1). It explicitly keeps routes
+2 and 3 terminal: §22.6 says "native finding-evidence validation and repair
+exhaustion remain terminal", and ADR 0023 agrees ("Existing native finding-evidence
+validation and bounded repair are preserved"). Route 4 is a finding-evidence
+failure under that same rule, so it stays terminal. Its
+`invalid_json` label is wrong, however. Making canonicalization total would not
+help on its own: `admit` would classify the finding as an evidence-selection
+defect, and selection repair cannot change a verdict, so it would spend repair
+calls before blocking. The schema profile cannot express uniqueness, which stays a
+native check.
+
+**Change.** Membership becomes part of response admission for whole-unit review
+assignments under advisory policy and preservation comparisons under required
+policy. It sits on the shared contract rather than in
+an advisory-only branch.
+- `model_result_schema` gains an `exact_members` integer choice for an integer
+  property of array items. It fixes the item count to the member count, which the
+  guidance schema states (Bedrock's structural projection keeps only
+  `minItems: 1`), and records the member set. A foreign ordinal already fails the
+  narrowed choice.
+- `model_payload_schema` rejects a repeated member natively as `duplicate_member`.
+  A missing member then always appears as a count error or a repeat. Guidance
+  locates the repeat at its item but scopes the expected contract to the parent
+  array.
+- Source and principle assignment packets mark their ordinal choice
+  `exact_members`. So does the preservation-comparison packet, whose native
+  admission already required exactly one assessment per comparison. Its binding
+  always assigns the extracted-claims comparison, so a loss packet with no
+  comparison is refused as an invariant violation. Grouped reconciliation
+  dispositions are also one-per-claim responses but keep their native cardinality
+  checks; they were not examined here.
+- Membership defects take the existing bounded protocol correction of the complete
+  response, with the same allowance and no new counter. Assignments exist only
+  under advisory policy, so their exhaustion closes that assignment's advice as
+  incomplete (`protocol_exhausted`). Preservation comparisons run under required
+  policy, so their exhaustion stays terminal.
+- Native collection still rejects membership defects atomically, as the authority
+  behind admission. Routes 2, 3 and 4 are unchanged.
+- The restriction refuses a key that is not a required, non-nullable scalar
+  integer in every item variant. It also refuses a path through an optional
+  property or a second array, a match that misses any alternative or reaches only
+  a projection parent or another definition, and any later choice, path or
+  tagged, that narrows the key below the member set. Clones keep the restriction.
+- Request descriptions advance to `model-request-debug/v8` and record each applied
+  member set. Debugger inspection, replay and the exact-value harness reapply it
+  through the same `restrict` owner, so none of them reports a response that
+  admission rejected as valid. A record that does not fit its captured schema, or
+  that a pre-v8 harness capture claims to carry, is refused. No v7 reader remains.
+- ADR 0023 records the classification, the confirmation and the supersession in
+  its principle handoff. ADR 0019 records v8.
+  §12.2, §12.7, §17.3, §22.1, §22.4, §22.6, §24 and F0100 match.
+
+**Open decision (route 4).** In post-generation review, whether a positive verdict
+can be resolved is uniform within each assignment:
+- `projectRecords` requires a brief whenever generated content exists, so brief
+  fields always resolve;
+- the primary user story always resolves through its generated value;
+- every other assignment unit shares one record, one collection slot, the entities
+  basis or exact-set reference rules.
+
+Excluding positive verdicts from that assignment's schema when they cannot be
+resolved is therefore §10's move again: it needs no ADR change and cannot remove a
+valid verdict from a sibling member. It is not implemented here. It needs a fixture
+with a claimless record collection, and it is a separate change from membership.
+The `invalid_json` label on this route also remains wrong until then.
+
+**Regression evidence:**
+
+- **Schema owner:**
+  - complete member sets in any order are admitted;
+  - partial, empty, over-count and foreign batches reject;
+  - a repeated member rejects as `duplicate_member` even though the provider bytes
+    alone admit it;
+  - each restriction guard above refuses its case, while the same path under
+    another carried definition is still admitted;
+  - the recorded set survives cloning and rebuilds admission from provider bytes,
+    while ill-fitting records are refused.
+- **Payload correction flow:** a repeated member is reported at `/value/2` with the
+  expected path pinned to `/value` (parent scope). Its schema pointer and outline
+  are checked against the selected schema's projection.
+- **Debugger, replay and harness:** a captured assignment request round-trips its
+  member set through the feature log. Inspection and the exact-value harness reject
+  the repeat, and accept the same bytes without the record. Ill-fitting records
+  and the v7 label are refused.
+- **Packets:** the principle-assignment and preservation-comparison schemas each
+  admit the complete response and reject partial, repeated and foreign ones. The
+  record calibration probe accepts only the complete batch.
+- **Offline integration:**
+  - Source and principle assignments with a partial or repeated member recover
+    after one correction, or exhaust into incomplete advice for that projection
+    only, and the run still publishes.
+  - Source-loss runs that omit or repeat one comparison recover after one
+    correction. A persistent omission ends the run with `retry_limit`, because
+    this request runs under required policy.
+  - Every assignment and comparison request asserts its bound count and exact
+    member set. Every membership correction asserts the reason, located path,
+    expected path, scope and schema pointer.
+  - Without the packet change, the first source scenario blocks at
+    `collect-specification-support`, as the live run did.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-model-result-schema test-model-payload-schema test-specification-generation test-model-logging test-exact-value-replay -j2 --summary all` | 23/23 steps; 875/875 tests. |
+| `zig build test-architecture --summary all` | 3/3 steps; 156/156 tests. |
+| `zig build test-integration -j2 --summary all` | 8/8 steps; 127/127 tests. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,895/1,895 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included.

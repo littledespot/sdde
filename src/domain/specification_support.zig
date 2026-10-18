@@ -289,7 +289,9 @@ pub fn Contract(comptime purpose: Purpose) type {
                 break :excluded try packets.withExcludedVariants(allocator, reviewed, excluded);
             } else try packets.retain(reviewed);
             defer packets.release(base);
-            const ordinal_choice: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals };
+            // Response admission requires exactly one finding per member, so a
+            // missing, repeated or foreign member gets the bounded protocol correction.
+            const ordinal_choice: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals, .collection = .exact_members };
             const selected_packet = if (purpose == .source) try packets.withIntegerChoices(allocator, base, &.{
                 ordinal_choice,
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
@@ -452,10 +454,13 @@ pub fn Contract(comptime purpose: Purpose) type {
             const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, inputs, assigned.finding.subject)});
             const packet = try reviewPacket(allocator, inputs, context.inputs.corpus.state_id, body, slot, .{ .bytes = "preservation_comparisons" });
             defer packets.release(packet);
-            if (assigned.comparisons.len == 0) return packets.withIntegerChoices(allocator, packet, &.{});
+            // The binding always assigns the extracted-claims comparison; none is not a state.
+            if (assigned.comparisons.len == 0) return error.InvalidRequiredAuthority;
             const ids = try scratch.alloc(i64, assigned.comparisons.len);
             for (assigned.comparisons, ids) |view, *id| id.* = view.id.ordinal;
-            return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = .{ .bytes = "preservation_comparisons" }, .allowed = ids }});
+            // Native admission requires exactly one assessment per comparison, so
+            // response admission binds the same member set.
+            return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = .{ .bytes = "preservation_comparisons" }, .allowed = ids, .collection = .exact_members }});
         }
 
         pub fn admitComparisons(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate, retained: @import("source_omission.zig").comparisons.Assignment, bytes: []const u8) ComparisonError!@import("source_omission.zig").comparisons.Attribution {

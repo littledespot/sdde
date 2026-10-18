@@ -135,7 +135,9 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Unknown locations or definitions reject; a carried sibling
+  and local validation. The one exception is `exact_members` uniqueness (below):
+  provider schema syntax cannot express it, so local admission, request
+  descriptions and replay apply it natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
   existing behavior. No field-name search crosses unrelated ID namespaces.
@@ -145,6 +147,21 @@ Each generation request contains only what the current unit needs:
   cardinality unless the native owner declares a unique-subset selector: its maximum
   is the smaller of the canonical maximum and eligible-ID count. This fact applies
   only to integer collections, never scalar choices, and introduces no token limit.
+  An `exact_members` selector instead names an integer property of array items:
+  - the array must contain exactly one item for each allowed value;
+  - its item count is fixed to the member count, which the guidance schema states
+    (a provider structural projection may keep only its own array floor);
+  - a repeated member rejects natively as `duplicate_member`;
+  - it applies only to a path ending in array items and one property, with a
+    nonempty member set that fits the canonical item bounds;
+  - the key must be a required, non-nullable scalar integer in every item variant;
+  - it must constrain the selected schema itself, through required properties, one
+    array step and every alternative along its path, never through a projection
+    parent or another definition;
+  - after every choice applies, the key must still enumerate exactly the member
+    set, so no later choice, path or tagged, may narrow it.
+  Duplicate-target detection for every integer choice treats a choice naming the
+  selected definition as the same target as one naming none.
   Sets above ADR 0006's 1,024-choice bound reject before invocation.
   Source review and its selection repairs use actual source IDs; reference
   authoring and repairs use their current native claim, signal or group scope.
@@ -657,6 +674,9 @@ The existing codec decodes source candidates with `kind`; native candidates reta
 optional question data for diagnostics and the same decision-dependent checks.
 Persisted evidence retains its existing finding/resolution representation.
 Missing/forbidden questions reject at schema admission, before native collection.
+So do missing, repeated or foreign assignment members: the packet's `exact_members`
+ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
 Existing protocol correction resubmits the whole assigned review under its original
 assignment allowance, including otherwise correct siblings; insertion still corrects
 only its selected finding. No partial-response merge, new counter or verdict
@@ -1083,6 +1103,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v7` retains native scope for diagnostic replay; request logs
+`model-request-debug/v8` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

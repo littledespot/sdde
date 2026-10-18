@@ -5,8 +5,10 @@ const data = @import("../domain/pipeline_data.zig");
 const workflow = @import("../domain/workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 pub const Fault = struct {
-    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed },
+    /// `principle_review` selects only post-generation principle assignments;
+    /// `loss_review` selects only source-loss preservation comparisons.
+    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review, principle_review, loss_review },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -104,7 +106,7 @@ pub const Driver = struct {
     rejected_operation: ?[]const u8 = null,
     protocol_advice: std.EnumArray(AdviceProjection, ?ProtocolAdvice) = .initFill(null),
     pub fn expectsProtocolAdvice(self: *const Driver) bool {
-        if (self.fault) |fault| if (fault.stage == .support or fault.stage == .candidate_review) {
+        if (self.fault) |fault| if (fault.stage == .support or fault.stage == .candidate_review or fault.stage == .principle_review) {
             if (fault.repetition == .persistent or fault.shape == .review_dropped or fault.shape == .review_changed) return true;
         };
         return self.support_fault == .question_exhaust or self.support_fault == .question_evidence_exhaust or
@@ -306,9 +308,15 @@ pub const Driver = struct {
                     const expected = @import("../domain/model_result_schema.zig").restrict(arena.allocator(), canonical.select(.{ .bytes = "preservation_comparisons" }).?, packet.excludedVariants(), packet.integerChoices()) catch unreachable;
                     defer expected.release();
                     std.testing.expectEqualStrings(expected.selected().modelBytes(), current_request.prepared().?.response_schema.modelBytes()) catch unreachable;
+                    // Response admission binds exactly one assessment per comparison.
+                    const comparisons = input.value.object.get("comparisons").?.array.items;
+                    const bound = current_request.prepared().?.response_schema.memberChoices();
+                    std.testing.expectEqual(@as(usize, 1), bound.len) catch unreachable;
+                    std.testing.expectEqual(comparisons.len, bound[0].allowed.len) catch unreachable;
+                    for (comparisons, bound[0].allowed) |comparison, allowed| std.testing.expectEqual(comparison.object.get("id").?.integer, allowed) catch unreachable;
                 } else if (policy) {
                     self.principle_calls += 1;
-                    assertAssignmentReviewRequest(.principles, arena.allocator(), &view, input.value, (std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable).value) catch unreachable;
+                    assertAssignmentReviewRequest(.principles, arena.allocator(), &view, input.value, current_request.prepared().?.response_schema) catch unreachable;
                     std.testing.expect(input.value.object.get("principles").?.array.items.len != 0) catch unreachable;
                 } else {
                     var permits_applicability = false;
@@ -341,7 +349,7 @@ pub const Driver = struct {
                     }
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
                     if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "assignment_findings")) {
-                        assertAssignmentReviewRequest(.source, arena.allocator(), &view, input.value, schema.value) catch unreachable;
+                        assertAssignmentReviewRequest(.source, arena.allocator(), &view, input.value, current_request.prepared().?.response_schema) catch unreachable;
                         if (input.value.object.get("record")) |record| if (std.mem.eql(u8, record.object.get("id").?.object.get("kind").?.string, "acceptance_criterion")) {
                             self.record_batch_calls += 1;
                             if (attempt == 1) self.record_batch_requests += 1;
@@ -387,7 +395,9 @@ pub const Driver = struct {
                     .semantic_review => .support,
                     else => unreachable,
                 };
-                const matches_stage = stage == fault.stage or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null);
+                const definition = if (stage == .support) (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes else "";
+                const matches_stage = stage == fault.stage or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null) or
+                    (fault.stage == .principle_review and std.mem.eql(u8, definition, "principle_assignment_findings")) or (fault.stage == .loss_review and std.mem.eql(u8, definition, "preservation_comparisons"));
                 if (matches_stage and fault.shape == .forbidden_provenance) {
                     const references = view.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)].?;
                     if (self.brief_references) |retained| std.testing.expect(retained == references) catch unreachable else self.brief_references = references;
@@ -418,6 +428,28 @@ pub const Driver = struct {
                     const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                     std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
                 }
+                if (matches_stage and (fault.shape == .review_partial_assignment or fault.shape == .review_repeated_member) and attempt > 1) {
+                    // Whole-assignment membership is a response-admission defect: the
+                    // bounded protocol correction names it and retains the rejected bytes.
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                    const response = (std.json.parseFromSlice(std.json.Value, arena.allocator(), body, .{}) catch unreachable).value;
+                    const collection = memberCollection(response);
+                    const members = response.object.get(collection.array).?.array.items.len;
+                    const repeated = fault.shape == .review_repeated_member and members > 1;
+                    std.testing.expectEqualStrings(if (repeated) "duplicate_member" else "array_length", diagnostic.get("reason").?.string) catch unreachable;
+                    // The repeated item is located, but the violated contract is the
+                    // enclosing member array, so guidance names that parent scope.
+                    const array_path = std.fmt.allocPrint(arena.allocator(), "/{s}", .{collection.array}) catch unreachable;
+                    const located = if (repeated) std.fmt.allocPrint(arena.allocator(), "{s}/{d}", .{ array_path, members - 1 }) catch unreachable else array_path;
+                    std.testing.expectEqualStrings(located, diagnostic.get("path").?.string) catch unreachable;
+                    const expected = correction.value.object.get("expected").?.object;
+                    std.testing.expectEqualStrings(array_path, expected.get("path").?.string) catch unreachable;
+                    std.testing.expectEqualStrings(if (repeated) "parent" else "value", expected.get("scope").?.string) catch unreachable;
+                    std.testing.expectEqualStrings(std.fmt.allocPrint(arena.allocator(), "/properties/{s}", .{collection.array}) catch unreachable, expected.get("schema_pointer").?.string) catch unreachable;
+                }
                 if (matches_stage and fault.reviewShape() and attempt > 1) {
                     const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                     std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
@@ -441,7 +473,7 @@ pub const Driver = struct {
                     .persistent => true,
                 };
                 if (matches_stage and reject) {
-                    if (fault.stage == .candidate_review) {
+                    if (fault.stage == .candidate_review or fault.stage == .principle_review) {
                         std.testing.expect(authorityInputs(&view).specification != null) catch unreachable;
                         std.testing.expect(self.runner.repair_retry.currentPermit() == null) catch unreachable;
                         std.testing.expectEqual(@as(u32, @intCast(if (self.fault_request == request.id()) self.fault_calls + 1 else 1)), attempt) catch unreachable;
@@ -830,7 +862,8 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     try std.testing.expect(schema_found and instruction_found);
 }
 
-fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specification_support.zig").Purpose, allocator: std.mem.Allocator, view: *const data.View, input: std.json.Value, schema: std.json.Value) !void {
+fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specification_support.zig").Purpose, allocator: std.mem.Allocator, view: *const data.View, input: std.json.Value, response_schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
+    const schema = (try std.json.parseFromSlice(std.json.Value, allocator, response_schema.modelBytes(), .{})).value;
     const support = @import("../domain/specification_support.zig").Contract(purpose);
     const workflow_review = @import("../application/specification_support_workflow.zig");
     const progress = try workflow_review.progress(view);
@@ -872,7 +905,17 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     }
     const properties = schema.object.get("properties").?.object;
     try std.testing.expectEqual(@as(usize, 1), properties.count());
-    const finding_schema = properties.get("findings").?.object.get("items").?.object;
+    // Response admission binds the complete member set: the schema shows the
+    // count and native admission keeps the exact ordinals.
+    const assignment = properties.get("findings").?.object;
+    try std.testing.expectEqual(@as(i64, @intCast(assigned.len)), assignment.get("minItems").?.integer);
+    try std.testing.expectEqual(@as(i64, @intCast(assigned.len)), assignment.get("maxItems").?.integer);
+    try std.testing.expectEqual(@as(usize, 1), response_schema.memberChoices().len);
+    const members = response_schema.memberChoices()[0];
+    try std.testing.expectEqualStrings("requirement_ordinal", members.path[members.path.len - 1].property);
+    try std.testing.expectEqual(requirements.len, members.allowed.len);
+    for (requirements, members.allowed) |requirement, allowed| try std.testing.expectEqual(requirement.object.get("ordinal").?.integer, allowed);
+    const finding_schema = assignment.get("items").?.object;
     try std.testing.expect(finding_schema.get("properties").?.object.contains("requirement_ordinal"));
     if (purpose == .source) {
         // Native applicability narrows the shared value schema for the whole
@@ -937,6 +980,12 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
 }
 
+/// The member array and key of a scripted member-set response: review
+/// assignments name requirements, preservation comparisons name comparisons.
+fn memberCollection(response: std.json.Value) struct { array: []const u8, key: []const u8 } {
+    return if (response.object.contains("assessments")) .{ .array = "assessments", .key = "comparison_id" } else .{ .array = "findings", .key = "requirement_ordinal" };
+}
+
 fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fault, "shape"), attempt: u32) ![]const u8 {
     if (shape == .empty) return "{}";
     if (shape == .inconclusive) return "{\"kind\":\"inconclusive\",\"detail\":\"The interpretation could not be established; no missing user decision was identified.\"}";
@@ -955,6 +1004,17 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
             try selected.put(allocator, "claim_ids", .{ .array = .init(allocator) });
             try value.put(allocator, "provenance", .{ .object = selected });
         }
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .review_partial_assignment or shape == .review_repeated_member) {
+        const collection = memberCollection(parsed.value);
+        const items = &(parsed.value.object.getPtr(collection.array) orelse return error.InvalidFixture).array;
+        if (items.items.len == 0) return error.InvalidFixture;
+        if (shape == .review_partial_assignment) {
+            _ = items.pop();
+        } else if (items.items.len > 1) {
+            items.items[items.items.len - 1].object.getPtr(collection.key).?.* = items.items[0].object.get(collection.key).?;
+        } else try items.append(items.items[0]);
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if ((Fault{ .stage = .support, .shape = shape }).reviewShape()) {

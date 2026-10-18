@@ -118,8 +118,8 @@ test "captured descriptions round-trip controls and reject a retired output allo
     const retired = try std.mem.replaceOwned(u8, a, bytes, "\"temperature\":\"fixed\"", "\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}");
     try std.testing.expect(!std.mem.eql(u8, bytes, retired));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, retired));
-    // The superseded v6 label cannot be read as current.
-    const superseded = try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v7", "model-request-debug/v6");
+    // The superseded v7 label, which recorded no membership, cannot be read as current.
+    const superseded = try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v8", "model-request-debug/v7");
     try std.testing.expect(!std.mem.eql(u8, bytes, superseded));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, superseded));
 }
@@ -367,7 +367,7 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
-    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v7", "model-request-debug/v3");
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v8", "model-request-debug/v3");
     try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
     var unsupported: archive.Archive = .{ .allocator = a };
     try unsupported.ingest(obsolete);
@@ -875,7 +875,7 @@ test "source snapshots retain static JSON guidance with its prompt resource kind
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {
-    for (0..7) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for (0..8) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -927,6 +927,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expect(parent.parent == null);
         const selected = parent.description.?;
         if (shape == 2 or shape == 6) try std.testing.expect(selected.field_policies.len != 0);
+        if (shape == 7) try expectReplayedMembers(a, &fixture, selected);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -941,7 +942,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v7", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v8", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }
@@ -990,6 +991,11 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
         );
         return .{ .schema = canonical.select(.{ .bytes = "repair" }).?, .response = "{\"enabled\":true}" };
     }
+    if (shape == 7) {
+        const canonical = try compiler.compile(a, member_schema);
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
+        return .{ .schema = restriction.selected(), .response = "{\"findings\":[{\"ordinal\":4,\"note\":\"b\"},{\"ordinal\":2,\"note\":\"a\"}]}", .restriction = restriction };
+    }
     if (shape == 5) {
         const canonical = try compiler.compile(a,
             \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"keep"},"value":{"type":"string","maxLength":16}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"drop"}},"required":["kind"],"additionalProperties":false}]}
@@ -1013,6 +1019,32 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     if (shape == 3) return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), "{\"token_classifications\":[]}");
     const claim_prior = try std.json.parseFromSlice(std.json.Value, a, "{\"kind\":\"claims\",\"claims\":[]}", .{});
     return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = claim_prior.value }}), "{\"token_classifications\":[]}");
+}
+
+const member_schema = "{\"type\":\"object\",\"properties\":{\"findings\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8},\"note\":{\"type\":\"string\",\"maxLength\":16}},\"required\":[\"ordinal\",\"note\"],\"additionalProperties\":false}}},\"required\":[\"findings\"],\"additionalProperties\":false}";
+const member_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "findings" }, .{ .items = {} }, .{ .property = "ordinal" } };
+
+/// A captured assignment request replays admission's native membership, which
+/// the recorded provider schema bytes cannot express.
+fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
+    try std.testing.expectEqual(@as(usize, 1), selected.members.len);
+    try std.testing.expectEqualSlices(i64, &.{ 2, 4 }, selected.members[0].allowed);
+    const repeated = try debugResponse(a, "{\"findings\":[{\"ordinal\":2,\"note\":\"a\"},{\"ordinal\":2,\"note\":\"b\"}]}");
+    const checked = try fixture.provider.provider().inspect(a, selected, repeated);
+    try std.testing.expectEqual(.invalid, checked.schema);
+    try std.testing.expectEqualStrings("duplicate_member", checked.reason.?);
+    try std.testing.expectEqualStrings("/findings/1", checked.path.?);
+    // Without the record the same bytes pass, so the record is what replays admission.
+    var unrestricted = selected;
+    unrestricted.members = &.{};
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, repeated)).schema);
+    // A record that does not fit the captured schema cannot be read or replayed.
+    var foreign = selected;
+    foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
+    try std.testing.expectEqualStrings("Captured schema and native membership disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
+    try std.testing.expectEqualDeep(selected.members, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).members);
 }
 
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {

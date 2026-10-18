@@ -25,6 +25,8 @@ pub const Adapter = struct {
         const request_profile = try self.authorization.authorize_fn(self.authorization.context, description);
         if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
+        const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, schema, description.members) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
+        members.release();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
         if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
@@ -146,11 +148,19 @@ pub const Adapter = struct {
         result.normalization = document.normalization;
         result.parsed = strict.decode(std.json.Value, a, document.content, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         result.json = .valid;
-        const schema = self.compiler.compileSelected(a, description.schema) catch |err| {
+        const compiled = self.compiler.compileSelected(a, description.schema) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             result.reason = "Captured schema is invalid";
             return result;
         };
+        // Admission validates the restricted schema, including native membership.
+        const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, compiled, description.members) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
+            result.reason = "Captured schema and native membership disagree";
+            return result;
+        };
+        defer members.release();
+        const schema = members.selected();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null) or (description.exact_scope != null and !@import("../../domain/model_exact_values.zig").valid(description.exact_scope.?))) {
             result.reason = "Captured schema and native field policies disagree";

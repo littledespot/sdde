@@ -3274,6 +3274,34 @@ fn sourceReviewWire(allocator: std.mem.Allocator, inputs: @import("domain/requir
     return @import("domain/specification_support_model.zig").encode(allocator, value, try rules.requirements(allocator, inputs, context.inputs, id));
 }
 
+/// A member-set packet's selected schema admits exactly one item per assigned
+/// member; partial, repeated and foreign responses fail response admission.
+fn expectExactMembers(a: std.mem.Allocator, packet: *const @import("domain/model_input_packet.zig").Packet, body: []const u8, collection: []const u8, key: []const u8) !void {
+    const schema = @import("domain/model_result_schema.zig");
+    const check = @import("domain/model_payload_schema.zig");
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const restricted = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer restricted.release();
+    const complete = try std.json.parseFromSliceLeaky(std.json.Value, a, body, .{ .parse_numbers = false });
+    try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&complete), restricted.selected().root()) == null);
+    try std.testing.expect(complete.object.get(collection).?.array.items.len != 0);
+    for ([_]check.Rejection{ .array_length, .duplicate_member, .enum_mismatch }) |rejection| {
+        var altered = try std.json.parseFromSliceLeaky(std.json.Value, a, body, .{ .parse_numbers = false });
+        const items = &altered.object.getPtr(collection).?.array;
+        // A single member cannot repeat within its fixed count of one.
+        const expected: check.Rejection = if (rejection == .duplicate_member and items.items.len == 1) .array_length else rejection;
+        switch (rejection) {
+            .array_length => _ = items.pop(),
+            .duplicate_member => if (items.items.len == 1) try items.append(items.items[0]) else {
+                items.items[items.items.len - 1].object.getPtr(key).?.* = items.items[0].object.get(key).?;
+            },
+            else => items.items[0].object.getPtr(key).?.* = .{ .number_string = "2048" },
+        }
+        try std.testing.expectEqual(expected, check.validateValue(@import("domain/model_envelope.zig").value(&altered), restricted.selected().root()).?.reason);
+    }
+}
+
 fn assignmentWire(comptime Review: type, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, id: @import("domain/required_authority.zig").Id, complete: Review.Review) ![]const u8 {
     const authority = @import("domain/required_authority.zig");
     const codec = @import("domain/model_candidate_json.zig");
@@ -4734,6 +4762,7 @@ test "pre-generation localized disposition evidence replaces source review linea
             const assigned = try support.comparisonAssignment(a, inputs, fixture.context, pending);
             const wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, assigned, selected);
             try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = wire });
+            try expectExactMembers(a, packet, wire, "assessments", "comparison_id");
 
             const collected = (try support.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = initial.inputs, .candidate = pending } }, packet, wire, null)).accepted;
             const located = collected.candidate.review.entries[index].value;
@@ -5667,6 +5696,7 @@ test "empty principle review can recover every assigned finding without losing e
             try std.testing.expectEqualStrings("principle_assignment_findings", packet.resultDefinition().?.bytes);
             const body = try assignmentWire(policy_review, a, policy_inputs, fixture.context, selected, .{ .entries = findings });
             if (index == 0) try rejectForeignReviewPackets(.principles, a, policy_inputs, fixture.context, packet, body);
+            if (index == 0) try expectExactMembers(a, packet, body, "findings", "requirement_ordinal");
             focused = try policy_review.collectFocused(a, policy_inputs, fixture.context, focused, packet, body, .{ .request = .{ .value = @intCast(300 + index) }, .attempt = .{ .value = 1 } });
             index += (try policy_review.assignmentSubjects(a, policy_inputs, selected)).len;
             if (index < findings.len) try std.testing.expect(focused.? == .pending);
@@ -8850,7 +8880,10 @@ test "bound preservation shared schema and codec exclude culprit and verdict rea
     foreign[0].comparison_id.ordinal = 999;
     try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = try json.encode(preservation.Response, a, .{ .assessments = foreign }), .rejection = .enum_mismatch, .path = "/assessments/0/comparison_id" });
     for ([_][]const u8{ "[]", "[1]" }) |members| {
-        const obsolete = try std.fmt.allocPrint(a, "{{\"assessments\":[{{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{{\"chunk_id\":{{\"bytes\":\"{s}\"}},\"lines\":{{\"first\":1,\"last\":1}}}}],\"members\":{s},\"explanation\":\"MOCK Missing alarm behavior.\"}}]}}", .{ assigned.sources[0].chunk_id.bytes, members });
+        // Every assigned comparison stays present, so only the retired field differs.
+        var retired = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{});
+        try retired.object.getPtr("assessments").?.array.items[0].object.put(a, "members", try std.json.parseFromSliceLeaky(std.json.Value, a, members, .{}));
+        const obsolete = try std.json.Stringify.valueAlloc(a, retired, .{});
         try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = obsolete, .rejection = .unknown_property, .path = "/assessments/0/members" });
         try std.testing.expectError(error.InvalidJsonDocument, json.decode(preservation.Response, a, obsolete));
     }

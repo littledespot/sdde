@@ -136,7 +136,10 @@ and dependencies remain in the retained assignment. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
 culprits or permission to expand the finding.
 
-Native admission rejects missing, duplicate, foreign or stale comparisons and
+Response admission first binds the assigned comparison IDs as an `exact_members`
+choice, so a missing, repeated or foreign comparison takes bounded protocol
+correction; exhaustion stays terminal under this required policy. Native admission
+still rejects missing, duplicate, foreign or stale comparisons and
 invalid source joins or native collection identities, including a changed obligation
 binding. The closed response rejects the superseded `members` field; no reader,
 correction or normalization fills member IDs into rejected responses. It derives
@@ -323,7 +326,10 @@ source unit/collection assignment in §17 produces all its native member finding
 in one call; principle assessment produces the complete current subject set of
 one selected principle set in one call. Exact complete native membership is checked
 before appending any member; partial, duplicate, foreign or misbound responses
-cannot contribute coverage. Native ledger order owns canonical ordering.
+cannot contribute coverage. Response admission first enforces the same membership
+through the packet's `exact_members` choice. A defect there uses the bounded
+protocol correction of the complete assignment, never insertion or deletion
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)). Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -585,7 +591,9 @@ defined response-level correction containing:
   a distinct JSON Pointer locating the exact expected node in the complete selected
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
-  constraint; correction does not repeat its subtrees. Syntax correction uses that
+  every constraint that schema syntax can express; `exact_members` uniqueness stays
+  native and is reported as `duplicate_member` with parent scope on the enclosing
+  array. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.

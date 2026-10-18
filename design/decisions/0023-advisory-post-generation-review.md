@@ -11,6 +11,14 @@
   principle findings into mandatory Plan obligations and the post-generation
   semantic omission/rebuild paths described under ADR 0020. The overall design
   remains **Proposed design**.
+- **Membership amendment:** 2026-10-18, by the user's instruction to "apply best
+  recommendation" after the loan-renewal run blocked on an assignment response that
+  omitted one member. The user then explicitly confirmed this policy change the same
+  day, and chose the follow-up option that opts preservation comparisons into the
+  same admission rule. It amends §12.2 (a native-only `exact_members` rule beside
+  the derived provider schema), §12.7, §17.3, §22.1, §22.4 and §22.6, and advances
+  ADR 0019's request description to `model-request-debug/v8`. See "Assignment
+  membership at response admission".
 
 ## Decision
 
@@ -142,6 +150,38 @@ Correction still targets one invalid finding with unchanged siblings and bounded
 retry ownership. Reuse requires the complete current assignment and dependencies;
 it never converts an assessment into semantic proof.
 
+### Assignment membership at response admission (18 October 2026)
+
+- **Classification:** for every whole-unit assignment, source or principle,
+  "exactly one finding per assigned member" is part of the response contract.
+  Missing, repeated and foreign members are malformed responses, not
+  finding-evidence defects or native authority failures. They are checked at
+  response admission, before any member is appended.
+- **Mechanism:** the packet binds the member ordinals as an `exact_members`
+  integer choice on the result schema. That fixes the item count, narrows each
+  ordinal to an assigned member, and rejects a repeated member natively
+  (`duplicate_member`). The guidance schema states the count, and a provider
+  structural projection may keep only its own array floor. Uniqueness stays native.
+- **Correction:** the existing bounded protocol correction resubmits the complete
+  assignment with the typed diagnostic, under the original assignment allowance. It
+  adds no counter, partial merge, insertion or deletion.
+- **Scope:** whole-unit assignments exist only under advisory policy. Required
+  review requests one finding at a time, so it has no assignment membership.
+  Preservation comparisons, which run under required policy, bind their comparison
+  IDs at response admission in the same way; their protocol exhaustion stays
+  terminal.
+- **Exhaustion keeps the existing advisory outcome:** that assignment's advice ends
+  as incomplete (`protocol_exhausted`), keeping the admitted prefix and leaving
+  publication to the native gates.
+- **Diagnostics:** request descriptions (`model-request-debug/v8`, ADR 0019) record
+  each applied member set, so debugger inspection and replay enforce the same
+  admission as the original request.
+- **Unchanged:**
+  - native collection still rejects partial, repeated or foreign membership
+    atomically, as the authority behind admission;
+  - native capture, selection and citation failures remain native failures;
+  - finding-evidence defects and repair exhaustion keep their terminal outcomes.
+
 ## Post-generation upstream findings and source repair
 
 A finding that blames an earlier producer after generation is retained as a typed
@@ -204,7 +244,9 @@ notes. Model-reported conflict or uncertainty alone no longer creates a mandator
 Plan obligation or a Spec clarification. Plan still validates current project
 policy and all native required decisions at its own gate; early advice neither
 approves policy nor erases the underlying authority. Missing or invalid principle
-capture, selection, citations or assessment membership remains a native failure.
+capture, selection or citations remains a native failure. Assessment membership
+is classified at response admission under "Assignment membership at response
+admission", which supersedes its earlier listing here as a native failure.
 
 This supersedes the semantic-finding-to-Plan-obligation handoff in ADR 0015 and
 §17.3.1, without adding an assessment model, configuration option or principle

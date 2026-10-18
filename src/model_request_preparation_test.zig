@@ -527,7 +527,7 @@ test "native exact occurrence scope is deep owned and bound across request descr
     const encoded = try std.json.Stringify.valueAlloc(a, description.from(owned.request, &fixture.provider_binding, .inference), .{});
     const restored = try description.decode(a, encoded);
     try std.testing.expect(exact.same(scope, restored.exact_scope));
-    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v7", "model-request-debug/v5");
+    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v8", "model-request-debug/v5");
     try std.testing.expectError(error.InvalidJsonDocument, description.decode(a, old));
 }
 

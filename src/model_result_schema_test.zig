@@ -121,6 +121,163 @@ test "native unique subsets derive collection cardinality without restricting ov
     for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .unique_subset }}));
 }
 
+test "exact members admit one item per allowed key and reject partial repeated or foreign assignments" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const check = @import("domain/model_payload_schema.zig");
+    const resource = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10},\"note\":{\"type\":\"string\",\"maxLength\":20}},\"required\":[\"ordinal\",\"note\"],\"additionalProperties\":false}}"));
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
+    const exact = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    defer exact.release();
+    // Any order of the complete member set is admitted, by native and wire schemas alike.
+    try expectSelection(a, exact.selected(), "{\"value\":[{\"ordinal\":5,\"note\":\"b\"},{\"ordinal\":3,\"note\":\"a\"}]}", true);
+    // Count and foreign members are visible to the provider schema too.
+    try expectSelection(a, exact.selected(), "{\"value\":[{\"ordinal\":3,\"note\":\"a\"}]}", false);
+    try expectSelection(a, exact.selected(), "{\"value\":[]}", false);
+    try expectSelection(a, exact.selected(), "{\"value\":[{\"ordinal\":3,\"note\":\"a\"},{\"ordinal\":5,\"note\":\"b\"},{\"ordinal\":5,\"note\":\"c\"}]}", false);
+    try expectSelection(a, exact.selected(), "{\"value\":[{\"ordinal\":3,\"note\":\"a\"},{\"ordinal\":4,\"note\":\"b\"}]}", false);
+    const Reason = check.Rejection;
+    for ([_]struct { bytes: []const u8, reason: Reason }{
+        .{ .bytes = "{\"value\":[{\"ordinal\":3,\"note\":\"a\"}]}", .reason = .array_length },
+        .{ .bytes = "{\"value\":[{\"ordinal\":3,\"note\":\"a\"},{\"ordinal\":4,\"note\":\"b\"}]}", .reason = .enum_mismatch },
+        .{ .bytes = "{\"value\":[{\"ordinal\":3,\"note\":\"a\"},{\"ordinal\":3,\"note\":\"b\"}]}", .reason = .duplicate_member },
+    }) |case| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
+        try std.testing.expectEqual(case.reason, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), exact.selected().root()).?.reason);
+    }
+    // Uniqueness is native: the provider schema sees only the exact item count.
+    const repeated = try std.json.parseFromSlice(std.json.Value, a, "{\"value\":[{\"ordinal\":3,\"note\":\"a\"},{\"ordinal\":3,\"note\":\"b\"}]}", .{ .parse_numbers = false });
+    const wire = try compile(a, exact.selected().modelBytes());
+    try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&repeated.value), wire.root()) == null);
+    const array = schema.findProperty(exact.selected().root().object, "value").?.schema.array;
+    try std.testing.expectEqual(@as(u32, 2), array.minimum);
+    try std.testing.expectEqual(@as(u32, 2), array.maximum);
+    try std.testing.expectEqualStrings("ordinal", array.members.?.property);
+    try std.testing.expectEqualSlices(i64, &.{ 3, 5 }, array.members.?.values);
+    try std.testing.expect(std.mem.indexOf(u8, exact.selected().modelBytes(), "uniqueItems") == null);
+    // The selector must name an integer property of array items, with members.
+    for ([_]schema.IntegerChoice{
+        .{ .target = .{ .path = path }, .allowed = &.{}, .collection = .exact_members },
+        .{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{3}, .collection = .exact_members },
+        .{ .target = .{ .tagged = .{ .kind = "value", .field = "ordinal" } }, .allowed = &.{3}, .collection = .exact_members },
+        .{ .target = .{ .path = path }, .allowed = &.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 }, .collection = .exact_members },
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
+}
+
+test "exact members require a required scalar key in the validated schema" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
+    const members: []const schema.IntegerChoice = &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }};
+    // A nullable, optional or collection-valued key cannot identify one member per item.
+    for ([_][]const u8{
+        "{\"oneOf\":[{\"type\":\"null\"},{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}]}",
+        "{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}",
+    }) |key| {
+        const items = try std.mem.concat(a, u8, &.{ "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":", key, "},\"required\":[\"ordinal\"],\"additionalProperties\":false}}" });
+        try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, try compile(a, try fieldSchema(a, items)), &.{}, members));
+    }
+    const optional = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[],\"additionalProperties\":false}}"));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, optional, &.{}, members));
+    // A member count outside the canonical item bounds is not a narrowing.
+    const bounded = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":3,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}"));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, bounded, &.{}, members));
+    // Membership must constrain the selected schema itself: a projection-only
+    // or other-definition match would leave admission unconstrained.
+    const tagged = try compile(a,
+        \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"keep"},"value":{"type":"array","minItems":1,"maxItems":10,"items":{"type":"object","properties":{"ordinal":{"type":"integer","minimum":1,"maximum":10}},"required":["ordinal"],"additionalProperties":false}}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"drop"}},"required":["kind"],"additionalProperties":false}]}
+    );
+    const dropped = try schema.project(a, tagged, tagged.root().one_of[1]);
+    const sequence = try schema.restrict(std.testing.allocator, dropped, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 } }});
+    sequence.release();
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, dropped, &.{}, members));
+    const review = (try compile(a, selectionChoices)).select(.{ .bytes = "review" }).?;
+    const nested: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
+    const foreign = try schema.restrict(std.testing.allocator, review, &.{}, &.{.{ .target = .{ .path = nested }, .definition = .{ .bytes = "nested" }, .allowed = &.{1} }});
+    foreign.release();
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, review, &.{}, &.{.{ .target = .{ .path = nested }, .definition = .{ .bytes = "nested" }, .allowed = &.{1}, .collection = .exact_members }}));
+    // Every root alternative carrying the selector must be constrained; an
+    // alternative where the key does not match would escape membership.
+    const alternatives = try compile(a,
+        \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"keep"},"value":{"type":"array","minItems":1,"maxItems":10,"items":{"type":"object","properties":{"ordinal":{"type":"integer","minimum":1,"maximum":10}},"required":["ordinal"],"additionalProperties":false}}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"other"},"value":{"type":"array","maxItems":10,"items":{"type":"integer","minimum":1,"maximum":10}}},"required":["kind","value"],"additionalProperties":false}]}
+    );
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, alternatives, &.{}, members));
+    const kept = try schema.project(a, alternatives, alternatives.root().one_of[0]);
+    const exact = try schema.restrict(std.testing.allocator, kept, &.{}, members);
+    exact.release();
+    // A second choice on an exact-members key would leave no admissible
+    // response, whether it names the selected definition explicitly or not.
+    const definitions = try compile(a,
+        \\{"$defs":{"assignment":{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":10,"items":{"type":"object","properties":{"ordinal":{"type":"integer","minimum":1,"maximum":10}},"required":["ordinal"],"additionalProperties":false}}},"required":["value"],"additionalProperties":false}},"$ref":"#/$defs/assignment"}
+    );
+    const assignment = definitions.select(.{ .bytes = "assignment" }).?;
+    const named: schema.DefinitionId = .{ .bytes = "assignment" };
+    for ([_][2]schema.IntegerChoice{
+        .{ .{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .exact_members }, .{ .target = .{ .path = path }, .allowed = &.{3} } },
+        .{ .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members }, .{ .target = .{ .path = path }, .definition = named, .allowed = &.{3} } },
+    }) |stacked| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, assignment, &.{}, &stacked));
+    const single = try schema.restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = path }, .definition = named, .allowed = &.{ 3, 5 }, .collection = .exact_members }});
+    single.release();
+    // An optional member array could be omitted, and an outer array would repeat or
+    // omit the set; neither is one complete assignment.
+    const optional_array = try compile(a, "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[],\"additionalProperties\":false}");
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, optional_array, &.{}, members));
+    const grouped = try compile(a, "{\"type\":\"object\",\"properties\":{\"groups\":{\"type\":\"array\",\"maxItems\":4,\"items\":{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}}},\"required\":[\"groups\"],\"additionalProperties\":false}");
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, grouped, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "groups" }, .items, .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 3, 5 }, .collection = .exact_members }}));
+    // A tagged choice on the same key, in either order, leaves no admissible set.
+    const tagged_items = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"keep\"},\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"kind\",\"ordinal\"],\"additionalProperties\":false}}"));
+    const tagged_key: schema.IntegerChoice = .{ .target = .{ .tagged = .{ .kind = "keep", .field = "ordinal" } }, .allowed = &.{3} };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, tagged_items, &.{}, &.{ members[0], tagged_key }));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, tagged_items, &.{}, &.{ tagged_key, members[0] }));
+    const tagged_exact = try schema.restrict(std.testing.allocator, tagged_items, &.{}, members);
+    tagged_exact.release();
+    // Normalization is narrow: the same path under another carried definition is
+    // a different target and remains admitted beside the selected one.
+    const carried = try schema.restrict(std.testing.allocator, review, &.{}, &.{
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "selection" }, .allowed = &.{2} },
+    });
+    carried.release();
+}
+
+test "recorded exact members reconstruct native admission from provider schema bytes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const check = @import("domain/model_payload_schema.zig");
+    const resource = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":1,\"maxItems\":10,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}"));
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ordinal" } };
+    const exact = try schema.restrict(std.testing.allocator, resource, &.{}, &.{
+        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members },
+    });
+    defer exact.release();
+    try std.testing.expectEqual(@as(usize, 0), resource.memberChoices().len);
+    try std.testing.expectEqual(@as(usize, 1), exact.selected().memberChoices().len);
+    try std.testing.expectEqualSlices(i64, &.{ 3, 5 }, exact.selected().memberChoices()[0].allowed);
+    try std.testing.expectEqualStrings("ordinal", exact.selected().memberChoices()[0].path[2].property);
+    // Clones keep both the native node restriction and its record.
+    const cloned = try exact.selected().clone(a);
+    try std.testing.expectEqualDeep(exact.selected().memberChoices(), cloned.memberChoices());
+    try std.testing.expect(schema.findProperty(cloned.root().object, "value").?.schema.array.members != null);
+    // Replay compiles provider bytes, which cannot express membership, then
+    // reapplies the record to recover admission's exact validation schema.
+    const repeated = try std.json.parseFromSlice(std.json.Value, a, "{\"value\":[{\"ordinal\":3},{\"ordinal\":3}]}", .{ .parse_numbers = false });
+    const wire = try compile(a, exact.selected().modelBytes());
+    try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&repeated.value), wire.root()) == null);
+    const restored = try schema.restrictMembers(std.testing.allocator, wire, exact.selected().memberChoices());
+    defer restored.release();
+    try std.testing.expectEqual(check.Rejection.duplicate_member, check.validateValue(@import("domain/model_envelope.zig").value(&repeated.value), restored.selected().root()).?.reason);
+    try expectSelection(a, restored.selected(), "{\"value\":[{\"ordinal\":5},{\"ordinal\":3}]}", true);
+    // A record that does not fit the captured schema is rejected, not ignored.
+    for ([_]schema.MemberChoice{
+        .{ .path = path, .allowed = &.{ 3, 5, 7 } },
+        .{ .path = path, .allowed = &.{ 3, 9 } },
+        .{ .path = &.{ .{ .property = "other" }, .{ .items = {} }, .{ .property = "ordinal" } }, .allowed = &.{ 3, 5 } },
+    }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictMembers(std.testing.allocator, wire, &.{invalid}));
+}
+
 test "nullable terminal integer choices preserve absence and narrow only authorized values" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

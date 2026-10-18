@@ -164,14 +164,22 @@ fn schemaProbe(a: std.mem.Allocator, schema: *const schema_owner.Schema, packet:
     const body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
     var findings: std.ArrayList(@import("../domain/specification_support_model.zig").BatchFinding) = .empty;
     for (body.object.get("requirements").?.array.items) |requirement| try findings.append(a, .{ .requirement_ordinal = @intCast(requirement.object.get("ordinal").?.integer), .value = .{ .supported = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment." } } });
-    // The shared batch schema allows variable nonempty units. Exact member
-    // cardinality is checked by native assignment admission, not an AC-only schema.
+    // Response admission requires the complete assignment: exactly one finding
+    // per member. Partial and empty batches fail the item count.
     for ([_]usize{ 3, 2, 0 }) |length| {
         var document = try @import("../domain/model_envelope.zig").parseContent(a, try codec.encode(@import("../domain/specification_support_model.zig").Batch, a, .{ .findings = findings.items[0..length] }), null);
         defer document.deinit();
         const invalid = @import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root());
-        try std.testing.expect((invalid == null) == (length != 0));
+        try std.testing.expect((invalid == null) == (length == 3));
+        if (invalid) |diagnostic| try std.testing.expectEqual(.array_length, diagnostic.reason);
     }
+    // A complete-sized batch that repeats one member is still rejected.
+    var repeated = try a.dupe(@import("../domain/specification_support_model.zig").BatchFinding, findings.items);
+    repeated[2].requirement_ordinal = repeated[0].requirement_ordinal;
+    var document = try @import("../domain/model_envelope.zig").parseContent(a, try codec.encode(@import("../domain/specification_support_model.zig").Batch, a, .{ .findings = repeated }), null);
+    defer document.deinit();
+    const duplicate = @import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root()).?;
+    try std.testing.expectEqual(.duplicate_member, duplicate.reason);
 }
 fn sameJson(a: std.mem.Allocator, left: std.json.Value, right: std.json.Value) !void {
     try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, left, .{}), try std.json.Stringify.valueAlloc(a, right, .{}));

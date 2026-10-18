@@ -9,6 +9,9 @@
   [ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
   (18 October 2026): descriptions advance to `model-request-debug/v7` without an
   output allowance.
+  [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
+  (18 October 2026): descriptions advance to `model-request-debug/v8` and record
+  applied assignment membership.
 
 ## Diagnostic execution boundary
 
@@ -49,12 +52,15 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v7`
+prompt, exact validation schema and inference settings. `model-request-debug/v8`
 captures the selected schema's complete expanded projection, including named
 selections, composition parts and narrowed repair shapes; the native original-source witness and plain-prose selectors
 used by the source-aware model-text wire validator; native wire-field bindings to
 the composition registry, so the selected schema and diagnostic replay enforce the
-same permitted insertions; and the immutable exact-occurrence scope (ADR 0020). This metadata is
+same permitted insertions; the immutable exact-occurrence scope (ADR 0020); and
+each applied exact-membership selection (ADR 0023), whose uniqueness the schema
+bytes cannot express, so replay reapplies it through the same schema restriction
+owner. This metadata is
 diagnostic input, not provider-visible authority. Older descriptions remain
 unchanged and reject readback; replay requires a new capture, with no compatibility
 reader. The shared schema
@@ -111,7 +117,7 @@ provider registry and repository model allowlist. Credentials are obtained afres
 from the existing authorization source, never from logs or the browser.
 Settings carry no output-token allowance under
 [ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
-(amended 18 October 2026); `model-request-debug/v7` has no such field.
+(amended 18 October 2026); `model-request-debug/v8` has no such field.
 
 **Converse amendment (user-directed, 15 October 2026):** Bedrock request construction,
 capture, extraction and replay use the same canonical Converse codec as production

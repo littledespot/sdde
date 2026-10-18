@@ -11,7 +11,7 @@ const typed = @import("../../../src/domain/typed_text.zig");
 const policy = @import("../../../src/domain/text_field_policy.zig");
 const pointer = @import("../../../src/domain/json_pointer.zig");
 pub const recognition = @import("recognition.zig");
-pub const MetadataContract = enum { current_v7, historical_v3, historical_v4, historical_v5, unavailable };
+pub const MetadataContract = enum { current_v8, historical_v3, historical_v4, historical_v5, unavailable };
 pub const Input = struct {
     packet: []const u8,
     output: []const u8,
@@ -19,8 +19,10 @@ pub const Input = struct {
     field_policies: []const field_owner.Binding = &.{},
     prose_fields: []const wire.ProseField = &.{},
     original_sources: ?[]const wire.SourceText = null,
-    metadata_contract: MetadataContract = .current_v7,
+    metadata_contract: MetadataContract = .current_v8,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
+    /// Recorded assignment membership; the schema bytes cannot express it.
+    members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
 };
 pub const State = enum { measured, no_exact_context, invalid_packet, invalid_model_json, missing_schema, invalid_field_metadata, unsupported_schema, schema_invalid, no_declared_text_fields };
 pub const Binding = enum { assigned_requirements, selected_groups, explicit_provenance, fixed_candidate, missing, invalid };
@@ -144,7 +146,7 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
     var occurrences: []recognition.Occurrence = undefined;
     var occurrence_ids: []recognition.OccurrenceId = undefined;
     if (input.exact_scope) |scope| {
-        if (input.metadata_contract != .current_v7 or !@import("../../../src/domain/model_exact_values.zig").valid(scope)) {
+        if (input.metadata_contract != .current_v8 or !@import("../../../src/domain/model_exact_values.zig").valid(scope)) {
             result.state = .invalid_field_metadata;
             return result;
         }
@@ -189,17 +191,30 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         return result;
     };
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const compiled = compiler.compiler().compileSelected(a, schema_bytes) catch |err| {
+    // Only current descriptions record membership; older contracts cannot carry it.
+    if (input.members.len != 0 and input.metadata_contract != .current_v8) {
+        result.state = .invalid_field_metadata;
+        return result;
+    }
+    const captured = compiler.compiler().compileSelected(a, schema_bytes) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.state = .unsupported_schema;
         return result;
     };
+    // Production admission validates the restricted schema, membership included.
+    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictMembers(a, captured, input.members) catch |err| {
+        if (err == error.OutOfMemory) return err;
+        result.state = .invalid_field_metadata;
+        return result;
+    };
+    defer restricted.release();
+    const compiled = restricted.selected();
     if (@import("../../../src/domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), compiled.root()) != null) {
         result.state = .schema_invalid;
         return result;
     }
     const compatible_fields = if (input.field_policies.len == 0) true else switch (input.metadata_contract) {
-        .current_v7 => field_owner.validSchema(compiled.root(), input.field_policies),
+        .current_v8 => field_owner.validSchema(compiled.root(), input.field_policies),
         .historical_v3, .historical_v4, .historical_v5 => capturedFieldsFit(compiled.root(), input.field_policies),
         .unavailable => false,
     };
