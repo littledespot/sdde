@@ -164,7 +164,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     _ = try packet.input(a, inputs);
     _ = try judgment.validate(a, null, inputs, good);
     const config = try configuration.parse(a, config_bytes, test_selection);
-    _ = try wire.request(a, config, inputs);
+    _ = try wire.request(a, config, inputs, null);
     _ = try wire.response(a, try responseBytes(a, "completed", good));
     var fake: Fake = .{ .observations = &.{observed_good} };
     const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
@@ -172,12 +172,12 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     _ = try reports.markdown(a, report);
     var malformed = observed_good;
     malformed.payload = "{\"results\":[{}},{}]}";
-    fake = .{ .observations = &.{malformed} };
+    fake = .{ .observations = &.{ malformed, malformed } };
     const rejected = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
     _ = try reports.json(a, rejected);
     _ = try reports.markdown(a, rejected);
     const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
-    _ = try bedrock.request(a, bedrock_config, inputs);
+    _ = try bedrock.request(a, bedrock_config, inputs, null);
     var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", good) } });
     observation.identity = .{ .bedrock_target = .{ .model = bedrock_config.model, .region = bedrock_config.region.? } };
     fake = .{ .observations = &.{observation} };
@@ -204,6 +204,8 @@ const config_bytes =
 const Fake = struct {
     observations: []const provider.Observation,
     count: usize = 0,
+    /// The request bodies sent, in order; owned by the evaluation arena.
+    bodies: [4][]const u8 = @splat(""),
     fn port(self: *Fake) provider.Port {
         return .{ .context = @ptrCast(self), .invoke_fn = invoke };
     }
@@ -211,6 +213,7 @@ const Fake = struct {
         const self: *Fake = @ptrCast(@alignCast(context));
         std.debug.assert(body.len > 0 and timeout > 0);
         std.debug.assert(self.count < self.observations.len);
+        if (self.count < self.bodies.len) self.bodies[self.count] = body;
         const result = self.observations[self.count];
         self.count += 1;
         return result;
@@ -237,7 +240,7 @@ test "API request has one native-derived schema, complete data, no tools or serv
     const a = arena.allocator();
     const config = try configuration.parse(a, config_bytes, test_selection);
     const input = try capture(a);
-    const bytes = try wire.request(a, config, input);
+    const bytes = try wire.request(a, config, input, null);
     const root = try c.decode(std.json.Value, a, bytes);
     try std.testing.expectEqualStrings("scripted-judge", root.object.get("model").?.string);
     const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
@@ -308,7 +311,7 @@ test "evaluation selection is required from test environment and reaches request
         try environment.put("TEST_EVALUATION_MODEL", model);
         const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
         const inputs = try capture(a);
-        const request = try c.decode(std.json.Value, a, try @import("request.zig").encode(a, config, inputs));
+        const request = try c.decode(std.json.Value, a, try @import("request.zig").encode(a, config, inputs, null));
         try std.testing.expect(request.object.get("outputConfig") != null);
         try std.testing.expect(request.object.get("model") == null);
         var fake: Fake = .{ .observations = &.{observed_good} };
@@ -430,7 +433,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
             continue;
         }
         var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
-        const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs));
+        const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
         switch (entry.bedrock_request_profile) {
             .openai_luna => {
                 try std.testing.expect(baseline.object.get("inferenceConfig") == null);
@@ -444,9 +447,9 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
         inline for (.{ .low, .medium, .high, .none, .minimal, .xhigh }) |effort| {
             config.reasoning_effort = effort;
             if (!@import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(entry.supported_reasoning_efforts, @tagName(effort))) {
-                try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, config, inputs));
+                try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, config, inputs, null));
             } else {
-                const encoded = try bedrock.request(a, config, inputs);
+                const encoded = try bedrock.request(a, config, inputs, null);
                 const root = try c.decode(std.json.Value, a, encoded);
                 switch (entry.bedrock_request_profile) {
                     .openai_oss => try std.testing.expectEqualStrings(@tagName(effort), root.object.get("additionalModelRequestFields").?.object.get("reasoning_effort").?.string),
@@ -513,7 +516,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
         config.timeout_ms = 100;
         const inputs = try capture(a);
-        const encoded = try @import("request.zig").encode(a, config, inputs);
+        const encoded = try @import("request.zig").encode(a, config, inputs, null);
         const root = try c.decode(std.json.Value, a, encoded);
         try std.testing.expectEqualStrings(packet.instructions, root.object.get("system").?.array.items[0].object.get("text").?.string);
         const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
@@ -562,7 +565,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
     }
 }
 
-test "evaluation trace retains failed attempts before retry and malformed judgment rejection" {
+test "evaluation trace retains failed attempts, the correction request and malformed judgment rejection" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -576,7 +579,7 @@ test "evaluation trace retains failed attempts before retry and malformed judgme
     var second = observed_good;
     second.payload = "```json\n{}\n```";
     second.response_body = "untrusted provider completion body";
-    var fake: Fake = .{ .observations = &.{ first, second } };
+    var fake: Fake = .{ .observations = &.{ first, second, second } };
     var trace: @import("evaluation_trace.zig").Trace = .{
         .store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &.{} },
         .inner = fake.port(),
@@ -585,14 +588,21 @@ test "evaluation trace retains failed attempts before retry and malformed judgme
     const inputs = try capture(a);
     const report = try evaluator.run(io, a, trace.port(), config, inputs);
     try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
-    try std.testing.expectEqual(@as(usize, 2), fake.count);
-    try std.testing.expectEqual(@as(usize, 2), report.attempts.len);
+    try std.testing.expectEqual(@as(usize, 3), fake.count);
+    try std.testing.expectEqual(@as(usize, 3), report.attempts.len);
+    // The transient retry resends the judgment request; the correction follows
+    // the mechanical rejection and is itself final.
+    try std.testing.expectEqual(.judgment, report.attempts[1].purpose);
+    try std.testing.expectEqual(.correction, report.attempts[2].purpose);
     try std.testing.expect(trace.failure == null);
-    for ([_]provider.Observation{ first, second }, 1..) |observation, ordinal| {
+    for ([_]provider.Observation{ first, second, second }, 1..) |observation, ordinal| {
         const path = try @import("evidence.zig").Store.path(a, .evaluation, ordinal, .response);
         try std.testing.expectEqualStrings(observation.response_body.?, try @import("files.zig").read(io, a, run.dir, path));
     }
     try std.testing.expectEqualStrings(second.payload.?, try @import("files.zig").read(io, a, run.dir, "evidence/evaluation/call-000002/model_output.txt"));
+    const correction_request = try @import("files.zig").read(io, a, run.dir, try @import("evidence.zig").Store.path(a, .evaluation, 3, .request));
+    try std.testing.expect(std.mem.indexOf(u8, correction_request, "rejected_response") != null);
+    try std.testing.expectEqualStrings(fake.bodies[2], correction_request);
 }
 
 test "evidence write failure prevents a new evaluator call" {
@@ -643,17 +653,22 @@ test "Bedrock native schema output retains complete judgment validation and exac
     }) |case| {
         var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", case.text) } });
         observation.identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } };
-        var fake: Fake = .{ .observations = &.{observation} };
+        // Each listed defect is mechanical: the same defect in the one
+        // correction ends the evaluation with no grade.
+        var fake: Fake = .{ .observations = &.{ observation, observation } };
         const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
-        try std.testing.expectEqual(@as(usize, 1), fake.count);
-        try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+        const calls: usize = if (case.reason == null) 1 else 2;
+        try std.testing.expectEqual(calls, fake.count);
+        try std.testing.expectEqual(calls, report.attempts.len);
         try std.testing.expectEqualDeep(observation.usage, report.attempts[0].usage);
         if (case.reason) |reason| {
             try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
-            try std.testing.expectEqual(reason, report.judgment_diagnostic.?.reason);
+            try std.testing.expectEqual(reason, report.attempts[0].diagnostic.?.reason);
+            try std.testing.expectEqual(.correction, report.attempts[1].purpose);
+            try std.testing.expectEqual(reason, report.attempts[1].diagnostic.?.reason);
         } else {
             try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
-            try std.testing.expect(report.judgment_diagnostic == null);
+            try std.testing.expect(report.attempts[0].diagnostic == null);
         }
         var limited = config;
         limited.total_token_budget = 29;
@@ -775,7 +790,7 @@ test "provider decoding binds payload usage and observed model and handles stops
     const parsed = try wire.response(a, bytes);
     try std.testing.expectEqualStrings(good, parsed.payload.?);
     try std.testing.expectEqual(@as(u64, 30), parsed.usage.?.total_tokens);
-    for ([_]struct { status: []const u8, failure: reports.Failure }{
+    for ([_]struct { status: []const u8, failure: provider.Failure }{
         .{ .status = "incomplete", .failure = .incomplete },
         .{ .status = "failed", .failure = .provider_failed },
         .{ .status = "cancelled", .failure = .cancelled },
@@ -857,11 +872,13 @@ test "all terminal errors retain no grade and unknown usage prohibits retries" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    inline for (std.meta.fields(reports.Failure)) |field| {
-        const failure: reports.Failure = @enumFromInt(field.value);
+    // Every provider-reportable failure ends without a grade; judgment, budget
+    // and retry outcomes cannot be supplied by an adapter.
+    inline for (std.meta.fields(provider.Failure)) |field| {
+        const failure: provider.Failure = @enumFromInt(field.value);
         var fake: Fake = .{ .observations = &.{.{ .failure = failure }} };
         const result = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), try capture(a));
-        try std.testing.expectEqual(failure, result.outcome.evaluator_error);
+        try std.testing.expectEqual(provider.reported(failure), result.outcome.evaluator_error);
         try std.testing.expectEqual(@as(usize, 1), fake.count);
         try std.testing.expect(result.attempts[0].usage == null);
     }
@@ -892,7 +909,7 @@ test "retry and total-token boundaries use actual observations without score-dri
     try std.testing.expectEqual(@as(u64, 30), exceeded.attempts[0].usage.?.total_tokens);
 }
 
-test "judgment diagnostics distinguish syntax shape and exact evidence without retries or grades" {
+test "judgment diagnostics distinguish syntax shape and exact evidence and a failed correction gives no grade" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -911,19 +928,25 @@ test "judgment diagnostics distinguish syntax shape and exact evidence without r
     for (cases) |case| {
         var observation = observed_good;
         observation.payload = case.payload;
-        var fake: Fake = .{ .observations = &.{observation} };
+        // Every listed defect is mechanical, so it gets exactly one correction;
+        // repeating it ends the evaluation without a grade.
+        var fake: Fake = .{ .observations = &.{ observation, observation } };
         const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
         try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
-        try std.testing.expectEqual(@as(usize, 1), fake.count);
-        try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+        try std.testing.expectEqual(@as(usize, 2), fake.count);
+        try std.testing.expectEqual(@as(usize, 2), report.attempts.len);
         try std.testing.expectEqualDeep(observation.usage, report.attempts[0].usage);
-        const diagnostic = report.judgment_diagnostic.?;
+        try std.testing.expectEqual(.judgment, report.attempts[0].purpose);
+        try std.testing.expectEqual(.correction, report.attempts[1].purpose);
+        try std.testing.expectEqualDeep(report.attempts[0].diagnostic, report.attempts[1].diagnostic);
+        const diagnostic = report.attempts[0].diagnostic.?;
         try std.testing.expectEqual(case.reason, diagnostic.reason);
         try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
         try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
         const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
-        try std.testing.expectEqualStrings("evaluation-report/v4", encoded.get("schema").?.string);
-        try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("judgment_diagnostic").?.object.get("reason").?.string);
+        try std.testing.expectEqualStrings("evaluation-report/v5", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("attempts").?.array.items[0].object.get("diagnostic").?.object.get("reason").?.string);
+        try std.testing.expect(!encoded.contains("judgment_diagnostic"));
         const markdown = try reports.markdown(a, report);
         try std.testing.expect(std.mem.indexOf(u8, markdown, "No quality score") != null);
         try std.testing.expect(std.mem.indexOf(u8, markdown, @tagName(case.reason)) != null);
@@ -949,6 +972,513 @@ test "judgment diagnostics distinguish syntax shape and exact evidence without r
     try std.testing.expect(diagnostic == null);
 }
 
+test "one correction of a mechanical defect resends the same request with its diagnostic and yields a grade" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    var missing = observed_good;
+    missing.payload = try std.mem.replaceOwned(u8, a, good, source_locator ++ ",", "");
+    // The correction is fixed protocol outside the transient retry limit.
+    var config = try configuration.parse(a, config_bytes, test_selection);
+    config.retry_limit = 0;
+    var fake: Fake = .{ .observations = &.{ missing, observed_good } };
+    const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+    try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+    try std.testing.expectEqual(@as(usize, 2), report.attempts.len);
+    try std.testing.expectEqual(.missing_source_evidence, report.attempts[0].diagnostic.?.reason);
+    try std.testing.expectEqual(.correction, report.attempts[1].purpose);
+    try std.testing.expect(report.attempts[1].diagnostic == null);
+    try reports.validateAttempts(report.attempts, report.outcome, report.configuration);
+    const original = (try std.json.parseFromSlice(std.json.Value, a, fake.bodies[0], .{})).value.object;
+    const correcting = (try std.json.parseFromSlice(std.json.Value, a, fake.bodies[1], .{})).value.object;
+    // Instruction, schema, model and documents are unchanged; only the typed
+    // diagnostic and the rejected response follow them.
+    for ([_][]const u8{ "model", "instructions", "text" }) |key| try std.testing.expectEqualStrings(
+        try std.json.Stringify.valueAlloc(a, original.get(key).?, .{}),
+        try std.json.Stringify.valueAlloc(a, correcting.get(key).?, .{}),
+    );
+    const sent = correcting.get("input").?.array.items;
+    try std.testing.expectEqual(@as(usize, 3), sent.len);
+    try std.testing.expectEqualStrings(original.get("input").?.array.items[0].object.get("content").?.string, sent[0].object.get("content").?.string);
+    const guidance = (try std.json.parseFromSlice(std.json.Value, a, sent[1].object.get("content").?.string, .{})).value.object;
+    try std.testing.expectEqualStrings("missing_source_evidence", guidance.get("diagnostic").?.object.get("reason").?.string);
+    try std.testing.expectEqualStrings("coverage", guidance.get("diagnostic").?.object.get("criterion_id").?.string);
+    try std.testing.expectEqualStrings(@import("correction.zig").instruction, guidance.get("instruction").?.string);
+    const retained = (try std.json.parseFromSlice(struct { rejected_response: []const u8 }, a, sent[2].object.get("content").?.string, .{})).value;
+    try std.testing.expectEqualStrings(missing.payload.?, retained.rejected_response);
+    // The Bedrock projection carries the same correction exactly once.
+    const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const bedrock_body = try bedrock.request(a, bedrock_config, inputs, .{ .rejected = missing.payload.?, .diagnostic = report.attempts[0].diagnostic.? });
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bedrock_body, "rejected_response"));
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bedrock_body, "Correct only the reported error"));
+}
+
+test "judgment-content defects and valid low scores are never corrected" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // The user's closed list: missing evidence, invalid line references, missing
+    // criteria and malformed output. Nothing else is correctable.
+    for (std.meta.tags(@FieldType(judgment.Diagnostic, "reason"))) |reason| try std.testing.expectEqual(switch (reason) {
+        .json, .invalid_shape, .criterion_count, .missing_criterion, .missing_source_evidence, .missing_specification_evidence, .blank_evidence, .unknown_document, .invalid_line_range => true,
+        .duplicate_criterion, .empty_explanation, .invalid_score, .invalid_disposition, .changed_criterion => false,
+    }, @import("correction.zig").correctable(reason));
+    const inputs = try capture(a);
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const Reason = @FieldType(judgment.Diagnostic, "reason");
+    const result = (try c.decode(judgment.Proposal, a, good)).results[0];
+    var duplicated = [_]judgment.CriterionResult{ result, result };
+    var not_applicable = result;
+    not_applicable.disposition = .not_applicable;
+    not_applicable.score = null;
+    for ([_]struct { payload: []const u8, reason: ?Reason }{
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "\"score\":3", "\"score\":9"), .reason = .invalid_score },
+        .{ .payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &duplicated }, .{}), .reason = .duplicate_criterion },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "Both texts describe the behavior.", " "), .reason = .empty_explanation },
+        .{ .payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &.{not_applicable} }, .{}), .reason = .invalid_disposition },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "\"score\":3", "\"score\":1"), .reason = null },
+    }) |case| {
+        var observation = observed_good;
+        observation.payload = case.payload;
+        var fake: Fake = .{ .observations = &.{ observation, observed_good } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        const corrected = case.reason != null and @import("correction.zig").correctable(case.reason.?);
+        try std.testing.expectEqual(@as(usize, if (corrected) 2 else 1), fake.count);
+        if (case.reason) |reason| {
+            try std.testing.expectEqual(reason, report.attempts[0].diagnostic.?.reason);
+            if (!corrected) try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+        } else try std.testing.expectEqual(@as(f64, 0), report.outcome.evaluated.score_percent.?);
+    }
+}
+
+test "a correction may change only the criterion its diagnostic names" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    var inputs = try capture(a);
+    const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+    var criteria = [_]c.Criterion{ inputs.rubric.criteria[0], inputs.rubric.criteria[0] };
+    criteria[1].id = "organization";
+    inputs.rubric.criteria = &criteria;
+    inputs.rubric_bytes = try std.json.Stringify.valueAlloc(a, inputs.rubric, .{});
+    // A valid low score beside an organization result with no source evidence.
+    var rejected = [_]judgment.CriterionResult{ seed, seed };
+    rejected[0].score = 1;
+    rejected[1].criterion_id = "organization";
+    rejected[1].evidence = seed.evidence[1..];
+    var faithful = rejected;
+    faithful[1].evidence = seed.evidence;
+    var inflated = faithful;
+    inflated[0].score = 3;
+    for ([_]bool{ true, false }) |keeps_siblings| {
+        var first = observed_good;
+        first.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &rejected }, .{});
+        var second = observed_good;
+        second.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = if (keeps_siblings) &faithful else &inflated }, .{});
+        var fake: Fake = .{ .observations = &.{ first, second } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(@as(usize, 2), fake.count);
+        try std.testing.expectEqualStrings("organization", report.attempts[0].diagnostic.?.criterion_id.?);
+        if (keeps_siblings) {
+            try std.testing.expectEqual(@as(?u16, 1), report.outcome.evaluated.results[0].score);
+        } else {
+            try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+            try std.testing.expectEqual(.changed_criterion, report.attempts[1].diagnostic.?.reason);
+            try std.testing.expectEqualStrings("coverage", report.attempts[1].diagnostic.?.criterion_id.?);
+        }
+    }
+}
+
+fn twoCriteria(a: std.mem.Allocator) !c.Capture {
+    var inputs = try capture(a);
+    const criteria = try a.dupe(c.Criterion, &.{ inputs.rubric.criteria[0], inputs.rubric.criteria[0] });
+    criteria[1].id = "organization";
+    inputs.rubric.criteria = criteria;
+    inputs.rubric_bytes = try std.json.Stringify.valueAlloc(a, inputs.rubric, .{});
+    return inputs;
+}
+
+fn observedJudgment(a: std.mem.Allocator, results: []const judgment.CriterionResult) !provider.Observation {
+    var observation = observed_good;
+    observation.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = results }, .{});
+    return observation;
+}
+
+test "corrections preserve readable results, pin an evidence defect's grade and never correct duplicates" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const inputs = try twoCriteria(a);
+    const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+    var low = seed;
+    low.score = 1;
+    var organization = seed;
+    organization.criterion_id = "organization";
+    const complete = [_]judgment.CriterionResult{ low, organization };
+    var raised_low = low;
+    raised_low.score = 3;
+    // A shape defect in organization leaves coverage readable, so coverage keeps
+    // its low score; only unparseable JSON has nothing to preserve.
+    var shaped = observed_good;
+    shaped.payload = try std.mem.replaceOwned(u8, a, (try observedJudgment(a, &complete)).payload.?, "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":3", "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":\"3\"");
+    var unparsed = observed_good;
+    unparsed.payload = "{\"results\":[";
+    for ([_]struct { first: provider.Observation, second: []const judgment.CriterionResult, graded: bool }{
+        .{ .first = shaped, .second = &complete, .graded = true },
+        .{ .first = shaped, .second = &.{ raised_low, organization }, .graded = false },
+        .{ .first = unparsed, .second = &.{ raised_low, organization }, .graded = true },
+    }) |case| {
+        var fake: Fake = .{ .observations = &.{ case.first, try observedJudgment(a, case.second) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(@as(usize, 2), fake.count);
+        if (case.graded) {
+            try std.testing.expectEqual(case.second[0].score, report.outcome.evaluated.results[0].score);
+        } else try std.testing.expectEqual(.changed_criterion, report.attempts[1].diagnostic.?.reason);
+    }
+    // An evidence defect is corrected in its evidence: raising the named
+    // criterion's score is rejected, restoring its evidence alone is graded.
+    var cited = organization;
+    cited.evidence = &.{ .{ .document_id = "requirements", .first_line = 9, .last_line = 9 }, seed.evidence[1] };
+    var regraded = organization;
+    regraded.score = 2;
+    for ([_]struct { second: []const judgment.CriterionResult, graded: bool }{
+        .{ .second = &complete, .graded = true },
+        .{ .second = &.{ low, regraded }, .graded = false },
+    }) |case| {
+        var fake: Fake = .{ .observations = &.{ try observedJudgment(a, &.{ low, cited }), try observedJudgment(a, case.second) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(.invalid_line_range, report.attempts[0].diagnostic.?.reason);
+        if (case.graded) {
+            try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+        } else {
+            try std.testing.expectEqual(.changed_criterion, report.attempts[1].diagnostic.?.reason);
+            try std.testing.expectEqualStrings("organization", report.attempts[1].diagnostic.?.criterion_id.?);
+        }
+    }
+    // A missing criterion and missing specification evidence are corrected.
+    var unsupported = organization;
+    unsupported.evidence = seed.evidence[0..1];
+    for ([_]struct { first: []const judgment.CriterionResult, reason: @FieldType(judgment.Diagnostic, "reason") }{
+        .{ .first = &.{low}, .reason = .criterion_count },
+        .{ .first = &.{ low, unsupported }, .reason = .missing_specification_evidence },
+    }) |case| {
+        var fake: Fake = .{ .observations = &.{ try observedJudgment(a, case.first), try observedJudgment(a, &complete) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(case.reason, report.attempts[0].diagnostic.?.reason);
+        try std.testing.expectEqual(@as(?u16, 1), report.outcome.evaluated.results[0].score);
+    }
+    var missing_low = low;
+    missing_low.criterion_id = "unrubricked";
+    var fake_missing: Fake = .{ .observations = &.{ try observedJudgment(a, &.{ missing_low, organization }), try observedJudgment(a, &complete) } };
+    const corrected_missing = try evaluator.run(std.testing.io, a, fake_missing.port(), config, inputs);
+    try std.testing.expectEqual(.missing_criterion, corrected_missing.attempts[0].diagnostic.?.reason);
+    try std.testing.expectEqual(.scored, corrected_missing.outcome.evaluated.assessment);
+    // A repeated criterion is judgment content, whatever the count or rubric order.
+    for ([_][]const judgment.CriterionResult{ &.{ organization, organization }, &.{ low, low }, &.{ low, organization, organization } }) |repeated| {
+        var fake: Fake = .{ .observations = &.{ try observedJudgment(a, repeated), try observedJudgment(a, &complete) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(@as(usize, 1), fake.count);
+        try std.testing.expectEqual(.duplicate_criterion, report.attempts[0].diagnostic.?.reason);
+    }
+}
+
+test "readable duplicates and unreadable shapes follow the documented correction rules and reports round-trip" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const inputs = try twoCriteria(a);
+    const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+    var low = seed;
+    low.score = 1;
+    var organization = seed;
+    organization.criterion_id = "organization";
+    const complete = [_]judgment.CriterionResult{ low, organization };
+    var raised = low;
+    raised.score = 3;
+    // A duplicate behind a shape defect is still judgment content: no correction.
+    const duplicated = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &.{ low, raised, organization } }, .{});
+    var hidden = observed_good;
+    hidden.payload = try std.mem.replaceOwned(u8, a, duplicated, "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":3", "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":\"3\"");
+    var blocked: Fake = .{ .observations = &.{ hidden, try observedJudgment(a, &complete) } };
+    const stopped = try evaluator.run(std.testing.io, a, blocked.port(), config, inputs);
+    try std.testing.expectEqual(@as(usize, 1), blocked.count);
+    try std.testing.expectEqual(.duplicate_criterion, stopped.attempts[0].diagnostic.?.reason);
+    // A response without a top-level results array has no readable result, so
+    // its correction is constrained by validation alone, as documented.
+    var root_array = observed_good;
+    root_array.payload = try std.json.Stringify.valueAlloc(a, complete, .{});
+    var unreadable: Fake = .{ .observations = &.{ root_array, try observedJudgment(a, &.{ raised, organization }) } };
+    const regraded = try evaluator.run(std.testing.io, a, unreadable.port(), config, inputs);
+    try std.testing.expectEqual(.invalid_shape, regraded.attempts[0].diagnostic.?.reason);
+    try std.testing.expectEqual(@as(?u16, 3), regraded.outcome.evaluated.results[0].score);
+    // The user's condition: every validation-only correction logs why.
+    try std.testing.expect(regraded.attempts[0].unconstrained == null);
+    try std.testing.expectEqual(@import("correction.zig").Unconstrained.no_results_array, regraded.attempts[1].unconstrained.?);
+    try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, regraded), "Correction checked by validation alone: the rejected response had no top-level results array") != null);
+    try std.testing.expectEqual(@import("correction.zig").Unconstrained.unparseable_json, (try @import("correction.zig").unconstrained(a, "{\"results\":[")).?);
+    try std.testing.expectEqual(@import("correction.zig").Unconstrained.no_readable_result, (try @import("correction.zig").unconstrained(a, "{\"results\":[{\"criterion_id\":1}]}")).?);
+    // One unreadable result among readable ones is logged too.
+    try std.testing.expectEqual(@import("correction.zig").Unconstrained.some_results_unreadable, (try @import("correction.zig").unconstrained(a, hidden.payload.?)).?);
+    try std.testing.expect(try @import("correction.zig").unconstrained(a, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &complete }, .{})) == null);
+    // Every field of an unnamed readable result is preserved, not only its score.
+    var missing = organization;
+    missing.evidence = seed.evidence[1..];
+    var explained = low;
+    explained.explanation = "A different reason.";
+    var cited = low;
+    cited.evidence = seed.evidence[0..1];
+    cited.missing_from_specification = true;
+    for ([_]judgment.CriterionResult{ explained, cited }) |sibling| {
+        var fake: Fake = .{ .observations = &.{ try observedJudgment(a, &.{ low, missing }), try observedJudgment(a, &.{ sibling, organization }) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(.changed_criterion, report.attempts[1].diagnostic.?.reason);
+        try std.testing.expectEqualStrings("coverage", report.attempts[1].diagnostic.?.criterion_id.?);
+    }
+    // Evaluator-produced reports, including a corrected, a budget-stopped and a
+    // retried correction, round-trip through the closed reader.
+    var failed = observed_good;
+    failed.failure = .provider_failed;
+    failed.payload = null;
+    var tight = config;
+    tight.total_token_budget = 30;
+    var corrected: Fake = .{ .observations = &.{ try observedJudgment(a, &.{ low, missing }), failed, try observedJudgment(a, &complete) } };
+    var budgeted: Fake = .{ .observations = &.{try observedJudgment(a, &.{ low, missing })} };
+    for ([_]reports.Report{
+        try evaluator.run(std.testing.io, a, corrected.port(), config, inputs),
+        try evaluator.run(std.testing.io, a, budgeted.port(), tight, inputs),
+        stopped,
+        regraded,
+    }) |report| {
+        const restored = try reports.parse(a, try reports.json(a, report));
+        try std.testing.expectEqualDeep(report.attempts, restored.attempts);
+    }
+}
+
+test "out-of-range numbers get their typed diagnostics, never a shape correction" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const inputs = try twoCriteria(a);
+    const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+    var low = seed;
+    low.score = 1;
+    var organization = seed;
+    organization.criterion_id = "organization";
+    const complete = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &.{ low, organization } }, .{});
+    const organization_score = "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":3";
+    const first_source_line = "\"first_line\":1,\"last_line\":1}";
+    var raised = organization;
+    raised.score = 2;
+    // A negative or oversized score is a final score defect.
+    for ([_][]const u8{ "-1", "70000" }) |score| {
+        var observation = observed_good;
+        observation.payload = try std.mem.replaceOwned(u8, a, complete, organization_score, try std.mem.concat(a, u8, &.{ "\"criterion_id\":\"organization\",\"disposition\":\"scored\",\"score\":", score }));
+        var fake: Fake = .{ .observations = &.{ observation, try observedJudgment(a, &.{ low, raised }) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(@as(usize, 1), fake.count);
+        try std.testing.expectEqual(.invalid_score, report.attempts[0].diagnostic.?.reason);
+    }
+    // A negative or oversized line is an evidence defect: corrected, grade pinned.
+    for ([_][]const u8{ "-1", "5000000000" }) |line| {
+        var observation = observed_good;
+        const at = std.mem.lastIndexOf(u8, complete, first_source_line).?;
+        observation.payload = try std.mem.concat(a, u8, &.{ complete[0..at], "\"first_line\":", line, ",\"last_line\":1}", complete[at + first_source_line.len ..] });
+        var fake: Fake = .{ .observations = &.{ observation, try observedJudgment(a, &.{ low, raised }) } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(@as(usize, 2), fake.count);
+        try std.testing.expectEqual(.invalid_line_range, report.attempts[0].diagnostic.?.reason);
+        try std.testing.expectEqualStrings("organization", report.attempts[0].diagnostic.?.criterion_id.?);
+        try std.testing.expectEqual(.changed_criterion, report.attempts[1].diagnostic.?.reason);
+    }
+}
+
+test "correction guidance states the grade pin only for evidence defects and logs unreadable responses" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const correction = @import("correction.zig");
+    for ([_]@FieldType(judgment.Diagnostic, "reason"){ .missing_source_evidence, .invalid_line_range, .criterion_count, .invalid_shape }) |reason| {
+        const guidance = try correction.guidance(a, .{ .reason = reason, .criterion_id = if (reason == .criterion_count or reason == .invalid_shape) null else "coverage" });
+        try std.testing.expectEqual(correction.evidenceDefect(reason), std.mem.indexOf(u8, guidance, correction.keep_grade) != null);
+    }
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    const inputs = try capture(a);
+    for ([_]struct { payload: []const u8, logged: correction.Unconstrained }{
+        .{ .payload = "{\"results\":[", .logged = .unparseable_json },
+        .{ .payload = "{\"results\":[]}", .logged = .no_readable_result },
+    }) |case| {
+        var observation = observed_good;
+        observation.payload = case.payload;
+        var fake: Fake = .{ .observations = &.{ observation, observed_good } };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+        try std.testing.expectEqual(case.logged, report.attempts[1].unconstrained.?);
+        try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+        _ = try reports.parse(a, try reports.json(a, report));
+    }
+}
+
+test "correction requests carry the shared response-format framing exactly once" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
+    const correction: @import("correction.zig").Correction = .{ .rejected = "{\"results\":[]}", .diagnostic = .{ .reason = .criterion_count } };
+    for ([_]configuration.Selection{ test_selection, bedrock_selection }) |selection| {
+        const config = try configuration.parse(a, config_bytes, selection);
+        const body = try @import("request.zig").encode(a, config, inputs, correction);
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, "rejected_response"));
+    }
+}
+
+test "a correction stays within the evaluator budget and its transient failures use retry_limit" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    var missing = observed_good;
+    missing.payload = try std.mem.replaceOwned(u8, a, good, source_locator ++ ",", "");
+    var config = try configuration.parse(a, config_bytes, test_selection);
+    config.total_token_budget = 30;
+    var exhausted: Fake = .{ .observations = &.{ missing, observed_good } };
+    const stopped = try evaluator.run(std.testing.io, a, exhausted.port(), config, inputs);
+    try std.testing.expectEqual(.budget_exceeded, stopped.outcome.evaluator_error);
+    try std.testing.expectEqual(@as(usize, 1), exhausted.count);
+    try std.testing.expectEqual(.missing_source_evidence, stopped.attempts[0].diagnostic.?.reason);
+    config.total_token_budget = 100;
+    var failed = observed_good;
+    failed.failure = .provider_failed;
+    failed.payload = null;
+    var transient: Fake = .{ .observations = &.{ missing, failed, observed_good } };
+    const recovered = try evaluator.run(std.testing.io, a, transient.port(), config, inputs);
+    try std.testing.expectEqual(.scored, recovered.outcome.evaluated.assessment);
+    try std.testing.expectEqual(.correction, recovered.attempts[1].purpose);
+    try std.testing.expectEqual(.correction, recovered.attempts[2].purpose);
+    try std.testing.expectEqualStrings(transient.bodies[1], transient.bodies[2]);
+    config.retry_limit = 0;
+    var no_retry: Fake = .{ .observations = &.{ missing, failed } };
+    try std.testing.expectEqual(.retries_exhausted, (try evaluator.run(std.testing.io, a, no_retry.port(), config, inputs)).outcome.evaluator_error);
+}
+
+test "persisted attempt sequences admit only transient retries and one correction" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const config = try configuration.parse(arena.allocator(), config_bytes, test_selection);
+    const identity: @import("provider.zig").Identity = .unavailable;
+    const usage = reports.Usage.init(1, 1, 2).?;
+    const diagnostic: judgment.Diagnostic = .{ .reason = .missing_source_evidence, .criterion_id = "coverage" };
+    const judged: reports.Attempt = .{ .ordinal = 1, .purpose = .judgment, .request_id = null, .identity = identity, .usage = usage, .failure = null };
+    var invalid = judged;
+    invalid.failure = .invalid_judgment;
+    invalid.diagnostic = diagnostic;
+    var transient = judged;
+    transient.failure = .provider_failed;
+    var unmetered = transient;
+    unmetered.usage = null;
+    var content = invalid;
+    content.diagnostic = .{ .reason = .invalid_score, .criterion_id = "coverage" };
+    var changed = invalid;
+    changed.diagnostic = .{ .reason = .changed_criterion, .criterion_id = "coverage" };
+    var correction = judged;
+    correction.ordinal = 2;
+    correction.purpose = .correction;
+    var failed_correction = invalid;
+    failed_correction.ordinal = 2;
+    failed_correction.purpose = .correction;
+    var retried = judged;
+    retried.ordinal = 2;
+    var second_transient = transient;
+    second_transient.ordinal = 2;
+    var third = judged;
+    third.ordinal = 3;
+    var third_correction = correction;
+    third_correction.ordinal = 3;
+    var unexplained = judged;
+    unexplained.failure = .invalid_judgment;
+    var stray = judged;
+    stray.diagnostic = diagnostic;
+    var first_correction = correction;
+    first_correction.ordinal = 1;
+    var unmetered_correction = correction;
+    unmetered_correction.usage = null;
+    var unmetered_grade = judged;
+    unmetered_grade.usage = null;
+    var unmetered_invalid = invalid;
+    unmetered_invalid.usage = null;
+    var logged_judgment = judged;
+    logged_judgment.unconstrained = .unparseable_json;
+    var logged_correction = correction;
+    logged_correction.unconstrained = .unparseable_json;
+    var unparsed = invalid;
+    unparsed.diagnostic = .{ .reason = .json };
+    var tight = config;
+    tight.total_token_budget = 2;
+    var exhausted_attempt = judged;
+    exhausted_attempt.failure = .budget_exceeded;
+    var transient_logged = logged_correction;
+    transient_logged.failure = .provider_failed;
+    var correction_retry = correction;
+    correction_retry.ordinal = 3;
+    const graded: reports.Outcome = .{ .evaluated = .{ .results = &.{}, .assessment = .no_applicable_criteria, .score_percent = null, .threshold = .not_configured } };
+    const rejected_grade: reports.Outcome = .{ .evaluator_error = .invalid_judgment };
+    for ([_]struct { attempts: []const reports.Attempt, outcome: reports.Outcome }{
+        .{ .attempts = &.{judged}, .outcome = graded },
+        .{ .attempts = &.{content}, .outcome = rejected_grade },
+        .{ .attempts = &.{ transient, second_transient }, .outcome = .{ .evaluator_error = .retries_exhausted } },
+        .{ .attempts = &.{ invalid, correction }, .outcome = graded },
+        .{ .attempts = &.{ unparsed, logged_correction }, .outcome = graded },
+        .{ .attempts = &.{ invalid, failed_correction }, .outcome = rejected_grade },
+        .{ .attempts = &.{ transient, retried }, .outcome = graded },
+    }) |accepted| try reports.validateAttempts(accepted.attempts, accepted.outcome, config);
+    // A budget stop must be justified by the recorded usage.
+    try reports.validateAttempts(&.{invalid}, .{ .evaluator_error = .budget_exceeded }, tight);
+    try std.testing.expectError(error.InvalidEvaluationContract, reports.validateAttempts(&.{invalid}, .{ .evaluator_error = .budget_exceeded }, config));
+    try std.testing.expectError(error.InvalidEvaluationContract, reports.validateAttempts(&.{judged}, graded, blank: {
+        var spent = config;
+        spent.total_token_budget = 1;
+        break :blank spent;
+    }));
+    for ([_]struct { attempts: []const reports.Attempt, outcome: reports.Outcome }{
+        .{ .attempts = &.{first_correction}, .outcome = graded },
+        .{ .attempts = &.{ content, correction }, .outcome = graded },
+        .{ .attempts = &.{ invalid, retried }, .outcome = graded },
+        .{ .attempts = &.{ invalid, failed_correction, third_correction }, .outcome = graded },
+        .{ .attempts = &.{ judged, correction }, .outcome = graded },
+        .{ .attempts = &.{ transient, correction }, .outcome = graded },
+        .{ .attempts = &.{ unmetered, retried }, .outcome = graded },
+        .{ .attempts = &.{ unmetered_invalid, correction }, .outcome = graded },
+        .{ .attempts = &.{ transient, second_transient, third }, .outcome = graded },
+        .{ .attempts = &.{changed}, .outcome = rejected_grade },
+        .{ .attempts = &.{unexplained}, .outcome = rejected_grade },
+        .{ .attempts = &.{stray}, .outcome = graded },
+        // The outcome is the final attempt's, and a pending correction is sent.
+        .{ .attempts = &.{invalid}, .outcome = graded },
+        .{ .attempts = &.{invalid}, .outcome = rejected_grade },
+        .{ .attempts = &.{judged}, .outcome = .{ .evaluator_error = .retries_exhausted } },
+        .{ .attempts = &.{transient}, .outcome = .{ .evaluator_error = .retries_exhausted } },
+        .{ .attempts = &.{ invalid, unmetered_correction }, .outcome = graded },
+        .{ .attempts = &.{unmetered_grade}, .outcome = graded },
+        .{ .attempts = &.{logged_judgment}, .outcome = graded },
+        // Evaluator outcomes are never one attempt's failure; stops need a cause.
+        .{ .attempts = &.{exhausted_attempt}, .outcome = .{ .evaluator_error = .budget_exceeded } },
+        .{ .attempts = &.{transient}, .outcome = .{ .evaluator_error = .provider_failed } },
+        .{ .attempts = &.{judged}, .outcome = .{ .evaluator_error = .cancelled } },
+        .{ .attempts = &.{content}, .outcome = .{ .evaluator_error = .cancelled } },
+        // The logged reason follows the defect and survives correction retries.
+        .{ .attempts = &.{ invalid, logged_correction }, .outcome = graded },
+        .{ .attempts = &.{ unparsed, correction }, .outcome = graded },
+        .{ .attempts = &.{ unparsed, transient_logged, correction_retry }, .outcome = graded },
+        .{ .attempts = &.{judged}, .outcome = rejected_grade },
+        .{ .attempts = &.{transient}, .outcome = .{ .evaluator_error = .refused } },
+    }) |rejected| try std.testing.expectError(error.InvalidEvaluationContract, reports.validateAttempts(rejected.attempts, rejected.outcome, config));
+}
+
 test "each rubric result needs source evidence even when sibling judgments are complete" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -972,32 +1502,41 @@ test "each rubric result needs source evidence even when sibling judgments are c
         const carried = (try std.json.parseFromSlice(std.json.Value, a, request, .{})).value.object;
         try std.testing.expectEqual(judgment.lineCount(inputs.sources[0].text), carried.get("sources").?.array.items[0].object.get("lines").?.array.items.len);
         try std.testing.expectEqualStrings("The user can store the message.", carried.get("specification").?.object.get("lines").?.array.items[0].object.get("text").?.string);
-        // Independent returned judgments progressively restore the omitted evidence;
-        // the evaluator itself must not retry an invalid judgment or fabricate it.
+        // Independent returned judgments progressively restore the omitted evidence.
+        // The one correction restores only the named criterion, so a second
+        // omitted criterion still ends the evaluation without a grade.
         for (0..4) |restored| {
             for (results[1..], 0..) |*result, index| result.evidence = if (index < restored) seed.evidence else seed.evidence[1..];
             const payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{});
+            var corrected_results = results;
+            if (restored < 3) corrected_results[restored + 1].evidence = seed.evidence;
             var observation = observed_good;
             observation.payload = payload;
-            var fake: Fake = .{ .observations = &.{observation} };
+            var correction_observation = observed_good;
+            correction_observation.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &corrected_results }, .{});
+            var fake: Fake = .{ .observations = &.{ observation, correction_observation } };
             const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
-            try std.testing.expectEqual(@as(usize, 1), fake.count);
-            try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+            const calls: usize = if (restored < 3) 2 else 1;
+            try std.testing.expectEqual(calls, fake.count);
+            try std.testing.expectEqual(calls, report.attempts.len);
             try std.testing.expectEqualDeep(observation.usage, report.attempts[0].usage);
             try std.testing.expectEqualDeep(seed, results[0]);
             if (restored < 3) {
-                try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
-                try std.testing.expectEqual(.missing_source_evidence, report.judgment_diagnostic.?.reason);
-                try std.testing.expectEqualStrings(ids[restored], report.judgment_diagnostic.?.criterion_id.?);
-                try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
+                try std.testing.expectEqual(.missing_source_evidence, report.attempts[0].diagnostic.?.reason);
+                try std.testing.expectEqualStrings(ids[restored], report.attempts[0].diagnostic.?.criterion_id.?);
                 // Claiming absence does not waive source evidence either.
                 results[3].missing_from_specification = true;
                 try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{})));
                 results[3].missing_from_specification = false;
+            }
+            if (restored < 2) {
+                try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+                try std.testing.expectEqualStrings(ids[restored + 1], report.attempts[1].diagnostic.?.criterion_id.?);
+                try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
             } else {
                 try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
-                try std.testing.expect(report.judgment_diagnostic == null);
-                try std.testing.expectEqualDeep(results[0..], report.outcome.evaluated.results);
+                try std.testing.expect(report.attempts[calls - 1].diagnostic == null);
+                try std.testing.expectEqualDeep(corrected_results[0..], report.outcome.evaluated.results);
             }
         }
     }
@@ -1283,7 +1822,7 @@ test "Bedrock temperature follows the registered capability and rejects configur
             var forged = config;
             forged.temperature = value;
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(forged));
-            try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, forged, inputs));
+            try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, forged, inputs, null));
         }
     }
 }
@@ -1297,7 +1836,7 @@ test "OpenAI evaluation keeps its existing optional temperature selection" {
         const field = try std.fmt.allocPrint(a, "\"temperature\":{s}", .{value});
         const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", field);
         const config = try configuration.parse(a, bytes, test_selection);
-        const encoded = try wire.request(a, config, inputs);
+        const encoded = try wire.request(a, config, inputs, null);
         const root = try c.decode(std.json.Value, a, encoded);
         if (std.mem.eql(u8, value, "null")) {
             try std.testing.expect(config.temperature == null);

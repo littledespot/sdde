@@ -107,8 +107,10 @@ match observed scores.
 
 Qualification requires human adjudication of the actual reports and a declaration
 binding the approved panel, human review, complete nonsecret judge configuration,
-judge instructions/result schema and every report's exact bytes. The validator
-rechecks report identities, accounting, exact captured sources/rubric/specimens,
+judge instructions/result schema and every report's exact bytes. A report may
+contain transient retries and the one correction of a mechanical judgment defect
+([evaluator](evaluator.md#attempts-and-failures)); its final attempt is the grade.
+The validator rechecks report identities, accounting, exact captured sources/rubric/specimens,
 native judgment arithmetic and pass/fail agreement for every panel member. A panel
 must contain at least two positives and one negative. Missing, malformed, changed,
 uncertain or disagreeing evidence cannot qualify the grader. Passing this panel
@@ -124,12 +126,12 @@ and qualification. No real grader is currently qualified by these pending record
 
 - `evaluation-case/v2`: required qualification paths.
 - `evaluation-rubric/v2`: required nullable critical minima.
-- `evaluation-report/v4`: raw assessment, line-locator evidence and explicit
-  grader/acceptance evidence.
+- `evaluation-report/v5`: raw assessment, line-locator evidence, per-attempt purpose
+  and diagnostic, and explicit grader/acceptance evidence.
 - `spec-e2e-case/v2`: required expected outcome.
-- `spec-e2e-report/v6`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v7`: the single total token budget and aggregate actual usage,
   expected outcome, captured evaluation inputs, replayable admission evidence,
-  separate acceptance and an embedded `evaluation-report/v4`.
+  separate acceptance and an embedded `evaluation-report/v5`.
 - `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and
   derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,

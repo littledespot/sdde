@@ -73,11 +73,11 @@ const Fixture = struct {
                 .missing_from_specification = false,
             }} };
             result.* = .{
-                .schema = "evaluation-report/v4",
+                .schema = "evaluation-report/v5",
                 .protocol_sha256 = try q.protocolSha256(a),
                 .capture = input,
                 .configuration = config,
-                .attempts = try a.dupe(reports.Attempt, &.{.{ .ordinal = 1, .request_id = "unit-request", .identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } }, .usage = reports.Usage.init(1, 1, 2).?, .failure = null }}),
+                .attempts = try a.dupe(reports.Attempt, &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = "unit-request", .identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } }, .usage = reports.Usage.init(1, 1, 2).?, .failure = null }}),
                 .outcome = .{ .evaluated = try judgment.validate(a, null, input, try std.json.Stringify.valueAlloc(a, proposal, .{})) },
             };
             const bytes = try reports.json(a, result.*);
@@ -268,12 +268,46 @@ test "reports cannot qualify foreign captures forged arithmetic missing usage or
             },
         }
         try fixture.saveReport(0, value);
-        // Forged arithmetic is a malformed persisted report: reports.parse rejects it.
-        if (fault == .protocol or fault == .arithmetic) {
+        // Forged arithmetic, and an outcome that is not the final attempt's, are
+        // malformed persisted reports: reports.parse rejects them.
+        if (fault == .protocol or fault == .arithmetic or fault == .no_attempts or fault == .failed_attempt or fault == .no_usage) {
             try std.testing.expectError(error.InvalidGraderQualification, fixture.inspect());
         } else {
             try unresolved(expected, try fixture.inspect());
         }
+    }
+}
+
+test "one mechanical correction remains qualification evidence; any other attempt shape does not" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]enum { corrected, uncorrectable, second_correction }{ .corrected, .uncorrectable, .second_correction }) |shape| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        var fixture = try Fixture.init(a, tmp.dir);
+        var value = fixture.results[0];
+        const graded = value.attempts[0];
+        const affected = value.outcome.evaluated.results[0].criterion_id;
+        var rejected = graded;
+        rejected.failure = .invalid_judgment;
+        rejected.diagnostic = .{ .reason = if (shape == .uncorrectable) .invalid_score else .missing_source_evidence, .criterion_id = affected };
+        var corrected = graded;
+        corrected.ordinal = 2;
+        corrected.purpose = .correction;
+        var repeated = rejected;
+        repeated.ordinal = 2;
+        repeated.purpose = .correction;
+        var final = corrected;
+        final.ordinal = 3;
+        value.attempts = switch (shape) {
+            .corrected, .uncorrectable => try a.dupe(reports.Attempt, &.{ rejected, corrected }),
+            .second_correction => try a.dupe(reports.Attempt, &.{ rejected, repeated, final }),
+        };
+        try fixture.saveReport(0, value);
+        if (shape == .corrected) {
+            try std.testing.expect(try fixture.inspect() == .qualified);
+        } else try std.testing.expectError(error.InvalidGraderQualification, fixture.inspect());
     }
 }
 

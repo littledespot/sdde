@@ -19,15 +19,22 @@ pub const Failure = enum {
     retries_exhausted,
 };
 pub const Usage = @import("../../src/domain/llm_provider_operation.zig").ProviderUsage;
+/// `purpose` names the request sent: the original judgment request or its one
+/// correction. A transient retry resends the same request. `diagnostic` is the
+/// typed rejection of that attempt's judgment, when it had one. `unconstrained`
+/// logs why a correction is checked by validation alone.
 pub const Attempt = struct {
     ordinal: u32,
+    purpose: enum { judgment, correction },
     request_id: ?[]const u8,
     identity: @import("provider.zig").Identity,
     usage: ?Usage,
     failure: ?Failure,
+    diagnostic: ?j.Diagnostic = null,
+    unconstrained: ?@import("correction.zig").Unconstrained = null,
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
-pub const schema_version = "evaluation-report/v4";
+pub const schema_version = "evaluation-report/v5";
 pub const Report = struct {
     schema: []const u8 = schema_version,
     prompt_revision: []const u8 = @import("packet.zig").revision,
@@ -36,7 +43,6 @@ pub const Report = struct {
     configuration: @import("configuration.zig").Config,
     attempts: []const Attempt,
     outcome: Outcome,
-    judgment_diagnostic: ?j.Diagnostic = null,
     acceptance: gate.Evidence = .{},
     grader_qualification: ?@import("grading_evidence.zig").Evidence = null,
     protocol_sha256: ?[]const u8 = null,
@@ -63,6 +69,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) c.Error!Report {
             if (!(byte >= '0' and byte <= '9') and !(byte >= 'a' and byte <= 'f')) return error.InvalidEvaluationContract;
         }
     }
+    try validateAttempts(value.attempts, value.outcome, value.configuration);
     // A persisted judgment must still resolve against its own captured documents
     // and reproduce its recorded arithmetic; every reader inherits this check.
     if (value.outcome == .evaluated) {
@@ -73,6 +80,77 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) c.Error!Report {
         if (!std.mem.eql(u8, recorded, expected)) return error.InvalidEvaluationContract;
     }
     return value;
+}
+
+/// The closed attempt policy. A transient provider failure with known usage
+/// resends the same request, within `retry_limit`; a correctable invalid
+/// judgment is followed only by its correction, up to the hashed correction
+/// limit, whose `unconstrained` log matches the defect; every other attempt is
+/// final. The outcome is the final attempt's, or a stop the attempts justify.
+pub fn validateAttempts(attempts: []const Attempt, outcome: Outcome, config: @import("configuration.zig").Config) c.Error!void {
+    const correction = @import("correction.zig");
+    var retries: usize = 0;
+    var corrections: usize = 0;
+    var total: u128 = 0;
+    for (attempts, 0..) |attempt, index| {
+        if (attempt.ordinal != index + 1) return error.InvalidEvaluationContract;
+        if (attempt.usage) |usage| total += usage.total_tokens;
+        if (attempt.failure) |failure| switch (failure) {
+            // Evaluator outcomes, never one attempt's observation.
+            .budget_exceeded, .retries_exhausted => return error.InvalidEvaluationContract,
+            else => {},
+        };
+        if ((attempt.diagnostic != null) != (attempt.failure == .invalid_judgment)) return error.InvalidEvaluationContract;
+        if (attempt.diagnostic) |diagnostic| if (diagnostic.reason == .changed_criterion and attempt.purpose != .correction) return error.InvalidEvaluationContract;
+        if (attempt.unconstrained != null and attempt.purpose != .correction) return error.InvalidEvaluationContract;
+        if (index == 0) {
+            if (attempt.purpose != .judgment) return error.InvalidEvaluationContract;
+            continue;
+        }
+        const prior = attempts[index - 1];
+        switch (prior.failure orelse return error.InvalidEvaluationContract) {
+            .provider_failed, .rate_limited => {
+                if (attempt.purpose != prior.purpose or prior.usage == null or attempt.unconstrained != prior.unconstrained) return error.InvalidEvaluationContract;
+                retries += 1;
+            },
+            .invalid_judgment => {
+                const defect = prior.diagnostic.?.reason;
+                if (attempt.purpose != .correction or corrections == correction.attempts or prior.usage == null or !correction.correctable(defect)) return error.InvalidEvaluationContract;
+                // The log follows from the defect's class: unparseable JSON always,
+                // a decoded response only when it held no result.
+                const logged = switch (defect) {
+                    .json => attempt.unconstrained == .unparseable_json,
+                    .invalid_shape => attempt.unconstrained != .unparseable_json,
+                    .criterion_count => attempt.unconstrained == null or attempt.unconstrained == .no_readable_result,
+                    else => attempt.unconstrained == null,
+                };
+                if (!logged) return error.InvalidEvaluationContract;
+                corrections += 1;
+            },
+            else => return error.InvalidEvaluationContract,
+        }
+    }
+    if (retries > config.retry_limit) return error.InvalidEvaluationContract;
+    const last: ?Attempt = if (attempts.len == 0) null else attempts[attempts.len - 1];
+    // A judgment, valid or not, is validated only with actual usage.
+    if (last) |final| if ((final.failure == null or final.failure == .invalid_judgment) and final.usage == null) return error.InvalidEvaluationContract;
+    // A metered transient failure is retried, and a correctable defect with a
+    // correction remaining is corrected, unless the budget or cancellation stops it.
+    const retry_pending = if (last) |final| (final.failure == .provider_failed or final.failure == .rate_limited) and final.usage != null else false;
+    const correction_pending = if (last) |final| final.failure == .invalid_judgment and corrections < correction.attempts and
+        correction.correctable(final.diagnostic.?.reason) else false;
+    const exhausted = total > config.total_token_budget or (total >= config.total_token_budget and (retry_pending or correction_pending));
+    switch (outcome) {
+        .evaluated => if (last == null or last.?.failure != null or total > config.total_token_budget) return error.InvalidEvaluationContract,
+        .evaluator_error => |failure| switch (failure) {
+            .authentication, .configuration, .rate_limited, .timeout, .provider_failed, .refused, .incomplete, .invalid_response, .invalid_judgment, .usage_unavailable => {
+                if (last == null or last.?.failure != failure or retry_pending or correction_pending or exhausted) return error.InvalidEvaluationContract;
+            },
+            .retries_exhausted => if (!retry_pending or retries != config.retry_limit or exhausted) return error.InvalidEvaluationContract,
+            .budget_exceeded => if (!exhausted) return error.InvalidEvaluationContract,
+            .cancelled => if (exhausted or (last != null and last.?.failure != .cancelled and !retry_pending and !correction_pending)) return error.InvalidEvaluationContract,
+        },
+    }
 }
 
 pub fn json(allocator: std.mem.Allocator, report: Report) std.mem.Allocator.Error![]const u8 {
@@ -114,7 +192,7 @@ fn render(out: *std.Io.Writer, report: Report) (std.Io.Writer.Error || c.Error)!
         },
     };
     for (report.attempts) |attempt| {
-        try out.print("Attempt {d}: ", .{attempt.ordinal});
+        try out.print("Attempt {d} ({s}): ", .{ attempt.ordinal, @tagName(attempt.purpose) });
         switch (attempt.identity) {
             .unavailable => try out.writeAll("provider identity unavailable"),
             .openai_response => |value| {
@@ -141,30 +219,29 @@ fn render(out: *std.Io.Writer, report: Report) (std.Io.Writer.Error || c.Error)!
         } else try out.writeAll("; usage unavailable");
         if (attempt.failure) |failure| try out.print("; {s}", .{@tagName(failure)});
         try out.writeAll("\n\n");
+        if (attempt.unconstrained) |reason| try out.print("Correction checked by validation alone: {s}.\n\n", .{reason.explanation()});
+        if (attempt.diagnostic) |diagnostic| {
+            try out.print("Judgment diagnostic: {s}", .{@tagName(diagnostic.reason)});
+            if (diagnostic.criterion_id) |id| {
+                try out.writeAll("; criterion ");
+                try escape(out, id);
+            }
+            if (diagnostic.evidence_index) |index| try out.print("; evidence index {d}", .{index});
+            if (diagnostic.document_id) |id| {
+                try out.writeAll("; document ");
+                try escape(out, id);
+            }
+            if (diagnostic.json) |detail| {
+                try out.print("; {s}", .{@tagName(detail.reason)});
+                if (detail.location) |location| try out.print(" at byte {d}, line {d}, column {d}", .{ location.byte_offset, location.line, location.column });
+                try out.writeAll(". ");
+                try out.writeAll(detail.explanation());
+            }
+            try out.writeAll("\n\n");
+        }
     }
     switch (report.outcome) {
-        .evaluator_error => |failure| {
-            try out.print("Evaluator error: {s}. No quality score.\n", .{@tagName(failure)});
-            if (report.judgment_diagnostic) |diagnostic| {
-                try out.print("\nJudgment diagnostic: {s}", .{@tagName(diagnostic.reason)});
-                if (diagnostic.criterion_id) |id| {
-                    try out.writeAll("; criterion ");
-                    try escape(out, id);
-                }
-                if (diagnostic.evidence_index) |index| try out.print("; evidence index {d}", .{index});
-                if (diagnostic.document_id) |id| {
-                    try out.writeAll("; document ");
-                    try escape(out, id);
-                }
-                if (diagnostic.json) |detail| {
-                    try out.print("; {s}", .{@tagName(detail.reason)});
-                    if (detail.location) |location| try out.print(" at byte {d}, line {d}, column {d}", .{ location.byte_offset, location.line, location.column });
-                    try out.writeAll(". ");
-                    try out.writeAll(detail.explanation());
-                }
-                try out.writeByte('\n');
-            }
-        },
+        .evaluator_error => |failure| try out.print("Evaluator error: {s}. No quality score.\n", .{@tagName(failure)}),
         .evaluated => |result| {
             try out.print("Assessment: {s}; threshold: {s}\n\n", .{ @tagName(result.assessment), @tagName(result.threshold) });
             if (result.score_percent) |score| try out.print("Score: {d:.2}%\n\n", .{score});

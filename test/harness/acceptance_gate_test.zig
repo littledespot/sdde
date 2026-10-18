@@ -84,7 +84,8 @@ fn report() reports.Report {
             .retry_delay_ms = 0,
             .total_token_budget = 150000,
         },
-        .attempts = &.{},
+        // An evaluated outcome is its successful final attempt's.
+        .attempts = &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = null, .identity = .unavailable, .usage = .{ .input_tokens = 1, .output_tokens = 1, .total_tokens = 2 }, .failure = null }},
         .outcome = .{ .evaluated = result() },
         .acceptance = gate.from(rubric(), result(), .{ .self_grading = generation }, .unresolved),
         .grader_qualification = .{ .unresolved = .review_pending },
@@ -133,13 +134,13 @@ test "evaluation reports render human gate critical minima and qualification rea
     }) |expected| try std.testing.expect(std.mem.indexOf(u8, rendered, expected) != null);
 }
 
-test "persisted v4 reports require explicit acceptance and protocol identities" {
+test "persisted evaluation reports require explicit acceptance and protocol identities" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try reports.json(a, report());
     const parsed = try reports.parse(a, bytes);
-    try std.testing.expectEqualStrings("evaluation-report/v4", parsed.schema);
+    try std.testing.expectEqualStrings("evaluation-report/v5", parsed.schema);
     try std.testing.expectEqualDeep(report().acceptance, parsed.acceptance);
     for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
         var tree = try @import("../../src/domain/strict_json.zig").parse(a, bytes, c.json_limits, false, null);
@@ -148,7 +149,7 @@ test "persisted v4 reports require explicit acceptance and protocol identities" 
         try std.testing.expectError(error.InvalidEvaluationContract, reports.parse(a, try std.json.Stringify.valueAlloc(a, tree.value, .{})));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-report/v4", "evaluation-report/v3" },
+        .{ "evaluation-report/v5", "evaluation-report/v4" },
         .{ @import("packet.zig").revision, "old-prompt" },
         .{ judgment.schema_revision, "old-judgment" },
         .{ digest, "bad-digest" },

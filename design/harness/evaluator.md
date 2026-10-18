@@ -191,7 +191,7 @@ calibration retains raw scores while acceptance remains unresolved.
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
 - Cases and rubrics use distinct `/v2` identifiers; configuration remains `/v1`.
-  Reports use `evaluation-report/v4` with typed judgment and acceptance evidence.
+  Reports use `evaluation-report/v5` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -218,7 +218,10 @@ Every criterion must receive exactly one of:
     coordinates (`source_coordinates.zig`): CR, LF and CRLF each end one line, and a
     final terminator ends the last line instead of starting another.
   - The protocol hash binds that numbering through a fixed probe document, so a
-    change to it invalidates retained qualification.
+    change to it invalidates retained qualification. Since `rubric-judge/v3` it also
+    binds the correction instruction, explanations, correctable reasons, attempt
+    count, preservation rule, grade-pinned reasons, provider placement and the exact
+    correction envelope through fixed probe diagnostics.
   - Evidence is `{document_id, first_line, last_line}`, inclusive and 1-based. The
     judge cites lines instead of copying text, because verbatim quotes from the
     small judge drifted into paraphrase and could not be matched.
@@ -282,19 +285,67 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v4` carries the judgment validator's typed diagnostic in
-  JSON and Markdown: parser byte/line/column for invalid JSON, or the affected
+- `evaluation-report/v5` records each attempt's purpose (`judgment` or `correction`)
+  and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
+  and Markdown: parser byte/line/column for invalid JSON, or the affected
   criterion, zero-based evidence index and document ID for an unknown document,
   invalid line range or blank evidence.
   Missing source and specification evidence are distinct. Valid JSON that fails
-  the closed response contract reports `invalid_shape`. Diagnostics add no retry
-  or authority to score an invalid judgment; the E2E report embeds the same value.
+  the closed response contract reports `invalid_shape`. A diagnostic grants no
+  authority to score an invalid judgment; the E2E report embeds the same value.
 
 - Only transient provider failures/rate limits with known actual usage can retry, within
-  the configured count, delay and remaining allowance.
+  the configured count, delay and remaining allowance. A transient retry resends the
+  same request.
 - Unknown consumption stops further calls; ordinary HTTP 429 responses without usage
   therefore stop.
-- Low scores, refusals and invalid judgments are not retried to obtain a pass.
+- **One correction (approved by the user on 18 October 2026).** An invalid judgment
+  whose diagnostic is mechanical gets exactly one correction request:
+  - correctable: `json`, `invalid_shape`, `criterion_count`, `missing_criterion`,
+    `missing_source_evidence`, `missing_specification_evidence`, `blank_evidence`,
+    `unknown_document` and `invalid_line_range`;
+  - not correctable, ending the evaluation: `duplicate_criterion`,
+    `empty_explanation`, `invalid_score`, `invalid_disposition` and
+    `changed_criterion`, as well as refusals, incomplete output and other provider
+    failures;
+  - the request resends the same instruction, documents, rubric, schema and model,
+    plus the validator's typed diagnostic (reason, affected criterion when one
+    exists, evidence location, and parser reason and position; parser context is
+    omitted), a fixed explanation and instruction, and the rejected response. For
+    an evidence defect it also states that the result's disposition and score must
+    stay. Bedrock carries the guidance in its system blocks and the evidence in the
+    user message; OpenAI sends both as user messages after the documents;
+  - judgments decode through widened integers, so a negative or oversized score is
+    `invalid_score` and a negative or oversized line is `invalid_line_range`,
+    never a shape defect;
+  - the complete corrected judgment is revalidated by `judgment.validate`. Every
+    result the rejected response made readable and the diagnostic did not name must
+    be returned equal after canonical decoding, or the correction is rejected as
+    `changed_criterion`. After a shape defect, each result that decodes on its own
+    under a top-level `results` array is readable. Unparseable JSON, or a response
+    without that array or with no decodable result, has no readable result, so its
+    correction is constrained by validation alone; results that do not decode on
+    their own in an otherwise readable response are likewise unconstrained. The
+    user accepted this exception on 18 October 2026 on condition that it is
+    logged: such a correction attempt records `unconstrained`
+    (`unparseable_json`, `no_results_array`, `no_readable_result` or
+    `some_results_unreadable`) with its explanation in JSON and Markdown, and the
+    reader requires the reason to match the defect. A readable duplicate behind a shape defect ends the
+    evaluation as `duplicate_criterion`. For an evidence defect (`missing_*_evidence`,
+    `blank_evidence`, `unknown_document`, `invalid_line_range`) the named result
+    must also keep its disposition and score. Results absent from, unknown to or
+    missing in the rubric may be fixed alongside the named defect, but a second
+    defective readable result cannot be changed, so it ends the evaluation;
+  - repeated criteria are detected before counts and order, so a duplicate always
+    ends the evaluation as `duplicate_criterion`;
+  - the correction is fixed protocol, outside `retry_limit`; its own transient
+    failures use the remaining retries. Both attempts count against the evaluator's
+    total-token allowance, and an exhausted allowance prevents the correction
+    (`budget_exceeded`);
+  - an invalid correction is final (`invalid_judgment`); no invalid grade is
+    accepted.
+- Low scores, refusals and valid judgments are never retried or corrected to obtain a
+  pass.
 
 - The total-token allowance is checked against actual responses; it cannot promise a
   hard billing ceiling for an in-flight request.
@@ -323,7 +374,8 @@ For scored criteria, the percentage is:
 
 - JSON retains exact source/spec bytes, original case/rubric bytes and their parsed
   projections, origin, prompt/schema revisions, judge configuration, per-attempt
-  identity/usage, criterion results and aggregate outcome.
+  identity/usage/purpose/diagnostic/unconstrained, criterion results and aggregate
+  outcome.
 - Markdown is a readable, escaped projection of the same report value.
 - Treat retained inputs as potentially sensitive local data.
 - An input overwritten later cannot alter this capture.
@@ -384,8 +436,10 @@ zig build verify
 - Tests use scripted results for the original rubric and unrelated criterion IDs, score
   ranges and weights.
 - They exercise closed parsing, evidence/absence joins, uncertainty, provider errors,
-  retry/budget accounting, allocation failures, immutable file capture, unsafe paths and
-  report escaping.
+  retry/budget accounting, the one-correction policy (accepted correction,
+  uncorrectable defects, changed siblings, budget, transient retry and forged attempt
+  sequences), allocation failures, immutable file capture, unsafe paths and report
+  escaping.
 - The clean-directory smoke runs the standalone binary without credentials or
   development assets.
 - Ordinary `test`/`verify` include offline evaluator checks; they never invoke an API.

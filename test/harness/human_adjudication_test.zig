@@ -51,7 +51,7 @@ test "pending human review preserves known native blocked and unexpected clarifi
     report.workflow_outcome = .needs_user;
     const clarification = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.unexpected_outcome, clarification.acceptance.failed);
-    report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
+    report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
     const ungraded = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.missing_expected_outcome, ungraded.acceptance.unresolved);
 }
@@ -161,9 +161,9 @@ test "human declaration and original E2E report are closed explicitly versioned 
     }
     const pending = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     for ([_][2][]const u8{
-        .{ "spec-e2e-report/v6", "spec-e2e-report/v5" },
+        .{ "spec-e2e-report/v7", "spec-e2e-report/v6" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v6\",", "" },
+        .{ "\"schema\":\"spec-e2e-report/v7\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
     }) |replacement| {
         const invalid = try std.mem.replaceOwned(u8, a, original, replacement[0], replacement[1]);

@@ -13,17 +13,23 @@ const operation = @import("../../src/domain/llm_provider_operation.zig");
 const strict = @import("../../src/domain/strict_json.zig");
 const Region = @import("../../src/domain/llm_provider_contracts.zig").BedrockRegion;
 
-pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
+pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture, correction: ?@import("correction.zig").Correction) c.Error![]const u8 {
     try configuration.validate(config);
     if (config.api != .bedrock_converse) return error.InvalidEvaluationContract;
     const supported = @import("../../src/composition/provider_model_contracts.zig").registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(config.model).?) orelse return error.InvalidEvaluationContract;
-    const content = [_]operation.ModelVisibleContent{
+    const judged = [_]operation.ModelVisibleContent{
         .{ .system = packet.instructions },
         .{ .user = try packet.input(a, capture) },
     };
+    const content: []const operation.ModelVisibleContent = if (correction) |selected| try a.dupe(operation.ModelVisibleContent, &.{
+        judged[0],
+        judged[1],
+        .{ .guidance = try @import("correction.zig").guidance(a, selected.diagnostic) },
+        .{ .evidence = try @import("correction.zig").evidence(a, selected.rejected) },
+    }) else &judged;
     const schema = try packet.resultSchema(a);
     return encoding.encodeText(a, .{
-        .content = &content,
+        .content = content,
         .schema = .{ .native = .{ .guidance = schema, .structure = schema } },
         .schema_name = "rubric_judgment",
         .temperature = if (config.temperature != null) .fixed else null,

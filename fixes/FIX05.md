@@ -621,6 +621,16 @@ Current native facts, authority-completeness checks and genuine supported human
 decisions remain mandatory. The separate assessment-model/configuration option,
 budget changes and further live calls are not authorized by this approval.
 
+**Approval — 18 October 2026 (record families):** after the 15:33 loan-renewal run
+spent 80,901 tokens on per-record advice, the user approved amending ADR 0023 and
+§17.3 so source review assigns one record family per call, with feature collection
+subjects kept separate, one protocol-correction allowance and atomic stop per family,
+`specification-state` advancing to v19, and the budget and reviewed record kinds
+unchanged. The user also chose to send each Bedrock model's documented maximum output
+from its provider configuration, because Bedrock otherwise stops GPT-OSS-20B at 4,096
+output tokens (§1) and a 21-record family needs about 5,800. That needs an ADR 0011
+amendment. Neither is implemented yet.
+
 **Additional approval — 17 October 2026:** the user approved source-only positive
 readiness evidence before an authored candidate exists. The native source-purpose
 role requires explicitly selected nonempty original source IDs and empty canonical
@@ -1701,10 +1711,11 @@ The approved follow-up and remaining proposals below authorize no live calls:
    - Done: the 12:10/12:11 v6 pair confirmed live locators. §14 fixes the
      loan-renewal membership block, and the 15:31/15:33 pair on `96fb905` confirms
      it no longer blocks (§1).
-   - Next: decide whether the grader gets a bounded correction for an invalid
-     judgment. Two consecutive grades failed on missing source evidence.
-   - Reduce post-generation source-review cost (B2). Loan-renewal's 21 assignments
-     exhaust the 100,000-token budget before publication.
+   - Done offline: the grader's one mechanical correction (§15).
+   - Next: send each Bedrock model's documented maximum output (ADR 0011
+     amendment), then review records per family (B2 approval of 18 October).
+     Loan-renewal's 21 assignments exhaust the 100,000-token budget before
+     publication.
    - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
      §10-style schema exclusion needs no ADR change.
    - Adjudicate its reports under `human-spec-adjudication/v2`.
@@ -1735,7 +1746,9 @@ Rules for every contract change (former FIX04 §1.1):
 - Never tune on the sixteen reserved qualification features.
 - A model limitation under a coherent contract is a valid result. Don't answer it
   with field-, case- or model-specific rules, sampling changes, extra retries, a
-  second model or a weaker admission rule.
+  second model or a weaker admission rule. The development grader's single
+  mechanical correction (§15, user decision of 18 October 2026) is an explicit
+  exception for the harness, not engine policy.
 - Budget-stopped, malformed and exhausted runs stay in the attempted-workload
   denominator.
 
@@ -1792,6 +1805,8 @@ bounded approval, and each E2E run needs its own explicit approval
   updated §6.
 - **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
   and §6.
+- **18 October 2026, grader correction and B2 approvals:** added §15, recorded the
+  record-family and maximum-output approvals under B2, and updated §6 and §7.
 - **18 October 2026, after the §14 runs:** added §1's §14 live diagnostics and
   updated §6.
 - **18 October 2026, membership at admission:** the user directed applying the best
@@ -2407,3 +2422,122 @@ The `invalid_json` label on this route also remains wrong until then.
 | `zig build lint` and `git diff --check` | Pass. |
 
 No billed calls are included.
+
+## 15. Grader one-shot correction — 18 October 2026
+
+**Decision.** Two consecutive live grades failed with `invalid_judgment`
+(`missing_source_evidence` on `organization`, then `clarity-testability`), so no run
+received an automated grade. On 18 October the user decided:
+
+> Allow one correction attempt per invalid grader judgment. Limit correction to
+> mechanical errors: missing evidence, invalid line references, missing criteria or
+> malformed output. Send the exact validation diagnostic and identify the affected
+> criterion. Keep the specification, sources, rubric, model and unaffected criterion
+> results unchanged. Revalidate the complete corrected judgment using the existing
+> canonical validator. Never retry a valid low score to obtain a passing grade. Count
+> both attempts against the evaluator's token budget and retain their responses,
+> diagnostics and usage. If correction fails or the budget is exhausted, report an
+> evaluator error; do not accept the invalid grade. Add positive and negative tests
+> before enabling this policy.
+
+The user then chose the closed correctable list below and fixed protocol outside
+`retry_limit`.
+
+**Authority.** The grader is development-only harness code under R8: it grants no
+workflow, publication or acceptance authority. No ADR or invariant governs grader
+retries. The superseded text was harness documentation (evaluator.md "invalid
+judgments are not retried") and the tests that pinned it.
+
+**Change** (in `test/harness/`):
+- `correction.zig` owns the policy:
+  - correctable reasons: `json`, `invalid_shape`, `criterion_count`,
+    `missing_criterion`, `missing_source_evidence`,
+    `missing_specification_evidence`, `blank_evidence`, `unknown_document` and
+    `invalid_line_range`;
+  - model-visible guidance: the exact diagnostic, naming the criterion when one
+    exists, a fixed explanation and instruction, and the rejected response;
+  - the preservation check: every result the rejected response made readable and
+    the diagnostic did not name must be returned equal after canonical decoding,
+    or the correction is rejected as `changed_criterion`. After a shape defect
+    each result that decodes on its own under a top-level `results` array is
+    readable; unparseable JSON, a response without that array or one with no
+    decodable result has none, and a readable duplicate is final. The user accepted
+    validation-only correction of unreadable results on condition that it is
+    logged: that attempt records `unconstrained` (`unparseable_json`,
+    `no_results_array`, `no_readable_result` or `some_results_unreadable`) in JSON
+    and Markdown, matching the defect.
+- `judgment.validate` decodes through widened integers, so a negative or oversized
+  score is `invalid_score` and such a line is `invalid_line_range`, not a shape
+  defect. An evidence defect also pins the named result's
+    disposition and score, and its guidance says so.
+- `judgment.validate` detects repeated criteria before counts and order, so a
+  duplicate is always final. Provider observations can no longer report judgment,
+  budget or retry outcomes.
+- `evaluate.zig` sends one correction after a correctable invalid judgment, through
+  both the OpenAI and the Bedrock encoders. The correction is outside `retry_limit`;
+  its transient failures use the remaining retries. Both attempts count against the
+  evaluator budget, and an exhausted budget prevents the correction
+  (`budget_exceeded`). An invalid correction is final (`invalid_judgment`).
+  Valid judgments, including low scores, are never resent.
+- `evaluation-report/v5` gives each attempt its purpose and diagnostic and drops the
+  report-level diagnostic. The reader admits only metered transient retries within
+  `retry_limit` and up to the hashed correction limit after a metered correctable
+  defect. The outcome must be the final attempt's, a pending correction can stop
+  only on the budget or cancellation, and `retries_exhausted` must follow a used-up
+  metered retry. Budget stops must be justified by the recorded usage,
+  cancellation needs a pending retry or correction, and attempts cannot carry
+  evaluator-only failures.
+- `rubric-judge/v3`: the protocol hash binds the correction instruction,
+  explanations, correctable reasons, attempt count, preservation rule, grade-pinned
+  reasons, provider placement and the exact envelope through fixed probes.
+- Qualification accepts one correction; any other shape rejects.
+- `spec-e2e-report/v7` and `baseline-acquisition/v5` follow the embedded report.
+  evaluator.md, e2e.md and acceptance.md record the decision. With no
+  compatibility reader, the retained 18 October `spec-e2e-report/v6` reports
+  (12:10/12:11 and 15:31/15:33) can no longer be read by human adjudication or
+  feasibility evidence. Adjudicate a v7 report from a new run.
+
+**Known limit.** The validator reports the first defect only. A second defective
+readable result cannot be changed, so such a judgment ends as `invalid_judgment`.
+Missing, unknown and absent results can be fixed alongside the named defect. Both
+observed failures had a single defect.
+
+**Regression evidence** (`test/harness/tests.zig`, `grader_qualification_test.zig`):
+- A missing-evidence judgment is corrected once and graded, with `retry_limit` 0.
+  The correction resends the same model, instruction, schema and documents, then
+  the diagnostic and the rejected response; the Bedrock body carries them once.
+- Every listed mechanical defect gets one correction; repeating it ends with no
+  grade. Score, explanation and disposition defects get none, and a valid low score
+  is graded as is. The correctable set is pinned against the closed reason list.
+- A correction that keeps the low sibling score is graded; one that raises it is
+  rejected as `changed_criterion`. After a shape defect, the readable sibling is
+  preserved the same way; unparseable JSON is constrained by validation alone.
+- Fixing an invalid line reference while raising that criterion's score is
+  rejected; fixing the reference alone is graded. Missing-criterion, count and
+  missing-specification-evidence defects are corrected. Duplicates are final in
+  every count and order. Correction requests carry the shared response-format
+  framing once for both providers. A duplicate behind a shape defect is final; a
+  root-array response gets the documented validation-only correction; a changed
+  sibling explanation, evidence or absence claim is rejected; and corrected,
+  budget-stopped, duplicate-stopped and regraded reports round-trip through the
+  reader.
+- Budget exhaustion prevents the correction. A transient failure of the correction
+  request retries the same request within `retry_limit`, or exhausts it.
+- The trace retains the correction request. Forged attempt sequences are rejected:
+  a correction first, after a content defect or without a defect; two corrections;
+  a judgment after a defect; a diagnostic without `invalid_judgment`;
+  `changed_criterion` outside a correction; an unmetered or over-limit retry; and
+  an outcome that is not the final attempt's.
+- A report with one mechanical correction still qualifies. A correction after an
+  uncorrectable defect, or a second correction, does not.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator --summary all` | 3/3 steps; 398/398 tests. |
+| `zig build lint` | Pass. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,906/1,906 tests, including clean packaged-executable checks. |
+
+No live grading ran; whether GPT-OSS-20B fixes its own evidence omission is still
+unmeasured.

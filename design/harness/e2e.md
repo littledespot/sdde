@@ -348,7 +348,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The rubric assesses semantic quality.
 - A readable poor specification is passed unchanged to the judge after the engine's own
   gates accept it.
-- There is no harness semantic prefilter or retry-until-good loop.
+- There is no harness semantic prefilter or retry-until-good loop. The grader's one
+  correction answers only a mechanical judgment defect, never a score
+  ([evaluator](evaluator.md#attempts-and-failures)).
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
 - Rubric revision 2 includes the user-added UTC date/time requirement and remains an
   uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
@@ -570,11 +572,13 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v6`,
-`baseline-acquisition/v4`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
+The current closed report formats are `spec-e2e-report/v7`,
+`baseline-acquisition/v5`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
-`rubric-judgment/v2` because they embed its judgments or the E2E report. The compatibility report's outer
+`rubric-judgment/v2` because they embed its judgments or the E2E report.
+`spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
+`evaluation-report/v5`, which records per-attempt purpose and diagnostics. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
 Feasibility evidence retains the single total budget and aggregate actual usage.

@@ -38,7 +38,7 @@ pub fn nativeInvocationObserved(facts: Facts) bool {
 pub const PublishedFile = struct { path: []const u8, bytes: []const u8, sha256: []const u8 };
 pub const Record = struct { sha256: []const u8, facts: Facts };
 pub const Report = struct {
-    schema: enum { @"baseline-acquisition/v4" },
+    schema: enum { @"baseline-acquisition/v5" },
     freeze_sha256: []const u8,
     build: @import("../../../build/provenance.zig").Identity,
     toolchain: frozen_inputs.Toolchain,
@@ -97,7 +97,7 @@ pub fn acquire(io: std.Io, a: std.mem.Allocator, transient: std.mem.Allocator, f
             evidence_complete = false;
         };
     }
-    return .{ .schema = .@"baseline-acquisition/v4", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = try a.dupe(u8, &run.name), .experiment_claim = claim, .budget = snapshot, .allowance = try experiment.remaining(a, claim.phases, snapshot), .records = try records.toOwnedSlice(a), .complete = panelComplete(frozen.trials.len, attempted, evidence_complete, snapshot, null) };
+    return .{ .schema = .@"baseline-acquisition/v5", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = try a.dupe(u8, &run.name), .experiment_claim = claim, .budget = snapshot, .allowance = try experiment.remaining(a, claim.phases, snapshot), .records = try records.toOwnedSlice(a), .complete = panelComplete(frozen.trials.len, attempted, evidence_complete, snapshot, null) };
 }
 
 /// The replacement transport is only reachable from offline tests. Production
@@ -123,7 +123,7 @@ pub fn execute(io: std.Io, a: std.mem.Allocator, frozen: frozen_inputs.Freeze, p
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = run.dir, .secrets = &secrets };
     var captured: trace.CaptureLog = .init(a);
     defer captured.deinit();
-    var report: native.Report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = try a.dupe(u8, &run.started_at_utc), .execution_id = try a.dupe(u8, &run.name), .case_id = project.selected.id, .workflow_id = project.selected.workflow_id, .status = .input_invalid };
+    var report: native.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = try a.dupe(u8, &run.started_at_utc), .execution_id = try a.dupe(u8, &run.name), .case_id = project.selected.id, .workflow_id = project.selected.workflow_id, .status = .input_invalid };
     const started: std.Io.Clock.Timestamp = .now(io, .awake);
     const published = @import("../e2e/invoke.zig").run(io, a, run.project, project.selected, project.captured, key, store, &report, .{ .purpose = .whole_workflow, .transport = transport, .experiment = gate, .capture = &captured }) catch |err| failed: {
         report.status = .harness_error;
@@ -199,7 +199,7 @@ test "native report write failures preserve charged exchanges after trace owners
         captured.candidates.first = .{ .json = try a.dupe(u8, "{}"), .sha256 = std.fmt.bytesToHex(initial_digest, .lower), .first_pass = true };
         captured.candidates.latest = .{ .json = try a.dupe(u8, "{\"corrected\":true}"), .sha256 = std.fmt.bytesToHex(final_digest, .lower), .first_pass = false };
         const attempts = [_]native.Attempt{.{ .origin = origin, .step = "native-model-call", .accounting = .exact_usage, .usage = usage }};
-        const report: native.Report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = "2026-10-16T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled, .model_calls = 1, .total_tokens = 12, .attempts = &attempts };
+        const report: native.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "2026-10-16T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled, .model_calls = 1, .total_tokens = 12, .attempts = &attempts };
         var facts: Facts = .{ .trial = .{ .ordinal = 1, .arm = .A, .case_id = "case", .feature_id = "feature", .repetition = 1 }, .freeze_sha256 = "freeze" };
         try std.testing.expectError(error.NotOpenForWriting, retainInvocation(std.testing.io, a, &facts, report, &captured, sink));
         captured.deinit();
@@ -427,7 +427,7 @@ test "native advisory non-delivery needs no physical receipt and preserves the p
         .{ .origin = unsent, .step = "advisory-review", .accounting = .not_sent, .usage = null },
     };
     const receipts = [_]trace.Receipt{.{ .call = 1, .origin = origin, .purpose = .initial_generation, .owner_kind = .reference_chunk, .experiment_send = null, .request_step = "required-generation", .context_sha256 = @splat(1), .request_sha256 = @splat(2), .usage = usage }};
-    const report: native.Report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .workflow_outcome = .ok, .model_calls = 2, .not_sent_operations = 1, .total_tokens = 12, .attempts = &attempts, .last_model_origin = origin, .last_model_usage = usage };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .workflow_outcome = .ok, .model_calls = 2, .not_sent_operations = 1, .total_tokens = 12, .attempts = &attempts, .last_model_origin = origin, .last_model_usage = usage };
     try validateNative(report, &receipts);
     var wrong = report;
     wrong.not_sent_operations = 0;

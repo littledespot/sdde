@@ -78,7 +78,7 @@ fn execute(io: std.Io, a: std.mem.Allocator, environment: *const std.process.Env
     report.status = .inconclusive;
     report.build.?.reconstruction = try @import("../e2e/build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
-    var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = report.started_at_utc, .status = .input_invalid };
+    var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = report.started_at_utc, .status = .input_invalid };
     var probe: @import("../e2e/invoke.zig").Probe = .{};
     defer reports.applyExecution(report, probe, workflow);
     _ = try @import("../e2e/invoke.zig").run(io, a, run.project, selected, captured, key, store, &workflow, .{ .purpose = .{ .single_exchange = &probe } });

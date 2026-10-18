@@ -3,9 +3,12 @@ const std = @import("std");
 const c = @import("contracts.zig");
 const strict = @import("../../src/domain/strict_json.zig");
 const coordinates = @import("../../src/domain/source_coordinates.zig");
-/// Report-owned diagnostic data; indices are zero-based, IDs are from the rubric.
+/// Report-owned diagnostic data; indices are zero-based. Criterion IDs come from
+/// the rubric, except a duplicate's, which is the judge's own repeated ID.
+/// `changed_criterion` is the correction owner's rejection of a corrected
+/// judgment that altered a result its diagnostic did not name.
 pub const Diagnostic = struct {
-    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, unknown_document, invalid_line_range, blank_evidence, invalid_score, invalid_disposition },
+    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, unknown_document, invalid_line_range, blank_evidence, invalid_score, invalid_disposition, changed_criterion },
     criterion_id: ?[]const u8 = null,
     evidence_index: ?usize = null,
     document_id: ?[]const u8 = null,
@@ -25,6 +28,19 @@ pub const CriterionResult = struct {
     missing_from_specification: bool,
 };
 pub const Proposal = struct { results: []const CriterionResult };
+/// The judge's decoded wire shape before range checks. Integers are widened so a
+/// negative or oversized score or line reaches its typed diagnostic instead of
+/// `invalid_shape`; the result schema still describes `Proposal`.
+pub const RawEvidence = struct { document_id: []const u8, first_line: i64, last_line: i64 };
+pub const RawResult = struct {
+    criterion_id: []const u8,
+    disposition: @FieldType(CriterionResult, "disposition"),
+    score: ?i64,
+    explanation: []const u8,
+    evidence: []const RawEvidence,
+    missing_from_specification: bool,
+};
+pub const RawProposal = struct { results: []const RawResult };
 pub const Assessment = enum { scored, unresolved, no_applicable_criteria };
 pub const Threshold = enum { not_configured, met, not_met, undetermined };
 pub const Result = struct {
@@ -37,7 +53,7 @@ pub const Result = struct {
 pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture: c.Capture, bytes: []const u8) c.Error!Result {
     if (diagnostic) |out| out.* = null;
     try c.validateCapture(capture);
-    const proposal = c.decode(Proposal, allocator, bytes) catch |err| {
+    const proposal = c.decode(RawProposal, allocator, bytes) catch |err| {
         if (err == error.OutOfMemory) return error.OutOfMemory;
         // Diagnose only a failed decode, using the same parser and depth contract.
         if (diagnostic != null) {
@@ -50,31 +66,31 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         }
         return reject(diagnostic, .{ .reason = .invalid_shape });
     };
+    // A repeated criterion is judgment content, whatever the count or rubric order.
+    if (duplicate(proposal.results)) |repeated| return reject(diagnostic, repeated);
     if (proposal.results.len != capture.rubric.criteria.len) return reject(diagnostic, .{ .reason = .criterion_count });
     const ordered = try allocator.alloc(CriterionResult, proposal.results.len);
     var earned: u128 = 0;
     var possible: u128 = 0;
     var uncertain = false;
     for (capture.rubric.criteria, ordered) |criterion, *output| {
-        var matched: ?CriterionResult = null;
-        for (proposal.results) |result| {
-            if (!std.mem.eql(u8, criterion.id, result.criterion_id)) continue;
-            if (matched != null) return reject(diagnostic, .{ .reason = .duplicate_criterion, .criterion_id = criterion.id });
-            matched = result;
-        }
-        const result = matched orelse return reject(diagnostic, .{ .reason = .missing_criterion, .criterion_id = criterion.id });
+        const result = for (proposal.results) |candidate| {
+            if (std.mem.eql(u8, criterion.id, candidate.criterion_id)) break candidate;
+        } else return reject(diagnostic, .{ .reason = .missing_criterion, .criterion_id = criterion.id });
         if (!c.text(result.explanation)) return reject(diagnostic, .{ .reason = .empty_explanation, .criterion_id = criterion.id });
         var source_evidence = false;
         var candidate_evidence = false;
-        for (result.evidence, 0..) |evidence, index| {
+        const evidence_out = try allocator.alloc(Evidence, result.evidence.len);
+        for (result.evidence, evidence_out, 0..) |evidence, *converted, index| {
             const location: Diagnostic = .{ .reason = .unknown_document, .criterion_id = criterion.id, .evidence_index = index, .document_id = evidence.document_id };
             const text = documentText(capture, evidence.document_id) orelse return reject(diagnostic, location);
             if (std.mem.eql(u8, evidence.document_id, "specification")) candidate_evidence = true else source_evidence = true;
-            const cited = (try lineSpan(text, evidence.first_line, evidence.last_line)) orelse {
-                var invalid = location;
-                invalid.reason = .invalid_line_range;
-                return reject(diagnostic, invalid);
-            };
+            var invalid = location;
+            invalid.reason = .invalid_line_range;
+            const first = std.math.cast(u32, evidence.first_line) orelse return reject(diagnostic, invalid);
+            const last = std.math.cast(u32, evidence.last_line) orelse return reject(diagnostic, invalid);
+            converted.* = .{ .document_id = evidence.document_id, .first_line = first, .last_line = last };
+            const cited = (try lineSpan(text, first, last)) orelse return reject(diagnostic, invalid);
             if (!c.text(cited)) {
                 var blank = location;
                 blank.reason = .blank_evidence;
@@ -83,10 +99,13 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         }
         if (!source_evidence) return reject(diagnostic, .{ .reason = .missing_source_evidence, .criterion_id = criterion.id });
         if (!candidate_evidence and !result.missing_from_specification) return reject(diagnostic, .{ .reason = .missing_specification_evidence, .criterion_id = criterion.id });
+        var score_out: ?u16 = null;
         switch (result.disposition) {
             .scored => {
-                const score = result.score orelse return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
-                if (score < capture.rubric.minimum_score or score > capture.rubric.maximum_score) return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                const raw_score = result.score orelse return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                if (raw_score < capture.rubric.minimum_score or raw_score > capture.rubric.maximum_score) return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                const score: u16 = @intCast(raw_score);
+                score_out = score;
                 earned += @as(u128, score - capture.rubric.minimum_score) * criterion.weight;
                 possible += @as(u128, capture.rubric.maximum_score - capture.rubric.minimum_score) * criterion.weight;
             },
@@ -98,7 +117,14 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
                 if (!criterion.allow_not_applicable or result.score != null) return reject(diagnostic, .{ .reason = .invalid_disposition, .criterion_id = criterion.id });
             },
         }
-        output.* = result;
+        output.* = .{
+            .criterion_id = result.criterion_id,
+            .disposition = result.disposition,
+            .score = score_out,
+            .explanation = result.explanation,
+            .evidence = evidence_out,
+            .missing_from_specification = result.missing_from_specification,
+        };
     }
     const percent: ?f64 = if (uncertain or possible == 0) null else @as(f64, @floatFromInt(earned)) * 100 / @as(f64, @floatFromInt(possible));
     return .{
@@ -110,6 +136,14 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         else
             .not_configured,
     };
+}
+
+/// The first repeated criterion ID among results, which no correction may resolve.
+pub fn duplicate(results: []const RawResult) ?Diagnostic {
+    for (results, 0..) |result, index| for (results[0..index]) |prior| {
+        if (std.mem.eql(u8, prior.criterion_id, result.criterion_id)) return .{ .reason = .duplicate_criterion, .criterion_id = result.criterion_id };
+    };
+    return null;
 }
 
 /// The supplied document a locator names, or null when the judge invented one.

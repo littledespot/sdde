@@ -51,7 +51,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
         .total_token_budget = 1000,
     };
     return .{
-        .schema = .@"spec-e2e-report/v6",
+        .schema = .@"spec-e2e-report/v7",
         .started_at_utc = "2026-10-17T00:00:00Z",
         .execution_id = "MOCK-run",
         .case_id = "MOCK-workflow-case",
@@ -71,7 +71,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
         .evaluation = .{
             .capture = input,
             .configuration = config,
-            .attempts = &.{.{ .ordinal = 1, .request_id = "MOCK-request", .identity = .{ .openai_response = .{ .response_id = "MOCK-response", .actual_model = config.model } }, .usage = .{ .input_tokens = 10, .output_tokens = 10, .total_tokens = 20 }, .failure = null }},
+            .attempts = &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = "MOCK-request", .identity = .{ .openai_response = .{ .response_id = "MOCK-response", .actual_model = config.model } }, .usage = .{ .input_tokens = 10, .output_tokens = 10, .total_tokens = 20 }, .failure = null }},
             .outcome = .{ .evaluated = result },
             .acceptance = .{ .independence = .independent, .qualification = .qualified, .quality = .passed, .decision = .passed },
         },
@@ -112,7 +112,7 @@ test "E2E model evaluation stays advisory and status or stored pass never accept
     try gate.apply(a, &complete);
     try std.testing.expectEqual(.human_adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
-        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
+        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v7", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
         try std.testing.expect(!try gate.commandSucceeded(a, asserted));
     }
     complete.expected_outcome = null;
