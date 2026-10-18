@@ -7,7 +7,9 @@ documentation (§12).
 **Status:** **Proposal; not accepted and not implemented.** This document describes
 the work needed to add a second production model provider that calls the
 Anthropic Messages API directly. It changes provider architecture, so it needs an
-accepted ADR and the decisions in §10 before any code change. It is not an active
+accepted ADR defining the implementation scope before any code change. That ADR
+must distinguish bounded diagnostic enablement from production qualification;
+evidence-dependent decisions in §10 close at the gates in §8. It is not an active
 backlog: [FIX05](FIX05.md) is the sole active fix record under the
 [fix-record convention](README.md). Once accepted, its normative content moves into
 an ADR and a feature document (§9), and implementation progress is recorded in FIX05.
@@ -25,16 +27,20 @@ Claude behavior to have one implementation. §§4–6 identify the shared owners
 the provider-specific projections; §§8 and 11 require Bedrock to migrate through
 those owners before Claude is added. This review updates this document only.
 
-**Repository revision inspected:** uncommitted working tree on
-`85556b2f72accc32919a9180c04f0e01ceb18783`, including the accepted 18 October
-amendment to ADR 0011. This review changes this proposal only; it does not amend
-accepted authority or implement the connector. Existing unrelated worktree changes
-are outside this review.
+**Repository revision inspected:** `c100912245abfedf54871aa5751fedf64091a359`,
+with a clean worktree at the start of this final architectural review, including
+the accepted 18 October amendment to ADR 0011. This review changes this proposal
+only; it does not amend accepted authority or implement the connector.
 
 ## 0. Feasibility assessment
 
-**Verdict: configuration source selected; governing contracts still need alignment,
-and schema/latency risks remain unmeasured.** The Messages API requires `max_tokens`,
+**Verdict: technically feasible as a second provider, but not implementation-ready
+or production-qualified.** Common owners and closed protocol projections fit the
+engine boundaries. The remaining work includes governing contract alignment,
+complete-response accounting across terminal races, closed readback validation,
+and a diagnostic path that can gather the still-missing schema/latency evidence.
+These are concrete prerequisites, not evidence that the connector already works.
+The Messages API requires `max_tokens`,
 while
 [ADR 0011](../design/decisions/0011-provider-owned-request-limits.md#no-output-token-allowance),
 design invariant 32 and acceptance criterion 31.12 prohibit sending any output-token
@@ -63,9 +69,14 @@ decoder also requires maintenance even with a pinned API version (§10.3).
 | R5 | Medium | Authorization currently accepts only Bedrock, and composition builds one provider. Snapshot validation, capability deposit/destruction and lease use are common mechanics. | [bedrock_authorization.zig](../src/adapters/provider/bedrock_authorization.zig); [model_provider_runtime.zig](../src/composition/model_provider_runtime.zig) | Use one shared authorization mechanism with provider-tagged material and exhaustive routing. Preserve distinct credential identities and the single runner lease table (§5.3, §10.8). |
 | R6 | Medium | `count_tokens` returns an **estimate** that "might differ by a small amount" and can include system-added tokens. | Token-counting documentation | It must not be registered as the engine's exact token counter. The Spec workflow never counts tokens, so the first increment registers no counting capability (§3.7). |
 | R7 | Medium | A 429 is not always retryable: the monthly spend-cap 429 has no `retry-after`, carries `error.details.error_code: "enforced_spend_limit_reached"`, and keeps failing. A user-set spend limit returns 400. Error types "will grow over time". | Errors and rate-limits documentation | The closed error decoder must accept `error.details`, classify the spend cap as non-retryable, and treat unknown types as `response_invalid` (§3.6). |
-| R8 | Medium | Ordinary responses may include `usage.speed`, nullable refusal explanations, `container` and `diagnostics`; the earlier field inventory was incomplete. | Messages API and focused response documentation | Freeze exact presence, nullability and nested schemas in fixtures; reject unknown values without losing independently valid usage (§5.5). |
+| R8 | High | `usage.speed` is nullable, and SDK representations disagree on whether several nullable response members may be omitted. Nested values have capability and accounting significance. | Messages API, focused documentation and official SDK types (§3.5) | Freeze a dated non-beta presence/nullability manifest and negative fixtures. Client defaults cannot authorize omitted wire fields; retain usage only after its validated trust boundary (§5.5). |
 | R9 | Medium | Omitting `inference_geo` inherits the workspace default. Inference location and storage location are separate settings. | [Data residency](https://platform.claude.com/docs/en/manage-claude/data-residency) | The proposed `max_tokens` configuration does not pin residency. Record the intended workspace's defaults and retention requirements (§10.10). |
 | R10 | Low | Asking for private step-by-step reasoning can trigger `reasoning_extraction`; a short evidence explanation or a field named `detail` alone does not establish that problem. | [Refusals](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback) | Keep typed non-candidate stops and measure actual refusal behavior. |
+| R11 | High | A complete HTTP body can be retained after a timer/cancellation race, but current transport failure paths do not carry a validated receipt through to usage accounting. Sharing the existing code alone does not fulfill the proposal's retention promise. | [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig), [bedrock_transport.zig](../src/adapters/provider/bedrock_transport.zig), [bedrock_response.zig](../src/adapters/provider/bedrock_response.zig) | Specify and test a shared receipt/terminal-outcome contract (§5.6). Reconcile independently valid usage once while preserving cancellation/deadline failure; never infer usage from partial or invalid bytes. |
+| R12 | High | Persisted descriptions deserialize a type named `ValidatedProviderConfig`; generic decoding alone will not prove a new numeric `max_tokens` value positive or consistent with its provider. | [model_request_description.zig](../src/domain/model_request_description.zig) `Description.decode` | Reuse canonical configuration semantics at every description/evidence readback before inspection, authorization or replay; add malformed persisted-value cases (§6). |
+| R13 | Medium | Current compiled-registry validation enforces one implementation per provider but does not prevent different providers sharing an implementation ID. The proposed dispatch selects by that ID. | [llm_provider_contracts.zig](../src/domain/llm_provider_contracts.zig) `Registry.validate` | Require coherent provider/facts/schema/implementation identity and one closed protocol/authentication projection per ID before credentials are read (§5.2). |
+| R14 | Medium | The former step 0 required live feasibility evidence before building the currently absent Anthropic diagnostic path. | [compatibility CLI](../test/harness/compatibility/cli.zig), [diagnostic_binding.zig](../test/harness/diagnostic_binding.zig) | Stage offline design, approved diagnostic enablement, then feasibility decisions (§8). Do not treat the existing Bedrock-only probe as usable for Claude. |
+| R15 | Medium | Captured-call diagnostics permit explicit model/effort rebinding, unlike exact debugger replay; copying the source `max_tokens` would select the wrong model configuration. | [diagnostic_binding.zig](../test/harness/diagnostic_binding.zig) `rebind` | Rebinding creates a new request using the target catalogue config, preserving the source and reporting both bindings (§6). |
 
 **Feasibility by area:**
 
@@ -75,10 +86,12 @@ decoder also requires maintenance even with a pinned API version (§10.3).
 | Request encoding (§5.4) | Catalogue-to-wire mapping selected; governing contract amendments remain required (R0). Other fields map to existing content parts. |
 | Native structured output (§3.3) | **Uncertain (R1).** Prompt-only is a proposed fixed mode, still subject to R0 and quality evidence. |
 | Response, usage, stop and reasoning decoding (§5.5) | Core outcomes fit; additional metadata needs an explicit diagnostic owner or raw-capture-only treatment. |
+| Usage under cancellation/deadline races (§5.6) | **Contract work required (R11).** Ordinary response capture already retains observations; complete-response terminal races need their own shared correction and evidence. |
 | Errors (§3.6) | Feasible; needs one decision on spend-cap and billing causes. |
 | Transport (§5.6) | Feasible; refactor rather than duplicate. |
 | Latency within current deadlines | **Uncertain (R2).** |
 | Mixed providers (§2.1) | Feasible; requires the routing and authorization changes in §4. |
+| Diagnostic readiness (§6, §8) | **Not available today.** Extend the shared diagnostic path under accepted scope before requesting live feasibility evidence. |
 | Cost | Historical GPT-OSS totals are not a Claude estimate. Price actual per-request inclusive input and output using the selected model's tier, geography and refusal rules; thinking and tokenizer differences prevent transferring token totals (§3.4). |
 
 ## 1. Outcome and scope
@@ -176,10 +189,15 @@ no `providers.json` alias or new file is introduced by this documentation update
 - `config.max_tokens` is a required positive integer representable by its typed
   wire value. Missing, null, zero, negative, fractional, string and overflowing
   values reject, as do duplicate or unknown fields. `128000` is an explicit example
-  value for the illustrated model, never an engine default. Maintain the value
+  value for the illustrated model, never an engine default or a demonstrated safe
+  non-streaming setting under the 60-second workflow deadline. Maintain the value
   against the selected model's documented API limits; the engine does not perform
   a metadata lookup or predict capacity. An API-unsupported value produces the
   provider's typed rejection, with no automatic adjustment.
+- The API permits `max_tokens: 0` for cache population without generation. The
+  positive-value rule here belongs to this inference operation's scope; cache-only
+  requests are excluded. It is not a claim that the API's minimum is one.
+  [Messages API](https://platform.claude.com/docs/en/api/messages/create).
 - Every slot bound to the same provider/model entry uses that entry's value.
   Capture it once with the catalogue; corrections and retries retain it. A change
   takes effect on a fresh invocation, not through a mid-workflow catalogue reread.
@@ -257,6 +275,13 @@ date in the feature document.
 
 Endpoints and the API version are compiled constants, never configuration. No
 `anthropic-beta` header is sent in the first increment.
+
+The documented ten-minute expectation check is an SDK safeguard, not a documented
+direct-HTTP rejection rule. Anthropic advises against large non-streaming
+`max_tokens` values because idle connections can fail. The 128K model maximum does
+not establish feasibility within SDDE's deadline. Measure the selected settings;
+do not add an inferred local limit or treat streaming as an automatic fallback.
+[Long requests](https://platform.claude.com/docs/en/api/errors#long-requests).
 
 ### 3.2 Request fields
 
@@ -423,8 +448,8 @@ A non-streaming response is a `message` object with these top-level fields:
   (`ephemeral_5m_input_tokens`, `ephemeral_1h_input_tokens`), nullable
   `output_tokens_details` (`thinking_tokens`, an approximate observability figure
   included in `output_tokens`), nullable `server_tool_use`, nullable `service_tier`
-  (`standard`, `priority`, `batch`), nullable `inference_geo`, and `speed`
-  (`standard` or `fast`). Deferring fast-mode requests does not remove ordinary
+  (`standard`, `priority`, `batch`), nullable `inference_geo`, and nullable `speed`
+  (`standard`, `fast` or null). Deferring fast-mode requests does not remove ordinary
   standard-speed response metadata.
   [Speed metadata](https://platform.claude.com/docs/en/build-with-claude/fast-mode#checking-which-speed-was-used).
   Total input is
@@ -432,11 +457,32 @@ A non-streaming response is a `message` object with these top-level fields:
   `output_tokens` already includes thinking and is used once for token accounting.
   There is no total field.
 
-This is an inventory to turn into a closed wire schema, not a completed decoder
-specification. Before implementation, resolve required/optional/null distinctions
-and nested `container`, `diagnostics`, `server_tool_use` and cache metadata shapes
-against the selected non-beta contract. Accept declared null/empty values; reject
-unrequested tool effects and unknown variants rather than ignoring nested objects.
+The following closes the proposed nested-value policy for this tool-free,
+non-beta request. It does not resolve whether each outer field may be omitted:
+
+| Field | Accepted present value | Rejected value |
+| --- | --- | --- |
+| `container` | Null | Every non-null container, including `{}`; no container tool was requested. |
+| `diagnostics` | Null, because the request omits diagnostics | Non-null objects, including `{}`; a requested-but-pending comparison is a different API state. |
+| `usage.server_tool_use` | Null or exactly `web_fetch_requests: 0` and `web_search_requests: 0` | Positive counts, missing/unknown members, invalid numbers. |
+| `usage.cache_creation` | Null or both nonnegative integer `ephemeral_1h_input_tokens` and `ephemeral_5m_input_tokens`, consistent with the parent counter | Empty/partial objects, unknown members, invalid or inconsistent counters. Never add the breakdown twice. |
+| `usage.output_tokens_details` | Null or exactly integer `thinking_tokens` with `0 <= thinking_tokens <= output_tokens` | Empty/partial objects, unknown members or an inconsistent count. The approximate breakdown is not another charge. |
+
+Sources: official [container](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/container.py),
+[cache diagnostics](https://platform.claude.com/docs/en/build-with-claude/cache-diagnostics),
+[server-tool usage](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/server_tool_usage.py),
+[cache creation](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/cache_creation.py),
+and [thinking usage](https://platform.claude.com/docs/en/build-with-claude/thinking-steering-and-cost#pricing).
+
+**Presence is still a contract-freeze gate.** The official
+[TypeScript response types](https://raw.githubusercontent.com/anthropics/anthropic-sdk-typescript/main/src/resources/messages/messages.ts)
+declare these outer fields required and nullable; the Python
+[Message](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/message.py)
+and [Usage](https://raw.githubusercontent.com/anthropics/anthropic-sdk-python/main/src/anthropic/types/usage.py)
+models default them to `None`. Client defaults do not prove wire omission valid.
+Record the selected non-beta contract, pinned source revision and absent/null/value
+fixtures before finalizing the decoder. Do not interpret arbitrary empty objects
+or missing fields as null, or import SDK permissiveness into the closed parser.
 Generated examples can contradict focused stop documentation; fixtures must enforce
 `stop_details == null` for non-refusal stops and distinguish missing from null where
 the contract does. No real response capture was obtained during this review.
@@ -495,6 +541,12 @@ models. New organizations may start in a lower Evaluation tier. Sequential engin
 calls can still hit shared organization limits, workspace overrides or burst limits;
 measure the selected account rather than assuming otherwise. Monthly spend caps
 ($500 on Start, $1,000 on Build) can stop all requests until the next month (R7).
+
+The documented output-token rate limit counts actual generated output;
+`max_tokens` does not reserve that many tokens against OTPM. A larger ceiling can
+permit more actual work and longer latency, but is not itself a rate-limit charge.
+This does not alter SDDE's separate actual-usage ledger or authorize reservations.
+[Output rate accounting](https://platform.claude.com/docs/en/api/rate-limits#cache-aware-itpm).
 
 ## 4. Current Bedrock coupling and shared-code gaps
 
@@ -557,7 +609,7 @@ Provider codecs/projections never import their sibling provider.
 | `adapters/provider/bedrock_request.zig`, `anthropic_request.zig` | API-specific JSON encoding from the shared prepared view and validated provider facts/config. No copied ordering or guidance policy. |
 | `adapters/provider/provider_response_support.zig` (extracted) | Common closed-field/scalar/path diagnostics using `strict_json`; API field sets and null rules remain codec-owned. |
 | `adapters/provider/provider_response_assembly.zig` (extracted) | Common exact text/reasoning ownership and normalized observation construction, reusing existing domain usage/result types. No candidate admission or token charging. |
-| `domain/provider_failure.zig` (extracted) | One pure retry-eligibility classifier from typed failure origin/stage, cause and delivery facts, preserving existing distinctions; no retry execution. |
+| `domain/provider_failure.zig` (extracted) | One pure retry-eligibility classifier from provider-neutral origin/stage, normalized cause and delivery facts. No HTTP types, status/header values, provider error enums, adapter imports or retry execution. |
 | `adapters/provider/bedrock_response.zig`, `anthropic_response.zig` | Closed API envelopes, usage-counter interpretation, stop/error mappings and protocol-specific validation, producing the shared normalized result. |
 | `adapters/provider/model_http_transport.zig`, `model_http_head.zig` (extracted) | One transport request/response/failure contract and the existing generic HTTP head reader. |
 | `adapters/provider/model_http_exchange.zig` (extracted) | One HTTPS implementation for deadlines, cancellation, body retention and framing through `native_model_http.zig`; no retries. |
@@ -599,7 +651,7 @@ promising those fields in reports; diagnostic metadata grants no workflow author
         .input_token_count = false,
         .inference = true,
         .exact_token_counter = .unavailable,
-        .structured_response = .anthropic_json_schema, // or .prompt_only after step 0
+        .structured_response = .anthropic_json_schema, // provisional; qualify in step 7
         .temperature = false,
     },
 },
@@ -607,7 +659,15 @@ promising those fields in reports; diagnostic metadata grants no workflow author
 
 Registry validation must reject an Anthropic fact on a non-`anthropic` schema, a
 Bedrock fact without regions, and a fact whose provider differs from the entry's
-provider. The registry declares the supported configuration schema; the numeric
+provider. The compiled implementation ID must resolve to exactly one closed
+provider/protocol/authentication projection consistent with those facts and schema.
+Multiple models within that provider may share its ID; different provider families
+cannot alias it. Reject unknown IDs and mismatches at registry/composition validation
+before credential reads, not only when extracting a capability. Current
+`Registry.validate` enforces the forward provider-to-implementation relationship
+only; add the reverse coherence checks and negative fixtures for mixed dispatch.
+
+The registry declares the supported configuration schema; the numeric
 `max_tokens` value comes only from the selected catalogue entry, never a compiled
 default. Which models to register is decision §10.1. Implementation still requires
 the governing contract updates in R0.
@@ -728,6 +788,8 @@ produce the same domain types.
   rejected or stopped; invalid/missing usage is unavailable, never fabricated.
   Counter extraction and cache-breakdown checks remain API-specific; common
   checked arithmetic and final validation use the single `ProviderUsage` owner.
+  When `thinking_tokens` is present, validate its relationship to `output_tokens`
+  under §3.5 even if its reporting destination is raw-capture-only.
   Bedrock supplies its reported total for consistency checking; Anthropic derives
   a total from its documented components. Do not drop Bedrock's total check merely
   because Anthropic has no total field.
@@ -739,7 +801,9 @@ produce the same domain types.
   existing distinction: an expired lease is a pre-send `timeout` with retry class
   `never`, while a transport timeout may be `policy_eligible`, even when no bytes
   were sent. Cause or delivery alone cannot determine eligibility. Retry execution
-  remains exclusively with existing workflow policy.
+  remains exclusively with existing workflow policy. Codecs translate wire status,
+  headers and error discriminators into provider-neutral facts; the domain classifier
+  neither reads those wire fields nor imports transport/provider implementations.
 - Preserve the trust boundary before usage retention. Current Bedrock decoding
   validates envelope/usage metadata before normalizing an observation; invalid
   candidate content after that boundary can retain trusted usage. Shared code must
@@ -797,6 +861,34 @@ produce the same domain types.
 - Network calls stay compiled out of every test executable through
   `native_model_http.zig`; add the Anthropic endpoint to its denial test.
 
+**Complete receipt versus terminal failure (R11).** The current
+`response_body_on_error` retains bytes and a completeness flag only. A timer-winning
+path can return failure after a complete response exists; `errorResponse` then
+short-circuits decoding. Those bytes alone do not prove valid framing, headers,
+status, envelope or request association. Mechanical extraction must not claim to
+solve that gap.
+
+Specify a shared typed contract that can preserve a complete receipt alongside a
+terminal cancellation/deadline outcome. HTTP retains the completely framed raw
+receipt and validated head facts; the selected codec validates the API envelope and
+usage. The provider observation port exposes normalized provider-neutral evidence
+alongside the terminal outcome. Existing runner validation proves association and
+reconciles trusted usage once while still applying the terminal failure. Do not
+add raw HTTP status, headers or wire envelopes to domain/application contracts to
+solve this problem.
+No stopped execution gains candidate admission, publication or retry authority.
+Join existing tasks before inspecting retained state; do not wait beyond the
+deadline for another response. Partial bodies, invalid heads/envelopes and
+unassociated receipts remain unavailable for accounting, never salvaged or estimated.
+Allocation failure remains explicit rather than a fabricated zero-usage result.
+
+This is a shared-contract correction under the existing accounting invariant,
+separate from the behavior-preserving extraction. Require deterministic tests for
+network completion versus timer/cancellation, response-capture failure after a
+complete receipt, and incomplete/invalid receipts for both providers. The design
+must specify failure precedence and exact-once cleanup without weakening the
+existing runner's cancellation, budget or logging rules.
+
 Sharing this transport does not merge diagnostic replay with workflow execution.
 Replay uses the same codecs, HTTP types and exchange implementation under its
 existing diagnostic authorization and deadline. It does not create a runner lease,
@@ -819,6 +911,19 @@ from capacity prediction and obtain approval for any actual policy amendment.
 
 ## 6. Debugger, harness and evidence
 
+- **Configuration readback is a trust boundary (R12):** the current
+  [description decoder](../src/domain/model_request_description.zig) decodes directly
+  into `ValidatedProviderConfig`. The type name is not validation of persisted
+  bytes. Extract/reuse one pure provider-configuration semantic validator for the
+  catalogue, versioned descriptions and call evidence. Every reader validates the
+  positive `max_tokens` and provider/config discriminator before typed inspection,
+  reconstruction or authorization. Current registry/allowlist authorization remains
+  a separate prerequisite for request reconstruction and send; read-only historical
+  display neither reauthorizes a call nor substitutes current catalogue values into
+  its captured configuration. Do not add separate debugger or harness rules.
+  Test missing, zero, null, negative, fractional, string,
+  overflow, duplicate/unknown members and wrong-provider configurations at readback,
+  as well as a valid value and exact unchanged round trips.
 - **One replay implementation:** retain
   [application/request_replay.zig](../src/application/request_replay.zig) as the
   owner of immutable parents, exact-byte checks, persistence order and the one-send
@@ -849,6 +954,17 @@ from capacity prediction and obtain approval for any actual policy amendment.
   `max_tokens`, stale bindings,
   incomplete/redacted captures, non-candidate inspection, secrets in modified input
   and pre/post-send persistence failures, alongside existing Bedrock cases.
+- **Explicit diagnostic rebinding is a new request:**
+  [diagnostic_binding.rebind](../test/harness/diagnostic_binding.zig) and the
+  [captured-call CLI](../test/harness/call/cli.zig) already permit explicit model/effort
+  selection within the captured provider. This is distinct from exact/modified
+  debugger replay. Keep the source capture immutable; validate the target catalogue
+  entry and use its captured `config.max_tokens`, never the source model's value.
+  Record original and effective provider/model/config/effort separately and apply
+  the same one-send and cost-policy gates. Preserve the CLI's same-provider rule;
+  a `--model` string cannot infer a provider or authorize cross-provider rebinding.
+  Test two Anthropic models with different values, invalid target config, stale
+  source evidence and attempted provider substitution.
 - **Compatibility probe:** current trace validation delegates to
   [frozen_binding.zig](../test/harness/frozen_binding.zig), which enforces the
   semantic-simplicity GPT-OSS cohort. The old `validateProbeWire` and
@@ -856,6 +972,16 @@ from capacity prediction and obtain approval for any actual policy amendment.
   binding contract must be separately approved and kept distinct from the frozen
   cohort. Adding a model to cost policy alone will not make the probe accept it.
   Keep the single inference-send bound and exact settings attribution.
+- **Later-request feasibility preparation:** the first-request compatibility probe
+  and capture-dependent replay cannot alone supply generation, repair and advice
+  samples before a successful Claude run. The approved diagnostic increment must
+  allow explicit offline preparation/selection of those requests using the existing
+  canonical preparation and validation owners. Record current content/schema,
+  field-policy, exact-scope and selected-binding provenance; label fixture-generated
+  inputs as diagnostic samples. They are neither historical live captures nor E2E
+  evidence. Do not require prior successful Claude E2E, invent earlier calls or use
+  unapproved cross-provider rebinding. Each selected sample still has one authorized
+  send and the existing capture/inspection path; no parallel diagnostic engine.
 - **One harness interception point:** replace the direct mutation of
   `provider.aws_bedrock.transport` in `Trace.prepare` with a shared transport
   decorator wired by composition. Both providers pass through the same physical
@@ -905,22 +1031,27 @@ from capacity prediction and obtain approval for any actual policy amendment.
 ## 8. Implementation sequence
 
 This is a conditional future sequence, not authorization to implement or execute
-it. Record the selected R0 change in governing contracts first; then gather R1/R2
-evidence before finalizing response mode and deadline. Each implementation stage
-preserves Bedrock behavior and uses the
-repository's build steps. No checks in this sequence ran during this document review.
+it. Record the selected R0 change in governing contracts first. An accepted ADR
+must authorize the bounded shared-contract and diagnostic increment before code
+changes; production qualification remains pending R1/R2 evidence. Today's
+Bedrock-only probe cannot collect that evidence for Claude. Build and verify the
+common diagnostic path before approving any live feasibility experiment.
+Each stage uses repository build steps. Separate mechanical extraction from the
+R11 contract correction and preserve all unrelated Bedrock behavior. No checks in
+this sequence ran during this document review.
 
-0. **Authority and feasibility.** Record the selected catalogue-owned `max_tokens`
+0. **Authority and offline feasibility.** Record the selected catalogue-owned `max_tokens`
    decision (§10.0) and its contract amendments. Decide the exact permitted models,
-   diagnostic path and live-test policy (§10.5). First inventory current
+   diagnostic scope, error/refusal normalization, credential timing and diagnostic
+   metadata treatment. Resolve the response-field presence manifest (§3.5) against
+   pinned official sources with accepted/rejected fixtures. Inventory current
    complete/derived schemas offline, including extraction,
-   generation, repair and advice. Any subsequent live experiment needs explicit
-   approval naming its tuple, settings, finite sends and cost authorization; manual
-   requests are not an escape from policy. Measure actual current schemas and
-   representative prompts, cold/repeated latency, output/thinking usage and typed
-   rejections. Record artifact paths and hashes with results in FIX05. Make response
-   mode (§10.2a) and deadline (§10.9) decisions from that evidence. These are
-   diagnostics, not workflow or quality qualification.
+   generation, repair and advice. Record source revision and reproducible schema
+   artifacts. Identify provisional response modes/settings for explicit diagnostic
+   cases without claiming compatibility or changing the production deadline.
+   The accepted scope must permit steps 1–6 while leaving response-mode/deadline
+   qualification to step 7. If authority cannot make that distinction, stop before
+   implementation rather than requiring an unavailable probe or bypassing policy.
 1. **Common authorized provider boundary, Bedrock first.** Generalize provider facts
    and closed selection. Extract the shared key material/source, preloaded
    authorization and authorized provider adapter from the Bedrock implementation.
@@ -942,6 +1073,11 @@ repository's build steps. No checks in this sequence ran during this document re
    ownership cases; existing HTTP/framing/deadline tests; exact replay reconstruction
    and inspection. Generalize fixtures, retaining assertions rather than creating
    copied Claude suites. No new provider is needed to prove this extraction.
+   In a separately reviewable contract change, implement R11's complete-receipt and
+   terminal-outcome propagation through the existing accounting owner. Prove both
+   race orderings, terminal failure retention, exact-once usage and cleanup, and
+   rejection of partial/invalid receipts before adding Claude. Do not describe this
+   correction as behavior-preserving extraction.
    Verify: existing provider conformance, HTTP/transport and debugger suites through
    `build.zig`, plus `zig build test-architecture`.
 3. **Anthropic configuration and protocol projections.** Add the closed Anthropic
@@ -965,7 +1101,9 @@ repository's build steps. No checks in this sequence ran during this document re
    typed provider rejection of unsupported values and stale-config replay.
    Reject retired slot controls and `max_tokens` at the wrong catalogue/slot level
    or in Bedrock config. Cover missing, null, zero, negative, fractional, string,
-   overflowing, unknown and duplicate configuration values. Run the shared
+   overflowing, unknown and duplicate configuration values, including persisted
+   description/evidence readback through the same semantic validator. Check the
+   provider/facts/schema/implementation relation before credential I/O. Run the shared
    conformance matrix (§11.1) through both real protocol projections.
    Verify: `zig build test-model-request-preparation test-provider-invocation-validation`
    plus the new codec suites registered in `build.zig`.
@@ -983,6 +1121,13 @@ repository's build steps. No checks in this sequence ran during this document re
    decorator; test that both providers use the same paths. Generalize the
    compatibility binding contract without weakening frozen cohort checks; evidence
    versioning, test credential handling and launcher tests (§6).
+   Prove exact replay retains source configuration while explicit same-provider
+   diagnostic rebinding records and uses the target configuration. The resulting
+   diagnostic executable must prepare and inspect both providers offline and
+   enforce the approved tuple/settings/send policy before any live authorization.
+   Include explicit offline preparation/selection of later generation, repair and
+   advice samples with the provenance in §6, so step 7 does not depend on a prior
+   successful Claude E2E run or fabricated historical captures.
    Verify: `zig build test-provider-compatibility test-provider-compatibility-launcher smoke-provider-compatibility`.
 6. **Full verification and packaging.** `zig build verify --summary all`, including
    clean-directory native packaging smoke. Add offline Claude-only and mixed
@@ -991,13 +1136,25 @@ repository's build steps. No checks in this sequence ran during this document re
    tree, compiler, development assets or live network. Review imports and the whole
    diff for duplicate helpers and bypasses under §11.1. No SDK or new runtime assets
    are expected.
-7. **Live compatibility (separately approved).** After the cost-policy decision,
-   one inference-send probe per registered Anthropic tuple using its explicit
-   catalogue `max_tokens`:
+7. **Live feasibility and compatibility (separately approved).** Only after steps
+   0–6, the cost-policy decision and explicit approval naming tuple, settings,
+   finite sends and cost authorization, collect R1/R2 evidence using the now-built
+   shared diagnostic path. Manual HTTP requests are not an escape from policy.
+   Measure current representative schemas/prompts, cold/repeated latency,
+   output/thinking usage and typed rejections; retain exact request/schema artifacts,
+   source revision and hashes in FIX05. A first-request probe cannot qualify later
+   generation, repair or advice schemas: select those explicitly through the
+   approved single-request diagnostic path, recording their preparation provenance.
+   Make response-mode (§10.2a) and deadline (§10.9) decisions from these results.
+   Any resulting contract/code change needs its applicable offline verification
+   before qualification. Failure to meet the accepted deadline or schema contract
+   blocks the selected mode; it cannot trigger fallback, a clamp or weaker validation.
+
+   Each registered tuple also needs its one-inference-send compatibility probe with
+   exact selected catalogue `max_tokens`:
    `zig build provider-compatibility -- --case <approved-case> --live`. A compatible
-   result qualifies only the observed request shape and settings. The probe sends
-   only the workflow's first request, so it does not cover later schemas; step 0
-   must cover those separately.
+   result qualifies only the observed request shape and settings. Neither this probe
+   nor the preceding diagnostics establishes full-workflow or quality qualification.
 8. **Full live E2E (approval before each run).** Use explicitly identified target
    projects and workflow cases for intended Claude-only and mixed bindings, real
    selected services, and an independently selected rubric judge. Assess actual
@@ -1014,7 +1171,9 @@ repository's build steps. No checks in this sequence ran during this document re
   endpoint, API version pin, credential variable, provider-fact union, response-mode
   decision, the selected catalogue-owned `max_tokens` contract, schema-capacity
   boundary, non-streaming scope, refusal and spend-cap handling, closed decoding,
-  the shared HTTP exchange and the rejected alternatives in §7.
+  the shared HTTP exchange and the rejected alternatives in §7. Separate permission
+  to build/test the bounded diagnostic increment from permission for live calls and
+  evidence that the connector is production-qualified.
 - **Feature document `design/features/F0009-AnthropicProvider.md`:** responsibility,
   configuration, credentials, request and schema projection, response and
   accounting, acceptance evidence, structured like
@@ -1030,11 +1189,14 @@ repository's build steps. No checks in this sequence ran during this document re
   [F0007](../design/features/F0007-AWSBedrockProvider.md) (shared provider,
   authorization, credential, codec-support and transport owners) and
   [F0008](../design/features/F0008-LLMProviderConfigService.md) where they describe
-  a single provider; and the workflow definition if the deadline changes.
+  a single provider; the shared complete-receipt/terminal-outcome propagation needed
+  to meet existing accounting authority (R11); and the workflow definition if the
+  deadline changes. Include persisted configuration revalidation and diagnostic
+  rebinding semantics, rather than documenting only catalogue parsing.
 - **Harness documentation:** credential and launcher rules in
   [e2e.md](../design/harness/e2e.md) and `.env.e2e.example`.
-- **FIX05:** record step-0 results, implementation progress and verification there
-  once accepted.
+- **FIX05:** record offline inventory, implementation progress, step-7 feasibility
+  evidence and verification there once accepted.
 
 ## 10. Selected decisions and remaining decisions
 
@@ -1072,7 +1234,7 @@ repository's build steps. No checks in this sequence ran during this document re
 2. **Mixed providers per workflow.** Settled as a requirement by user direction on
    16 October 2026: configuration selects Claude or Bedrock per slot, and one
    workflow may use both (§2.1). The ADR must record this.
-   - **2a. Response mode for Claude entries.** After step 0: native schema with the
+   - **2a. Response mode for Claude entries.** Qualify after step 7: native schema with the
      provider-owned capacity boundary in §5.7, or prompt-only (`json: false`).
      Prompt-only relies on the engine's validation and protocol correction instead
      of constrained decoding.
@@ -1081,7 +1243,10 @@ repository's build steps. No checks in this sequence ran during this document re
    variants and changes in error conditions; it does not freeze a closed response
    schema. Define dated contract review, fixture refresh and offline regression
    procedures without an unknown-field escape hatch. Also decide which additional
-   diagnostics are typed versus raw-capture-only (§5.1).
+   diagnostics are typed versus raw-capture-only (§5.1). Resolve the SDK
+   required-nullable versus defaulted-optional discrepancy in §3.5 through an
+   explicit pinned wire manifest; neither client convenience defaults nor one
+   successful sample establishes all permitted absence/null cases.
    [Versioning policy](https://platform.claude.com/docs/en/api/versioning).
 4. **Refusal outcome.** Map `refusal` to the existing `content_filtered`, or add a
    distinct `refused` non-candidate stop that retains `stop_details.category`.
@@ -1108,7 +1273,8 @@ repository's build steps. No checks in this sequence ran during this document re
    without credential I/O; never require a key merely for an unused catalogue entry.
 9. **Per-call deadline.** Keep the shared 60-second `timeout-ms`, raise it in the
    workflow definition for all providers, or introduce a typed per-binding deadline
-   policy. Decide after step 0's latency measurements.
+   policy. Decide after step 7's latency measurements; the existing 60-second
+   production deadline stays in force until an explicit amendment is accepted.
 10. **Residency and retention.** Omitted `inference_geo` inherits the workspace
     default; inference geography and storage geography are distinct. Record the
     intended workspace settings and applicable retention requirements, including
@@ -1122,18 +1288,25 @@ repository's build steps. No checks in this sequence ran during this document re
 
 The connector is complete only when:
 
-- the selected decision 0 is recorded in governing contracts, step-0 results are
-  recorded and decisions 2a and 9 are made;
+- the selected decision 0 is recorded in governing contracts, the offline inventory
+  and step-7 feasibility results are recorded, and decisions 2a and 9 are made;
 - closed Anthropic catalogue configuration requires `max_tokens`, and accepted and
   rejected fixtures prove exact propagation through preparation, authorization,
   wire encoding, retries, evidence and replay without slot overrides or discovery;
 - the ADR, feature document and contract amendments are accepted;
+- the dated non-beta wire manifest resolves required/optional/null distinctions,
+  and accepted/rejected fixtures cover its nested metadata and thinking breakdown;
+- R11's complete-response race tests prove usage reconciliation without discarding
+  terminal failures; partial/invalid receipts never become accounting evidence;
+- registry implementation identity, persisted configuration validation and explicit
+  diagnostic rebinding have the negative cases in §§5.2 and 6;
 - registry, capability, codec, schema-projection, transport, credential, redaction,
   routing, authorization, debugger and harness tests exist with accepted and
   rejected cases at their owning boundaries;
 - both providers use the shared owners in §5.1; the cross-provider conformance and
   structural ownership checks in §11.1 pass;
-- Bedrock conformance and offline integration are unchanged;
+- Bedrock conformance and offline integration pass; request bytes and unrelated
+  behavior remain unchanged, with R11's shared correction explicitly tested;
 - offline integration passes for Bedrock-only, Claude-only and mixed slot
   configurations, with no cross-provider fallback;
 - `zig build verify --summary all` passes, including native packaging smoke;
@@ -1160,6 +1333,7 @@ wire-specific accepted/rejected fixtures alongside their individual codecs.
 
 | Shared boundary | Required evidence |
 | --- | --- |
+| Registry and persisted configuration | Coherent provider/facts/schema/implementation identity before credential reads. Catalogue and description/evidence readback share semantic validation; malformed numeric values and cross-provider configs cannot acquire validated authority. |
 | Credential material and authorization | One snapshot/deposit/cleanup implementation; invalid/missing keys, allocation failure, expired/reused lease and foreign provider capability reject. The common payload's provider tag prevents swapping keys even though both use the same destructor. |
 | Authorized exchange | One lease consumption and at most one HTTP exchange per invocation; pre-send capture rejection sends nothing; post-response capture rejection preserves the observation for existing accounting. Cancellation and partial/error paths release call storage exactly once. |
 | Text/schema preparation | Both modes preserve mixed content order, Unicode/escaping and guidance exactly once. Empty user/evidence rejects. Production, supported Bedrock counting and replay consume the same prepared view; extracted Bedrock wire bytes remain unchanged. |
@@ -1167,7 +1341,9 @@ wire-specific accepted/rejected fixtures alongside their individual codecs.
 | Response ownership and normalization | Exact text joins add no characters; whitespace-only/missing final text and reasoning-only responses cannot become candidates. Text/reasoning allocation failures and transfers clean up once. Candidate rejection/stops retain usage only after its trusted envelope boundary. |
 | Usage and failure policy | Provider-specific counters normalize through the common checked usage owner; Bedrock reported totals remain checked. One classifier preserves failure origin/stage, cause and delivery distinctions, including expired-lease versus transport timeouts. Mixed calls share the runner ledger, equality/overshoot rules and stop warnings; no second charge or automatic retry appears. |
 | HTTP transport | The same exchange/head reader handles both endpoint projections: duplicate retained headers, framing/truncation, identity encoding, redirects, timer/network races, cancellation and partial bodies. Wrong-provider authentication/target pairing rejects. Test executables cannot connect through either path. |
+| Complete receipt and terminal outcome | Both race orderings preserve independently validated usage exactly once while cancellation/deadline/logging failure stays blocking. Partial bodies, invalid headers/envelopes and foreign receipts remain unusable; cleanup occurs exactly once. Only normalized evidence crosses the provider port. |
 | Replay and inspection | Production-equivalent request reconstruction for both providers/modes; shared native inspection. Changed provider/configuration including `max_tokens`, incomplete captures and persistence failures reject correctly. No workflow lease or continuation is created. |
+| Explicit diagnostic rebinding | Same-provider model selection creates a separately authorized request using the target catalogue's `max_tokens`; source captures stay immutable and original/effective bindings are reported. No inferred provider switch or source-limit substitution. |
 | Harness capture and redaction | Interleaved Bedrock/Claude calls pass through one decorator and one evidence decoder; the one-send gate and receipt identity hold for either provider. Every selected secret is removed from every provider's captured content, errors and reasoning through the existing redactor. |
 
 Architecture/import checks must enforce the structural evidence as well as behavior:
@@ -1183,6 +1359,8 @@ Architecture/import checks must enforce the structural evidence as well as behav
 - Invocation association, complete-candidate admission, lifecycle, usage charging,
   stop logging, retry transitions and publication remain with their existing
   domain/application owners. No new common adapter takes over those policies.
+- The common domain failure classifier accepts only neutral typed facts. HTTP
+  statuses/headers, wire error strings and adapter dependencies remain outside it.
 - Production, debugger and Bedrock harness consumers stop importing the extracted
   Bedrock-named helpers. Move/retarget the corresponding architecture assertions;
   do not delete a rule simply because its old filename disappears.
@@ -1204,9 +1382,17 @@ inference call, compatibility probe or E2E run was performed:
   required fields, `output_config`, deprecated sampling parameters, response, usage,
   content blocks, stop reasons and stop details.
 - [Errors](https://platform.claude.com/docs/en/api/errors): status codes, error shape,
-  `request-id`, request size limits and long-request guidance.
+  `request-id`, request size limits and long-request guidance; SDK safeguards are
+  distinguished from direct-HTTP requirements.
 - [Rate limits](https://platform.claude.com/docs/en/api/rate-limits): tier limits,
-  spend caps, the spend-cap 429 and response headers.
+  spend caps, the spend-cap 429, response headers and actual-output OTPM accounting.
+- Official SDK response types and cache/thinking diagnostics linked in §3.5:
+  nullable `speed`, nested value shapes and the unresolved wire-presence distinction.
+  These mutable sources need pinned revisions at contract freeze; they are evidence,
+  not engine dependencies or substitutes for closed validation.
+- [Bedrock inference configuration](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InferenceConfiguration.html):
+  confirms omitted `maxTokens` uses the model's maximum, preserving the existing
+  Bedrock behavior while Anthropic requires explicit request configuration.
 - [Token counting](https://platform.claude.com/docs/en/build-with-claude/token-counting):
   estimate semantics, pricing, rate limits and tokenizer note.
 - [Models overview](https://platform.claude.com/docs/en/models/overview): IDs, pricing,
@@ -1237,3 +1423,9 @@ authorization modules, request/response codecs, HTTP/head/transport modules,
 production/replay composition and harness consumers linked in §§4–6. It identified
 proposed extraction boundaries; it did not refactor code, execute tests or make
 live provider calls.
+
+The final architectural review rechecked those boundaries at the revision above,
+added R11–R15 and the response-presence gate in R8, and corrected the feasibility
+sequence. These findings come from source inspection and official documentation;
+race behavior, API compatibility, latency and quality still need the stated
+executable evidence. Only this proposal was edited.
