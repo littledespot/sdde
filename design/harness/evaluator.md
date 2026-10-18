@@ -191,7 +191,7 @@ calibration retains raw scores while acceptance remains unresolved.
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
 - Cases and rubrics use distinct `/v2` identifiers; configuration remains `/v1`.
-  Reports use `evaluation-report/v3` with typed judgment and acceptance evidence.
+  Reports use `evaluation-report/v4` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -212,12 +212,29 @@ Every criterion must receive exactly one of:
 - `uncertain`: a null score and explanation;
 - `not_applicable`: a null score and explanation, only if that criterion permits it.
 
-- All results need reasons and exact quotations linked to captured document IDs.
+- **Line locators (`rubric-judgment/v2`, approved by the user on 18 October 2026).**
+  - The packet supplies every source and the specification as numbered lines of the
+    exact captured bytes. Line boundaries come from the engine's shared source
+    coordinates (`source_coordinates.zig`): CR, LF and CRLF each end one line, and a
+    final terminator ends the last line instead of starting another.
+  - The protocol hash binds that numbering through a fixed probe document, so a
+    change to it invalidates retained qualification.
+  - Evidence is `{document_id, first_line, last_line}`, inclusive and 1-based. The
+    judge cites lines instead of copying text, because verbatim quotes from the
+    small judge drifted into paraphrase and could not be matched.
+- All results need reasons and evidence linked to captured document IDs.
 - Source evidence is required.
 - Candidate evidence is also required unless the judge explicitly reports
-  `missing_from_specification`; absence must not be supported by a fabricated quote.
-- IDs and quotations are checked mechanically.
-- Their semantic relevance, and claims of absence, remain model judgments.
+  `missing_from_specification`; absence must not be supported by fabricated evidence.
+- Mechanical checks:
+  - the document ID exists;
+  - `1 <= first_line <= last_line <=` its line count, else `invalid_line_range`;
+  - at least one cited line has text, else `blank_evidence`.
+- Reports render each locator with its exact resolved lines. Parsing a persisted
+  report revalidates its judgment against its own capture, and an unresolvable
+  locator invalidates the report.
+- Semantic relevance of the cited lines, and claims of absence, remain model
+  judgments.
 
 ### Score calculation
 
@@ -265,9 +282,10 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v3` carries the judgment validator's typed diagnostic in
+- `evaluation-report/v4` carries the judgment validator's typed diagnostic in
   JSON and Markdown: parser byte/line/column for invalid JSON, or the affected
-  criterion, zero-based evidence index and document ID for invalid evidence.
+  criterion, zero-based evidence index and document ID for an unknown document,
+  invalid line range or blank evidence.
   Missing source and specification evidence are distinct. Valid JSON that fails
   the closed response contract reports `invalid_shape`. Diagnostics add no retry
   or authority to score an invalid judgment; the E2E report embeds the same value.

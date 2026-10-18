@@ -10,7 +10,7 @@ const strict = @import("../../src/domain/strict_json.zig");
 
 pub const Error = std.mem.Allocator.Error || error{InvalidHumanAdjudication};
 pub const Review = struct {
-    schema: enum { @"human-spec-adjudication/v1" },
+    schema: enum { @"human-spec-adjudication/v2" },
     outcome: union(enum) {
         pending,
         reviewed: struct {
@@ -22,7 +22,7 @@ pub const Review = struct {
     },
 };
 pub const Adjudication = struct {
-    schema: enum { @"spec-adjudication/v1" } = .@"spec-adjudication/v1",
+    schema: enum { @"spec-adjudication/v2" } = .@"spec-adjudication/v2",
     original_report_sha256: []const u8,
     review_sha256: []const u8,
     reviewer: ?[]const u8,
@@ -69,7 +69,7 @@ fn parseOriginal(a: std.mem.Allocator, bytes: []const u8) Error!native.Report {
     defer tree.deinit();
     if (tree.value != .object or !tree.value.object.contains("schema") or !tree.value.object.contains("origin")) return error.InvalidHumanAdjudication;
     const report = strict.decode(native.Report, a, bytes, limits) catch |err| return invalid(err);
-    if (report.schema != .@"spec-e2e-report/v5" or report.origin != .live) return error.InvalidHumanAdjudication;
+    if (report.schema != .@"spec-e2e-report/v6" or report.origin != .live) return error.InvalidHumanAdjudication;
     return report;
 }
 

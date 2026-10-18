@@ -69,11 +69,11 @@ const Fixture = struct {
                 .disposition = .scored,
                 .score = if (index < 2) 4 else 0,
                 .explanation = "Compare the original startup display with the specification.",
-                .evidence = &.{ .{ .document_id = source.id, .quote = source.text }, .{ .document_id = "specification", .quote = specimen_texts[index] } },
+                .evidence = &.{ .{ .document_id = source.id, .first_line = 1, .last_line = @intCast(try judgment.lineCount(source.text)) }, .{ .document_id = "specification", .first_line = 1, .last_line = @intCast(try judgment.lineCount(specimen_texts[index])) } },
                 .missing_from_specification = false,
             }} };
             result.* = .{
-                .schema = "evaluation-report/v3",
+                .schema = "evaluation-report/v4",
                 .protocol_sha256 = try q.protocolSha256(a),
                 .capture = input,
                 .configuration = config,
@@ -268,7 +268,8 @@ test "reports cannot qualify foreign captures forged arithmetic missing usage or
             },
         }
         try fixture.saveReport(0, value);
-        if (fault == .protocol) {
+        // Forged arithmetic is a malformed persisted report: reports.parse rejects it.
+        if (fault == .protocol or fault == .arithmetic) {
             try std.testing.expectError(error.InvalidGraderQualification, fixture.inspect());
         } else {
             try unresolved(expected, try fixture.inspect());

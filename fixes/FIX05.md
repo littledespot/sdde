@@ -50,7 +50,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
 | B5/B8/R8 live diagnostics, 17 October (AEDT), committed `8ed40ba` | Both reach post-generation review. Hello-world exhausts the budget in principle review (30 calls, 103,873 tokens); loan-renewal fails on a runaway review response at the provider output limit (13 calls, 45,322 tokens). Neither publishes (§1). |
 | B4/B9 live diagnostics, 17 October (AEDT), committed `f086dd1` | Hello-world publishes for the first time (26 calls, 70,830 tokens); human adjudication is pending and the advisory grader fails to parse. Loan-renewal blocks on a forbidden source-review verdict (23 calls, 64,636 tokens), fixed offline in §10 (§1). |
-| §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All four graders fail `quote_not_found` (§1). |
+| §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All three grader runs fail `quote_not_found` (§1); line locators replace quotes in §13. |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -336,7 +336,7 @@ What blocks or misleads now:
     even after removing Markdown backslash escapes.
   - The judge also drops inline code, bold labels and emphasis markers, and changes
     case.
-  - Decision needed: what the judge is shown and how quotes are matched.
+  - **Decided 18 October:** the judge cites line locators instead (§13).
 - **Bedrock caps output when no allowance is sent.**
   - At 10:44, source-review call 22 stopped at exactly 4,096 output tokens
     (`OUTPUT_LIMIT`). The runner logged it as `model.provider_stopped`.
@@ -362,8 +362,8 @@ What blocks or misleads now:
 Content gains: loan-renewal preserved all five duties, including "must allow", for
 the first time with a refusal acceptance criterion (AC-002) and both exact
 messages. Hello-world's title and earlier unsupported assumption are fixed. It still
-merges the three requirements and invents a "Greeting" entity. Human adjudication is
-pending for every published report.
+merges the three requirements and invents a "Greeting" entity. These reports are
+`spec-e2e-report/v5`, which the current adjudicator no longer reads (§13).
 
 ## 2. Why the engine is hard to implement
 
@@ -1634,16 +1634,17 @@ The approved follow-up and remaining proposals below authorize no live calls:
    and the next separately approved pair establish different evidence; neither
    substitutes for R8 acceptance. B7 remains open.
 3. R8 is implemented. Adjudicate the first published report under it; the advisory
-   grader doesn't decide acceptance. That report now exists: the 17 October 18:40
-   hello-world run awaits human adjudication.
+   grader doesn't decide acceptance. Every report published so far (17 October 18:40
+   onward) is `spec-e2e-report/v5`, so the current adjudicator cannot read it (§13).
 4. **After the post-B4/B9 runs:** §10's forbidden-verdict fix, the grader's envelope
    parsing, the output-allowance removal and provider-stop logging are implemented
    offline (§11). The next billed pair still needs separate approval for each run.
    B7 is then the main requirement-preservation risk.
-   **After the 18 October runs:** both cases publish (§1).
-   - Next: decide how the grader is shown the specification and how it matches
-     quotes.
-   - Adjudicate the published reports.
+   **After the 18 October runs:** both cases publish (§1), and §13 replaces quote
+   matching with line locators.
+   - Next: run a separately approved v6 pair, which also checks that the judge cites
+     valid locators live.
+   - Adjudicate its reports under `human-spec-adjudication/v2`.
    - Address B7, which also drives loan-renewal's record duplication.
    - Repeat both cases before claiming improvement (§7).
 5. Consider A4's broader evidence gaps and W5's identical sibling steps separately
@@ -1722,10 +1723,12 @@ bounded approval, and each E2E run needs its own explicit approval
   B4's post-R8 evidence, generalized B9 to all runaway output, and updated §6.
 - **18 October 2026, after the post-B4/B9 runs:** added §1's post-B4/B9 diagnostics
   and §10's forbidden-verdict fix, and updated §6.
-- **18 October 2026, after the §10–§12 runs:** added §1's §10–§12 live diagnostics and
-  updated §6.
 - **18 October 2026, prefix decision:** approved normalizing the truncated Bedrock
   GPT-OSS member-name prefix, logged as an engine fix. Added §12 and updated B6.
+- **18 October 2026, after the §10–§12 runs:** added §1's §10–§12 live diagnostics and
+  updated §6.
+- **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
+  and §6.
 - **18 October 2026, user decisions:** approved routing the grader through the
   canonical envelope parser. Directed that there be no output token limits and that
   provider-applied limits be logged. Added §11 and updated §1, B9, §5, §6 and §9.
@@ -2100,3 +2103,97 @@ its 20 source-review calls, counting retries.
 | `zig build lint` and `git diff --check` | Pass. |
 
 No billed calls are included.
+
+## 13. Grader evidence by line locator — 18 October 2026
+
+**Decision.** On 18 October the user chose option D: the judge cites where its
+evidence is, and the harness resolves the exact text.
+
+**Evidence.** Every grader run in §1's 18 October diagnostics failed
+`quote_not_found`.
+- None of 21 specification quotes across the three published runs matched the
+  captured bytes.
+- After removing Markdown escapes and markup and folding case, only 2–3 per run
+  matched.
+- GPT-OSS-20B copies the start of a quote, then paraphrases.
+
+**Change (test harness only).**
+- **Judgment contract** ([judgment.zig](../test/harness/judgment.zig)):
+  `rubric-judgment/v2` evidence is `{document_id, first_line, last_line}`, inclusive
+  and 1-based.
+- **Shared line handling:** one owner numbers lines (LF-terminated, with a final LF
+  ending the last line). It resolves each locator's exact bytes and validates:
+  - an unknown document;
+  - `invalid_line_range` for zero, reversed or out-of-range lines;
+  - `blank_evidence` when no cited line has text.
+- **Judge packet** ([packet.zig](../test/harness/packet.zig)):
+  - prompt revision `rubric-judge/v2`;
+  - every source and the specification arrive as numbered lines of the exact
+    captured bytes;
+  - instructions ask for the narrowest supporting lines, without copied text.
+- **Reports:**
+  - `evaluation-report/v4` renders each locator with its resolved lines;
+  - grader qualification reads the version from the report owner;
+  - `spec-e2e-report/v6` embeds it;
+  - human adjudication moves to `human-spec-adjudication/v2` and
+    `spec-adjudication/v2`.
+- **Review follow-ups (same change):**
+  - Line boundaries now come from the engine's shared `source_coordinates.advance`:
+    CR, LF and CRLF each end one line, and a final terminator ends the last line.
+  - The protocol hash binds the numbering through a fixed probe document.
+  - `reports.parse` revalidates a persisted judgment against its capture and
+    rejects unresolvable locators or forged arithmetic. Rendering has no fallback,
+    and qualification no longer revalidates separately.
+  - The baseline contracts that embed judgments or the E2E report advanced:
+    assessor schema `3`, `baseline-score/v4` and `baseline-acquisition/v4`.
+  - acceptance.md gives humans the numbering rule.
+- **Unchanged:**
+  - the engine, the renderer and published bytes;
+  - the baseline experiment's separate quote-based labels;
+  - the pending grader-calibration and qualification records, which bind no
+    judgment.
+- **Docs:** evaluator.md, acceptance.md and e2e.md record the contract.
+
+**Consequence.** Every report written before this change is historical. That covers
+`spec-e2e-report/v5`, from the 17 October 18:40 hello-world run through all four 18
+October runs.
+- The current adjudicator rejects these reports, as the no-compatibility rule
+  requires. They already carry the retired `quote_not_found` diagnostic, so a closed
+  reader could not decode them anyway.
+- Budget-feasibility evidence (`baseline/feasibility.zig`) also stops reading them.
+- A fresh run produces a different specification. The only route to adjudicate
+  those exact specifications is the historical adjudicator at commit `3d48334`,
+  which is a user decision.
+
+**Regression evidence:**
+
+- **Line handling:** `evidence locators cite numbered lines that resolve to exact
+  captured bytes` covers:
+  - line counting, with and without a final terminator, and for an empty document;
+  - CRLF, a lone CR, a trailing blank line, invalid UTF-8 and a `maxInt(u32)`
+    locator;
+  - exact spans, including a blank line and a multi-line range;
+  - rejected zero, reversed and out-of-range locators;
+  - an accepted range that spans a blank line;
+  - packet numbering that matches validation;
+  - report rendering of resolved text;
+  - persisted and in-memory reports with an unresolvable locator, which are
+    rejected.
+- **Validator diagnostics:** reject out-of-range, blank, zero and reversed locators,
+  an unknown document, and the retired `quote` field.
+- **Converted suites:** the acceptance, gate, qualification, useful-completion and
+  E2E acceptance tests now use locators. Their fabricated-evidence cases cite lines
+  outside the document.
+- **Version tests:** reject the immediately superseded versions (`spec-e2e-report/v5`,
+  `human-spec-adjudication/v1` and `evaluation-report/v3`).
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator test-integration test test-baseline -j2 --summary all` | 78/78 steps; 2,547/2,547 tests, after the review follow-ups. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,891/1,891 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included. The first v6 run is the live check that the judge
+cites valid locators.

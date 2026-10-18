@@ -2,16 +2,20 @@
 const std = @import("std");
 const c = @import("contracts.zig");
 const strict = @import("../../src/domain/strict_json.zig");
+const coordinates = @import("../../src/domain/source_coordinates.zig");
 /// Report-owned diagnostic data; indices are zero-based, IDs are from the rubric.
 pub const Diagnostic = struct {
-    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, empty_quote, unknown_document, quote_not_found, invalid_score, invalid_disposition },
+    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, unknown_document, invalid_line_range, blank_evidence, invalid_score, invalid_disposition },
     criterion_id: ?[]const u8 = null,
     evidence_index: ?usize = null,
     document_id: ?[]const u8 = null,
     json: ?strict.Diagnostic = null,
 };
-pub const schema_revision = "rubric-judgment/v1";
-pub const Evidence = struct { document_id: []const u8, quote: []const u8 };
+pub const schema_revision = "rubric-judgment/v2";
+/// Evidence names inclusive, 1-based lines of one supplied document. The
+/// harness resolves their exact bytes; the judge never copies text.
+pub const Evidence = struct { document_id: []const u8, first_line: u32, last_line: u32 };
+pub const NumberedLine = struct { line: u32, text: []const u8 };
 pub const CriterionResult = struct {
     criterion_id: []const u8,
     disposition: enum { scored, uncertain, not_applicable },
@@ -63,24 +67,18 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         var source_evidence = false;
         var candidate_evidence = false;
         for (result.evidence, 0..) |evidence, index| {
-            const location: Diagnostic = .{ .reason = .empty_quote, .criterion_id = criterion.id, .evidence_index = index, .document_id = evidence.document_id };
-            if (!c.text(evidence.quote)) return reject(diagnostic, location);
-            const document = if (std.mem.eql(u8, evidence.document_id, "specification")) blk: {
-                candidate_evidence = true;
-                break :blk capture.specification;
-            } else blk: {
-                for (capture.sources) |source| if (std.mem.eql(u8, source.id, evidence.document_id)) {
-                    source_evidence = true;
-                    break :blk source.text;
-                };
-                var unknown = location;
-                unknown.reason = .unknown_document;
-                return reject(diagnostic, unknown);
-            };
-            if (std.mem.indexOf(u8, document, evidence.quote) == null) {
+            const location: Diagnostic = .{ .reason = .unknown_document, .criterion_id = criterion.id, .evidence_index = index, .document_id = evidence.document_id };
+            const text = documentText(capture, evidence.document_id) orelse return reject(diagnostic, location);
+            if (std.mem.eql(u8, evidence.document_id, "specification")) candidate_evidence = true else source_evidence = true;
+            const cited = (try lineSpan(text, evidence.first_line, evidence.last_line)) orelse {
                 var invalid = location;
-                invalid.reason = .quote_not_found;
+                invalid.reason = .invalid_line_range;
                 return reject(diagnostic, invalid);
+            };
+            if (!c.text(cited)) {
+                var blank = location;
+                blank.reason = .blank_evidence;
+                return reject(diagnostic, blank);
             }
         }
         if (!source_evidence) return reject(diagnostic, .{ .reason = .missing_source_evidence, .criterion_id = criterion.id });
@@ -112,6 +110,69 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         else
             .not_configured,
     };
+}
+
+/// The supplied document a locator names, or null when the judge invented one.
+pub fn documentText(capture: c.Capture, id: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, id, "specification")) return capture.specification;
+    for (capture.sources) |source| if (std.mem.eql(u8, source.id, id)) return source.text;
+    return null;
+}
+
+/// Line boundaries for judge packets, evidence checks and reports come from the
+/// shared source-coordinate owner: CR, LF and CRLF each end one line, and a final
+/// terminator ends the last line instead of starting another. Lines are 1-based.
+const LineIterator = struct {
+    text: []const u8,
+    position: coordinates.Position = .{ .byte = 0, .line = 1, .column = 1 },
+    start: usize = 0,
+    const Line = struct { start: usize, end: usize };
+    fn next(self: *LineIterator) c.Error!?Line {
+        while (self.position.byte < self.text.len) {
+            const current = self.position;
+            self.position = coordinates.advance(self.text, current) catch return error.InvalidEvaluationContract;
+            if (self.position.line != current.line) {
+                defer self.start = self.position.byte;
+                return .{ .start = self.start, .end = current.byte };
+            }
+        }
+        if (self.start >= self.text.len) return null;
+        defer self.start = self.text.len;
+        return .{ .start = self.start, .end = self.text.len };
+    }
+};
+
+pub fn lineCount(text: []const u8) c.Error!usize {
+    var lines: LineIterator = .{ .text = text };
+    var count: usize = 0;
+    while (try lines.next()) |_| count += 1;
+    return count;
+}
+
+/// Exact bytes from the start of line `first` to the end of line `last`, without
+/// its terminator; null for an empty, reversed or out-of-range locator.
+pub fn lineSpan(text: []const u8, first: u32, last: u32) c.Error!?[]const u8 {
+    if (first == 0 or first > last) return null;
+    var lines: LineIterator = .{ .text = text };
+    var number: u32 = 0;
+    var span_start: usize = 0;
+    while (try lines.next()) |line| {
+        number += 1;
+        if (number == first) span_start = line.start;
+        if (number == last) return text[span_start..line.end];
+    }
+    return null;
+}
+
+pub fn numberedLines(allocator: std.mem.Allocator, text: []const u8) c.Error![]const NumberedLine {
+    var output: std.ArrayList(NumberedLine) = .empty;
+    errdefer output.deinit(allocator);
+    var lines: LineIterator = .{ .text = text };
+    while (try lines.next()) |line| {
+        const number = std.math.cast(u32, output.items.len + 1) orelse return error.InvalidEvaluationContract;
+        try output.append(allocator, .{ .line = number, .text = text[line.start..line.end] });
+    }
+    return output.toOwnedSlice(allocator);
 }
 
 fn reject(out: ?*?Diagnostic, value: Diagnostic) error{InvalidEvaluationContract} {

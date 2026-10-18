@@ -27,7 +27,7 @@ fn criterion(id: []const u8, score: ?u16) judgment.CriterionResult {
         .disposition = if (score == null) .uncertain else .scored,
         .score = score,
         .explanation = "The evidence supports this criterion assessment.",
-        .evidence = &.{ .{ .document_id = "requirements", .quote = "Keep at most ten messages." }, .{ .document_id = "specification", .quote = "The application keeps at most ten messages." } },
+        .evidence = &.{ .{ .document_id = "requirements", .first_line = 1, .last_line = 1 }, .{ .document_id = "specification", .first_line = 1, .last_line = 1 } },
         .missing_from_specification = false,
     };
 }

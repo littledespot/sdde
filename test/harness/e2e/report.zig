@@ -239,7 +239,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         "Use the failure step and diagnostics to locate the failed workflow operation. " ++
         "case.json and inputs.json retain the selected case and captured configuration, workflow resources, references, rubric and evaluator settings. " ++
         "project/ contains the isolated inputs and any actual engine output. report.json provides the structured run record for automated comparisons.\n\n" ++
-        "When grading completes, the criterion scores, explanations and source/specification quotations below identify coverage, grounding and clarity defects. " ++
+        "When grading completes, the criterion scores, explanations and cited source/specification lines below identify coverage, grounding and clarity defects. " ++
         "Compare runs with the same source, rubric revision and model settings, and retain failures and low scores. " ++
         "The report does not automatically tune or approve the workflow.\n\n");
     if (report.evaluation) |evaluation| {

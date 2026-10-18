@@ -6,7 +6,7 @@ const fixture = @import("e2e/acceptance_test.zig");
 
 fn reviewed(a: std.mem.Allocator, original: []const u8, proposal: judgment.Proposal) ![]const u8 {
     const value: human.Review = .{
-        .schema = .@"human-spec-adjudication/v1",
+        .schema = .@"human-spec-adjudication/v2",
         .outcome = .{ .reviewed = .{
             .reviewer = "unit-fixture-human",
             .reviewed_at_utc = "2026-10-17T01:00:00Z",
@@ -27,7 +27,7 @@ test "pending human adjudication records exact identity without fabricating a re
     const a = arena.allocator();
     const report = try fixture.completed(a);
     const original = try bytes(a, report);
-    const review = "{\"schema\":\"human-spec-adjudication/v1\",\"outcome\":{\"pending\":{}}}";
+    const review = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     const result = try human.evaluate(a, review, original);
     try std.testing.expectEqual(.human_adjudication_required, result.acceptance.unresolved);
     try std.testing.expect(result.reviewer == null);
@@ -41,7 +41,7 @@ test "pending human review preserves known native blocked and unexpected clarifi
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const pending = "{\"schema\":\"human-spec-adjudication/v1\",\"outcome\":{\"pending\":{}}}";
+    const pending = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     var report = try fixture.completed(a);
     report.status = .workflow_blocked;
     report.workflow_outcome = .blocked;
@@ -51,7 +51,7 @@ test "pending human review preserves known native blocked and unexpected clarifi
     report.workflow_outcome = .needs_user;
     const clarification = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.unexpected_outcome, clarification.acceptance.failed);
-    report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
+    report = .{ .schema = .@"spec-e2e-report/v6", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
     const ungraded = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.missing_expected_outcome, ungraded.acceptance.unresolved);
 }
@@ -151,7 +151,7 @@ test "human declaration and original E2E report are closed explicitly versioned 
     const original = try bytes(a, report);
     const review = try reviewed(a, original, .{ .results = report.evaluation.?.outcome.evaluated.results });
     for ([_][2][]const u8{
-        .{ "human-spec-adjudication/v1", "human-spec-adjudication/v0" },
+        .{ "human-spec-adjudication/v2", "human-spec-adjudication/v1" },
         .{ "\"reviewer\":", "\"approved\":true,\"reviewer\":" },
         .{ "unit-fixture-human", "" },
         .{ "2026-10-17T01:00:00Z", "2026-02-30T01:00:00Z" },
@@ -159,11 +159,11 @@ test "human declaration and original E2E report are closed explicitly versioned 
         const invalid = try std.mem.replaceOwned(u8, a, review, replacement[0], replacement[1]);
         try std.testing.expectError(error.InvalidHumanAdjudication, human.evaluate(a, invalid, original));
     }
-    const pending = "{\"schema\":\"human-spec-adjudication/v1\",\"outcome\":{\"pending\":{}}}";
+    const pending = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     for ([_][2][]const u8{
-        .{ "spec-e2e-report/v5", "spec-e2e-report/v3" },
+        .{ "spec-e2e-report/v6", "spec-e2e-report/v5" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v5\",", "" },
+        .{ "\"schema\":\"spec-e2e-report/v6\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
     }) |replacement| {
         const invalid = try std.mem.replaceOwned(u8, a, original, replacement[0], replacement[1]);

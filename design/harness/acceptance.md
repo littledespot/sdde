@@ -52,11 +52,14 @@ production state.
 
 ## Adjudicate a published run offline
 
-A human supplies `human-spec-adjudication/v1`, either `outcome:{"pending":{}}` or
+A human supplies `human-spec-adjudication/v2`, either `outcome:{"pending":{}}` or
 `outcome:{"reviewed":{...}}`. A reviewed record requires `reviewer`,
 `reviewed_at_utc` in UTC ISO 8601, the exact original `report_sha256`, and
 `proposal:{"results":[...]}` using the same complete criterion/evidence contract
-as model judgments. The human must inspect the exact captured sources and
+as model judgments. Evidence cites inclusive, 1-based line ranges of the captured
+documents (`rubric-judgment/v2`). CR, LF and CRLF each end a line, and a final
+terminator starts no extra line ([evaluator](evaluator.md)). An editor may show an
+empty last line after a final newline; citing it is out of range. The human must inspect the exact captured sources and
 published specification; copying the advisory model result is not human review.
 
 ```sh
@@ -121,12 +124,13 @@ and qualification. No real grader is currently qualified by these pending record
 
 - `evaluation-case/v2`: required qualification paths.
 - `evaluation-rubric/v2`: required nullable critical minima.
-- `evaluation-report/v3`: raw assessment and explicit grader/acceptance evidence.
+- `evaluation-report/v4`: raw assessment, line-locator evidence and explicit
+  grader/acceptance evidence.
 - `spec-e2e-case/v2`: required expected outcome.
-- `spec-e2e-report/v5`: the single total token budget and aggregate actual usage,
-  expected outcome, captured evaluation inputs, replayable admission evidence and
-  separate acceptance.
-- `human-spec-adjudication/v1`, `spec-adjudication/v1`: bound human judgment and
+- `spec-e2e-report/v6`: the single total token budget and aggregate actual usage,
+  expected outcome, captured evaluation inputs, replayable admission evidence,
+  separate acceptance and an embedded `evaluation-report/v4`.
+- `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and
   derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,
   `grader-qualification/v1`: closed evidence records.

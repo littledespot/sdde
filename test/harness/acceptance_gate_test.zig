@@ -43,8 +43,8 @@ fn result() judgment.Result {
             .score = 4,
             .explanation = "The required behavior is preserved.",
             .evidence = &.{
-                .{ .document_id = "source", .quote = "Show a message." },
-                .{ .document_id = "specification", .quote = "The user sees a message." },
+                .{ .document_id = "source", .first_line = 1, .last_line = 1 },
+                .{ .document_id = "specification", .first_line = 1, .last_line = 1 },
             },
             .missing_from_specification = false,
         }},
@@ -133,13 +133,13 @@ test "evaluation reports render human gate critical minima and qualification rea
     }) |expected| try std.testing.expect(std.mem.indexOf(u8, rendered, expected) != null);
 }
 
-test "persisted v3 reports require explicit acceptance and protocol identities" {
+test "persisted v4 reports require explicit acceptance and protocol identities" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try reports.json(a, report());
     const parsed = try reports.parse(a, bytes);
-    try std.testing.expectEqualStrings("evaluation-report/v3", parsed.schema);
+    try std.testing.expectEqualStrings("evaluation-report/v4", parsed.schema);
     try std.testing.expectEqualDeep(report().acceptance, parsed.acceptance);
     for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
         var tree = try @import("../../src/domain/strict_json.zig").parse(a, bytes, c.json_limits, false, null);
@@ -148,7 +148,7 @@ test "persisted v3 reports require explicit acceptance and protocol identities" 
         try std.testing.expectError(error.InvalidEvaluationContract, reports.parse(a, try std.json.Stringify.valueAlloc(a, tree.value, .{})));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-report/v3", "evaluation-report/v2" },
+        .{ "evaluation-report/v4", "evaluation-report/v3" },
         .{ @import("packet.zig").revision, "old-prompt" },
         .{ judgment.schema_revision, "old-judgment" },
         .{ digest, "bad-digest" },

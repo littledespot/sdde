@@ -27,8 +27,9 @@ pub const Attempt = struct {
     failure: ?Failure,
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
+pub const schema_version = "evaluation-report/v4";
 pub const Report = struct {
-    schema: []const u8 = "evaluation-report/v3",
+    schema: []const u8 = schema_version,
     prompt_revision: []const u8 = @import("packet.zig").revision,
     judgment_schema: []const u8 = j.schema_revision,
     capture: c.Capture,
@@ -53,7 +54,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) c.Error!Report {
         if (!tree.value.object.contains(key)) return error.InvalidEvaluationContract;
     }
     const value = try c.decode(Report, allocator, bytes);
-    if (!std.mem.eql(u8, value.schema, "evaluation-report/v3") or
+    if (!std.mem.eql(u8, value.schema, schema_version) or
         !std.mem.eql(u8, value.prompt_revision, @import("packet.zig").revision) or
         !std.mem.eql(u8, value.judgment_schema, j.schema_revision)) return error.InvalidEvaluationContract;
     if (value.protocol_sha256) |digest| {
@@ -62,19 +63,28 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) c.Error!Report {
             if (!(byte >= '0' and byte <= '9') and !(byte >= 'a' and byte <= 'f')) return error.InvalidEvaluationContract;
         }
     }
+    // A persisted judgment must still resolve against its own captured documents
+    // and reproduce its recorded arithmetic; every reader inherits this check.
+    if (value.outcome == .evaluated) {
+        const evaluated = value.outcome.evaluated;
+        const native = try j.validate(allocator, null, value.capture, std.json.Stringify.valueAlloc(allocator, j.Proposal{ .results = evaluated.results }, .{}) catch return error.OutOfMemory);
+        const recorded = std.json.Stringify.valueAlloc(allocator, evaluated, .{}) catch return error.OutOfMemory;
+        const expected = std.json.Stringify.valueAlloc(allocator, native, .{}) catch return error.OutOfMemory;
+        if (!std.mem.eql(u8, recorded, expected)) return error.InvalidEvaluationContract;
+    }
     return value;
 }
 
 pub fn json(allocator: std.mem.Allocator, report: Report) std.mem.Allocator.Error![]const u8 {
     return std.json.Stringify.valueAlloc(allocator, report, .{ .whitespace = .indent_2 });
 }
-pub fn markdown(allocator: std.mem.Allocator, report: Report) std.mem.Allocator.Error![]const u8 {
+pub fn markdown(allocator: std.mem.Allocator, report: Report) c.Error![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
-    render(&out.writer, report) catch return error.OutOfMemory;
+    render(&out.writer, report) catch |err| return if (err == error.InvalidEvaluationContract) error.InvalidEvaluationContract else error.OutOfMemory;
     return out.toOwnedSlice() catch return error.OutOfMemory;
 }
-fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
+fn render(out: *std.Io.Writer, report: Report) (std.Io.Writer.Error || c.Error)!void {
     try out.writeAll("# Specification evaluation\n\nCase: ");
     try escape(out, report.capture.case.id);
     try out.writeAll("\n\nEvaluation: ");
@@ -172,11 +182,15 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
                 try out.writeAll("\n\n");
                 try escape(out, criterion.explanation);
                 try out.writeAll("\n\n");
+                // Locators resolve to the exact captured lines; an unresolvable
+                // locator is an invalid report, never a rendered placeholder.
                 for (criterion.evidence) |evidence| {
+                    const text = j.documentText(report.capture, evidence.document_id) orelse return error.InvalidEvaluationContract;
+                    const cited = (try j.lineSpan(text, evidence.first_line, evidence.last_line)) orelse return error.InvalidEvaluationContract;
                     try out.writeAll("- ");
                     try escape(out, evidence.document_id);
-                    try out.writeAll(": ");
-                    try escape(out, evidence.quote);
+                    try out.print(" lines {d}-{d}: ", .{ evidence.first_line, evidence.last_line });
+                    try escape(out, cited);
                     try out.writeByte('\n');
                 }
                 if (criterion.missing_from_specification) try out.writeAll("\nThe judge reports missing specification content.\n");

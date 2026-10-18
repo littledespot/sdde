@@ -570,10 +570,11 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v5`,
-`baseline-acquisition/v3`, `baseline-score/v3` and `baseline-budget-feasibility/v1`. Step events remain
+The current closed report formats are `spec-e2e-report/v6`,
+`baseline-acquisition/v4`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
-assessor documents retain numeric schema `2`. The compatibility report's outer
+assessor documents use numeric schema `3`. These versions advanced with
+`rubric-judgment/v2` because they embed its judgments or the E2E report. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
 Feasibility evidence retains the single total budget and aggregate actual usage.

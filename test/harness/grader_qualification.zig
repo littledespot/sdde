@@ -153,8 +153,8 @@ pub fn inspect(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, paths: Paths,
         if (!sameHash(bytes, record.sha256)) return .{ .unresolved = .report_stale };
         const report = reports.parse(a, bytes) catch |err| return invalid(err);
         if (!try matches(a, report, selected, rubric, rubric_bytes, sources, specimens[index], judge_config)) return .{ .unresolved = .report_mismatch };
-        const native = judgment.validate(a, null, report.capture, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = report.outcome.evaluated.results }, .{})) catch |err| return invalid(err);
-        if (!try sameJson(a, native, report.outcome.evaluated)) return .{ .unresolved = .report_mismatch };
+        // reports.parse has revalidated the judgment against its captured documents.
+        const native = report.outcome.evaluated;
         // Qualification requires complete judgments even for a specimen whose
         // known critical failure would already reject production acceptance.
         if (native.assessment != .scored) return .{ .unresolved = .report_unresolved };
@@ -189,7 +189,7 @@ pub fn protocolSha256(a: std.mem.Allocator) std.mem.Allocator.Error![]const u8 {
 }
 
 fn matches(a: std.mem.Allocator, report: reports.Report, selected: c.Case, rubric: c.Rubric, rubric_bytes: []const u8, sources: []const c.Document, specimen: []const u8, config: configuration.Config) Error!bool {
-    if (!std.mem.eql(u8, report.schema, "evaluation-report/v3") or !std.mem.eql(u8, report.prompt_revision, packet.revision) or
+    if (!std.mem.eql(u8, report.schema, reports.schema_version) or !std.mem.eql(u8, report.prompt_revision, packet.revision) or
         !std.mem.eql(u8, report.judgment_schema, judgment.schema_revision) or report.outcome != .evaluated or
         report.judgment_diagnostic != null or report.capture.generation.origin != .supplied) return false;
     const protocol_sha256 = report.protocol_sha256 orelse return false;
