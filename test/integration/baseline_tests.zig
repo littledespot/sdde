@@ -141,10 +141,16 @@ test "test.integration.baseline frozen development projects contain original sou
     var foreign = decoded;
     foreign.inputs.files = with_foreign_reference;
     try std.testing.expectError(error.UnselectedReferenceInput, frozen_inputs.project(a, foreign, decoded.trials[0]));
-    const unversioned = try std.mem.replaceOwned(u8, a, serialized, "\"schema\":\"baseline-freeze/v1\",", "");
+    const unversioned = try std.mem.replaceOwned(u8, a, serialized, "\"schema\":\"baseline-freeze/v2\",", "");
     try std.testing.expectError(error.InvalidJsonDocument, frozen_inputs.decode(a, unversioned));
-    const wrong_version = try std.mem.replaceOwned(u8, a, serialized, "baseline-freeze/v1", "baseline-freeze/v2");
+    const wrong_version = try std.mem.replaceOwned(u8, a, serialized, "baseline-freeze/v2", "baseline-freeze/v1");
     try std.testing.expectError(error.InvalidJsonDocument, frozen_inputs.decode(a, wrong_version));
+    // The retired E2E judge configuration is not readable freeze content.
+    for ([_][]const u8{ "\"config_source\":\"MOCK-retired\",", "\"config_bytes\":\"{}\"," }) |retired| {
+        const with_retired = try std.mem.replaceOwned(u8, a, serialized, "\"rubric_bytes\":", try std.mem.concat(a, u8, &.{ retired, "\"rubric_bytes\":" }));
+        try std.testing.expect(!std.mem.eql(u8, with_retired, serialized));
+        try std.testing.expectError(error.InvalidJsonDocument, frozen_inputs.decode(a, with_retired));
+    }
     var features: usize = 0;
     for (inventory.cases) |example| {
         if (example.partition != .development or example.variant != .base) continue;
@@ -281,7 +287,7 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         try std.testing.expectEqual(.initial_generation, facts.receipts[0].purpose);
         try std.testing.expectEqual(.reference_chunk, facts.receipts[0].owner_kind);
         try std.testing.expect(facts.published_output == null and facts.first_candidate == null and facts.final_candidate == null);
-        try std.testing.expectEqual(.not_run, facts.workflow.?.semantic_quality);
+        try std.testing.expect(facts.workflow.?.evaluation_inputs == null);
         const run = try parent.dir.openDir(std.testing.io, facts.directory.?, .{});
         defer run.close(std.testing.io);
         const raw = try files.read(std.testing.io, a, run, "evidence/generation/call-000001/response.json");
@@ -309,10 +315,10 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         const claim: experiment.Claim = .{ .schema = .@"baseline-experiment-claim/v1", .experiment_sha256 = try frozen_inputs.experimentHash(a, frozen), .freeze_sha256 = freeze_sha256, .execution_id = "offline-partial-panel", .limits = gate.snapshot().limits, .phases = &.{.baseline} };
         try experiment.consume(std.testing.io, a, parent.dir, claim);
         try experiment.verify(std.testing.io, a, parent.dir, claim);
-        const report: acquisition.Report = .{ .schema = .@"baseline-acquisition/v6", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
-        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "\"schema\":\"baseline-acquisition/v6\",", "");
+        const report: acquisition.Report = .{ .schema = .@"baseline-acquisition/v7", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
+        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "\"schema\":\"baseline-acquisition/v7\",", "");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, unversioned, frozen, freeze_sha256));
-        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v6", "baseline-acquisition/v5");
+        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v7", "baseline-acquisition/v6");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, old_version, frozen, freeze_sha256));
         _ = try acquisition.decode(a, try std.json.Stringify.valueAlloc(a, report, .{}), frozen, freeze_sha256);
         // Rehashing a changed receipt cannot make it match native evidence.

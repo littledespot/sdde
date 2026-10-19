@@ -1,4 +1,5 @@
-//! Join a successful publication to the independent rubric evaluator.
+//! Bind a successful publication to the exact source, rubric and published
+//! bytes that offline human adjudication revalidates.
 const std = @import("std");
 const c = @import("contracts.zig");
 const evaluator = @import("../contracts.zig");
@@ -24,19 +25,4 @@ pub fn inputs(allocator: std.mem.Allocator, report: c.Report, captured: fixture.
     };
     try evaluator.validateCapture(value);
     return value;
-}
-
-pub fn apply(report: *c.Report, result: @import("../report.zig").Report) void {
-    report.evaluation = result;
-    switch (result.outcome) {
-        .evaluator_error => |failure| {
-            report.status = .evaluator_failed;
-            report.semantic_quality = .evaluator_error;
-            report.diagnostic = @tagName(failure);
-        },
-        .evaluated => |judgment| {
-            report.status = if (judgment.assessment == .scored) .evaluated else .quality_unresolved;
-            report.semantic_quality = if (judgment.assessment == .scored) .scored else .unresolved;
-        },
-    }
 }

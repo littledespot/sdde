@@ -27,10 +27,11 @@ and publication evidence control workflow authority.
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
   [current FIX05 review and remaining work](fixes/FIX05.md).
-- The development harness runs real generation and grades the actual published
-  specification through the selected OpenAI or Bedrock evaluator. A successful
-  scored live baseline, human rubric calibration and broader acceptance remain
-  outstanding. Offline tests are not E2E evidence.
+- The development harness runs real generation and retains the actual published
+  specification, with its sources and rubric, for human adjudication; no model
+  grades an E2E run. An adjudicated live run, a scored live baseline, human rubric
+  calibration and broader acceptance remain outstanding. Offline tests are not E2E
+  evidence.
 - Plan, Tasks and Implement remain proposed workflow work.
 
 Each invocation starts its selected workflow at `start`. Candidate output stays
@@ -44,8 +45,8 @@ and preserve user-closed forms byte-for-byte. See
 
 `needs_user` is a normal clarification pause: the CLI exits 0 and lists the open
 form IDs and paths. It does not mean the workflow completed. The E2E harness
-reports `awaiting_clarification` with publication/grading `not_run`; only
-`evaluated` establishes its published/scored baseline.
+reports `awaiting_clarification`; only `generated` records a completed
+publication, whose development acceptance still requires human adjudication.
 
 ## Build and verify
 
@@ -89,8 +90,8 @@ unit-test import tree. `zig build verify` includes both
 as separate steps, plus architecture and smoke checks. The numbered
 specification scenarios exercise engine behavior with fake model responses;
 they do not assess prompt quality. The separately invoked live `e2e-spec`
-command runs the configured LLM and grades its published output against the
-rubric.
+command runs the configured LLM and captures its published output for human
+adjudication against the rubric.
 
 Parser and schema matrices run at their owning unit boundaries; workflow tests
 use representative cases to check routing, evidence and accounting. Historical
@@ -236,10 +237,10 @@ selection, retained evidence and result interpretation. Each agent-initiated
 E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 
 Live development tests permit only Bedrock `openai.gpt-oss-20b-1:0` from
-`ap-southeast-2`, with native JSON Schema. Generation and grading use the same
-explicit model tuple with separate settings and accounting. The registered
-profile uses temperature `0.1`; Spec generation, repair and grading select low
-reasoning. Sonnet, Sol, Haiku, Luna, direct OpenAI and unregistered selections
+`ap-southeast-2`, with native JSON Schema. Generation and the standalone
+supplied-spec evaluator use the same explicit model tuple with separate settings
+and accounting. The registered profile uses temperature `0.1`; Spec generation and
+repair select low reasoning. Sonnet, Sol, Haiku, Luna, direct OpenAI and unregistered selections
 reject before credentials or network use. Luna remains registered for explicitly
 configured production use; changing the test selection does not remove its codec.
 These API contracts do not establish model quality or authorize a live run.
@@ -253,7 +254,9 @@ compile out native model connections, and automated build steps reject dependenc
 on live harness execution.
 
 The launcher requires an explicit case and loads the checkout's optional
-`.env.e2e`. It uses real APIs for both generation and grading. The
+`.env.e2e`. It uses real APIs for generation only; no model grades the run. In
+Claude Code, `/evaluate-e2e <run>` gives advisory rubric and defect-origin analysis
+of a retained run. The
 [supplied-spec evaluator](design/harness/evaluator.md) separately grades a given
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.

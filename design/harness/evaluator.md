@@ -4,7 +4,9 @@ The evaluator sends captured requirements, a supplied specification and its rubr
 to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and
 writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
-The [live E2E harness](e2e.md) joins production generation to this evaluator.
+The [live E2E harness](e2e.md) does not call this evaluator: since 19 October 2026
+(user decision) a published E2E run is assessed by human adjudication
+([R8](acceptance.md)).
 
 ## Run
 
@@ -294,7 +296,7 @@ For scored criteria, the percentage is:
   invalid line range or blank evidence.
   Missing source and specification evidence are distinct. Valid JSON that fails
   the closed response contract reports `invalid_shape`. A diagnostic grants no
-  authority to score an invalid judgment; the E2E report embeds the same value.
+  authority to score an invalid judgment.
 
 - Only transient provider failures/rate limits with known actual usage can retry, within
   the configured count, delay and remaining allowance. A transient retry resends the
@@ -387,7 +389,8 @@ For scored criteria, the percentage is:
 - The shared grading call accepts explicit recorded/scripted/live provenance; fresh
   generation requires a completed execution identity and live generation records each
   configured slot/provider/model in `generation.models`.
-- The E2E entry point supplies this identity and the exact published artifact directly.
+- The E2E harness records the same identity in its captured adjudication inputs; it does
+  not grade them.
 - Recorded artifacts can preserve a previous failed/needs-user status without changing
   that status through grading.
 - Full workflow execution and its failure reports are not implemented by this entry
@@ -447,4 +450,5 @@ zig build verify
 - Ordinary `test`/`verify` include offline evaluator checks; they never invoke an API.
 
 - Passing mechanical tests does not establish that a live judge grades correctly.
-- Live execution evidence is recorded with the [E2E results](e2e.md).
+- Live evaluator evidence is recorded separately; [E2E results](e2e.md) contain no
+  model grade.

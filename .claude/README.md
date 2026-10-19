@@ -16,6 +16,7 @@ imports it and adds the Claude Code specifics.
 | `skills/preflight/` | `/preflight <task>`: the AGENTS.md "Before editing" analysis. |
 | `skills/verify/` | `/verify`: the offline validation ladder and the definition-of-done report. |
 | `skills/live-e2e/` | `/live-e2e <case>`: one approved, billed live Spec E2E run. Only the user can invoke it. |
+| `skills/evaluate-e2e/` | `/evaluate-e2e <run>`: offline, advisory rubric assessment of a retained E2E run that traces each defect to the call, prompt and engine stage that produced it. Writes to the Git-ignored `evaluations/`; never adjudicates. |
 
 ## Permission model
 

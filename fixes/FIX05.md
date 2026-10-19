@@ -53,6 +53,7 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All three grader runs fail `quote_not_found` (§1); line locators replace quotes in §13. |
 | §13 live diagnostics, 18 October (AEDT), committed `fb0f670` | Hello-world publishes (24 calls, 62,894 tokens); the grader's line locators all resolve, but it omits source evidence for one criterion. Loan-renewal blocks at its first source-review assignment, which omitted one member (11 calls, 21,989 tokens); fixed offline in §14 (§1). |
 | §14 live diagnostics, 18 October (AEDT), committed `96fb905` | Hello-world publishes (25 calls, 65,728 tokens); the grader again omits source evidence for one criterion. Loan-renewal no longer blocks: source review runs 21 assignments without a membership defect, then exhausts the token budget (31 calls, 100,441 tokens) (§1). |
+| §16 live diagnostics, 18 October (AEDT), committed `3e53153` | Both cases publish (25 calls / 66,297 and 31 / 97,475 tokens). Both grades end `invalid_judgment` after the §15 correction: each first judgment cites no source lines for three criteria, the validator names only the first, and the correction may change only that one. The user then removed the grader from E2E (§17). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -1600,6 +1601,10 @@ has fifteen. Proposed labels, human approval and actual judge qualification are
 separate; both real human-review and qualification records remain pending. No
 human-reviewed labels, general grader accuracy or E2E quality is claimed.
 
+**Amended 19 October 2026 (§17):** the advisory grader is removed from E2E. Human
+adjudication is the only rubric evaluation of a published run; GPT-OSS-20B grading
+and the calibration panels remain with the standalone supplied-spec evaluator.
+
 ### Summary hierarchy and cross-model variation
 
 Former FIX01 §9.20 recommendations 1–2 are implemented
@@ -1715,6 +1720,9 @@ The approved follow-up and remaining proposals below authorize no live calls:
    - Done offline: the grader's one mechanical correction (§15).
    - Done offline: each Bedrock model's documented maximum output is sent, for
      generation and the grader (§16).
+   - Done offline: the grader is removed from E2E, and the `/evaluate-e2e` skill gives
+     advisory rubric and defect-origin analysis of retained runs (§17). The 22:22 and
+     22:25 v8 reports can't be adjudicated; adjudicate a v9 run.
    - Next: review records per family (B2 approval of 18 October). Loan-renewal's
      21 assignments exhaust the 100,000-token budget before publication.
    - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
@@ -1803,6 +1811,10 @@ bounded approval, and each E2E run needs its own explicit approval
 - **18 October 2026, prefix decision:** approved normalizing the truncated Bedrock
   GPT-OSS member-name prefix, logged as an engine fix. Added §12 and updated B6.
 - **18 October 2026, after the §10–§12 runs:** added §1's §10–§12 live diagnostics and
+  updated §6.
+- **19 October 2026, E2E grader removal:** the user removed the advisory grader from
+  E2E only and asked for a Claude Code evaluation skill that yields engine and prompt
+  improvements. Added §1's §16 live diagnostics, §17 and the R8 amendment, and
   updated §6.
 - **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
   and §6.
@@ -2674,3 +2686,82 @@ it.
 
 Retained calibration runs show Bedrock accepted 16,384 for GPT-OSS-20B; no run on
 this build has yet confirmed it.
+
+## 17. E2E grader removal and assistant evaluation skill — 19 October 2026
+
+**Decision.** Both 18 October 22:22/22:25 runs on `3e53153` published, and both
+grades still ended `invalid_judgment` (§1). Each first judgment cited no source lines
+for `clarity-testability`, `organization` and `proportionate-business-scope`. The
+validator names only the first defect and §15 lets the correction change only that
+result, so any judgment with two or more defects cannot be corrected. Seven of the
+eight retained first judgments had three or four such defects. Every parsed score
+was 4/4 (70 of 70), including on the 22:25 loan-renewal specification, whose
+repetition and invented prohibition the rubric names as defects. After that review
+the user directed: "remove the grader, only the grader, so add a skill that can be used
+to evaluate the e2e tests"; "it should produce meaningful output that can be used to
+improve the engine or prompts"; and "make sure only the e2e grader is removed".
+
+**Authority.** No ADR or invariant requires an in-run model grader. AGENTS.md and §28
+require rubric evaluation of actual published output, which R8's human adjudication
+supplies. The decision amends R8's "GPT-OSS-20B advisory grading" for E2E only
+(acceptance.md). Accepted ADR grader text (0011, 0014) governs the standalone
+evaluator, which is unchanged.
+
+**Removed from E2E** (`test/harness/e2e/`):
+- the judge call, its `TEST_EVALUATION_*` selection and credential, judge
+  configuration, grader-qualification inspections, independence check and model
+  acceptance gate;
+- `spec-e2e-case/v3` drops `evaluation_config`; `test/e2e/config/evaluation.json` is
+  deleted;
+- `spec-e2e-report/v9` drops `evaluation`, `evaluation_configuration`,
+  `grader_qualification`, `semantic_quality` and the `evaluated` and
+  `evaluator_failed` statuses. A published run ends `generated` with acceptance
+  `human_adjudication_required`. `quality_unresolved` is renamed
+  `threshold_unconfigured`: the rubric has no threshold, checked before any send;
+- `judge_independence.zig` keeps only the `Result` type the standalone gate reports.
+  `fromObserved` (E2E's only use) and the uncalled `fromConfigured` are removed with
+  their tests.
+- **Open (user decision):** the standalone CLI passes only `unknown_generation`, so
+  `Result.independent` and `.self_grading` now have no producer. Removing them would
+  narrow the standalone `evaluation-report/v6` acceptance evidence, which the
+  E2E-only scope excludes.
+
+**Kept:** the standalone `evaluate-spec` evaluator with its correction, qualification,
+calibration panels, configuration and environment; rubrics; `rubric-judgment/v2`;
+rubric acceptance; `adjudicate-spec`; baseline supplied-judgment scoring. E2E still
+captures the exact source, rubric and published bytes as `evaluation_inputs` for
+adjudication.
+
+**Version consequences** (no compatibility readers): `baseline-freeze/v2` and
+`baseline-acquisition/v7` embed the case and report. None of the 19 retained runs,
+including 22:22/22:25, can be read by `adjudicate-spec` (v8 or older reports),
+replayed by `e2e-call` (14 `spec-e2e-case/v2` and 5 v1 `case.json` files) or used as
+budget-feasibility evidence. Each needs a fresh run.
+
+**Skill.** [`/evaluate-e2e`](../.claude/skills/evaluate-e2e/SKILL.md) reads a retained
+run offline. It scores the captured specification against the captured rubric with
+line citations and the canonical acceptance arithmetic. It traces each defect to the
+generation call that first produced it, classifies the origin, and maps it to the
+prompt, schema, composition or renderer `path:line`. It ranks generalized changes
+with expected effect, risk and verification, and profiles cost per stage. `--panel`
+checks its discrimination against a calibration panel, scoring specimens copied to
+opaque names before it reads any label. Output goes to the
+Git-ignored `evaluations/` as `evaluation.md` and `evaluation.json`. It is advisory
+assistant analysis, not a grade, human review or adjudication input, and it makes no
+provider calls.
+
+**Regression evidence:**
+- E2E acceptance: a published run is `human_adjudication_required` and passes only
+  through a source-bound human judgment. Every non-`generated` status rejects a human
+  pass. An unconfigured threshold stays `grading_unresolved`. Rendering names no
+  grader or judge.
+- Human adjudication reads only v9. A v8 label, or a report carrying any retired
+  grader field or status (`evaluated`, `evaluator_failed`, `quality_unresolved`), is
+  rejected.
+- Baseline freezes reject the retired `config_source`/`config_bytes`; acquisition
+  rejects a workflow report carrying an adjudication capture.
+- Cases reject `spec-e2e-case/v2` and a retired `evaluation_config` field.
+- Integration: the publication handoff captures poor output unchanged, and saved
+  reports round-trip the captured inputs. Compatibility and baseline reports carry
+  no adjudication capture. The launcher test forwards the generation credential.
+- The standalone evaluator's tests and smoke are unchanged and pass.

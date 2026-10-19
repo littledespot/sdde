@@ -1,6 +1,6 @@
 ---
 name: live-e2e
-description: Run one live Spec E2E case with real Bedrock generation and rubric grading of the engine's published output. Incurs provider charges. Only the user can invoke it.
+description: Run one live Spec E2E case with real Bedrock generation and capture of the engine's published output for rubric adjudication. Incurs provider charges. Only the user can invoke it.
 disable-model-invocation: true
 argument-hint: <case path, e.g. test/e2e/wf-001-hello-world/node-vitest/workflow.case.json>
 ---
@@ -28,9 +28,11 @@ explicit approval.
 5. **Interpret.** Open the new run directory under `zig-out/e2e-spec/`. Read
    `report.md`, `report.json` and `events.jsonl` as described in e2e.md
    "Retained results", and report:
-   - the outcome: `evaluated`, `awaiting_clarification` (publication and grading
-     `not_run`) or failure, with its diagnostics;
-   - for `evaluated`, the rubric results for the actual published specification;
+   - the outcome: `generated` (published; acceptance awaits human adjudication),
+     `awaiting_clarification` or failure, with its diagnostics;
+   - for a published or failed run, the `/evaluate-e2e <run>` analysis: advisory
+     rubric scores for the actual published specification, and the generation calls,
+     prompts and engine stages that produced each defect;
    - observations against the measures in
      [design/intent.md](../../../design/intent.md): requirement preservation,
      unsupported additions, false assessments, repair-induced harm, completion,

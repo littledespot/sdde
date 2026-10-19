@@ -38,7 +38,7 @@ flowchart TD
     Schema -.-> Shape
     Shape -->|Yes| Resolve["Resolve selected evidence in current scope<br/>derive exact source bytes and coordinates"]
     Resolve --> Candidate{"Candidate validators"}
-    Candidate -->|Valid| Publish["Continue full workflow validation<br/>before publication;<br/>development harness grades published output"]
+    Candidate -->|Valid| Publish["Continue full workflow validation<br/>before publication;<br/>development harness captures published output<br/>for human adjudication"]
     Candidate -->|Repairable diagnostic| Authorize["Native authorization selects one unit<br/>retains owner, revision and old value"]
     Authorize --> Repair["Same model-request path<br/>selected replacement schema, evidence and diagnostic"]
     Repair --> Merge["Verify request association and old value<br/>merge only authorized replacement"]

@@ -6,10 +6,10 @@ separate sources and rubrics and share one workflow/model configuration. To run 
 live case from the repository root:
 
 1. Review the case's explicit Bedrock `openai.gpt-oss-20b-1:0` generation
-   selection from `ap-southeast-2`, then configure the same GPT-OSS-20B judge under
+   selection from `ap-southeast-2`, and set its credential under
    [Environment setup](#environment-setup). Both cases share the native JSON
-   catalogue; Spec generation, repair and grading select low reasoning. The
-   registered profile uses temperature `0.1`.
+   catalogue; Spec generation and repair select low reasoning. The registered
+   profile uses temperature `0.1`.
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).
 3. Run the launcher with an explicitly selected live case:
@@ -24,19 +24,24 @@ live case from the repository root:
    zig build e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
    ```
 
-4. Inspect the retained generation, publication and rubric results under
-   [Retained results](#retained-results).
+4. Inspect the retained generation and publication results under
+   [Retained results](#retained-results). No model grades the run. Assess the
+   published specification against the case rubric through
+   [human adjudication](acceptance.md#adjudicate-a-published-run-offline); in
+   Claude Code, `/evaluate-e2e <run>` drafts an advisory rubric assessment and
+   traces defects to the generation calls and prompts that produced them
+   ([Rubric assessment](#rubric-assessment)).
 
 ### Launcher behavior
 
-- The command makes live API calls for generation and grading; there is no mock mode.
+- The command makes live API calls for generation; there is no mock mode.
 - The script requires the pinned Zig compiler and locates the checkout from its own path.
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
   permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0`. E2E preflight checks
-  every configured generation slot and the judge selection before reading
-  credentials or starting the workflow. Sonnet, Sol, Haiku, Luna, direct OpenAI
+  every configured generation slot before reading credentials or starting the
+  workflow. Sonnet, Sol, Haiku, Luna, direct OpenAI
   and other aliases reject; no target is substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
@@ -54,7 +59,7 @@ live case from the repository root:
 `e2e-call` is a development diagnostic within the E2E harness. It selects one
 captured generation call from an explicitly supplied prior E2E run and sends that
 request with an explicit registered model and reasoning effort. The full workflow
-command above remains the generation, publication and rubric-evaluation path.
+command above remains the generation and publication path.
 
 After obtaining explicit approval for the selected live diagnostic and repeat count:
 
@@ -233,20 +238,14 @@ Offline tests of this command do not authorize a run.
 2. Fill [.env.e2e.example](../../.env.e2e.example)'s declared values in the
    Git-ignored `.env.e2e`. Never put credentials in tracked configuration or
    command arguments.
-3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`.
-4. Explicitly set `TEST_EVALUATION_PROVIDER=bedrock`,
-   `TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0` and
-   `TEST_EVALUATION_REGION=ap-southeast-2`. The judge uses the same
-   `TEST_AWS_BEARER_TOKEN_BEDROCK` credential port as generation, with independent
-   settings and accounting. Judge JSON specifies `reasoning_effort: "low"` and
-   `temperature: null`; the registered profile normalizes temperature to `0.1`.
-   Native JSON remains required; no fallback exists.
-   See the [evaluator contract](evaluator.md#run).
-5. For direct build/evaluator commands, load the file in the invoking shell:
+3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`. E2E reads no
+   `TEST_EVALUATION_*` selection; those variables configure only the standalone
+   [supplied-spec evaluator](evaluator.md#run).
+4. For direct build commands, load the file in the invoking shell:
 
    ```sh
    . ./.env.e2e
-   zig build evaluate-spec -- --help
+   zig build e2e-spec -- --help
    ```
 
 - The launcher sources the file itself; direct commands do not.
@@ -287,23 +286,21 @@ credentials. No model answer means no evidence yet about schema conformance.
 - In-process checks and packaged CLI smoke checks retain their separate entry boundaries.
 
 - After successful generation, the harness reads the specification actually published by
-  that invocation and grades those exact captured bytes against the case's rubric.
-- The judge selection uses `TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL`, the
-  selected `TEST_` credential and any required region. The current permitted live
-  grading combination is Bedrock / `openai.gpt-oss-20b-1:0` / `ap-southeast-2`.
-- The case's `evaluation_config` supplies explicit reasoning, timeout, retry and
-  total-budget settings; no provider or model is selected by a fallback.
-- Judge settings and credentials are validated before generation starts.
+  that invocation and retains those exact bytes, with the captured sources and rubric,
+  as `evaluation_inputs` in `report.json`. No model grades the run; human adjudication
+  of the retained report is its rubric evaluation (user decision, 19 October 2026).
+- The case rubric must declare an acceptance threshold. A rubric without one could
+  never be accepted, so the run stops before generation with `threshold_unconfigured`
+  and `ACCEPTANCE_THRESHOLD_UNCONFIGURED`.
 
-- Generation and the evaluator both send the model's documented maximum output
-  (16,384 for GPT-OSS-20B) from their configuration, never a smaller allowance, and
+- Generation sends the model's documented maximum output (16,384 for GPT-OSS-20B)
+  from its configuration, never a smaller allowance, and
   every provider stop is logged with its reason
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The engine accounts every inference, including post-generation advice and
-  correction, once against one execution budget. The evaluator has its own
-  cumulative budget.
+  correction, once against one execution budget.
 - Provider-owned response limits still apply and are reported as provider stops.
-- Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
+- Bedrock generation, diagnostics and the standalone evaluator share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
   and temperature `0.1`, and sends `inferenceConfig.maxTokens` 16,384. Provider
   reasoning counts toward output usage;
@@ -313,7 +310,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   available, but the live-test policy rejects it. Registration does not establish
   live compatibility or semantic quality for either model.
 
-- Every generation call and both evaluator providers use the engine's short [universal
+- Every generation call, and both providers of the standalone evaluator, use the engine's short [universal
   JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
 - The serializer emits it once, including retries; workflow templates retain only
   task-specific guidance.
@@ -325,13 +322,13 @@ credentials. No model answer means no evidence yet about schema conformance.
 - A Spec case exercises Specify; Plan, Tasks and Implement need their own workflow cases.
 - The copied resources are declared test inputs, not production source-tree fallbacks.
 - Changes to the reference, including its UTC date/time requirement, are captured
-  directly for both engine and judge.
+  directly for both the engine and adjudication.
 
 ## Case and publication contract
 
-- The closed `spec-e2e-case/v2` declares workflow/feature/reference selection,
+- The closed `spec-e2e-case/v3` declares workflow/feature/reference selection,
   configuration, explicit file mappings, empty directories, all four expected artifact
-  kinds, `expected_outcome`, `evaluation_case` and `evaluation_config`.
+  kinds, `expected_outcome` and `evaluation_case`.
 - The evaluation case names source documents and a rubric.
 - Every selected reference must map exactly once to an evaluation source.
 - Unknown or duplicate fields, unsafe paths, symlinks, destination collisions and
@@ -347,24 +344,31 @@ credentials. No model answer means no evidence yet about schema conformance.
 - Only the engine's registered writer publishes output; the harness never exports or
   renders candidates to manufacture a specification.
 
-- The rubric assesses semantic quality.
-- A readable poor specification is passed unchanged to the judge after the engine's own
-  gates accept it.
-- There is no harness semantic prefilter or retry-until-good loop. The grader's one
-  correction answers only a mechanical judgment defect, never a score
-  ([evaluator](evaluator.md#attempts-and-failures)).
+### Rubric assessment
+
+- The rubric assesses semantic quality. Human adjudication of the retained report is
+  the only rubric evaluation with acceptance effect ([R8](acceptance.md)).
+- A readable poor specification is retained unchanged after the engine's own gates
+  accept it. There is no harness semantic prefilter or retry-until-good loop.
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
 - Rubric revision 2 includes the user-added UTC date/time requirement and remains an
   uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
   assessment is correct.
+- The [`/evaluate-e2e`](../../.claude/skills/evaluate-e2e/SKILL.md) Claude Code skill
+  reads a retained run, scores the captured specification against its rubric with line
+  citations, and traces each defect to the generation call, prompt and engine stage
+  that produced it. Its output is advisory assistant analysis written under the
+  Git-ignored `evaluations/` directory. It is not a grade, a human review or an
+  adjudication input, and its causal attributions are hypotheses backed by cited
+  evidence, not proof.
 
 ## Retained results
 
 ```text
 zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   case.json       # exact selected workflow case
-  inputs.json     # captured configuration/resources/source/rubric/settings
-  report.json     # generation result and joined rubric evaluation
+  inputs.json     # captured configuration/resources/source/rubric
+  report.json     # generation result and captured adjudication inputs
   report.md
   events.jsonl    # ordered production step outcomes and diagnostics
   build-inputs.json # allowlisted build sources and reconstruction status
@@ -375,8 +379,6 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
       response.json      # received provider response body, including invalid data
       model_output.txt   # complete final text when the provider exposes one
       outcome.json       # transport result and response metadata
-    evaluation/call-000001/
-      ...request, response, model output and outcome when available...
   project/
     ...declared inputs and actual engine output...
 ```
@@ -405,8 +407,8 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
 
 - Reports preserve execution identity, engine outcome, selected generation models by
   slot, accounted usage, publication checks and separate provider/model rejections.
-- Completed evaluations also retain exact source/spec/rubric bytes, judge configuration,
-  attempts, criterion judgments, evidence and aggregate score.
+- Published runs also retain the exact source, specification and rubric bytes that
+  adjudication revalidates.
 - Source changes during execution fail the run without modifying retained inputs.
 
 - For malformed model JSON, the shared engine decoder retains the native parser reason
@@ -440,8 +442,8 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   choosing which value survives.
 - Neither correction path synthesizes a candidate example.
 
-- Lifecycle status and development acceptance are separate. `evaluated` records
-  that scoring completed; it cannot by itself return command success.
+- Lifecycle status and development acceptance are separate. `generated` records
+  publication; it cannot by itself return command success.
 - Cases declare `expected_outcome`. Both current source-complete cases require
   `publication`, so an unexpected native `needs_user` does not pass acceptance.
   An explicitly clarification-expected case still requires valid native partial
@@ -451,9 +453,8 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   unexpected terminal outcomes cannot pass. Native workflow state remains unchanged.
 - See [R8 acceptance](acceptance.md) for approved numeric/human authority, refreshed calibration panels and the offline
   human adjudication command.
-- Evaluator failure preserves a successfully published specification.
 
-The terminal prints the score and threshold result explicitly.
+The terminal prints the development acceptance result explicitly.
 
 - Source-selection failures retain their scope, candidate revision, claim/citation
   indices, rejected selection, admissible range and producing request/attempt.
@@ -501,14 +502,14 @@ identical binary or future provider response. Exact request replay remains a
 separate byte-equality check and rejects redacted parents.
 
 Harness reports and captured inputs use ordinary typed JSON serialization, including
-fractional evaluator temperatures, rubric thresholds and scores. They are diagnostic
+fractional temperatures, rubric thresholds and scores. They are diagnostic
 projections; the engine's integer-only canonical state contract does not apply.
 The saver renders both report views before writing, preserves exclusive creation
 and durable writes, and releases its intermediate buffers. A report-file failure
 leaves the workflow status and cause unchanged: the CLI prints the workflow result,
 separately reports the finalization error and potentially incomplete files, and exits
-unsuccessfully even if generation and evaluation succeeded. It does not retry writes
-or rerun the workflow/evaluator to repair reporting.
+unsuccessfully even if generation succeeded. It does not retry writes or rerun the
+workflow to repair reporting.
 
 `token_accounting` (the single total budget and actual usage), `retry_settings` and `attempts` project the executed graph
 and native accounting. `model_calls` counts reconciled inference operations,
@@ -574,15 +575,21 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed report formats are `spec-e2e-report/v8`,
-`baseline-acquisition/v6`, `baseline-score/v4` and `baseline-budget-feasibility/v1`. Step events remain
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v9`,
+`baseline-freeze/v2`, `baseline-acquisition/v7`, `baseline-score/v4` and
+`baseline-budget-feasibility/v1`. Step events remain
 `e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
 `rubric-judgment/v2` because they embed its judgments or the E2E report.
 `spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
 `evaluation-report/v5`, which records per-attempt purpose and diagnostics, and
 `spec-e2e-report/v8`, `baseline-acquisition/v6` and `evaluation-report/v6` with the
-`evaluation-config/v2` judge maximum. The compatibility report's outer
+`evaluation-config/v2` judge maximum. Removing the advisory grader from E2E advanced
+`spec-e2e-case/v3`, `spec-e2e-report/v9`, `baseline-freeze/v2` and
+`baseline-acquisition/v7`. Retained runs captured before that change can no longer be
+adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
+`spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
+needed for each. The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
 Feasibility evidence retains the single total budget and aggregate actual usage.
@@ -591,11 +598,11 @@ Feasibility evidence retains the single total budget and aggregate actual usage.
 
 - For reliability assessment, repeat the same selected case using `scripts/e2e-spec.sh
   --case <workflow.case.json>` with a fixed engine build, captured case/workflow inputs,
-  model settings and rubric/evaluator configuration.
+  model settings and rubric.
 - Retain every run and compare completion rate, first-pass and post-repair acceptance,
   typed failure categories, criterion scores, threshold results, and total usage
   including failed attempts.
-- Report evaluator failures separately.
+- Report runs that are published but not yet adjudicated separately.
 - Different cases/models need separate results before aggregation.
 - Mechanical tests establish contracts; repeated live completion and acceptable
   published output are separate evidence.
@@ -636,7 +643,8 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - `zig build test-integration --summary all` runs fixed offline harness and
   launcher cases, including argument forwarding, publication identity, evidence
   capture and failure reports. It makes no provider calls.
-- `zig build test-rubric-evaluator --summary all` checks judge mechanics offline.
+- `zig build test-rubric-evaluator --summary all` checks the standalone evaluator's
+  judge mechanics, rubric acceptance and human adjudication offline.
 - `zig build test-e2e-call --summary all` checks captured-call selection, diagnostic
   bindings, dispatch and report behavior offline.
 - `zig build test-e2e-call-launcher --summary all` checks argument forwarding,
@@ -662,13 +670,14 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   `zig build smoke-e2e-call --summary all` checks its standalone startup and
   required selectors without live connections.
 - These results establish integration and evaluator behavior, not prompt quality.
-  Live generation and grading run separately through `./scripts/e2e-spec.sh`.
+  Live generation runs separately through `./scripts/e2e-spec.sh`.
 - `zig build smoke-e2e-harness --summary all` checks the standalone executable's startup
   and mandatory case selection in a clean directory without credentials.
 - `zig build verify --summary all` includes mechanical tests, lint, architecture and
   native packaging checks.
 - It does not launch live E2E cases.
-- `zig build e2e-spec -- --case ...` runs live generation and grading.
+- `zig build e2e-spec -- --case ...` runs live generation and captures the published
+  output for adjudication.
 - Only its retained results establish what happened in that E2E execution.
 - `zig build evaluate-spec -- ... --live` separately grades a supplied file; it does not
   establish engine generation.

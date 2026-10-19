@@ -1,5 +1,5 @@
 //! Pure human adjudication of one immutable retained E2E report. The original
-//! workflow and advisory model report remain unchanged.
+//! workflow report remains unchanged.
 const std = @import("std");
 const c = @import("contracts.zig");
 const native = @import("e2e/contracts.zig");
@@ -51,8 +51,8 @@ pub fn evaluate(a: std.mem.Allocator, review_bytes: []const u8, original_report_
     };
     if (!identity.validReviewer(reviewed.reviewer) or !identity.validUtcTimestamp(reviewed.reviewed_at_utc) or
         !std.mem.eql(u8, reviewed.report_sha256, original_hash)) return error.InvalidHumanAdjudication;
-    // The capture is created at the production publication handoff, before an
-    // advisory provider call. A grader's returned capture cannot substitute it.
+    // The capture is created at the production publication handoff, before any
+    // adjudication. A capture supplied elsewhere cannot substitute it.
     const input = original.evaluation_inputs orelse return error.InvalidHumanAdjudication;
     try validateCapture(a, input);
     const human = judgment.validate(a, null, input, try std.json.Stringify.valueAlloc(a, reviewed.proposal, .{})) catch |err| return invalid(err);
@@ -69,7 +69,7 @@ fn parseOriginal(a: std.mem.Allocator, bytes: []const u8) Error!native.Report {
     defer tree.deinit();
     if (tree.value != .object or !tree.value.object.contains("schema") or !tree.value.object.contains("origin")) return error.InvalidHumanAdjudication;
     const report = strict.decode(native.Report, a, bytes, limits) catch |err| return invalid(err);
-    if (report.schema != .@"spec-e2e-report/v8" or report.origin != .live) return error.InvalidHumanAdjudication;
+    if (report.schema != .@"spec-e2e-report/v9" or report.origin != .live) return error.InvalidHumanAdjudication;
     return report;
 }
 

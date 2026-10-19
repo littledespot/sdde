@@ -1,5 +1,5 @@
 //! Development acceptance joins native outcomes and mechanical publication
-//! evidence. Model scores are advisory; humans own semantic acceptance.
+//! evidence. Humans own semantic acceptance; no model grades an E2E run.
 const std = @import("std");
 const c = @import("contracts.zig");
 const grading = @import("../contracts.zig");
@@ -79,7 +79,7 @@ pub fn commandSucceeded(a: std.mem.Allocator, report: c.Report) Error!bool {
 fn mechanical(a: std.mem.Allocator, report: c.Report) Error!Result {
     const expected = report.expected_outcome orelse return .{ .unresolved = .missing_expected_outcome };
     if (report.evidence_error != null) return .{ .failed = .harness_failed };
-    if (report.status == .quality_unresolved and report.workflow_outcome == null) return .{ .unresolved = .grading_unresolved };
+    if (report.status == .threshold_unconfigured and report.workflow_outcome == null) return .{ .unresolved = .grading_unresolved };
     switch (report.status) {
         .input_invalid, .harness_error, .bootstrap_failed, .fixture_changed => return .{ .failed = .harness_failed },
         .artifact_missing, .artifact_unreadable, .artifact_changed => return .{ .failed = .artifact_failed },
@@ -119,7 +119,7 @@ fn nativeAdmission(a: std.mem.Allocator, report: c.Report) Error!Result {
 
 fn publication(a: std.mem.Allocator, report: c.Report) Error!Result {
     switch (report.status) {
-        .generated, .evaluated, .quality_unresolved, .evaluator_failed => {},
+        .generated => {},
         else => return .{ .failed = .harness_failed },
     }
     const inputs = report.evaluation_inputs orelse return .{ .unresolved = .missing_grading_evidence };
@@ -140,14 +140,11 @@ fn publication(a: std.mem.Allocator, report: c.Report) Error!Result {
     if (!try sameJson(a, original_case, inputs.case) or !try sameJson(a, original_rubric, inputs.rubric) or
         !sameGeneration(report, inputs.generation) or !std.mem.eql(u8, execution, inputs.generation.execution_id orelse "") or
         !std.mem.eql(u8, case_id, inputs.case.id) or !sameSources(report, inputs.sources)) return .{ .failed = .grading_mismatch };
-    if (report.evaluation) |advisory| {
-        if (!try sameJson(a, advisory.capture, inputs)) return .{ .failed = .grading_mismatch };
-    }
     return .passed;
 }
 
 fn clarification(report: c.Report) Result {
-    if (report.status != .awaiting_clarification or report.semantic_quality != .not_run or report.evaluation != null or report.evaluation_inputs != null)
+    if (report.status != .awaiting_clarification or report.evaluation_inputs != null)
         return .{ .failed = .unexpected_outcome };
     if (report.clarifications.len == 0) return .{ .unresolved = .invalid_clarifications };
     const directory = std.fs.path.dirname(report.specification.?) orelse return .{ .unresolved = .invalid_clarifications };

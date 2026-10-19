@@ -130,7 +130,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v8" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v9" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;
@@ -145,7 +145,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
     var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, input.config);
     defer expected_config.deinit();
     if (!std.mem.eql(u8, input.config_source, selected.config) or !std.mem.eql(u8, input.evaluation.case_source, selected.evaluation_case) or
-        !std.mem.eql(u8, input.evaluation.config_source, selected.evaluation_config) or input.files.len != selected.files.len or
+        input.files.len != selected.files.len or
         !try sameJson([]const []const u8, a, input.directories, selected.directories)) return error.InvalidBudgetEvidence;
     for (input.files, selected.files) |file, mapping| if (!std.mem.eql(u8, file.mapping.source, mapping.source) or !std.mem.eql(u8, file.mapping.destination, mapping.destination)) return error.InvalidBudgetEvidence;
     const project = try directories.open(io, run, "project");
@@ -605,7 +605,7 @@ test "budget evidence joins physical origins independently of native unsent oper
         .{ .call = 1, .origin = first, .usage = usage },
         .{ .call = 2, .origin = second, .usage = usage },
     };
-    const report: native.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
     const joined = try capturedAttempts(a, report);
     try std.testing.expectEqual(@as(usize, 2), joined.len);
     try std.testing.expectEqual(@as(usize, 1), joined[0].ordinal);

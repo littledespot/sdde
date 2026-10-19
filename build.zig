@@ -392,7 +392,7 @@ pub fn build(b: *std.Build) void {
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
     if (b.args) |args| run_e2e.addArgs(args);
-    b.step("e2e-spec", "Manually generate and grade one selected case").dependOn(&run_e2e.step);
+    b.step("e2e-spec", "Manually generate one selected case and capture it for human adjudication").dependOn(&run_e2e.step);
     b.step("build-e2e-harness", "Build the live E2E harness without an API call").dependOn(&e2e_executable.step);
     const e2e_directory = b.addTempFiles();
     const e2e_offline = offlineExecutable(b, e2e_executable);

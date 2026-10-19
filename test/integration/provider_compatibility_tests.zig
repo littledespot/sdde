@@ -127,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v8",
+        .schema = .@"spec-e2e-report/v9",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -156,7 +156,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try std.testing.expect(report.workflow_outcome != .ok);
             try std.testing.expect(report.specification == null);
             try std.testing.expectEqual(.not_run, report.publication_check);
-            try std.testing.expectEqual(.not_run, report.semantic_quality);
+            try std.testing.expect(report.evaluation_inputs == null);
             var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, try files.read(io, a, project, ".sddtoolkit.json"));
             defer current.deinit();
             try std.testing.expectEqualStrings("medium", current.value().models.slots.map.get("spec_generation").?.reasoningEffort.?);
@@ -185,8 +185,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expect(report.terminal_rejection != null);
     try std.testing.expect(report.specification == null);
     try std.testing.expectEqual(.not_run, report.publication_check);
-    try std.testing.expectEqual(.not_run, report.semantic_quality);
-    try std.testing.expect(report.evaluation == null);
+    try std.testing.expect(report.evaluation_inputs == null);
     // The probe terminates at invoke-model. Later production parsing, payload
     // validation and repairs must remain unexecuted even for invalid text.
     try std.testing.expect(report.model_diagnostic == null);
@@ -541,7 +540,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
         .purpose = .whole_workflow,
@@ -565,7 +564,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
     try std.testing.expectEqual(@as(usize, 1), log.records.items.len);
     try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
     try std.testing.expect(report.workflow_outcome != .ok and report.specification == null);
-    try std.testing.expectEqual(.not_run, report.semantic_quality);
+    try std.testing.expect(report.evaluation_inputs == null);
     const receipt = log.records.items[0];
     try std.testing.expectEqual(@as(usize, 1), receipt.call);
     try std.testing.expectEqual(@as(u64, 1), receipt.experiment_send.?.ordinal);

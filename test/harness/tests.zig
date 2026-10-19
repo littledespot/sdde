@@ -7,7 +7,6 @@ test {
     _ = @import("human_adjudication_test.zig");
     _ = @import("adjudicate_cli.zig");
     _ = @import("acceptance_gate_test.zig");
-    _ = @import("judge_independence_test.zig");
     _ = @import("grader_qualification_test.zig");
     _ = @import("model_cost_policy.zig");
     _ = @import("generation_comparison.zig");

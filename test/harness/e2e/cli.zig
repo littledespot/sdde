@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json, then grades its published specification against the case rubric. This command makes live API calls. Live generation and grading permit only Bedrock openai.gpt-oss-20b-1:0 from ap-southeast-2. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. Load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for human adjudication. No model grades the output. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {
@@ -36,7 +36,7 @@ fn command(init: std.process.Init) !bool {
     defer run.close(io);
     const output = try reports.Output.reserve(io, run.dir);
     defer output.close(io);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
     report.build = .{
         .source = (try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, allocator, @embedFile("build_provenance"))).identity,
         .zig_version = @import("builtin").zig_version_string,
@@ -89,21 +89,16 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     var generation_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
     defer generation_config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&generation_config.value().models);
-    const selection = @import("../environment.zig").selection(environment) catch |err| return if (err == error.DisallowedTestModel) err else error.InvalidEvaluationEnvironment;
-    const config = @import("../configuration.zig").parse(allocator, captured.evaluation.config_bytes, selection) catch return error.InvalidEvaluationConfiguration;
-    report.evaluation_configuration = config;
-    const qualification = @import("../grader_qualification.zig");
-    const grader = try qualification.inspect(io, allocator, .cwd(), captured.evaluation.case.grading_qualification, captured.evaluation.case, captured.evaluation.rubric_bytes, captured.evaluation.sources, config);
-    report.grader_qualification = grader;
+    // Human adjudication applies the rubric threshold, so a rubric without one
+    // could never accept this run; stop before any billed send.
     if (captured.evaluation.rubric.pass_threshold_percent == null) {
-        report.status = .quality_unresolved;
+        report.status = .threshold_unconfigured;
         report.diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED";
         return;
     }
-    const judge_key = try @import("../environment.zig").credential(environment, selection.api);
     const generation_key = try @import("../environment.zig").credential(environment, .bedrock_converse);
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
-    const secrets = [_][]const u8{ generation_key, judge_key };
+    const secrets = [_][]const u8{generation_key};
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };
     const reconstruction = try @import("build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
@@ -112,32 +107,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;
     if (selected.expected_outcome != .publication) return;
-    const inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);
-    report.evaluation_inputs = inputs;
-    const observed_independence = try @import("../judge_independence.zig").fromObserved(report.models, config);
-    const current_grader = try qualification.inspect(io, allocator, .cwd(), captured.evaluation.case.grading_qualification, captured.evaluation.case, captured.evaluation.rubric_bytes, captured.evaluation.sources, config);
-    if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, grader, .{}), try std.json.Stringify.valueAlloc(allocator, current_grader, .{}))) {
-        report.status = .quality_unresolved;
-        report.diagnostic = "GRADER_AUTHORITY_CHANGED";
-        return;
-    }
-    try std.Io.File.stdout().writeStreamingAll(io, "Grading the published specification against the selected rubric...\n");
-    var result = @import("../live.zig").run(io, allocator, config, judge_key, inputs, store) catch |err| {
-        report.status = .evaluator_failed;
-        report.semantic_quality = .evaluator_error;
-        report.diagnostic = @errorName(err);
-        if (err == error.EvidenceCaptureFailed) report.evidence_error = @errorName(err);
-        return;
-    };
-    result.grader_qualification = grader;
-    if (result.outcome == .evaluated) result.acceptance = @import("../acceptance_gate.zig").from(inputs.rubric, result.outcome.evaluated, observed_independence, if (grader == .qualified) .qualified else .unresolved);
-    @import("evaluation.zig").apply(report, result);
-    _ = try verifySources(io, allocator, case_path, case_bytes, captured, report);
-    const final_grader = try qualification.inspect(io, allocator, .cwd(), captured.evaluation.case.grading_qualification, captured.evaluation.case, captured.evaluation.rubric_bytes, captured.evaluation.sources, config);
-    if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, grader, .{}), try std.json.Stringify.valueAlloc(allocator, final_grader, .{}))) {
-        report.status = .fixture_changed;
-        report.diagnostic = "GRADER_QUALIFICATION_CHANGED";
-    }
+    report.evaluation_inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);
 }
 
 fn verifySources(io: std.Io, allocator: std.mem.Allocator, case_path: []const u8, case_bytes: []const u8, captured: fixture.Capture, report: *c.Report) !bool {

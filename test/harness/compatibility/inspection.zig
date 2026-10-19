@@ -60,7 +60,7 @@ pub fn classify(probe: invoke.Probe, report: workflow_report.Report, value: *Ins
             value.validation.reason orelse "ProviderUsageUnavailable"
         else
             "ProviderUsageUnavailable";
-    } else if (report.workflow_outcome != .cancelled or report.publication_check != .not_run or report.specification != null or report.semantic_quality != .not_run) {
+    } else if (report.workflow_outcome != .cancelled or report.publication_check != .not_run or report.specification != null or report.evaluation_inputs != null) {
         value.status = .inconclusive;
         value.reason = "UnexpectedWorkflowOutcome";
     } else if (value.validation.extraction != .valid or value.validation.json != .valid or value.validation.schema != .valid) {

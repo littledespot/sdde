@@ -1491,8 +1491,8 @@ YAML definition.
   feature-log integration, additional reference formats and the reference-feedback
   API (§16.5).
 - Offline verification does not establish live E2E acceptance; the
-  [harness](../harness/README.md) grades the exact published specification
-  separately, and [FIX05](../../fixes/FIX05.md) tracks open work.
+  [harness](../harness/README.md) captures the exact published specification for
+  separate human adjudication, and [FIX05](../../fixes/FIX05.md) tracks open work.
 
 ## 9. Traceability
 

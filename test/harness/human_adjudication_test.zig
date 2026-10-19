@@ -51,20 +51,17 @@ test "pending human review preserves known native blocked and unexpected clarifi
     report.workflow_outcome = .needs_user;
     const clarification = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.unexpected_outcome, clarification.acceptance.failed);
-    report = .{ .schema = .@"spec-e2e-report/v8", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
+    report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
     const ungraded = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.missing_expected_outcome, ungraded.acceptance.unresolved);
 }
 
-test "human final authority validates captured publication even when advisory evaluation failed" {
+test "human final authority validates the captured publication" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var report = try fixture.completed(a);
-    const proposal: judgment.Proposal = .{ .results = report.evaluation.?.outcome.evaluated.results };
-    report.evaluation = null;
-    report.status = .evaluator_failed;
-    report.semantic_quality = .evaluator_error;
+    const report = try fixture.completed(a);
+    const proposal: judgment.Proposal = .{ .results = &fixture.passing };
     const original = try bytes(a, report);
     const result = try human.evaluate(a, try reviewed(a, original, proposal), original);
     try std.testing.expectEqual(.passed, result.acceptance);
@@ -80,7 +77,7 @@ test "human scores retain critical aggregate and uncertainty decisions" {
     const a = arena.allocator();
     const report = try fixture.completed(a);
     const original = try bytes(a, report);
-    const results = try a.dupe(judgment.CriterionResult, report.evaluation.?.outcome.evaluated.results);
+    const results = try a.dupe(judgment.CriterionResult, &fixture.passing);
     results[0].score = 2;
     const critical = try human.evaluate(a, try reviewed(a, original, .{ .results = results }), original);
     try std.testing.expectEqual(@as(f64, 95), critical.human_judgment.?.score_percent.?);
@@ -103,7 +100,7 @@ test "human review cannot override native failure publication or admission evide
     const a = arena.allocator();
     for (std.enums.values(enum { workflow, publication, admission, evidence })) |fault| {
         var report = try fixture.completed(a);
-        const proposal: judgment.Proposal = .{ .results = report.evaluation.?.outcome.evaluated.results };
+        const proposal: judgment.Proposal = .{ .results = &fixture.passing };
         switch (fault) {
             .workflow => report.workflow_outcome = .failed,
             .publication => report.publication_check = .failed,
@@ -126,7 +123,7 @@ test "human adjudication rejects stale report foreign criteria and missing nativ
     defer arena.deinit();
     const a = arena.allocator();
     var report = try fixture.completed(a);
-    const proposal: judgment.Proposal = .{ .results = report.evaluation.?.outcome.evaluated.results };
+    const proposal: judgment.Proposal = .{ .results = &fixture.passing };
     const original = try bytes(a, report);
     const review = try reviewed(a, original, proposal);
     const changed = try std.mem.concat(a, u8, &.{ original, "\n" });
@@ -149,7 +146,7 @@ test "human declaration and original E2E report are closed explicitly versioned 
     const a = arena.allocator();
     const report = try fixture.completed(a);
     const original = try bytes(a, report);
-    const review = try reviewed(a, original, .{ .results = report.evaluation.?.outcome.evaluated.results });
+    const review = try reviewed(a, original, .{ .results = &fixture.passing });
     for ([_][2][]const u8{
         .{ "human-spec-adjudication/v2", "human-spec-adjudication/v1" },
         .{ "\"reviewer\":", "\"approved\":true,\"reviewer\":" },
@@ -161,10 +158,19 @@ test "human declaration and original E2E report are closed explicitly versioned 
     }
     const pending = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     for ([_][2][]const u8{
-        .{ "spec-e2e-report/v8", "spec-e2e-report/v7" },
+        .{ "spec-e2e-report/v9", "spec-e2e-report/v8" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v8\",", "" },
+        .{ "\"schema\":\"spec-e2e-report/v9\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
+        // Retired advisory-grader fields are not readable report content.
+        .{ "\"status\":", "\"evaluation\":null,\"status\":" },
+        .{ "\"status\":", "\"semantic_quality\":\"not_run\",\"status\":" },
+        .{ "\"status\":", "\"evaluation_configuration\":null,\"status\":" },
+        .{ "\"status\":", "\"grader_qualification\":null,\"status\":" },
+        // Retired advisory-grader statuses are not readable report content.
+        .{ "\"status\":\"generated\"", "\"status\":\"evaluated\"" },
+        .{ "\"status\":\"generated\"", "\"status\":\"evaluator_failed\"" },
+        .{ "\"status\":\"generated\"", "\"status\":\"quality_unresolved\"" },
     }) |replacement| {
         const invalid = try std.mem.replaceOwned(u8, a, original, replacement[0], replacement[1]);
         try std.testing.expectError(error.InvalidHumanAdjudication, human.evaluate(a, pending, invalid));
