@@ -305,7 +305,7 @@ pub fn validatePersistedIdentityRow(
     if (!std.mem.eql(u8, cellAt(line, 1) orelse return error.InvalidFeatureLogRecord, log_limits.schema_version) or
         !std.mem.eql(u8, cellAt(line, 2) orelse return error.InvalidFeatureLogRecord, @tagName(stream)) or
         !std.mem.eql(u8, cellAt(line, 3) orelse return error.InvalidFeatureLogRecord, if (stream == .event) log_limits.event_column_schema_id else log_limits.prompt_column_schema_id) or
-        !std.mem.eql(u8, cellAt(line, 4) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
+        !std.mem.eql(u8, logPolicyCell(line) orelse return error.InvalidFeatureLogRecord, binding.logPolicyId().bytes) or
         !std.mem.eql(u8, cellAt(line, 5) orelse return error.InvalidFeatureLogRecord, binding.bindingId().bytes) or
         (std.fmt.parseInt(u16, cellAt(line, 6) orelse return error.InvalidFeatureLogRecord, 10) catch return error.InvalidFeatureLogRecord) != ordinal or
         !std.mem.eql(u8, cellAt(line, 15) orelse return error.InvalidFeatureLogRecord, binding.runId().bytes) or
@@ -356,6 +356,11 @@ pub fn cellAt(line: []const u8, expected: usize) ?[]const u8 {
         }
     }
     return if (cell == expected) line[start..] else null;
+}
+
+/// The log policy ID cell of a persisted identity row.
+pub fn logPolicyCell(row: []const u8) ?[]const u8 {
+    return cellAt(row, 4);
 }
 
 pub fn trailerUnixMs(bytes: []const u8) ?u64 {

@@ -90,6 +90,8 @@ const Storage = struct {
     event_binding_path: []const u8,
     prompt_run_path: []const u8,
     prompt_binding_path: []const u8,
+    event_logs_path: []const u8,
+    prompt_logs_path: []const u8,
 };
 const OwnerStorage = struct {
     backing_allocator: std.mem.Allocator,
@@ -157,6 +159,8 @@ fn createForSpecs(
         .event_binding_path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ event_run, binding_id }) catch return error.InvalidWorkflowArtifactRegistry,
         .prompt_run_path = prompt_run,
         .prompt_binding_path = std.fmt.allocPrint(allocator, "{s}/{s}", .{ prompt_run, binding_id }) catch return error.InvalidWorkflowArtifactRegistry,
+        .event_logs_path = allocator.dupe(u8, paths.get(.event_logs).root_relative) catch return error.InvalidWorkflowArtifactRegistry,
+        .prompt_logs_path = allocator.dupe(u8, paths.get(.prompt_logs).root_relative) catch return error.InvalidWorkflowArtifactRegistry,
     };
     return @ptrCast(owner);
 }
@@ -181,7 +185,8 @@ pub const FeatureLogSinkBinding = struct {
     prompt_binding_path: []const u8,
 };
 
-/// The sole concrete handoff from artifact authority to the feature-log sink.
+/// The sole concrete handoff from artifact authority to the current run's
+/// feature-log sink.
 pub fn bindFeatureLogSinkAdapter(
     value: *const WorkflowArtifactRegistry,
     binding: *const log_binding.ValidatedFeatureLogBinding,
@@ -196,6 +201,59 @@ pub fn bindFeatureLogSinkAdapter(
         .event_binding_path = stored.event_binding_path,
         .prompt_run_path = stored.prompt_run_path,
         .prompt_binding_path = stored.prompt_binding_path,
+    };
+}
+
+/// The current feature's log collections, for discovering its prior runs. Only
+/// the registry derives these paths; discovery never builds its own.
+pub const FeatureLogHistory = struct {
+    current: log_binding.BindingCandidate,
+    specs_root_path: []const u8,
+    specs_root_identity: @import("bootstrap_roots.zig").PhysicalDirectoryIdentity,
+    event_logs_path: []const u8,
+    prompt_logs_path: []const u8,
+};
+
+pub fn featureLogHistory(value: *const WorkflowArtifactRegistry) FeatureLogHistory {
+    const stored = registryStorage(value);
+    return .{
+        .current = stored.binding,
+        .specs_root_path = stored.specs_root_path,
+        .specs_root_identity = stored.specs_root_identity,
+        .event_logs_path = stored.event_logs_path,
+        .prompt_logs_path = stored.prompt_logs_path,
+    };
+}
+
+/// Paths for one stream of one prior run of the current feature, used only to
+/// prune that stream's closed segments under its own lock.
+pub const HistoricalFeatureLogStream = struct {
+    expected_binding: log_binding.BindingCandidate,
+    stream: @import("feature_log_stream.zig").Stream,
+    specs_root_path: []const u8,
+    specs_root_identity: @import("bootstrap_roots.zig").PhysicalDirectoryIdentity,
+    /// The binding directory is opened beneath this run directory, by binding ID.
+    run_path: []const u8,
+};
+
+/// The historical binding must name the same feature and a different run; its
+/// paths sit under the same specs root and log collection as the current run.
+pub fn bindHistoricalFeatureLogStream(
+    allocator: std.mem.Allocator,
+    value: *const WorkflowArtifactRegistry,
+    historical: *const log_binding.ValidatedFeatureLogBinding,
+    stream: @import("feature_log_stream.zig").Stream,
+) std.mem.Allocator.Error!?HistoricalFeatureLogStream {
+    const stored = registryStorage(value);
+    if (!std.mem.eql(u8, historical.featureId().bytes, stored.binding.feature_id.bytes) or
+        std.mem.eql(u8, historical.runId().bytes, stored.binding.run_id.bytes)) return null;
+    const run_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ if (stream == .event) stored.event_logs_path else stored.prompt_logs_path, historical.runId().bytes });
+    return .{
+        .expected_binding = .{ .log_policy_id = historical.logPolicyId(), .binding_id = historical.bindingId(), .run_id = historical.runId(), .feature_id = historical.featureId() },
+        .stream = stream,
+        .specs_root_path = stored.specs_root_path,
+        .specs_root_identity = stored.specs_root_identity,
+        .run_path = run_path,
     };
 }
 

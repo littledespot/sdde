@@ -2809,7 +2809,40 @@ Accessors and test seams used only by tests remain.
 retention after recovery and rotation (the only authorized destructive log
 operation), and F0002 §6.4 fixes `retentionDays = 14`. `LogService.retainHistorical`
 and the filesystem segment-pruner facet have only test callers, so production never
-prunes. This needs its own change, not deletion. Similarly, §26 and F0002 name the
+prunes. This needs its own change, not deletion. **Built 20 October 2026** as
+[ADR 0026](../design/decisions/0026-header-identity-log-retention.md) (user choice:
+header-identity retention). A contract review then found that the first version
+skipped invalid groups, contrary to §26.5, and could prune a crashed run's closed
+stream. It was reworked:
+- invalid prior history blocks;
+- a run with an active tail in either stream is kept whole;
+- discovery and the under-lock prune share recovery's segment inspector;
+- the historical adapter covers one stream and offers lock, prune and release only;
+- cancellation while opening stays distinct, and every failure writes the emergency line;
+- the runner builds the authorization as its first child step.
+
+A second review led to more changes:
+- a last segment torn during creation counts as a crash and keeps its run;
+- sequence arithmetic on persisted bytes is checked;
+- only the expired ordinal prefix is deleted;
+- the current run's unused prune facet is gone;
+- multi-segment, crash-shape and coordinator tests were added.
+
+A third review led to these changes:
+- a rotation crash (a torn last segment behind closed ones) is tested;
+- a lone torn segment must be ordinal 1 and have valid binding directory names;
+- torn bytes must be a prefix of the stream's `segment_header` row, within the
+  row size limit;
+- the binding directory opens beneath the locked run directory;
+- a prune failure stays the reported cause when release also fails.
+
+Two shared logging gaps stay as known work:
+- cancellation during segment reads and under the lock is reported as a logging
+  failure;
+- the lock action reports every acquire failure as a timeout.
+
+Prior-run crash finalization (§14.10) stays open: it needs a persisted bootstrap
+authority that does not exist. Similarly, §26 and F0002 name the
 compiler-owned `redaction/default-v1` policy, but no code or persisted record carries
 that ID; the removed constant was never read.
 

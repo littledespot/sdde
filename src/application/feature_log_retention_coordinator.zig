@@ -4,6 +4,10 @@ const runtime = @import("../domain/feature_log_stream.zig");
 pub const Outcome = union(enum) { ok, blocked: runtime.FailureCode };
 
 pub fn run(children: bindings.ChildBindings) Outcome {
+    switch (children.invokeAuthorize()) {
+        .ok => {},
+        .failed => |failure| return .{ .blocked = failure },
+    }
     switch (children.invokeResolveStream()) {
         .ok => {},
         .failed => |failure| return .{ .blocked = failure },
@@ -17,9 +21,10 @@ pub fn run(children: bindings.ChildBindings) Outcome {
         .ok => {},
         .failed => |value| failure = value,
     }
+    // Release is always attempted; a prune failure is the cause and is kept.
     switch (children.invokeRelease()) {
         .ok => {},
-        .failed => |value| failure = value,
+        .failed => |value| failure = failure orelse value,
     }
     return if (failure) |value| .{ .blocked = value } else .ok;
 }

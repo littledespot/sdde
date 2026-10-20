@@ -585,6 +585,8 @@ joins raw path strings. There is no shared or global persistent log.
 - File permissions, exclusive locking, sequence, flush, rotation, retention, prior-tail
   recovery, and policy transition behavior are governed once by Sections 13.9, 14.10,
   and 26.5 and are not redefined here.
+  [ADR 0026](../decisions/0026-header-identity-log-retention.md) amends how a fresh run
+  retains prior runs' segments.
 
 The initial implementation processes each fact through the runner-owned
 logging barrier before the next applicable business node. It has no background

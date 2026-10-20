@@ -1068,6 +1068,7 @@ naming) was superseded by 0010 and removed.
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
 | [0023](decisions/0023-advisory-post-generation-review.md) | All post-generation semantic findings remain advice; native assessment completeness is distinct from semantic support, whole units, record families (every record of one kind) and collections are reviewed together, and upstream source repair requires a current pre-generation witness. Its 18 October amendments check member sets at response admission (§12.2, ADR 0019) and replace per-record review with record families (`specification-state/v19`). Its 20 October amendment withholds positive verdicts no claim set can bind, so one in a response is an admission defect. |
 | [0024](decisions/0024-native-exact-token-authority.md) | Token-only groups receive no record batch; native canonical-byte evidence forces exact duties independently of semantic kind, and code owns byte-only token dispositions while retaining all original occurrences and obligations. |
+| [0026](decisions/0026-header-identity-log-retention.md) | Fresh runs prune prior-run log segments that are closed and past retention, using each segment header's identity. Invalid prior history blocks, and a run with an active tail is kept whole. |
 
 Additional accepted feature boundaries:
 

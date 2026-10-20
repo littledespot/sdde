@@ -237,7 +237,16 @@ Every activated run writes beneath the spec being run, never into the editable s
   duplicate trailer; an interior malformed pipe-delimited row; wrong column count, run, stream,
   or workflow shortcode; sequence regression; alias; or permission failure is never skipped.
 - Retention runs after recovery and rotation; a single-use authorization selects closed segments
-  oldest-first by `(closedAtUtc, runId, ordinal)`, never the current segment.
+  oldest-first by `(closedAtUtc, runId, ordinal)`, never the current segment. For prior runs,
+  ADR 0026 amends this order (below).
 - This is the only authorized destructive log operation.
+- [ADR 0026](../decisions/0026-header-identity-log-retention.md) sets how a fresh run
+  retains prior runs:
+  - identity comes from each binding's first segment header;
+  - every prior segment is validated, and a failure blocks rather than being skipped;
+  - a run with an active tail in either stream is kept whole;
+  - groups are pruned one at a time under each run's own lock, in
+    `(runId, bindingId, stream rank)` order;
+  - within a group, only the longest expired prefix in ordinal order is deleted.
 
 Logs are observations, not workflow authority. Their presence, absence or content cannot prove completion or resume an execution. A logging failure abandons the current workflow candidate; no transaction stabilization or recovery is invoked.

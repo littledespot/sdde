@@ -52,9 +52,20 @@ already made.
   cannot complete the registered recovery path. Refresh rejects new nonempty
   submissions with `AuthenticationRequired`, and provenance rejects nonempty
   response-ID sets. Treat it as a separate required feature.
-- **Log retention is not wired.** Design §26 requires retention after recovery and
-  rotation, and F0002 §6.4 fixes 14 days. Only tests call `retainHistorical` or
-  construct the segment pruner.
+- **Prior-run crash finalization is not implemented.** §14.10 resolves each prior
+  run's policy through a persisted `BootstrapAuthorityState`, which the engine
+  lacks. Retention runs (ADR 0026, built 20 October 2026). It keeps any run with an
+  active tail, so a crashed run's logs stay until this is decided. Damaged prior
+  logs, and stray files in the log folders, block later runs until someone
+  repairs or removes them.
+- **Cancellation during log reads and under a log lock is reported as a logging
+  failure.** The shared segment readers and the feature-log sink port have no
+  cancellation outcome, for the current run or for retention. That conflicts with
+  keeping cancelled distinct from failed. Fixing it changes the shared sink
+  contract.
+- **Every lock-acquisition failure is reported as `LOG_LOCK_TIMEOUT`.** The shared
+  acquire action collapses an insecure or unopenable lock file into a timeout, for
+  the current run and for retention.
 - **Group-level provenance precision.** A record binds a whole accepted group, so
   membership doesn't mean each record expresses every linked claim. This follows
   ADR 0020 and is not a defect. Decide it before promising stronger provenance.

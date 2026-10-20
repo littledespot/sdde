@@ -284,6 +284,11 @@ This instrumentation-internal orchestrator is entered once for a feature-sink fa
   initialization.
 - Thus crash recovery needs no durable run-local transition pointer, and neither a current
   binding nor a dual-binding capability is misapplied to a historical run.
+- Not yet implemented: no persisted bootstrap authority supplies historical policy
+  lineage. Retention uses segment-header identity instead
+  ([ADR 0026](../decisions/0026-header-identity-log-retention.md)). It runs after the
+  current activation and before `run.started`, and every prior group must still
+  validate. A prior run with an active tail is kept whole and unfinalized.
 
 ### 14.11 Implementation workflow composition
 

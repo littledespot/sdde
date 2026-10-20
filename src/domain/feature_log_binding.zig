@@ -75,6 +75,11 @@ pub fn sameBinding(value: *const ValidatedFeatureLogBinding, candidate: BindingC
         std.mem.eql(u8, value.featureId().bytes, candidate.feature_id.bytes);
 }
 
+/// Whether a binding's run, binding or policy ID can name a log directory.
+pub fn validPathName(bytes: []const u8) bool {
+    return validPathIdentifier(.{ .bytes = bytes });
+}
+
 fn validPathIdentifier(value: telemetry.Identifier) bool {
     if (telemetry.Identifier.validate(value.bytes) == null) return false;
     @import("relative_directory_path.zig").validate(value.bytes) catch return false;

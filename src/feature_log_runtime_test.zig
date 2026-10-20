@@ -390,23 +390,19 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     const historical_owner = try log_binding.createValidated(std.testing.allocator, historical_candidate);
     defer log_binding.deinitOwner(historical_owner);
     var retention_clock: FakeClock = .{};
-    const authorization = try (build_retention.Action{ .clock = retention_clock.port() }).execute(
-        std.testing.allocator,
-        &policy,
-        log_binding.binding(owner),
-        log_binding.binding(historical_owner),
-        .event,
-    );
-    defer log_retention.deinit(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     var retention_execution: retention_runner.Runner = .{
+        .allocator = std.testing.allocator,
+        .policy = &policy,
         .current = log_binding.binding(owner),
         .historical = log_binding.binding(historical_owner),
-        .authorization = authorization,
+        .target_stream = .event,
+        .authorize_action = .{ .clock = retention_clock.port() },
         .acquire_action = .{ .sink = retention_sink.lockAcquirer() },
         .prune_action = prune_segments.Action{ .sink = retention_sink.segmentPruner() },
         .release_action = .{ .sink = retention_sink.lockReleaser() },
     };
+    defer retention_execution.deinit();
     const retention = retention_coordinator.run(retention_execution.childBindings());
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
 }
@@ -482,23 +478,19 @@ test "same-run policy transition closes the old binding and continues sequence a
     const historical_owner = try log_binding.createValidated(std.testing.allocator, historical_candidate);
     defer log_binding.deinitOwner(historical_owner);
     var retention_clock: FakeClock = .{};
-    const authorization = try (build_retention.Action{ .clock = retention_clock.port() }).execute(
-        std.testing.allocator,
-        &policy,
-        log_binding.binding(next_owner),
-        log_binding.binding(historical_owner),
-        .event,
-    );
-    defer log_retention.deinit(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     var retention_execution: retention_runner.Runner = .{
+        .allocator = std.testing.allocator,
+        .policy = &policy,
         .current = log_binding.binding(next_owner),
         .historical = log_binding.binding(historical_owner),
-        .authorization = authorization,
+        .target_stream = .event,
+        .authorize_action = .{ .clock = retention_clock.port() },
         .acquire_action = .{ .sink = retention_sink.lockAcquirer() },
         .prune_action = prune_segments.Action{ .sink = retention_sink.segmentPruner() },
         .release_action = .{ .sink = retention_sink.lockReleaser() },
     };
+    defer retention_execution.deinit();
     const retention = lifecycle.retainHistorical(retention_execution.childBindings(), fact.workflow_shortcode);
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
@@ -984,4 +976,65 @@ test "production event projection uses closed facts and propagates every barrier
         spy.expect_capture = false;
     }
     try std.testing.expect(spy.count > 0);
+}
+
+const RetentionSpy = struct {
+    const Step = enum { authorize, resolve, acquire, prune, release };
+    failing: ?Step = null,
+    also_failing: ?Step = null,
+    calls: [5]Step = undefined,
+    count: usize = 0,
+
+    fn step(context: *anyopaque, which: Step) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        const self: *RetentionSpy = @ptrCast(@alignCast(context));
+        self.calls[self.count] = which;
+        self.count += 1;
+        if (self.failing == which or (self.also_failing == which)) return .{ .failed = if (which == .release) .LOG_RELEASE_FAILURE else .LOG_SINK_FAILURE };
+        return .ok;
+    }
+    fn authorize(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .authorize);
+    }
+    fn resolve(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .resolve);
+    }
+    fn acquire(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .acquire);
+    }
+    fn prune(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .prune);
+    }
+    fn release(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .release);
+    }
+    const vtable: @import("application/feature_log_retention_child_bindings.zig").ChildBindings.VTable = .{
+        .authorize = authorize,
+        .resolve_stream = resolve,
+        .acquire = acquire,
+        .prune = prune,
+        .release = release,
+    };
+};
+
+test "retention authorizes before resolving and locking, and releases after any prune outcome" {
+    const Step = RetentionSpy.Step;
+    for ([_]struct { ?Step, []const Step }{
+        .{ null, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+        .{ .authorize, &.{.authorize} },
+        .{ .resolve, &.{ .authorize, .resolve } },
+        .{ .acquire, &.{ .authorize, .resolve, .acquire } },
+        .{ .prune, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+        .{ .release, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+    }) |case| {
+        var spy: RetentionSpy = .{ .failing = case[0] };
+        const outcome = retention_coordinator.run(.{ .context = &spy, .vtable = &RetentionSpy.vtable });
+        try std.testing.expectEqualSlices(Step, case[1], spy.calls[0..spy.count]);
+        if (case[0] == null) try std.testing.expect(outcome == .ok) else try std.testing.expectEqual(if (case[0] == .release) log_stream.FailureCode.LOG_RELEASE_FAILURE else .LOG_SINK_FAILURE, outcome.blocked);
+    }
+    // Release is still attempted after a failed prune, and the prune failure is
+    // the reported cause.
+    var both: RetentionSpy = .{ .failing = .prune, .also_failing = .release };
+    const outcome = retention_coordinator.run(.{ .context = &both, .vtable = &RetentionSpy.vtable });
+    try std.testing.expectEqualSlices(Step, &.{ .authorize, .resolve, .acquire, .prune, .release }, both.calls[0..both.count]);
+    try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
 }

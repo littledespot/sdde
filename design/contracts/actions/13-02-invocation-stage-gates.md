@@ -461,6 +461,11 @@ requirements to activate or capture the current execution.
 - **Output:** single-use retention authorization
 - **Responsibility:** Select oldest eligible closed segments deterministically and exclude every
   active segment.
+- **Amendment:** for a prior run,
+  [ADR 0026](../../decisions/0026-header-identity-log-retention.md) changes the input. It is
+  the current and historical bindings, one stream and the trusted clock. The retention
+  runner builds the authorization as its first child step, and the prune re-validates the
+  group under the lock.
 
 ## `PruneFeatureLogSegmentAction`
 
