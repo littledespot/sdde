@@ -1620,6 +1620,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (preservation_scenario) {
             try std.testing.expect(driver.initial_source_review_calls != 0);
+            // Every subject of required review resolved a positive verdict.
+            try std.testing.expect(driver.required_subjects_resolved != 0);
             try std.testing.expect(driver.candidate_review_calls != 0);
             try std.testing.expectEqual(@as(usize, if (scenario == preservation_start) 0 else 1), driver.source_repair_calls);
             try std.testing.expect(runner.repair_retry.currentPermit() == null);
@@ -1781,12 +1783,15 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const published = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_publication_workflow.zig").state_schema, .publication_state);
             const policy = published.principle_assessment;
-            var record_batches: usize = 0;
+            var acceptance_criteria: usize = 0;
             for (published.review.evidence) |evidence| {
                 const requirement = evidence.requirement;
-                if (requirement.unit == .record and requirement.unit.record.kind == .acceptance_criterion and requirement.slot == .given) record_batches += 1;
+                if (requirement.unit == .record and requirement.unit.record.kind == .acceptance_criterion and requirement.slot == .given) acceptance_criteria += 1;
             }
-            try std.testing.expectEqual(record_batches, driver.record_batch_requests);
+            // Every acceptance criterion is reviewed in one family request;
+            // scenario 1 has several, so one request distinguishes the family.
+            try std.testing.expect(if (scenario == 1) acceptance_criteria > 1 else acceptance_criteria != 0);
+            try std.testing.expectEqual(@as(usize, 1), driver.record_batch_requests);
             // Source review retains its complete subject assignments. The
             // selected principle corpus assesses all business subjects once;
             // reference duties keep their separate native owners.
@@ -1797,7 +1802,13 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 .decision => return error.InvalidReviewFixture,
             };
             const principle_assignments: usize = @intFromBool(policy.selection.chunks.len != 0);
-            const logical_reviews = 6 + published.content.records.len + reference_reviews + principle_assignments;
+            // Source review assigns one record family per kind, not one call per record.
+            var families = std.EnumSet(@import("../../src/domain/specification.zig").Kind).initEmpty();
+            for (published.content.records) |record| families.insert(record.id.kind);
+            // Scenario 1 authors several records of one kind, so this count
+            // distinguishes family assignments from per-record ones.
+            if (scenario == 1) try std.testing.expect(published.content.records.len > families.count());
+            const logical_reviews = 6 + families.count() + reference_reviews + principle_assignments;
             try std.testing.expect(logical_reviews > 2);
             try std.testing.expectEqual(if (scenario == 0) logical_reviews + driver.support_merges else @as(usize, 0), driver.fault_requests);
             try std.testing.expectEqual(driver.fault_requests, driver.fault_calls);
@@ -2052,6 +2063,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             const copied = try diagnostic.copy(diagnostic_arena.allocator());
             try std.testing.expectEqualDeep(diagnostic, copied);
             try std.testing.expect(driver.initial_source_review_calls > 0);
+            // Every subject of required review resolved a positive verdict.
+            try std.testing.expect(driver.required_subjects_resolved != 0);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));

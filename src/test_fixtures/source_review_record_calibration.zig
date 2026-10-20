@@ -154,8 +154,9 @@ fn pairedAssignment(a: std.mem.Allocator, member: usize, single: *const packets.
     const subject = selected.object.get("subject").?.object;
     const slots = [_][]const u8{ "given", "when", "then" };
     try std.testing.expectEqualStrings(slots[member], subject.get("slot").?.string);
-    try std.testing.expect(!subject.contains("record"));
-    try sameJson(a, left.object.get("subject").?.object.get("record").?, right.object.get("record").?);
+    // A record family has no shared assignment record; each member keeps its own.
+    try std.testing.expect(!right.object.contains("record"));
+    try sameJson(a, left.object.get("subject").?.object.get("record").?, subject.get("record").?);
     try sameJson(a, left.object.get("subject").?.object.get("text").?, subject.get("text").?);
 }
 fn schemaProbe(a: std.mem.Allocator, schema: *const schema_owner.Schema, packet: *const packets.Packet) !void {

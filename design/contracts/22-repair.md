@@ -322,7 +322,7 @@ The repair guidance contains:
 
 **Focused-review repair.** All produced findings are
 individually validated before the next native assignment is requested. The
-source unit/collection assignment in §17 produces all its native member findings
+source unit, record-family or collection assignment in §17 produces all its native member findings
 in one call; principle assessment produces the complete current subject set of
 one selected principle set in one call. Exact complete native membership is checked
 before appending any member; partial, duplicate, foreign or misbound responses
@@ -610,7 +610,10 @@ child-object descriptors only.
   and records incomplete advice. A provider/protocol stop during advisory atomic
   finding repair explicitly retires only the exact active permit, retaining
   counters and unresolved history without claiming that repair succeeded.
-  Native finding-evidence validation and repair exhaustion remain terminal.
+  Native finding-evidence validation and repair exhaustion remain terminal. A
+  positive verdict that no claim set can bind is withheld at response admission
+  and corrected as a malformed response, not a finding-evidence defect (ADR 0023,
+  20 October 2026).
 - Request IDs cannot reset either authority.
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.

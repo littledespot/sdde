@@ -35,15 +35,17 @@ pub const BusinessSubject = union(enum) {
     entity_applicability: EntityApplicability,
 };
 
-/// Complete native assignment ownership. Source review owns business units;
-/// principle review assesses every subject against the current selected set.
-/// Collection coverage remains its own duty, not a pass inferred from members.
+/// Complete native assignment ownership. Source review owns business units and
+/// one record family per kind: every field and relationship member of every record
+/// of that kind. Principle review assesses every subject against the current
+/// selected set. Collection coverage remains its own duty, not a pass inferred
+/// from members.
 pub const AssignmentUnit = union(enum) {
     principle_set,
     brief,
     primary_user_story,
     entities,
-    record: spec.Id,
+    record_family: spec.Kind,
     collection: authority.Slot,
     reference: authority.Unit,
     singleton: authority.Id,
@@ -62,7 +64,8 @@ pub fn assignmentUnit(a: std.mem.Allocator, inputs: authority.Inputs, id: author
 }
 fn businessUnit(id: authority.Id) authority.Error!AssignmentUnit {
     return switch (id.unit) {
-        .record => |record| .{ .record = record },
+        // The ledger orders records by kind, so each family is one contiguous run.
+        .record => |record| .{ .record_family = record.kind },
         .feature => switch (id.slot) {
             .display_name, .description, .primary_goal => .brief,
             .primary_user_story => .primary_user_story,

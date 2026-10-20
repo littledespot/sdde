@@ -133,10 +133,13 @@ Typed content covers these concerns; each concern does not require a separate ca
   judgment remains advice; independent native defects retain their typed routes.
 - **Post-generation assessment:**
   [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
-  and principle review. Source review assesses one whole canonical unit or
-  complete collection per call: the brief, story, entity applicability, all
-  fields/relationship members of one record, or an independently assigned
-  collection/reference subject. Principle review assesses the complete generated
+  and principle review. Source review assesses one whole canonical unit, record
+  family or complete collection per call: the brief, story, entity applicability,
+  all fields/relationship members of every record of one kind (a record family,
+  each member carrying its own record), or an independently assigned
+  collection/reference subject. A family stops atomically under one
+  protocol-correction allowance; narrow finding correction keeps its per-target
+  allowance. Principle review assesses the complete generated
   requirement set together, carrying the selected principle corpus once. Native
   ownership defines each complete member set; a model cannot choose a subset.
   Each closed assignment response contains exactly one finding per assigned
@@ -144,7 +147,10 @@ Typed content covers these concerns; each concern does not require a separate ca
   response admission, before any member is appended. The existing bounded protocol
   correction resubmits the complete assignment. Assignments exist only under
   advisory policy, so on exhaustion that assignment's advice closes as incomplete
-  (ADR 0023, 18 October 2026). Canonical ledger order, per-member evidence, origins,
+  (ADR 0023, 18 October 2026). An assignment also withholds any positive verdict
+  to which no claim set can be bound, such as `supported` for a coverage subject
+  whose collection has no records; one in a response rejects at admission in the
+  same way (ADR 0023, 20 October 2026). Canonical ledger order, per-member evidence, origins,
   current candidate revision and full assignment context remain bound. Initial
   admission cannot fall back to a singleton response for a required batch.
   Narrow finding correction preserves the verdict and every sibling.

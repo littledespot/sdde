@@ -22,10 +22,9 @@ already made.
   `candidate_omission`, has judged byte-identical text both supported and omitted,
   and has accepted an obligation-strength change. Under ADR 0023 every
   post-generation finding is advice: it never repairs content, rebuilds an upstream
-  stage or creates a clarification. *Approved 18 October 2026, not built:* source
-  review assigns one record family per call. This amends ADR 0023 and §17.3,
-  advances `specification-state` to v19, and leaves the budget and reviewed record
-  kinds unchanged.
+  stage or creates a clarification. *Built 20 October 2026 (approved 18 October):*
+  source review assigns one record family per call (ADR 0023 "Record families",
+  `specification-state/v19`). Its effect on cost is not yet measured live.
 - **Record authoring duplicates.** A record batch can re-author the whole feature.
   Groups holding only preserved tokens no longer get a batch (ADR 0024). The native
   duplicate rule compares whole typed content, including the record kind, so
@@ -36,9 +35,11 @@ already made.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
   `required`.
-- **An unresolvable positive advisory verdict still blocks.** No run has hit it yet.
-  The fix needs no ADR change: exclude positive verdicts from an assignment's schema
-  when they cannot resolve.
+- **Unresolvable positive advisory verdicts** (FIX05 route 4) are withheld from the
+  assignment's response schema. *Built 20 October 2026*: one in a response is a
+  typed admission defect that takes protocol correction (ADR 0023). The reachable
+  case is a coverage subject whose collection has no records. No live run has hit
+  it yet.
 - **GPT-OSS envelope prefixes.** GPT-OSS-20B often malforms a response's opening, for
   example `{"token{` or `{"find{`. Admission normalizes the truncated member-name form
   (approved 18 October 2026). Widening the normalizer needs a decision.

@@ -630,8 +630,38 @@ subjects kept separate, one protocol-correction allowance and atomic stop per fa
 unchanged. The user also chose to send each Bedrock model's documented maximum output
 from its provider configuration, because Bedrock otherwise stops GPT-OSS-20B at 4,096
 output tokens (§1) and a 21-record family needs about 5,800. That needs an ADR 0011
-amendment. The maximum-output change is implemented offline (§16); record families
-are not yet implemented.
+amendment. The maximum-output change is implemented offline (§16).
+
+**Record families implemented offline — 20 October 2026.** The user confirmed the
+scope: the three collection-coverage subjects, the brief, the story, entity
+applicability and reference subjects keep their own assignments; entity records form
+their own family; a family above the 1,024-member choice bound gets a typed failure
+and is never split; restatements conform and only `specification-state` advances
+(to v19). The grouping key in `specification_review_subject.zig` changed from record
+ID to record kind; the ledger's kind-major order makes each family one contiguous
+member run, so admission, correction, atomic stop, retention and stored validation
+follow unchanged. Each member now carries its own record in its subject instead of
+one hoisted assignment record. ADR 0023 ("Record families"), §§12, 17.3, 22.4, 24 and
+28, the §32 index, F0100, diagram 21 and `support.prompt.md` match.
+
+- **Bound and memory.** An over-bound family now fails with the schema owner's
+  closed `ChoiceBoundExceeded` error before any member packet is built, through one
+  predicate shared with the schema restriction. It previously failed later, at
+  request handoff, as `InvalidModelRequestSource`. Each member's
+  single packet is built in its own arena, and only its entry is kept. Before this,
+  building a 1,024-member family held about 6 GB of repeated shared evidence.
+- **Tests:**
+  - accepted: a two-criterion family, two-entity and two-requirement families,
+    separate entity applicability, per-member records, the bound control;
+  - rejected: a response covering one complete record of a family, family-only
+    start, a stop forged at a record boundary inside a family (with a valid-boundary
+    control), an over-bound family, and v18 state.
+- **Baseline harness.** It now verifies `assignment_findings` and
+  `principle_assignment_findings`. It had recognised only the removed
+  `record_findings`, so batched review output was always unmeasured.
+- **Still to measure live.** Each member repeats its own record, roughly 18 KB more
+  for a 21-criterion family, against the saved shared context. No live run has
+  measured the net cost change yet.
 
 **Additional approval — 17 October 2026:** the user approved source-only positive
 readiness evidence before an authored candidate exists. The native source-purpose
@@ -1723,10 +1753,11 @@ The approved follow-up and remaining proposals below authorize no live calls:
    - Done offline: the grader is removed from E2E, and the `/evaluate-e2e` skill gives
      advisory rubric and defect-origin analysis of retained runs (§17). The 22:22 and
      22:25 v8 reports can't be adjudicated; adjudicate a v9 run.
-   - Next: review records per family (B2 approval of 18 October). Loan-renewal's
-     21 assignments exhaust the 100,000-token budget before publication.
-   - Route 4 in §14: an unresolvable positive advisory verdict still blocks. The
-     §10-style schema exclusion needs no ADR change.
+   - Done offline: source review assigns one record family per call (B2 approval of
+     18 October, implemented 20 October). Measure its effect on loan-renewal's
+     budget in the next separately approved pair.
+   - Done offline: route 4 in §14 is a typed response-admission defect (ADR 0023,
+     20 October 2026).
    - Adjudicate its reports under `human-spec-adjudication/v2`.
    - Address B7, which also drives loan-renewal's record duplication.
    - Repeat both cases before claiming improvement (§7).
@@ -1872,7 +1903,7 @@ describe the superseded uncommitted implementation, not the governing contract.
   entity records. Other record batches reject entities. Arrays gain no new caps.
   The 2,048-token slot allowances originally recorded here were withdrawn on
   18 October 2026 (§11).
-- Current state is `specification-state/v18`; workflow reports are
+- State was then `specification-state/v18` (v19 since 20 October); workflow reports were
   `spec-e2e-report/v5`, with incomplete advice and explicit unsent operations. The
   separate pool observations and feasibility pool evidence in the uncommitted
   implementation are withdrawn with the advisory allowance; the single-pool
@@ -2387,10 +2418,43 @@ can be resolved is uniform within each assignment:
   basis or exact-set reference rules.
 
 Excluding positive verdicts from that assignment's schema when they cannot be
-resolved is therefore §10's move again: it needs no ADR change and cannot remove a
-valid verdict from a sibling member. It is not implemented here. It needs a fixture
-with a claimless record collection, and it is a separate change from membership.
-The `invalid_json` label on this route also remains wrong until then.
+resolved is therefore §10's move again: it cannot remove a valid verdict from a
+sibling member.
+
+**Route 4 implemented offline — 20 October 2026.** The user chose to treat it as a
+typed response-admission defect: protocol correction of the whole assignment, with
+exhaustion ending that assignment's advice as incomplete. ADR 0023 ("Unresolvable
+positive verdicts at response admission") records the amendment, and §§12.2, 12.7,
+17.3 and 22.6 match.
+- **Premise checked again.** Record families did not break the uniformity above.
+  A record always binds its own provenance, and the specification validator refuses
+  a record with no effective claim. The reachable case is a coverage subject whose
+  collection has no records, such as acceptance criteria or scenario coverage when
+  only functional requirements are authored. One integration scenario reaches it.
+- **Mechanism.** `specification_support_model.resolves` exposes the
+  canonicalization rule, which no longer duplicates it. The assignment packet
+  withholds each unresolvable positive verdict with the existing excluded-variant
+  restriction and omits its guidance rule. One withheld set per assignment
+  replaces the former `not_applicable`-only flag. Members that disagree are
+  refused before invocation. A withheld verdict rejects at admission as
+  `unknown_variant`. Request descriptions record the restricted provider schema,
+  which already omits withheld verdicts, so `model-request-debug` stays at v9.
+- **Follow-up review (20 October 2026).**
+  - The integration driver now checks that every required-review subject resolves
+    a positive verdict, so the "required review is unchanged" premise is enforced.
+  - `ChoiceBoundExceeded` belongs to the support contract. Only principle
+    assessment's two forwarding wrappers name it.
+  - The unit test also covers an acceptance-criteria-only candidate, whose empty
+    collection is functional requirements.
+- **Tests:**
+  - accepted: negative verdicts are admitted for the unresolvable subjects, and
+    the functional-requirement collection and its record family keep `supported`;
+  - rejected: `supported` and `not_applicable` fail admission for both
+    acceptance-criteria and scenario coverage, across two unrelated sources;
+  - the integration driver now derives the expected variants and guidance from
+    the same predicate;
+  - the test fails when resolution is not checked.
+- Required review is unchanged; its subjects all resolve.
 
 **Regression evidence:**
 

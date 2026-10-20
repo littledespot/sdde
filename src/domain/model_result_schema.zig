@@ -8,6 +8,12 @@ pub const max_depth = 16;
 pub const max_nodes = 4096;
 pub const max_properties = 256;
 pub const max_choices = 1024;
+/// ADR 0006's bound on one native integer choice, including an assignment's
+/// exact member set. A larger choice rejects before invocation and is never split.
+pub const ChoiceBoundError = error{ChoiceBoundExceeded};
+pub fn withinChoiceBound(count: usize) bool {
+    return count <= max_choices;
+}
 pub const max_variants = 32;
 
 pub const DefinitionId = struct {
@@ -150,7 +156,7 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
     var arena: std.heap.ArenaAllocator = .init(allocator);
     errdefer arena.deinit();
     for (integer_choices, 0..) |entry, index| {
-        if (entry.allowed.len > max_choices) return invalid();
+        if (!withinChoiceBound(entry.allowed.len)) return invalid();
         if (entry.singleton == .construct and (entry.target != .tagged or entry.definition != null)) return invalid();
         if (entry.definition) |id| _ = DefinitionId.parse(id.bytes) orelse return invalid();
         switch (entry.target) {
@@ -639,7 +645,7 @@ const Compiler = struct {
             result.* = .{ .constant = try self.scalar(value) };
         } else if (object.get("enum")) |values| {
             try fields(object, &.{"enum"});
-            if (values != .array or values.array.items.len == 0 or values.array.items.len > max_choices) return invalid();
+            if (values != .array or values.array.items.len == 0 or !withinChoiceBound(values.array.items.len)) return invalid();
             const first = values.array.items[0];
             switch (first) {
                 .string => {

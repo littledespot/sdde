@@ -134,7 +134,7 @@ flowchart LR
     PRE --> REUSE
     POLICY --> FINDING
     REUSE -- "Unchanged eligible source receipt" --> RETAIN["Native re-admission<br/>Original finding/origin; no model call"]
-    REUSE -- "Changed or excluded assignment" --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per native business unit or collection;<br/>focused duties before generation"]
+    REUSE -- "Changed or excluded assignment" --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per native business unit, record family or collection;<br/>focused duties before generation"]
     PRE -. "Pre-generation omission requires attribution" .-> LOSS["loss-model<br/>loss-prompt<br/>Complete producer comparisons;<br/>pre-generation only"]
     SOURCE -. "Invalid review data" .-> SUPPORT_REPAIR["repair<br/>Assigned support or principle prompt<br/>Authorized finding metadata correction"]
     POLICY -. "Invalid review data" .-> SUPPORT_REPAIR
@@ -172,10 +172,11 @@ validation still runs. Actual original origins and retry identities survive; no
 request, checkpoint or persisted cache is created. See
 [§22.4](../contracts/22-repair.md#224-repair-request-and-response).
 
-Source and principle reviews use the same native business ownership: one brief
-assignment with its three field findings, one story, one entities decision, one
-complete record with all its fields, and separate acceptance-criteria,
-functional-requirements and scenario collections. Reference duties retain their
+Source review uses native business ownership: one brief assignment with its three
+field findings, one story, one entities decision, one record family (every field of
+every record of one kind, each member carrying its own record), and separate
+acceptance-criteria, functional-requirements and scenario collections. Principle
+review assesses one selected principle set per assignment. Reference duties retain their
 own subjects. Exact complete membership is checked before append, wire order is
 normalized to native ledger order, and every finding retains its purpose and
 evidence validation. A record pass cannot replace a field finding. Protocol

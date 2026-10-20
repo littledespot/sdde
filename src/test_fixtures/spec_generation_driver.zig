@@ -40,6 +40,7 @@ pub const Driver = struct {
     candidate_review_calls: usize = 0,
     record_batch_calls: usize = 0,
     record_batch_requests: usize = 0,
+    required_subjects_resolved: usize = 0,
     loss_calls: usize = 0,
     uncertain_loss_calls: usize = 0,
     admitted_losses: std.EnumArray(std.meta.Tag(@import("../domain/source_omission.zig").Location), usize) = .initFill(0),
@@ -350,13 +351,26 @@ pub const Driver = struct {
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
                     if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "assignment_findings")) {
                         assertAssignmentReviewRequest(.source, arena.allocator(), &view, input.value, current_request.prepared().?.response_schema) catch unreachable;
-                        if (input.value.object.get("record")) |record| if (std.mem.eql(u8, record.object.get("id").?.object.get("kind").?.string, "acceptance_criterion")) {
+                        const family = input.value.object.get("requirements").?.array.items[0].object.get("subject").?.object;
+                        if (family.get("record")) |record| if (std.mem.eql(u8, record.object.get("id").?.object.get("kind").?.string, "acceptance_criterion")) {
                             self.record_batch_calls += 1;
                             if (attempt == 1) self.record_batch_requests += 1;
                         };
                     } else {
                         std.testing.expectEqual(@as(usize, 1), input.value.object.get("requirements").?.array.items.len) catch unreachable;
-                        assertReviewShape(schema.value, permits_applicability, authorityInputs(&view).projection == .source_preservation) catch unreachable;
+                        const native = authorityInputs(&view);
+                        // Required review withholds no verdict: every subject of its
+                        // ledger resolves a positive one (ADR 0023, 20 October 2026).
+                        if (@import("../domain/required_authority.zig").assessmentPolicy(native.projection) == .required) {
+                            const sources = (@import("../application/specification_workflow.zig").readContext(&view) catch unreachable).inputs;
+                            const ledger = @import("../domain/required_authority.zig").build(arena.allocator(), native) catch unreachable;
+                            for (ledger.requirements) |required| {
+                                const rules = @import("../domain/specification_support_evidence.zig").requirements(arena.allocator(), native, sources, required.seed.id) catch unreachable;
+                                std.testing.expect(@import("../domain/specification_support_model.zig").resolves(rules, .supported)) catch unreachable;
+                                self.required_subjects_resolved += 1;
+                            }
+                        }
+                        assertReviewShape(schema.value, permits_applicability, native.projection == .source_preservation, true) catch unreachable;
                     }
                 }
             }
@@ -837,7 +851,7 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     if (packet.resultDefinition()) |definition| {
         if (std.mem.eql(u8, definition.bytes, "preservation_finding") or std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
-            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"));
+            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"), true);
         }
         const payload: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "business_text")) "segments" else if (std.mem.eql(u8, definition.bytes, "reference_text")) "nodes" else null;
         if (payload) |field| {
@@ -884,6 +898,9 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     }
     const owner = try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, first);
     var permits_applicability = false;
+    // A positive verdict no claim set can bind is withheld from the whole
+    // assignment; every member agrees.
+    var resolves_positive = true;
     for (assigned, requirements, 0..) |id, requirement, member| {
         try std.testing.expectEqualDeep(owner, try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, id));
         const ordinal = for (ledger.requirements, 0..) |native, index| {
@@ -893,14 +910,25 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
         try std.testing.expect(requirement.object.contains("task") and requirement.object.contains("subject"));
         if (purpose == .source) {
             try std.testing.expect(requirement.object.contains("evidence") and requirement.object.contains("assessment_scope") and requirement.object.contains("evidence_rules"));
-            const permits = (try @import("../domain/required_authority.zig").applicability(inputs, id)) == .review;
-            if (member != 0) try std.testing.expectEqual(permits_applicability, permits);
+            const required = try @import("../domain/specification_support_evidence.zig").requirements(allocator, inputs, (try @import("../application/specification_workflow.zig").readContext(view)).inputs, id);
+            const resolves = @import("../domain/specification_support_model.zig").resolves(required, .supported);
+            const permits = (try @import("../domain/required_authority.zig").applicability(inputs, id)) == .review and @import("../domain/specification_support_model.zig").resolves(required, .not_applicable);
+            if (member != 0) try std.testing.expect(permits_applicability == permits and resolves_positive == resolves);
             permits_applicability = permits;
+            resolves_positive = resolves;
             try std.testing.expectEqual(permits, requirement.object.contains("permitted_not_applicable"));
             try std.testing.expectEqual(permits, requirement.object.get("evidence_rules").?.object.contains("not_applicable"));
+            try std.testing.expectEqual(resolves, requirement.object.get("evidence_rules").?.object.contains("supported"));
         }
         const subject = requirement.object.get("subject").?.object;
-        if (purpose == .source) try std.testing.expect(!subject.contains("record"));
+        if (purpose == .source) {
+            // A record family member carries its own record; other subjects carry none.
+            if (id.unit == .record) {
+                const record_id = subject.get("record").?.object.get("id").?.object;
+                try std.testing.expectEqualStrings(@tagName(id.unit.record.kind), record_id.get("kind").?.string);
+                try std.testing.expectEqual(@as(i64, id.unit.record.ordinal), record_id.get("ordinal").?.integer);
+            } else try std.testing.expect(!subject.contains("record"));
+        }
         if (purpose == .principles) try std.testing.expect(!subject.contains("context"));
     }
     const properties = schema.object.get("properties").?.object;
@@ -920,7 +948,7 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     if (purpose == .source) {
         // Native applicability narrows the shared value schema for the whole
         // assignment; member admission still enforces it independently.
-        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, permits_applicability, false);
+        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, permits_applicability, false, resolves_positive);
     } else {
         const value = finding_schema.get("properties").?.object.get("value").?.object.get("properties").?.object;
         try std.testing.expectEqual(@as(usize, 3), value.count());
@@ -928,9 +956,10 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     }
 }
 
-fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool) !void {
+fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool, resolves_supported: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (preservation) 4 else if (permits_applicability) 8 else 7), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 4 else (if (permits_applicability) @as(usize, 8) else 7) - @intFromBool(!resolves_supported)), variants.len);
+    var has_supported = false;
     var has_inconclusive = false;
     var has_not_applicable = false;
     var has_candidate_invalid = false;
@@ -971,6 +1000,7 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         try std.testing.expect(!properties.contains("loss"));
         const required = variant.object.get("required").?.array.items;
         try std.testing.expectEqual(properties.count(), required.len);
+        has_supported = has_supported or decision == .supported;
         has_inconclusive = has_inconclusive or decision == .inconclusive;
         has_not_applicable = has_not_applicable or decision == .not_applicable;
         has_candidate_invalid = has_candidate_invalid or decision == .candidate_invalid;
@@ -978,6 +1008,7 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
     try std.testing.expect(has_inconclusive);
     try std.testing.expect(has_candidate_invalid);
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
+    if (!preservation) try std.testing.expectEqual(resolves_supported, has_supported);
 }
 
 /// The member array and key of a scripted member-set response: review

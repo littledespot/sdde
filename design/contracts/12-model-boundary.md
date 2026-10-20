@@ -122,7 +122,9 @@ Each generation request contains only what the current unit needs:
   make filenames available as passive content choices; semantic relevance still requires review.
 - Native availability facts may exclude unavailable tagged alternatives from the selected
   compiled schema. The existing schema owner derives a narrower
-  view; it never adds fields, values or semantic decisions. Initial reference/specification
+  view; it never adds fields, values or semantic decisions. A source-review
+  assignment excludes each positive verdict to which no claim set can be bound for
+  its subjects ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#unresolvable-positive-verdicts-at-response-admission-20-october-2026)). Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
   Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   all model-response wire contracts and schemas omit `exact_copy`. The model types required
@@ -334,7 +336,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   every post-generation source/principle finding remains advice unless an
   independent owning deterministic validator establishes the corresponding
   defect. Complete current assessment is a native fact; semantic support is not.
-  Whole-unit/collection assignments retain one finding per native member, with
+  Whole-unit, record-family and collection assignments retain one finding per native member, with
   exact association, per-member origins and narrow correction. Pre-generation
   source-readiness/preservation policy remains separate and mandatory.
 
@@ -381,7 +383,8 @@ reuse, not provider caching or deterministic semantic proof.
 
 **Focused semantic reviews.** For a review whose required subjects are known
 natively, the review owner selects one complete native assignment from its ordered
-ledger (a whole unit or collection, or one selected principle set; ADR 0023) and
+ledger (a whole unit, record family or collection, or one selected principle set;
+ADR 0023) and
 binds its ordered members, purpose, parent and current dependencies to the request.
 The response returns exactly one finding per assigned member, keyed by its
 assignment ordinal, under the selected canonical finding schema; it returns no
@@ -679,6 +682,8 @@ Missing/forbidden questions reject at schema admission, before native collection
 So do missing, repeated or foreign assignment members: the packet's `exact_members`
 ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
+So does a positive verdict the assignment withholds because no claim set can be
+bound to it: it rejects as `unknown_variant`.
 Existing protocol correction resubmits the whole assigned review under its original
 assignment allowance, including otherwise correct siblings; insertion still corrects
 only its selected finding. No partial-response merge, new counter or verdict

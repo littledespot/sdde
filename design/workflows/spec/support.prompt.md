@@ -1,7 +1,8 @@
 Assess each supplied subject using its assessment_scope and assigned purpose.
-When the selected response schema exposes findings, use the complete unit or collection
-and shared record context; return one entry for every assigned requirement_ordinal,
-exactly once. Otherwise return the single finding selected by the schema.
+When the selected response schema exposes findings, use the complete unit, record family
+or collection, and judge each subject with its own record; return one entry for every
+assigned requirement_ordinal, exactly once. Otherwise return the single finding selected
+by the schema.
 Judge each field's assigned role; do not require sibling conditions to be repeated
 in it or replace its finding with a verdict on the whole unit. A correction returns
 only the selected replacement and preserves the retained verdict.

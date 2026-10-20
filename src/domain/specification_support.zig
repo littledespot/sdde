@@ -23,7 +23,7 @@ pub fn Contract(comptime purpose: Purpose) type {
         const principles = @import("principle_assessment.zig");
         const evidence_admission = if (purpose == .source) admission else principles;
         const Origin = @import("model_candidate_origin.zig").Origin;
-        pub const Error = @import("strict_json.zig").Error || a.Error || p.Error || packets.Error || principles.Error || (if (purpose == .source) @import("source_omission_binding.zig").ComparisonError else error{});
+        pub const Error = @import("strict_json.zig").Error || a.Error || p.Error || packets.Error || principles.Error || (if (purpose == .source) @import("source_omission_binding.zig").ComparisonError else error{}) || @import("model_result_schema.zig").ChoiceBoundError;
         pub const Review = struct { entries: []const Finding };
         pub const Finding = struct { requirement_ordinal: u32, value: Value };
         /// A review judges support or an explicitly permitted applicability exception.
@@ -217,57 +217,93 @@ pub fn Contract(comptime purpose: Purpose) type {
             return .{ .bytes = if (purpose == .source) "assignment_findings" else "principle_assignment_findings" };
         }
 
+        /// Copy a member-arena JSON value into the assignment arena. Both the
+        /// serialized bytes and the decoded copy are allocated from `scratch`.
+        fn copyJson(scratch: std.mem.Allocator, value: std.json.Value) Error!std.json.Value {
+            return @import("strict_json.zig").decode(std.json.Value, scratch, try std.json.Stringify.valueAlloc(scratch, value, .{}), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+        }
+
+        /// Positive verdicts a source member may not take: `not_applicable` outside
+        /// an applicability review, and any positive verdict to which no claim
+        /// set can be bound (ADR 0023 route 4). Negative verdicts always resolve.
+        fn withheldVerdicts(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, target: a.Id) Error!std.EnumSet(source_model.Decision) {
+            var withheld = std.EnumSet(source_model.Decision).initEmpty();
+            if (!permitsNotApplicable(try applicability(inputs, target))) withheld.insert(.not_applicable);
+            const required = try admission.requirements(allocator, inputs, sources, target);
+            for ([_]source_model.Decision{ .supported, .not_applicable }) |verdict| if (!source_model.resolves(required, verdict)) withheld.insert(verdict);
+            return withheld;
+        }
+
         fn assignmentPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
             const selected = try assignmentSubjects(scratch, inputs, id);
+            // The member choice is bounded (ADR 0006). A larger assignment rejects
+            // before any member packet is built, and is never split (ADR 0011).
+            if (!@import("model_result_schema.zig").withinChoiceBound(selected.len)) return error.ChoiceBoundExceeded;
             const ledger = try a.build(scratch, inputs);
             var body: ?std.json.Value = null;
-            var record: ?std.json.Value = null;
             var business_context: ?std.json.Value = null;
             var assigned: std.ArrayList(std.json.Value) = .empty;
             const ordinals = try scratch.alloc(i64, selected.len);
             var sources: std.ArrayList(i64) = .empty;
-            // The shared batch envelope lists every source verdict; native
-            // applicability narrows it, and one assignment has one restriction.
-            var permits_not_applicable: ?bool = null;
+            // The shared batch envelope lists every source verdict. Native
+            // applicability and claim resolution narrow it, and one assignment
+            // has one restriction.
+            var withheld: ?std.EnumSet(source_model.Decision) = null;
             for (selected, ordinals) |target, *ordinal| {
+                // Each member's single packet repeats the shared evidence. Build it in
+                // a member arena and keep only its own entry, so a large record family
+                // holds one copy of the shared body rather than one per member.
+                var member_arena: std.heap.ArenaAllocator = .init(allocator);
+                defer member_arena.deinit();
+                const local = member_arena.allocator();
                 if (purpose == .source) {
-                    const permits = permitsNotApplicable(try applicability(inputs, target));
-                    if (permits_not_applicable) |prior| if (prior != permits) return error.InvalidRequiredAuthority;
-                    permits_not_applicable = permits;
+                    const member = try withheldVerdicts(local, inputs, context.inputs, target);
+                    if (withheld) |prior| if (!prior.eql(member)) return error.InvalidRequiredAuthority;
+                    withheld = member;
                 }
-                const single = if (purpose == .source) try packetForContext(scratch, inputs, context, .{ .finding = target }) else try principles.packet(scratch, inputs, context, .{ .finding = target });
+                const single = if (purpose == .source) try packetForContext(local, inputs, context, .{ .finding = target }) else try principles.packet(local, inputs, context, .{ .finding = target });
                 defer packets.release(single);
-                var parsed = try @import("strict_json.zig").decode(std.json.Value, scratch, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+                var parsed = try @import("strict_json.zig").decode(std.json.Value, local, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+                // Copy the shared body before the member entry below mutates aliased
+                // maps; its per-member fields are replaced in the payload anyway.
+                if (body == null) body = try copyJson(scratch, parsed);
                 ordinal.* = for (ledger.requirements, 0..) |required, index| {
                     if (std.meta.eql(required.seed.id, target)) break @intCast(index + 1);
                 } else return error.InvalidRequiredAuthority;
                 var requirement: std.json.Value = if (purpose == .source) parsed.object.get("requirements").?.array.items[0] else .{ .object = .empty };
                 if (purpose == .principles) {
-                    try requirement.object.put(scratch, "ordinal", .{ .integer = ordinal.* });
-                    try requirement.object.put(scratch, "task", parsed.object.get("task").?);
+                    try requirement.object.put(local, "ordinal", .{ .integer = ordinal.* });
+                    try requirement.object.put(local, "task", parsed.object.get("task").?);
                 }
                 var subject = parsed.object.get("subject").?;
                 if (purpose == .source) {
-                    if (subject.object.fetchOrderedRemove("record")) |entry| if (entry.value != .null) {
-                        record = entry.value;
+                    // A record family spans several records, so every member keeps
+                    // its own record context; fields outside records carry none.
+                    if (subject.object.get("record")) |value| if (value == .null) {
+                        _ = subject.object.orderedRemove("record");
                     };
                 } else {
-                    if (subject.object.fetchOrderedRemove("context")) |entry| business_context = entry.value;
+                    if (subject.object.fetchOrderedRemove("context")) |entry| business_context = try copyJson(scratch, entry.value);
                 }
-                try requirement.object.put(scratch, "subject", subject);
+                try requirement.object.put(local, "subject", subject);
                 if (purpose == .source) {
-                    try requirement.object.put(scratch, "assessment_scope", parsed.object.get("assessment_scope").?);
-                    const rules = parsed.object.get("evidence_rules").?;
-                    try requirement.object.put(scratch, "evidence_rules", rules);
+                    try requirement.object.put(local, "assessment_scope", parsed.object.get("assessment_scope").?);
+                    var rules = parsed.object.get("evidence_rules").?;
+                    // Guidance offers only the verdicts the assignment may take.
+                    if (withheld.?.contains(.supported)) _ = rules.object.orderedRemove("supported");
+                    if (withheld.?.contains(.not_applicable)) {
+                        _ = rules.object.orderedRemove("not_applicable");
+                        _ = requirement.object.orderedRemove("permitted_not_applicable");
+                    }
+                    try requirement.object.put(local, "evidence_rules", rules);
                     for (rules.object.get("eligible_source_ids").?.array.items) |source| {
                         if (std.mem.indexOfScalar(i64, sources.items, source.integer) == null) try sources.append(scratch, source.integer);
                     }
                 }
-                try assigned.append(scratch, requirement);
-                if (body == null) body = parsed;
+                try assigned.append(scratch, try copyJson(scratch, requirement));
             }
             var payload = body.?;
             _ = payload.object.orderedRemove("subject");
@@ -275,17 +311,21 @@ pub fn Contract(comptime purpose: Purpose) type {
             _ = payload.object.orderedRemove("assessment_scope");
             _ = payload.object.orderedRemove("evidence_rules");
             try payload.object.put(scratch, "requirements", .{ .array = std.array_list.Managed(std.json.Value).fromOwnedSlice(scratch, try assigned.toOwnedSlice(scratch)) });
-            if (record) |value| try payload.object.put(scratch, "record", value);
             if (business_context) |value| try payload.object.put(scratch, "business_context", value);
             const slot = try std.fmt.allocPrint(scratch, "{s}-assignment", .{try reviewSlot(scratch, inputs, id)});
             const state = (try p.items(context)).state_id;
             const definition = assignmentDefinition();
             const reviewed = try reviewPacket(allocator, inputs, state, try std.json.Stringify.valueAlloc(scratch, payload, .{}), slot, definition);
             defer packets.release(reviewed);
-            const base: *const packets.Packet = if (purpose == .source and !permits_not_applicable.?) excluded: {
-                const excluded = try scratch.alloc(@import("model_result_schema.zig").ExcludedVariant, reviewed.excludedVariants().len + 1);
-                @memcpy(excluded[0..reviewed.excludedVariants().len], reviewed.excludedVariants());
-                excluded[excluded.len - 1] = .{ .kind = @tagName(Decision.not_applicable) };
+            // A withheld verdict fails response admission, so it takes the bounded
+            // protocol correction instead of reaching native canonicalization.
+            const base: *const packets.Packet = if (purpose == .source and withheld.?.count() != 0) excluded: {
+                const prior = reviewed.excludedVariants();
+                const excluded = try scratch.alloc(@import("model_result_schema.zig").ExcludedVariant, prior.len + withheld.?.count());
+                @memcpy(excluded[0..prior.len], prior);
+                var next = prior.len;
+                var verdicts = withheld.?.iterator();
+                while (verdicts.next()) |verdict| : (next += 1) excluded[next] = .{ .kind = @tagName(verdict) };
                 break :excluded try packets.withExcludedVariants(allocator, reviewed, excluded);
             } else try packets.retain(reviewed);
             defer packets.release(base);

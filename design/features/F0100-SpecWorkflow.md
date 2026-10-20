@@ -761,9 +761,10 @@ bypasses.
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
-  A whole-unit assignment's missing, repeated or foreign member is instead a
-  response-admission defect, corrected by protocol correction of the complete
-  assignment (ADR 0023, 18 October 2026).
+  A whole-unit or record-family assignment's missing, repeated or foreign member
+  is instead a response-admission defect, corrected by protocol correction of the
+  complete assignment (ADR 0023, 18 October 2026). A record family covers every
+  record of one kind in one call.
 - Mechanical coverage defects have no independently supported repair target and
   block (§5.7); a review finding cannot authorize an edit to generated content.
 - Before generation, upstream repair attributes loss to an extraction chunk, token classification,
