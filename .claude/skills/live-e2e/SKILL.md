@@ -14,8 +14,8 @@ explicit approval.
 
 1. **Case.** If no case path was given, ask for one; there is no default. Check that
    the file exists under `test/e2e/`.
-2. **Procedure.** Read [design/harness/e2e.md](../../../design/harness/e2e.md) for the
-   current launcher behaviour, environment setup and live-test model policy. From the
+2. **Procedure.** Read the "Launcher behavior" and "Environment setup" sections of
+   [design/harness/e2e.md](../../../design/harness/e2e.md). From the
    case and its referenced configuration, confirm that every generation selection is
    the permitted Bedrock `openai.gpt-oss-20b-1:0` in `ap-southeast-2`. Never open
    `.env.e2e`. If credentials need checking, refer the user to `.env.e2e.example` and
