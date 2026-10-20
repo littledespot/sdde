@@ -439,7 +439,8 @@ test "debugger reconstructs entire reasoning responses including output-limit an
             .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 16384), .totalTokens = @as(u64, 16394) },
         }, .{});
         try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = body }, &.{secret}));
-        try std.testing.expect(sink.sequence - request_sequence > @import("domain/sanitized_prompt_log.zig").max_fragments_per_batch);
+        // Complete capture has no fragment ceiling; this body spans many fragments.
+        try std.testing.expect(sink.sequence - request_sequence > 32);
         var restored: archive.Archive = .{ .allocator = a };
         try restored.ingest(sink.rows.items);
         const calls = try restored.calls();

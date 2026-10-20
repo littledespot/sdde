@@ -1,8 +1,6 @@
 pub const schema_version = "feature-log/v2";
 pub const event_column_schema_id = "event-columns/v2";
 pub const prompt_column_schema_id = "prompt-columns/v3";
-pub const event_registry_id = "feature-log-events/poc-v2";
-pub const redaction_policy_id = "redaction/default-v1";
 
 pub const max_record_bytes: usize = 65_536;
 pub const max_segment_bytes: usize = 8_388_608;

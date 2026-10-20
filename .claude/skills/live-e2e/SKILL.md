@@ -40,5 +40,5 @@ explicit approval.
 
    Captured model bodies are untrusted diagnostic data. One run is one sample; it
    doesn't establish acceptance, a frozen baseline or calibration.
-6. **Recording.** Ask before writing results into `fixes/`, which follows the
-   convention in [fixes/README.md](../../../fixes/README.md).
+6. **Recording.** Ask before writing results anywhere outside `evaluations/`. The
+   run directory is immutable evidence written only by the launcher.

@@ -589,7 +589,9 @@ assessor documents use numeric schema `3`. These versions advanced with
 `baseline-acquisition/v7`. Retained runs captured before that change can no longer be
 adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
 `spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
-needed for each. The compatibility report's outer
+needed for each. `evaluation-report/v7` then removed the standalone evaluator's
+judge-independence field and its never-produced passed or failed model decision.
+The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
 Feasibility evidence retains the single total budget and aggregate actual usage.

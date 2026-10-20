@@ -968,7 +968,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence and a fai
         try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
         try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
         const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
-        try std.testing.expectEqualStrings("evaluation-report/v6", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings("evaluation-report/v7", encoded.get("schema").?.string);
         try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("attempts").?.array.items[0].object.get("diagnostic").?.object.get("reason").?.string);
         try std.testing.expect(!encoded.contains("judgment_diagnostic"));
         const markdown = try reports.markdown(a, report);
@@ -1780,22 +1780,35 @@ test "reports escape judge prose and preserve generation status separately" {
     defer arena.deinit();
     const a = arena.allocator();
     var inputs = try capture(a);
-    inputs.generation = .{ .origin = .recorded, .workflow_status = .needs_user, .execution_id = "recorded-run", .models = &.{} };
     var fake: Fake = .{ .observations = &.{observed_good} };
     var report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
     var result = report.outcome.evaluated.results[0];
     result.explanation = "[click](https://untrusted.invalid) <script> \x1b[31m";
     report.outcome.evaluated.results = @as(*const [1]judgment.CriterionResult, &result);
     const view = try reports.markdown(a, report);
-    try std.testing.expect(std.mem.indexOf(u8, view, "workflow: needs_user") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "Artifact origin: supplied; workflow: not_run") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "<script>") == null);
     try std.testing.expect(std.mem.indexOfScalar(u8, view, 27) == null);
     try std.testing.expect(std.mem.indexOf(u8, view, "\\[click\\]") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "request req-test; response resp-test") != null);
+    // A live origin needs a completed execution identity and models.
     inputs.generation.origin = .live_generation;
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
-    inputs.generation.origin = .supplied;
+    // A supplied artifact claims no execution.
+    inputs.generation = .{ .origin = .supplied, .workflow_status = .not_run, .execution_id = "claimed-run", .models = &.{} };
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
+    // Only supplied and live provenance have producers; retired values do not decode.
+    const bytes = try std.json.Stringify.valueAlloc(a, try capture(a), .{});
+    for ([_][2][]const u8{
+        .{ "\"origin\":\"supplied\"", "\"origin\":\"recorded\"" },
+        .{ "\"origin\":\"supplied\"", "\"origin\":\"scripted_generation\"" },
+        .{ "\"workflow_status\":\"not_run\"", "\"workflow_status\":\"needs_user\"" },
+        .{ "\"workflow_status\":\"not_run\"", "\"workflow_status\":\"failed\"" },
+    }) |replacement| {
+        const changed = try std.mem.replaceOwned(u8, a, bytes, replacement[0], replacement[1]);
+        try std.testing.expect(!std.mem.eql(u8, changed, bytes));
+        try std.testing.expectError(error.InvalidEvaluationContract, c.decode(c.Capture, a, changed));
+    }
 }
 
 test "live generation capture requires completed identity and distinct valid model slots" {

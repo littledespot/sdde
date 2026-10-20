@@ -12,7 +12,6 @@ pub const Account = struct {
 };
 pub const Obligation = struct { claim_id: r.ClaimId, exact_targets: []const Key, context_signals: []const r.SignalId };
 pub const Coverage = struct { accounts: []const Account, obligations: []const Obligation };
-pub const TokenSubject = r.ClaimId;
 pub const Error = std.mem.Allocator.Error || error{InvalidSpecificationCoverage};
 
 pub const Issue = union(enum) {

@@ -41,9 +41,11 @@ alongside unresolved evidence.
 
 For the supplied-spec evaluator,
 [acceptance_gate.zig](../../test/harness/acceptance_gate.zig) retains raw model
-quality, independence and qualification as diagnostic facts. Its decision always
-requires human adjudication. Known raw model failures remain visible but are
-advisory. No identity or calibration flag upgrades model opinion into acceptance.
+quality and grader qualification as diagnostic facts. Its decision is always
+unresolved: `human_adjudication_required`, `input_changed` or `not_evaluated`.
+A supplied specification proves no generator identity, so the evaluator records
+no judge independence. Known raw model failures remain visible but are advisory.
+No calibration flag upgrades model opinion into acceptance.
 
 The [E2E gate](../../test/harness/e2e/acceptance.zig) additionally requires the
 case's expected native outcome, validated artifacts, an intact source/provenance
@@ -136,9 +138,9 @@ and qualification. No real grader is currently qualified by these pending record
 
 - `evaluation-case/v2`: required qualification paths for the supplied-spec evaluator.
 - `evaluation-rubric/v2`: required nullable critical minima.
-- `evaluation-report/v6`: raw assessment, line-locator evidence, per-attempt purpose
+- `evaluation-report/v7`: raw assessment, line-locator evidence, per-attempt purpose
   and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
-  grader/acceptance evidence.
+  grader/acceptance evidence with an always-unresolved decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
 - `spec-e2e-report/v9`: the single total token budget and aggregate actual usage,
   expected outcome, captured evaluation inputs, replayable admission evidence and

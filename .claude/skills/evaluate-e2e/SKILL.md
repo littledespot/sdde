@@ -141,6 +141,13 @@ abstraction:
   validator or review assignment, with `path:line`. Prefer deterministic code for
   anything computable, such as duplicate paragraphs or escaping artefacts
   ([intent.md](../../../design/intent.md)).
+- **Existing work and authority.** Name the item in CLAUDE.md "Known failure classes
+  and open work" that already covers the defect, and prefer its approved or proposed
+  fix over a new one. Apply that file's rules for deciding a contract change. Check
+  the accepted ADRs before proposing a change. Post-generation review findings are
+  advice ([ADR 0023](../../../design/decisions/0023-advisory-post-generation-review.md)),
+  so a fix that makes them change the output is a **Decision** that amends an ADR,
+  not an ordinary change. Mark any such recommendation as a Decision.
 - **Expected effect** on the intent measures: requirement preservation, unsupported
   additions, false assessments, repair-induced harm, completion, calls and tokens.
 - **Regression risk.**
@@ -157,6 +164,10 @@ prompts, rubrics or cases in this skill.
   generation, review, repair). Give calls, input and output tokens and budget share
   per stage, plus retries and repairs. Flag spend that bought no quality, such as
   review calls that passed the defects found above.
+- **Review verdicts.** Each review call's `model_output.txt` holds its findings. Check
+  whether a finding's type matches what it describes. Reporting an unsupported
+  addition as `candidate_omission` is a known class and counts against finding-type
+  accuracy: the share of findings whose type matches a source-based label.
 - **Unpublished run.** Report the terminal step, typed rejection and diagnostics, then
   trace the failing value to its producing call and prompt as in section 4, and
   recommend as in section 5.
@@ -232,4 +243,4 @@ In `evaluations/e2e/<run-name>/`:
 In chat, give the advisory aggregate and critical failures, the top findings with
 their origins, and the path to `evaluation.md`. One run is one sample, so don't claim
 reliability. Remind the user that acceptance needs their own adjudication. Ask before
-recording a summary in `fixes/FIX05.md` ([fixes/README.md](../../../fixes/README.md)).
+recording a summary anywhere outside `evaluations/`.

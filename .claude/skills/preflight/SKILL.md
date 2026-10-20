@@ -22,8 +22,9 @@ skill.
    type, validator or normalizer, action or runner, and YAML operation entry. List its
    producers, consumers, transitions, repair and recovery paths, and sibling
    implementations. State the general violated invariant, not only the symptom.
-4. **Check tracked work.** Note any FIX05 item that already covers this
-   failure class, with its recorded status.
+4. **Check known work.** Note any item in CLAUDE.md "Known failure classes and open
+   work" that already covers this failure class, with its status and approval. A
+   contract change follows that file's rules for deciding a contract change.
 5. **Report** under the AGENTS.md "Before editing" headings:
    1. Observable outcome and explicit non-goals.
    2. Owning abstraction: the narrowest shared contract that owns the whole failure

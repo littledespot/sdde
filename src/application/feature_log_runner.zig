@@ -66,17 +66,6 @@ pub const Runner = struct {
         return orchestrator.processPrompt(self.childBindings(), fragment);
     }
 
-    pub fn processPromptBatch(self: *Runner, owner: *prompt_log.BatchOwner) log_stream.Outcome {
-        defer prompt_log.deinitBatch(owner);
-        var last_persisted: ?log_stream.PersistedEvidence = null;
-        for (prompt_log.batch(owner)) |fragment| switch (self.processPrompt(fragment)) {
-            .dropped => {},
-            .persisted => |evidence| last_persisted = evidence,
-            .blocked => |failure| return .{ .blocked = failure },
-        };
-        return if (last_persisted) |evidence| .{ .persisted = evidence } else .dropped;
-    }
-
     /// Recovers or initializes every enabled stream before this runner can be
     /// published as the active observer.
     pub fn prepare(self: *Runner, shortcode: telemetry.WorkflowShortcode) log_stream.Outcome {

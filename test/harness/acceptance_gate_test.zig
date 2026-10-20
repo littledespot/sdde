@@ -1,7 +1,6 @@
 const std = @import("std");
 const gate = @import("acceptance_gate.zig");
 const acceptance = @import("acceptance.zig");
-const independence = @import("judge_independence.zig");
 const c = @import("contracts.zig");
 const judgment = @import("judgment.zig");
 const reports = @import("report.zig");
@@ -36,12 +35,17 @@ fn rubric() c.Rubric {
 }
 
 fn result() judgment.Result {
+    return scored(4);
+}
+
+fn scored(comptime score: u16) judgment.Result {
+    const percent = @as(f64, @floatFromInt(score)) * 25;
     return .{
         .results = &.{.{
             .criterion_id = "faithfulness",
             .disposition = .scored,
-            .score = 4,
-            .explanation = "The required behavior is preserved.",
+            .score = score,
+            .explanation = "The required behavior is assessed.",
             .evidence = &.{
                 .{ .document_id = "source", .first_line = 1, .last_line = 1 },
                 .{ .document_id = "specification", .first_line = 1, .last_line = 1 },
@@ -49,9 +53,25 @@ fn result() judgment.Result {
             .missing_from_specification = false,
         }},
         .assessment = .scored,
-        .score_percent = 100,
-        .threshold = .met,
+        .score_percent = percent,
+        .threshold = if (percent >= 80) .met else .not_met,
     };
+}
+
+fn uncertain() judgment.Result {
+    var value = scored(4);
+    value.results = &.{.{
+        .criterion_id = "faithfulness",
+        .disposition = .uncertain,
+        .score = null,
+        .explanation = "The source does not settle the behavior.",
+        .evidence = &.{.{ .document_id = "source", .first_line = 1, .last_line = 1 }},
+        .missing_from_specification = false,
+    }};
+    value.assessment = .unresolved;
+    value.score_percent = null;
+    value.threshold = .undetermined;
+    return value;
 }
 
 fn report() reports.Report {
@@ -88,38 +108,35 @@ fn report() reports.Report {
         // An evaluated outcome is its successful final attempt's.
         .attempts = &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = null, .identity = .unavailable, .usage = .{ .input_tokens = 1, .output_tokens = 1, .total_tokens = 2 }, .failure = null }},
         .outcome = .{ .evaluated = result() },
-        .acceptance = gate.from(rubric(), result(), .{ .self_grading = generation }, .unresolved),
+        .acceptance = gate.from(rubric(), result(), .unresolved),
         .grader_qualification = .{ .unresolved = .review_pending },
         .protocol_sha256 = digest,
     };
 }
 
-test "every model score and provenance combination requires human adjudication" {
-    for ([_]acceptance.Quality{
-        .passed,
-        .{ .failed = .critical_failed },
-        .{ .failed = .threshold_failed },
-        .{ .unresolved = .missing_threshold },
-        .{ .unresolved = .uncertainty },
-        .{ .unresolved = .no_applicable },
-    }) |quality| {
-        for ([_]independence.Result{ .independent, .{ .self_grading = generation }, .unknown_generation }) |identity| {
-            for ([_]gate.Qualification{ .qualified, .unresolved }) |qualification| {
-                try std.testing.expectEqualDeep(gate.Decision{ .unresolved = .human_adjudication_required }, gate.decide(quality, identity, qualification));
-            }
+test "every model score and qualification requires human adjudication" {
+    for ([_]struct { judgment.Result, acceptance.Quality }{
+        .{ scored(4), .passed },
+        .{ scored(2), .{ .failed = .critical_failed } },
+        .{ uncertain(), .{ .unresolved = .uncertainty } },
+    }) |case| {
+        for ([_]gate.Qualification{ .qualified, .unresolved }) |qualification| {
+            const evidence = gate.from(rubric(), case[0], qualification);
+            try std.testing.expectEqualDeep(case[1], evidence.quality.?);
+            try std.testing.expectEqual(qualification, evidence.qualification);
+            try std.testing.expectEqual(.human_adjudication_required, evidence.decision);
         }
     }
 }
 
 test "acceptance evidence retains advisory quality without model acceptance authority" {
-    const evidence = gate.from(rubric(), result(), .{ .self_grading = generation }, .unresolved);
+    const evidence = gate.from(rubric(), result(), .unresolved);
     try std.testing.expectEqualDeep(acceptance.Quality{ .passed = {} }, evidence.quality.?);
-    try std.testing.expectEqual(.self_grading, evidence.independence);
     try std.testing.expectEqual(.unresolved, evidence.qualification);
-    try std.testing.expectEqualDeep(gate.Decision{ .unresolved = .human_adjudication_required }, evidence.decision);
+    try std.testing.expectEqual(.human_adjudication_required, evidence.decision);
     const pending: gate.Evidence = .{};
     try std.testing.expect(pending.quality == null);
-    try std.testing.expectEqualDeep(gate.Decision{ .unresolved = .not_evaluated }, pending.decision);
+    try std.testing.expectEqual(.not_evaluated, pending.decision);
 }
 
 test "evaluation reports render human gate critical minima and qualification reasons" {
@@ -128,7 +145,7 @@ test "evaluation reports render human gate critical minima and qualification rea
     const rendered = try reports.markdown(arena.allocator(), report());
     for ([_][]const u8{
         "Development acceptance: unresolved (human_adjudication_required)",
-        "Judge independence: self_grading; qualification: unresolved",
+        "Judge qualification: unresolved",
         "Grader qualification evidence: unresolved (review_pending)",
         "critical minimum: 3",
         "Score: 100.00%",
@@ -141,7 +158,7 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
     const a = arena.allocator();
     const bytes = try reports.json(a, report());
     const parsed = try reports.parse(a, bytes);
-    try std.testing.expectEqualStrings("evaluation-report/v6", parsed.schema);
+    try std.testing.expectEqualStrings("evaluation-report/v7", parsed.schema);
     try std.testing.expectEqualDeep(report().acceptance, parsed.acceptance);
     for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
         var tree = try @import("../../src/domain/strict_json.zig").parse(a, bytes, c.json_limits, false, null);
@@ -150,7 +167,11 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
         try std.testing.expectError(error.InvalidEvaluationContract, reports.parse(a, try std.json.Stringify.valueAlloc(a, tree.value, .{})));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-report/v6", "evaluation-report/v5" },
+        .{ "evaluation-report/v7", "evaluation-report/v6" },
+        // Retired acceptance shapes: judge independence and a model-scored decision union.
+        .{ "\"acceptance\": {", "\"acceptance\": {\"independence\": \"unknown_generation\"," },
+        .{ "\"decision\": \"human_adjudication_required\"", "\"decision\": {\"unresolved\": \"human_adjudication_required\"}" },
+        .{ "\"decision\": \"human_adjudication_required\"", "\"decision\": \"passed\"" },
         .{ @import("packet.zig").revision, "old-prompt" },
         .{ judgment.schema_revision, "old-judgment" },
         .{ digest, "bad-digest" },

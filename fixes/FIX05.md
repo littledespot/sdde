@@ -2721,10 +2721,33 @@ evaluator, which is unchanged.
 - `judge_independence.zig` keeps only the `Result` type the standalone gate reports.
   `fromObserved` (E2E's only use) and the uncalled `fromConfigured` are removed with
   their tests.
-- **Open (user decision):** the standalone CLI passes only `unknown_generation`, so
-  `Result.independent` and `.self_grading` now have no producer. Removing them would
-  narrow the standalone `evaluation-report/v6` acceptance evidence, which the
-  E2E-only scope excludes.
+- **Resolved 20 October 2026** (user: "remove all legacy or unused code"): the
+  standalone CLI passed only `unknown_generation`, and the gate's `decide` ignored
+  its inputs. `judge_independence.zig` is deleted. The gate keeps raw quality and
+  qualification, and its decision is one unresolved enum (`not_evaluated`,
+  `input_changed`, `human_adjudication_required`). `evaluation-report/v7` drops
+  `independence` and the never-produced passed or failed decision, and its reader
+  rejects v6, an `independence` field and the old decision union. A completed
+  evaluation exits 2 as before.
+
+**Unused code removed with it** (no behavior change): the unreferenced canonical
+value, provenance and completed-unit replacement functions left by W2's deleted
+post-generation repair paths; the test-only prompt-batch API and its runner method;
+`claimRequired`, a parallel of `itemRequired`; `recordForGroup`, a parallel of
+`record`; `selectGroups`; `parseProposal`, whose closed-type tests now decode
+directly; two unused feature-log ID constants; an unused alias, fixture method and
+test helper. The evaluator capture's `recorded` and `scripted_generation` origins and
+its non-`completed` workflow statuses had no producer and now reject, in place: no
+written report carries them, so retained `spec-e2e-report/v9` runs stay adjudicable.
+Accessors and test seams used only by tests remain.
+
+**Found, not dead code — unimplemented contract.** Design §26 requires log
+retention after recovery and rotation (the only authorized destructive log
+operation), and F0002 §6.4 fixes `retentionDays = 14`. `LogService.retainHistorical`
+and the filesystem segment-pruner facet have only test callers, so production never
+prunes. This needs its own change, not deletion. Similarly, §26 and F0002 name the
+compiler-owned `redaction/default-v1` policy, but no code or persisted record carries
+that ID; the removed constant was never read.
 
 **Kept:** the standalone `evaluate-spec` evaluator with its correction, qualification,
 calibration panels, configuration and environment; rubrics; `rubric-judgment/v2`;

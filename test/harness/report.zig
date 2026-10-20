@@ -34,7 +34,7 @@ pub const Attempt = struct {
     unconstrained: ?@import("correction.zig").Unconstrained = null,
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
-pub const schema_version = "evaluation-report/v6";
+pub const schema_version = "evaluation-report/v7";
 pub const Report = struct {
     schema: []const u8 = schema_version,
     prompt_revision: []const u8 = @import("packet.zig").revision,
@@ -172,13 +172,7 @@ fn render(out: *std.Io.Writer, report: Report) (std.Io.Writer.Error || c.Error)!
     try out.writeAll("\n\nRubric: ");
     try escape(out, report.capture.rubric.id);
     try out.print(" (revision {d}; scale {d}–{d})\n\n", .{ report.capture.rubric.revision, report.capture.rubric.minimum_score, report.capture.rubric.maximum_score });
-    try out.writeAll("Development acceptance: ");
-    switch (report.acceptance.decision) {
-        .passed => try out.writeAll("passed"),
-        .failed => |failure| try out.print("failed ({s})", .{@tagName(failure)}),
-        .unresolved => |reason| try out.print("unresolved ({s})", .{@tagName(reason)}),
-    }
-    try out.print("\n\nJudge independence: {s}; qualification: {s}\n\n", .{ @tagName(report.acceptance.independence), @tagName(report.acceptance.qualification) });
+    try out.print("Development acceptance: unresolved ({s})\n\nJudge qualification: {s}\n\n", .{ @tagName(report.acceptance.decision), @tagName(report.acceptance.qualification) });
     if (report.grader_qualification) |evidence| switch (evidence) {
         .unresolved => |reason| try out.print("Grader qualification evidence: unresolved ({s})\n\n", .{@tagName(reason)}),
         .qualified => |proof| {

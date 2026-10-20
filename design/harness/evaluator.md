@@ -195,7 +195,7 @@ calibration retains raw scores while acceptance remains unresolved.
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
 - Cases, rubrics and configuration use distinct `/v2` identifiers.
-  Reports use `evaluation-report/v6` with typed judgment and acceptance evidence.
+  Reports use `evaluation-report/v7` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -289,7 +289,7 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v6` records each attempt's purpose (`judgment` or `correction`)
+- `evaluation-report/v7` records each attempt's purpose (`judgment` or `correction`)
   and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
   and Markdown: parser byte/line/column for invalid JSON, or the affected
   criterion, zero-based evidence index and document ID for an unknown document,
@@ -386,13 +386,12 @@ For scored criteria, the percentage is:
 
 - The CLI always labels its candidate `supplied` and workflow status `not_run`.
 - It never claims to have generated that file.
-- The shared grading call accepts explicit recorded/scripted/live provenance; fresh
-  generation requires a completed execution identity and live generation records each
-  configured slot/provider/model in `generation.models`.
-- The E2E harness records the same identity in its captured adjudication inputs; it does
+- A capture's provenance is `supplied` (`not_run`, no execution or models) or
+  `live_generation` (`completed`, with an execution identity and each configured
+  slot/provider/model in `generation.models`). No other origin or status has a
+  producer, and both reject.
+- The E2E harness records live identity in its captured adjudication inputs; it does
   not grade them.
-- Recorded artifacts can preserve a previous failed/needs-user status without changing
-  that status through grading.
 - Full workflow execution and its failure reports are not implemented by this entry
   point.
 
@@ -403,9 +402,9 @@ For scored criteria, the percentage is:
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Reserved for authoritative acceptance; model evaluation remains advisory. |
-| `2` | Unresolved acceptance, including every advisory model judgment pending human review. |
-| `1` | Failed acceptance, input, configuration, provider, judgment or reporting failure. |
+| `0` | `--help` only. A model judgment never decides acceptance. |
+| `2` | A completed evaluation: acceptance stays unresolved pending human adjudication. |
+| `1` | Input, configuration, provider, judgment or reporting failure. |
 
 - The machine report keeps workflow status separate from `evaluated` /
   `evaluator_error`.

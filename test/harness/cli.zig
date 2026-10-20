@@ -87,11 +87,11 @@ pub fn main(init: std.process.Init) !void {
     if (result.outcome == .evaluated) {
         // Supplied artifacts do not prove their generator identity. Calibration
         // retains raw judgments while acceptance remains explicitly unresolved.
-        result.acceptance = gate.from(inputs.rubric, result.outcome.evaluated, .unknown_generation, if (grader == .qualified) .qualified else .unresolved);
+        result.acceptance = gate.from(inputs.rubric, result.outcome.evaluated, if (grader == .qualified) .qualified else .unresolved);
     }
     if (!try unchanged(io, a, options, inputs, config_bytes, config, grader)) {
         result.acceptance.qualification = .unresolved;
-        result.acceptance.decision = .{ .unresolved = .input_changed };
+        result.acceptance.decision = .input_changed;
     }
     try json_file.writeStreamingAll(io, try reports.json(a, result));
     try json_file.sync(io);
@@ -101,11 +101,8 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.File.stdout().writeStreamingAll(io, message);
     switch (result.outcome) {
         .evaluator_error => std.process.exit(1),
-        .evaluated => switch (result.acceptance.decision) {
-            .passed => {},
-            .failed => std.process.exit(1),
-            .unresolved => std.process.exit(2),
-        },
+        // A model-scored decision is always unresolved pending human adjudication.
+        .evaluated => std.process.exit(2),
     }
 }
 fn unchanged(io: std.Io, a: std.mem.Allocator, options: Options, inputs: c.Capture, config_bytes: []const u8, config: configuration.Config, grader: qualification.Evidence) !bool {

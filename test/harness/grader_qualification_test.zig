@@ -74,7 +74,7 @@ const Fixture = struct {
                 .missing_from_specification = false,
             }} };
             result.* = .{
-                .schema = "evaluation-report/v6",
+                .schema = reports.schema_version,
                 .protocol_sha256 = try q.protocolSha256(a),
                 .capture = input,
                 .configuration = config,

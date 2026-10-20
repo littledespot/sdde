@@ -623,7 +623,9 @@ test "authoring group catalogue rejects empty stale foreign and unauthorized sel
         altered.dispositions = dispositions;
         try std.testing.expectEqual(@as(usize, 1), try binding.recordCount(altered));
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.resolveGroups(a, altered, fixture.context.inputs, &.{groups[0].signal_id}, .content));
-        try std.testing.expectError(error.InvalidSpecificationBinding, binding.recordForGroup(a, altered, fixture.context.inputs, groups[0].signal_id));
+        // The superseded group leaves one record batch, bound to the surviving group.
+        try std.testing.expectEqualDeep(groups[1].signal_id, (try binding.record(a, altered, fixture.context.inputs, 0)).records.signal);
+        try std.testing.expectError(error.InvalidSpecificationBinding, binding.record(a, altered, fixture.context.inputs, 1));
         dispositions[0].claim_id.ordinal = 9999;
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.recordCount(altered));
     }
@@ -711,11 +713,9 @@ test "record authoring excludes only complete preserved-token groups and keeps s
             const bound = (try binding.record(a, records, fixture.context.inputs, index)).records;
             try std.testing.expectEqualDeep(records.signals[signal_index].id, bound.signal);
             try std.testing.expectEqualDeep(records.signals[signal_index].value.claim_ids, bound.selection.claim_ids);
-            try std.testing.expectEqualDeep(bound, (try binding.recordForGroup(a, records, fixture.context.inputs, bound.signal)).records);
         }
         for ([_]usize{ 1, 3 }) |index| {
             try std.testing.expect(try binding.tokenOnly(records, records.signals[index].id));
-            try std.testing.expectError(error.InvalidSpecificationBinding, binding.recordForGroup(a, records, fixture.context.inputs, records.signals[index].id));
             // The scheduling decision does not remove selectable native evidence.
             _ = try binding.resolveGroups(a, records, fixture.context.inputs, &.{records.signals[index].id}, .content);
         }
@@ -746,10 +746,9 @@ test "record authoring excludes only complete preserved-token groups and keeps s
         try std.testing.expectEqual(@as(usize, 3), try binding.recordCount(mixed));
         try std.testing.expect(!try binding.tokenOnly(mixed, mixed.signals[2].id));
         const mixed_bound = (try binding.record(a, mixed, fixture.context.inputs, 1)).records;
+        try std.testing.expectEqualDeep(mixed.signals[2].id, mixed_bound.signal);
         try std.testing.expectEqualDeep(mixed.signals[2].value.claim_ids, mixed_bound.selection.claim_ids);
-        try std.testing.expectEqualDeep(mixed_bound, (try binding.recordForGroup(a, mixed, fixture.context.inputs, mixed_bound.signal)).records);
         try std.testing.expect(try binding.tokenOnly(mixed, mixed.signals[1].id));
-        try std.testing.expectError(error.InvalidSpecificationBinding, binding.recordForGroup(a, mixed, fixture.context.inputs, mixed.signals[1].id));
         var stale = fixture.context.inputs;
         stale.corpus.state_id.bytes = "foreign-reference-state";
         try std.testing.expectError(error.InvalidSpecificationBinding, binding.record(a, records, stale, 0));
@@ -5872,9 +5871,10 @@ test "record association preserves accepted multi-claim order and rejects unboun
         const accepted = (try references.finish(a, original.input, proposed, .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current })).valid;
         const records = refs.records(accepted);
         try binding.validate(records, fixture.context.inputs);
-        const bound = try binding.recordForGroup(a, records, fixture.context.inputs, records.signals[0].id);
+        const bound = try binding.record(a, records, fixture.context.inputs, 0);
+        try std.testing.expectEqualDeep(records.signals[0].id, bound.records.signal);
         try std.testing.expectEqualDeep(claims, bound.records.selection.claim_ids);
-        try std.testing.expectError(error.InvalidSpecificationBinding, binding.recordForGroup(a, records, fixture.context.inputs, .{ .ordinal = 9999 }));
+        try std.testing.expectError(error.InvalidSpecificationBinding, binding.record(a, records, fixture.context.inputs, 1));
         const chosen = try binding.resolveGroups(a, records, fixture.context.inputs, &.{records.signals[0].id}, .content);
         try std.testing.expectEqualDeep(claims, chosen.selection.claim_ids);
         const value = try fixture.proposal(source);
@@ -9741,12 +9741,6 @@ test "native retained append rejects partial and foreign record membership and s
     };
     changed.specification.?.records = records;
     try std.testing.expectError(error.InvalidRequiredAuthority, support.appendAdmitted(a, changed, fixture.context, prior, packet, members, null));
-}
-
-fn groupIds(a: std.mem.Allocator, groups: []const @import("domain/specification_source_binding.zig").EligibleSignal) ![]const references.r.SignalId {
-    const ids = try a.alloc(references.r.SignalId, groups.len);
-    for (groups, ids) |group, *id| id.* = group.signal_id;
-    return ids;
 }
 
 test "value repair retains raw native occurrence evidence from an unchanged sibling" {

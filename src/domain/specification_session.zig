@@ -551,20 +551,3 @@ pub fn recordIndex(current: Session, id: g.spec.Id) Error!usize {
     }
     return error.InvalidSpecificationUnit;
 }
-
-/// A completed unit may change only through an exact authorized merge. This
-/// boundary revalidates the whole affected unit before it becomes checked data.
-pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session, index: usize, response: g.CanonicalResponse, merged: @import("atomic_repair.zig").Merge, origins: @import("specification_candidate.zig").Origins) Error!Session {
-    if (current.completed != unit_count or index >= unit_count or current.units[index] == null or current.revision != merged.revision_before) return error.InvalidSpecificationUnit;
-    var checked = switch (try g.revalidate(allocator, validator, context, try unit(index), response)) {
-        .valid => |value| value,
-        .invalid => return error.InvalidSpecificationUnit,
-    };
-    checked.origins = origins;
-    checked.last_repair = merged;
-    var next = current;
-    next.revision = merged.revision_after;
-    next.units[index] = checked;
-    if (try checkConsistency(allocator, next, context, checked) != null) return error.InvalidSpecificationUnit;
-    return next;
-}

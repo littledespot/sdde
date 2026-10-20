@@ -350,43 +350,6 @@ test "info logging filters complete prompt bodies before effects" {
     try std.testing.expectEqual(@as(usize, 0), sink.calls);
 }
 
-test "prompt batches persist in canonical fragment id order and consume transient ownership" {
-    const io = std.testing.io;
-    var directory = std.testing.tmpDir(.{ .iterate = true });
-    defer directory.cleanup();
-    const candidate = bindingCandidate();
-    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
-    defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
-    var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var clock: FakeClock = .{};
-    var outputs: FakeOutputs = .{};
-    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency()) };
-    const base: prompt_log.SanitizedPromptFragment = .{
-        .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
-        .attempt = 1,
-        .request_id = telemetry.Identifier.validate("REQ-1").?,
-        .route_id = telemetry.Identifier.validate("ROUTE-1").?,
-        .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
-        .fragment_id = telemetry.Identifier.validate("FRAG-2").?,
-        .direction = .request,
-        .body_class = .ordinary,
-        .content = "second",
-        .retained_bytes = 6,
-        .truncated = false,
-        .redacted = true,
-    };
-    var first = base;
-    first.fragment_id = telemetry.Identifier.validate("FRAG-1").?;
-    first.content = "first";
-    first.retained_bytes = 5;
-    const batch = try prompt_log.createBatch(std.testing.allocator, &.{ base, first });
-    try std.testing.expect(runner.processPromptBatch(batch) == .persisted);
-    const bytes = try directory.dir.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
-    defer std.testing.allocator.free(bytes);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "|FRAG-1|").? < std.mem.indexOf(u8, bytes, "|FRAG-2|").?);
-}
-
 test "fault barriers distinguish lock recovery flush console rotation and retention failures" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
