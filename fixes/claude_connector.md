@@ -63,7 +63,7 @@ decoder also requires maintenance even with a pinned API version (§10.3).
 | --- | --- | --- | --- | --- |
 | R0 | **Contract alignment required** | The user selected per-model `config.max_tokens` in `.sddproviders.json`; ADR 0011 and related contracts still prohibit all output allowances. | User direction, 18 October 2026; ADR 0011 | Record the selected provider-configuration exception in governing contracts before implementation; keep slot controls rejected and preserve exact capture/replay (§10.0). |
 | R1 | **Unmeasured** | Anthropic limits union parameters and optional parameters (§3.3). The previous review reported 32 `anyOf` nodes for records and 16 for extraction in historical captures that are no longer available locally. | Structured-outputs documentation; historical figures retained in §3.3 | Re-measure current complete and derived schemas. Node counts do not establish the provider's parameter count or grammar acceptance. Any live check needs the §8 approvals; no automatic fallback or unapproved local capacity gate. |
-| R2 | **Unmeasured** | The Spec workflow's shared request subgraph sets a **60-second** total deadline; diagnostic replay instead uses **300 seconds**. Claude latency and first-use grammar compilation have not been measured here. | [spec.workflow.yaml](../design/workflows/spec.workflow.yaml); [request_replay.zig](../src/adapters/provider/request_replay.zig); [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig) | Replay success does not prove workflow deadline compatibility. Measure cold and repeated schemas and each intended effort/model. A deadline change needs explicit workflow/policy scope (§10.9); streaming does not extend total time. |
+| R2 | **Unmeasured** | The Spec workflow's shared request subgraph sets a **180-second** total deadline (raised from 60 seconds by user decision, 21 October 2026, after Bedrock outputs that ran to the 16,384-token limit outlasted 60 seconds); diagnostic replay instead uses **300 seconds**. Claude latency and first-use grammar compilation have not been measured here. | [spec.workflow.yaml](../design/workflows/spec.workflow.yaml); [request_replay.zig](../src/adapters/provider/request_replay.zig); [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig) | Replay success does not prove workflow deadline compatibility. Measure cold and repeated schemas and each intended effort/model. A deadline change needs explicit workflow/policy scope (§10.9); streaming does not extend total time. |
 | R3 | High | `max_tokens` is a hard limit on thinking **plus** visible text, and thinking is billed as output. Opus 5.5 cannot disable thinking. | Effort and thinking documentation | Thinking tokens add to the compiled 100,000-token workflow budget, which historical small-feature runs exhausted ([FIX04 F9](Z_FIX02.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)). Select explicit effort for comparable measurements and retain `usage.output_tokens_details.thinking_tokens`; the configuration control remains optional. |
 | R4 | High | Sharing only HTTP would still duplicate authorized invocation, credential lifetime, capture, request projection, response assembly and replay inspection. These mechanisms currently sit in Bedrock-named modules. | [aws_bedrock.zig](../src/adapters/provider/aws_bedrock.zig); [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig); [request_replay.zig](../src/adapters/provider/request_replay.zig) | Extract the common owners in §5.1 and migrate Bedrock first. Claude supplies protocol projections; it does not copy the provider lifecycle. |
 | R5 | Medium | Authorization currently accepts only Bedrock, and composition builds one provider. Snapshot validation, capability deposit/destruction and lease use are common mechanics. | [bedrock_authorization.zig](../src/adapters/provider/bedrock_authorization.zig); [model_provider_runtime.zig](../src/composition/model_provider_runtime.zig) | Use one shared authorization mechanism with provider-tagged material and exhaustive routing. Preserve distinct credential identities and the single runner lease table (§5.3, §10.8). |
@@ -190,7 +190,7 @@ no `providers.json` alias or new file is introduced by this documentation update
   wire value. Missing, null, zero, negative, fractional, string and overflowing
   values reject, as do duplicate or unknown fields. `128000` is an explicit example
   value for the illustrated model, never an engine default or a demonstrated safe
-  non-streaming setting under the 60-second workflow deadline. Maintain the value
+  non-streaming setting under the 180-second workflow deadline. Maintain the value
   against the selected model's documented API limits; the engine does not perform
   a metadata lookup or predict capacity. An API-unsupported value produces the
   provider's typed rejection, with no automatic adjustment.
@@ -1024,7 +1024,7 @@ from capacity prediction and obtain approval for any actual policy amendment.
 | Claude imports Bedrock helpers; old helpers remain behind aliases | Rejected | Common policy moves to provider-neutral owners and all consumers migrate. Remove superseded implementations and compatibility wrappers together. |
 | One permissive response decoder for both APIs | Rejected | Share parsing/assembly mechanisms; preserve each API's closed envelope, nullable fields, usage interpretation and stop/error tables. |
 | Callback/plugin registry for provider differences | Rejected | Trusted closed dispatch and narrow typed projections suffice. No service locator or generic capability bag is introduced. |
-| Streaming to avoid the 60-second deadline | Rejected as a fix for R2 | The deadline bounds total exchange time; streaming changes delivery, not duration. It remains a later option for outputs that exceed non-streaming limits. |
+| Streaming to avoid the workflow deadline | Rejected as a fix for R2 | The deadline bounds total exchange time; streaming changes delivery, not duration. It remains a later option for outputs that exceed non-streaming limits. |
 | Prompt caching | Deferred | May reduce currency cost and latency. Cached input still counts fully in ADR 0011's inclusive token ledger, so it does not solve workflow token exhaustion. It changes request bytes and needs separate measurement. |
 | Claude on Bedrock | Out of scope | Support depends on exact compiled tuple and API compatibility; do not infer that all current Claude models work through the existing Converse adapter. |
 
@@ -1271,10 +1271,10 @@ this sequence ran during this document review.
    need all their credentials before the first send, including the handling of
    inactive optional branches. Preserve no-provider and binding-only preparation
    without credential I/O; never require a key merely for an unused catalogue entry.
-9. **Per-call deadline.** Keep the shared 60-second `timeout-ms`, raise it in the
-   workflow definition for all providers, or introduce a typed per-binding deadline
-   policy. Decide after step 7's latency measurements; the existing 60-second
-   production deadline stays in force until an explicit amendment is accepted.
+9. **Per-call deadline.** The shared `timeout-ms` was raised from 60 to 180 seconds
+   for all providers by user decision on 21 October 2026. Keep it, raise it further,
+   or introduce a typed per-binding deadline policy. Decide after step 7's latency
+   measurements.
 10. **Residency and retention.** Omitted `inference_geo` inherits the workspace
     default; inference geography and storage geography are distinct. Record the
     intended workspace settings and applicable retention requirements, including

@@ -489,6 +489,10 @@ existing policy path once its prerequisites hold; retain its cited advice.
 - A user closes it by changing only `requestedStatus` and the answer region.
 - The submission must name the current state/record revisions, match the configured select-one
   or bounded-text schema, and be associated with an authenticated actor.
+- [ADR 0025](../decisions/0025-clarification-answer-authentication.md) defines that actor as the
+  operating-system account that runs the engine; running Specify with valid closed forms
+  accepts them. If any closed form is invalid, the run accepts none of them, makes no model
+  call and reports a typed reason for each failing form. Not yet implemented.
 - An empty close is invalid; `defer` remains open; `cancel` cancels the run.
 - Path-shaped answer text is scanned into the inert passive registry under the assigned response
   ID, and that complete clarification response is published before refresh.

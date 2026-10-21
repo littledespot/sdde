@@ -19,6 +19,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Invoke `AuthenticationPort.authenticateAndConsume` once.
 - The runner-owned lease table—not the envelope—holds the credential, and the port finalizes it
   on every terminal branch.
+- **Amendment:** [ADR 0025](../../decisions/0025-clarification-answer-authentication.md) gives
+  `AuthenticationPort` its first provider, for clarification responses: the operating-system
+  account that runs the engine. Other event kinds have no provider yet.
 
 ## `ValidateAuthenticationObservationAction`
 
@@ -420,6 +423,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   matching answer for `closed`; for `select_many` require unique known keys within min/max and
   canonicalize only the response value to engine option order, never rewrite submitted bytes;
   validate bounded defer/cancel reason shapes.
+- **Amendment:** [ADR 0025](../../decisions/0025-clarification-answer-authentication.md) makes
+  it return a typed reason for each rejected form. One rejected closed form stops the run before
+  any authentication lease is consumed, and no answer in that run is accepted.
 
 ## `BindAuthenticatedClarificationSubmissionAction`
 

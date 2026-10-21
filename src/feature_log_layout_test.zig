@@ -490,7 +490,7 @@ test "discovery orders closed groups, keeps a run with any active tail whole and
 test "an invalid prior group blocks discovery and activation and is never skipped" {
     const io = std.testing.io;
     const a = std.testing.allocator;
-    const Case = enum { forged_identity, symlinked_run, insecure_run, unexpected_entry, oversized_segment, foreign_feature, torn_before_another, torn_between, torn_not_first, torn_foreign_row, torn_wrong_stream, torn_reserved_name, torn_invalid_name, open_before_another, ordinal_gap, bytes_after_trailer, sequence_overflow };
+    const Case = enum { forged_identity, symlinked_run, insecure_run, symlinked_entry, symlinked_run_entry, symlinked_prompt_entry, nested_directory, misplaced_segment, collection_segment, oversized_segment, foreign_feature, torn_before_another, torn_between, torn_not_first, torn_foreign_row, torn_wrong_stream, torn_reserved_name, torn_invalid_name, open_before_another, ordinal_gap, bytes_after_trailer, sequence_overflow };
     for (std.enums.values(Case)) |case| {
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
@@ -511,11 +511,28 @@ test "an invalid prior group blocks discovery and activation and is never skippe
             },
             .symlinked_run => try project.dir.symLink(io, std.fs.path.basename(run_dir), logs_root ++ "/events/RUN-ALIAS", .{ .is_directory = true }),
             .insecure_run => try setMode(io, project.dir, run_dir, 0o755),
-            .unexpected_entry => {
-                const path = try std.fmt.allocPrint(a, "{s}/notes.txt", .{binding_dir});
+            // Only a regular file without a segment name is left alone.
+            .symlinked_entry, .symlinked_run_entry, .symlinked_prompt_entry => {
+                const directory = switch (case) {
+                    .symlinked_entry => binding_dir,
+                    .symlinked_run_entry => run_dir,
+                    else => std.fs.path.dirname(expired.prompt).?,
+                };
+                const path = try std.fmt.allocPrint(a, "{s}/.DS_Store", .{directory});
                 defer a.free(path);
-                try project.dir.writeFile(io, .{ .sub_path = path, .data = "x" });
+                try project.dir.symLink(io, "0001.log", path, .{});
             },
+            .nested_directory => {
+                const path = try std.fmt.allocPrint(a, "{s}/nested", .{binding_dir});
+                defer a.free(path);
+                try project.dir.createDirPath(io, path);
+            },
+            .misplaced_segment => {
+                const path = try std.fmt.allocPrint(a, "{s}/0001.log", .{run_dir});
+                defer a.free(path);
+                try project.dir.copyFile(expired.event, project.dir, path, io, .{});
+            },
+            .collection_segment => try project.dir.copyFile(expired.event, project.dir, logs_root ++ "/events/0001.log", io, .{}),
             // A segment torn or left open is a crash shape only when it is last.
             .torn_before_another, .open_before_another => {
                 const second = try siblingSegment(a, expired.event, "0002.log");
@@ -594,6 +611,48 @@ test "an invalid prior group blocks discovery and activation and is never skippe
         try std.testing.expectEqual(@import("domain/feature_log_stream.zig").FailureCode.LOG_SINK_FAILURE, outcome.blocked);
         try project.dir.access(io, expired.prompt, .{});
     }
+}
+
+test "regular files the engine never names are left alone by discovery and retention" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try project.dir.createDir(io, "workflows", .default_dir);
+    const expired = try completedRun(a, io, project.dir);
+    defer expired.deinit(a);
+    try ageRun(a, io, project.dir, expired);
+    const event_binding = std.fs.path.dirname(expired.event).?;
+    const prompt_binding = std.fs.path.dirname(expired.prompt).?;
+    // File-browser, editor and renamed-segment files at every folder level of
+    // both streams, with ordinary rather than owner-only permissions.
+    const strays = [_]struct { []const u8, []const u8 }{
+        .{ logs_root ++ "/events", ".DS_Store" },
+        .{ logs_root ++ "/prompts", "Thumbs.db" },
+        .{ std.fs.path.dirname(event_binding).?, "._0001.log" },
+        .{ std.fs.path.dirname(prompt_binding).?, "desktop.ini" },
+        .{ event_binding, "0001.log.bak" },
+        .{ prompt_binding, "notes.txt" },
+    };
+    var paths: [strays.len][]const u8 = undefined;
+    for (strays, &paths) |stray, *path| {
+        path.* = try std.fmt.allocPrint(arena.allocator(), "{s}/{s}", .{ stray[0], stray[1] });
+        try project.dir.writeFile(io, .{ .sub_path = path.*, .data = stray[1] });
+    }
+    const found = try discoverHistory(a, io, project.dir);
+    defer found.deinit(a);
+    try std.testing.expectEqual(@as(usize, 2), found.groups.len);
+    try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
+    try expectPruned(io, project.dir, expired);
+    for (strays, paths) |stray, path| {
+        const bytes = try project.dir.readFileAlloc(io, path, a, .limited(64));
+        defer a.free(bytes);
+        try std.testing.expectEqualStrings(stray[1], bytes);
+    }
+    // Binding directories left holding only a stray file are empty groups.
+    try std.testing.expectEqual(.ready, std.meta.activeTag(try nextRun(a, io, project.dir)));
 }
 
 test "a last segment torn or left open by a crash keeps its whole run" {

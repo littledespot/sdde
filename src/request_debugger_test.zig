@@ -781,6 +781,38 @@ test "debugger orders split captures across bindings by recorded sequence includ
     try std.testing.expectEqualStrings(calls[1].id, grouped[5].id);
     try std.testing.expectEqual(@as(u64, 1), grouped[5].execution_order);
 
+    // Regular files without a segment name are left alone at every level.
+    for ([_][]const u8{ "logs/prompts/.DS_Store", "logs/prompts/run-one/Thumbs.db", "logs/prompts/run-one/LOGBIND-2/0001.log.bak" }) |stray| {
+        try directory.dir.writeFile(io, .{ .sub_path = stray, .data = "stray" });
+    }
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+    // A heading-only segment loads cleanly inside a binding, so placement alone
+    // rejects it below.
+    try directory.dir.createDirPath(io, "logs/prompts/run-one/LOGBIND-3");
+    try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-one/LOGBIND-3/0001.log", .data = format.prompt_heading });
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+    try directory.dir.deleteTree(io, "logs/prompts/run-one/LOGBIND-3");
+    // Any other entry a level does not hold rejects the archive.
+    const Misplaced = enum { collection_link, run_link, binding_link, nested_directory, collection_segment, run_segment };
+    for (std.enums.values(Misplaced)) |misplaced| {
+        const path = switch (misplaced) {
+            .collection_link => "logs/prompts/link",
+            .run_link => "logs/prompts/run-one/link",
+            .binding_link => "logs/prompts/run-one/LOGBIND-2/link",
+            .nested_directory => "logs/prompts/run-one/LOGBIND-2/nested",
+            .collection_segment => "logs/prompts/0001.log",
+            .run_segment => "logs/prompts/run-one/0001.log",
+        };
+        switch (misplaced) {
+            .collection_link, .run_link, .binding_link => try directory.dir.symLink(io, "elsewhere", path, .{}),
+            .nested_directory => try directory.dir.createDirPath(io, path),
+            .collection_segment, .run_segment => try directory.dir.writeFile(io, .{ .sub_path = path, .data = format.prompt_heading }),
+        }
+        try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
+        if (misplaced == .nested_directory) try directory.dir.deleteDir(io, path) else try directory.dir.deleteFile(io, path);
+    }
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+
     // Sequence overlap across bindings must not manufacture an execution order.
     try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-one/LOGBIND-10/0001.log", .data = first });
     try std.testing.expectError(error.InvalidDebugArchive, store.load(a));

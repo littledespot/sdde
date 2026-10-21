@@ -7,7 +7,9 @@ const log_binding = @import("../domain/feature_log_binding.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 
 /// `InvalidHistory` is a prior group that fails validation, such as a symlinked
-/// entry, an insecure directory, an unexpected entry or a mismatched identity.
+/// entry, an insecure directory, a misplaced segment or directory, or a
+/// mismatched identity. A regular file whose name is not a segment name is not
+/// history.
 /// `HistoryUnavailable` is a path or read that cannot be completed. Both block
 /// the run; neither is skipped.
 pub const Error = error{ HistoryUnavailable, InvalidHistory, Cancelled, OutOfMemory };

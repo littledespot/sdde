@@ -18,7 +18,11 @@ pub fn prune(io: Io, allocator: std.mem.Allocator, directory: Io.Dir, cutoff_uni
     var count: usize = 0;
     var iterator = directory.iterate();
     while (iterator.next(io) catch return error.SinkFailure) |directory_entry| {
-        const ordinal = feature_log_file.parseSegmentName(directory_entry.name) orelse continue;
+        const ordinal = switch (feature_log_file.classifyBindingEntry(directory_entry)) {
+            .segment => |ordinal| ordinal,
+            .ignored => continue,
+            .invalid => return error.CorruptStream,
+        };
         var file = directory.openFile(io, directory_entry.name, .{
             .mode = .read_only,
             .allow_directory = false,

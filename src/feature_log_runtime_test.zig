@@ -175,6 +175,62 @@ test "restart rejects an insecure segment permission instead of trusting its byt
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, second_runner.process(fact).blocked);
 }
 
+test "restart recovery leaves regular files the engine never names alone and rejects other entries" {
+    const io = std.testing.io;
+    const Case = enum { strays_only, symlinked_entry, nested_directory, misplaced_segment, symlinked_run_entry, symlinked_sibling_entry, nested_sibling_directory };
+    for (std.enums.values(Case)) |case| {
+        var root = std.testing.tmpDir(.{ .iterate = true });
+        defer root.cleanup();
+        try root.dir.createDir(io, "LOGBIND-0", std.Io.File.Permissions.fromMode(0o700));
+        try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
+        var binding_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
+        defer binding_directory.close(io);
+        const candidate = bindingCandidate();
+        const owner = try log_binding.createValidated(std.testing.allocator, candidate);
+        defer log_binding.deinitOwner(owner);
+        const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
+        var clock: FakeClock = .{};
+        var outputs: FakeOutputs = .{};
+        const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
+        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+
+        var first_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
+        defer first_sink.deinit();
+        var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()) };
+        try std.testing.expect(first_runner.process(fact) == .persisted);
+        try std.testing.expect(first_runner.close(shortcode) == .dropped);
+
+        // Stray files in the run directory, this binding and a sibling binding.
+        for ([_][]const u8{ ".DS_Store", "LOGBIND-1/Thumbs.db", "LOGBIND-0/._0001.log" }) |path| {
+            try root.dir.writeFile(io, .{ .sub_path = path, .data = "stray" });
+        }
+        switch (case) {
+            .strays_only => {},
+            .symlinked_entry => try root.dir.symLink(io, "0001.log", "LOGBIND-1/desktop.ini", .{}),
+            .nested_directory => try root.dir.createDir(io, "LOGBIND-1/nested", .default_dir),
+            .misplaced_segment => try root.dir.copyFile("LOGBIND-1/0001.log", root.dir, "0001.log", io, .{}),
+            .symlinked_run_entry => try root.dir.symLink(io, "LOGBIND-1/0001.log", "desktop.ini", .{}),
+            .symlinked_sibling_entry => try root.dir.symLink(io, "../LOGBIND-1/0001.log", "LOGBIND-0/desktop.ini", .{}),
+            .nested_sibling_directory => try root.dir.createDir(io, "LOGBIND-0/nested", .default_dir),
+        }
+
+        var second_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
+        defer second_sink.deinit();
+        var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&second_sink, clock.port(), outputs.console(), outputs.emergency()) };
+        const outcome = second_runner.process(fact);
+        if (case != .strays_only) {
+            try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
+            continue;
+        }
+        try std.testing.expect(outcome == .persisted);
+        try std.testing.expectEqual(@as(u64, 2), outcome.persisted.sequence);
+        try std.testing.expectEqual(@as(u16, 2), outcome.persisted.segment_ordinal);
+        const stray = try root.dir.readFileAlloc(io, "LOGBIND-1/Thumbs.db", std.testing.allocator, .limited(16));
+        defer std.testing.allocator.free(stray);
+        try std.testing.expectEqualStrings("stray", stray);
+    }
+}
+
 test "stream lock acquisition rejects a symbolic link" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{ .iterate = true });

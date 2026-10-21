@@ -1,8 +1,10 @@
 //! Filesystem discovery of the current feature's prior-run log groups for
 //! retention. It only reads. Every prior binding is validated by recovery's
 //! segment inspector against the identity in its first segment header; any
-//! failure is returned, never skipped. A prior run whose event or prompt stream
-//! ends in an active tail is kept whole, so a crashed run is never pruned.
+//! failure is returned, never skipped. A regular file whose name is not a
+//! segment name is not history and is left alone. A prior run whose event or
+//! prompt stream ends in an active tail is kept whole, so a crashed run is never
+//! pruned.
 const std = @import("std");
 const artifacts = @import("../../domain/workflow_artifact_registry.zig");
 const log_binding = @import("../../domain/feature_log_binding.zig");
@@ -47,13 +49,20 @@ pub const Adapter = struct {
             var runs = logs.iterate();
             while (runs.next(self.io) catch |err| return iterationError(err)) |run_entry| {
                 if (std.mem.eql(u8, run_entry.name, history.current.run_id.bytes)) continue;
-                if (run_entry.kind != .directory) return error.InvalidHistory;
+                switch (feature_log_file.classifyContainerEntry(run_entry)) {
+                    .directory => {},
+                    .ignored => continue,
+                    .invalid => return error.InvalidHistory,
+                }
                 var run = try openValidated(self.io, logs, run_entry.name);
                 defer run.close(self.io);
                 var bindings = run.iterate();
                 while (bindings.next(self.io) catch |err| return iterationError(err)) |binding_entry| {
-                    if (binding_entry.kind == .file and std.mem.eql(u8, binding_entry.name, feature_log_file.lock_name)) continue;
-                    if (binding_entry.kind != .directory) return error.InvalidHistory;
+                    switch (feature_log_file.classifyContainerEntry(binding_entry)) {
+                        .directory => {},
+                        .ignored => continue,
+                        .invalid => return error.InvalidHistory,
+                    }
                     var directory = try openValidated(self.io, run, binding_entry.name);
                     defer directory.close(self.io);
                     const candidate = switch (try groupCandidate(self.io, allocator, directory, run_entry.name, binding_entry.name, history.current.feature_id, stream)) {

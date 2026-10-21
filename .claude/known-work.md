@@ -51,13 +51,16 @@ already made.
 - **Clarification answer recovery** is a confirmed implementation gap: fresh answers
   cannot complete the registered recovery path. Refresh rejects new nonempty
   submissions with `AuthenticationRequired`, and provenance rejects nonempty
-  response-ID sets. Treat it as a separate required feature.
+  response-ID sets. Treat it as a separate required feature. *Decided 21 October
+  2026 (ADR 0025):* the account that runs the engine is the actor, and the run that
+  reads valid closed forms accepts them. Implementation hasn't started.
 - **Prior-run crash finalization is not implemented.** §14.10 resolves each prior
   run's policy through a persisted `BootstrapAuthorityState`, which the engine
   lacks. Retention runs (ADR 0026, built 20 October 2026). It keeps any run with an
   active tail, so a crashed run's logs stay until this is decided. Damaged prior
-  logs, and stray files in the log folders, block later runs until someone
-  repairs or removes them.
+  logs block later runs until someone repairs or removes them. Stray regular files
+  in the log folders, such as Finder's `.DS_Store`, are left alone (ADR 0026,
+  amended 21 October 2026).
 - **Cancellation during log reads and under a log lock is reported as a logging
   failure.** The shared segment readers and the feature-log sink port have no
   cancellation outcome, for the current run or for retention. That conflicts with

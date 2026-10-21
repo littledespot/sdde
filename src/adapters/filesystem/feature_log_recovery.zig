@@ -26,18 +26,16 @@ pub fn recover(
     var ordinals: std.ArrayList(u16) = .empty;
     defer ordinals.deinit(allocator);
     var iterator = source.directory.iterate();
-    while (iterator.next(source.io) catch return error.SinkFailure) |entry| {
-        if (entry.kind != .file) return error.CorruptStream;
-        if (feature_log_file.parseSegmentName(entry.name)) |ordinal| {
-            ordinals.append(allocator, ordinal) catch return error.SinkFailure;
-            continue;
-        }
-        if (std.mem.eql(u8, entry.name, feature_log_file.lock_name)) continue;
-        return error.CorruptStream;
-    }
-    const total_segments = countRunSegments(source) catch return error.CorruptStream;
-    const history_next_sequence = historicalNextSequence(source, stream, heading, allocator) catch return error.CorruptStream;
-    if (total_segments > log_limits.max_segments) return error.CorruptStream;
+    while (iterator.next(source.io) catch return error.SinkFailure) |entry| switch (feature_log_file.classifyBindingEntry(entry)) {
+        .segment => |ordinal| ordinals.append(allocator, ordinal) catch return error.SinkFailure,
+        .ignored => {},
+        .invalid => return error.CorruptStream,
+    };
+    const others = scanOtherBindings(source, stream, heading, allocator) catch return error.CorruptStream;
+    const run_segments = std.math.add(usize, ordinals.items.len, others.segments) catch return error.CorruptStream;
+    if (run_segments > log_limits.max_segments) return error.CorruptStream;
+    const total_segments: u8 = @intCast(run_segments);
+    const history_next_sequence = others.next_sequence;
     if (ordinals.items.len == 0) return .{ .empty = .{
         .next_segment_ordinal = 1,
         .next_sequence = history_next_sequence,
@@ -193,14 +191,18 @@ fn headerRow(bytes: []const u8, heading: []const u8, stream: log_stream.Stream) 
     return if (std.mem.startsWith(u8, prefix, rest) or std.mem.startsWith(u8, rest, prefix)) null else error.InvalidSegment;
 }
 
-/// A binding directory holds only consecutive segment files, at most the
-/// stream's segment limit, returned in ascending order.
+/// A binding directory holds consecutive segment files, at most the stream's
+/// segment limit, returned in ascending order. Other regular files are left
+/// alone; any other entry is invalid.
 pub fn segmentOrdinals(io: Io, directory: Io.Dir, ordinals: *[log_limits.max_segments]u16) InspectError!usize {
     var count: usize = 0;
     var iterator = directory.iterate();
     while (iterator.next(io) catch |err| return fileError(err)) |entry| {
-        if (entry.kind != .file) return error.InvalidSegment;
-        const ordinal = feature_log_file.parseSegmentName(entry.name) orelse return error.InvalidSegment;
+        const ordinal = switch (feature_log_file.classifyBindingEntry(entry)) {
+            .segment => |ordinal| ordinal,
+            .ignored => continue,
+            .invalid => return error.InvalidSegment,
+        };
         if (count == ordinals.len) return error.InvalidSegment;
         ordinals[count] = ordinal;
         count += 1;
@@ -313,45 +315,27 @@ fn validRow(allocator: std.mem.Allocator, line: []const u8, columns: usize) Insp
     };
 }
 
-fn countRunSegments(source: Source) !u8 {
-    var count: usize = 0;
-    var iterator = source.run_directory.iterate();
-    while (try iterator.next(source.io)) |entry| switch (entry.kind) {
-        .file => {
-            if (feature_log_file.parseSegmentName(entry.name) != null) {
-                count += 1;
-            } else if (!std.mem.eql(u8, entry.name, feature_log_file.lock_name)) return error.CorruptStream;
-        },
-        .directory => {
-            var binding_directory = try source.run_directory.openDir(source.io, entry.name, .{
-                .iterate = true,
-                .follow_symlinks = false,
-            });
-            defer binding_directory.close(source.io);
-            var segments = binding_directory.iterate();
-            while (try segments.next(source.io)) |entry_segment| {
-                if (entry_segment.kind != .file or feature_log_file.parseSegmentName(entry_segment.name) == null) return error.CorruptStream;
-                count += 1;
-            }
-        },
-        else => return error.CorruptStream,
-    };
-    if (count > log_limits.max_segments) return error.CorruptStream;
-    return @intCast(count);
-}
+/// The run's other bindings of this stream: their segments, which count toward
+/// the run-wide cap, and the sequence after their highest trailer. A sink
+/// without run history has no other bindings.
+const OtherBindings = struct { segments: usize = 0, next_sequence: u64 = 1 };
 
-fn historicalNextSequence(
+fn scanOtherBindings(
     source: Source,
     stream: log_stream.Stream,
     heading: []const u8,
     allocator: std.mem.Allocator,
-) !u64 {
-    if (!source.scans_run_history) return 1;
+) !OtherBindings {
+    if (!source.scans_run_history) return .{};
+    var segment_count: usize = 0;
     var maximum: u64 = 0;
     var iterator = source.run_directory.iterate();
     while (try iterator.next(source.io)) |entry| {
-        if (entry.kind == .file and std.mem.eql(u8, entry.name, feature_log_file.lock_name)) continue;
-        if (entry.kind != .directory) return error.CorruptStream;
+        switch (feature_log_file.classifyContainerEntry(entry)) {
+            .directory => {},
+            .ignored => continue,
+            .invalid => return error.CorruptStream,
+        }
         if (std.mem.eql(u8, entry.name, source.expected_binding.binding_id.bytes)) continue;
         var historical = try source.run_directory.openDir(source.io, entry.name, .{
             .iterate = true,
@@ -360,8 +344,12 @@ fn historicalNextSequence(
         defer historical.close(source.io);
         var segments = historical.iterate();
         while (try segments.next(source.io)) |historical_entry| {
-            const ordinal = feature_log_file.parseSegmentName(historical_entry.name) orelse return error.CorruptStream;
-            if (historical_entry.kind != .file) return error.CorruptStream;
+            const ordinal = switch (feature_log_file.classifyBindingEntry(historical_entry)) {
+                .segment => |ordinal| ordinal,
+                .ignored => continue,
+                .invalid => return error.CorruptStream,
+            };
+            segment_count += 1;
             var file = try historical.openFile(source.io, historical_entry.name, .{
                 .mode = .read_only,
                 .allow_directory = false,
@@ -394,5 +382,5 @@ fn historicalNextSequence(
             maximum = @max(maximum, sequence);
         }
     }
-    return std.math.add(u64, maximum, 1) catch error.CorruptStream;
+    return .{ .segments = segment_count, .next_sequence = std.math.add(u64, maximum, 1) catch return error.CorruptStream };
 }

@@ -1043,7 +1043,7 @@ subgraphs:
       authorize:
         use: prepare-provider-operation-authorization
         with:
-          timeout-ms: 60000
+          timeout-ms: 180000
         on: {ok: phase, failed: terminate-operation, cancelled: terminate-operation}
       phase:
         use: check-model-request-phase

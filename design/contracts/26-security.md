@@ -201,6 +201,11 @@ Every activated run writes beneath the spec being run, never into the editable s
 - Feature log directories use owner-only directory permissions and segments use owner
   read/write, exclusive-create, no-follow regular-file opens; aliases and insecure permissions
   block.
+- In `logs/events` and `logs/prompts`, collection and run directories hold only directories,
+  and binding directories hold only segments. A regular file whose name is not a segment name,
+  such as a file browser's `.DS_Store`, is not log history, and every listing leaves it alone.
+  Any other entry that a level doesn't hold blocks, including a symlink
+  ([ADR 0026, log-folder entries amendment](../decisions/0026-header-identity-log-retention.md#log-folder-entries-amendment--21-october-2026)).
 - One validated exclusive lock capability exists per `(featureId, runId, stream)` while a writer
   is inspecting, recovering, rotating, appending, pruning, or flushing.
 - Each acquisition makes one attempt with the compiler-fixed 2,000 ms deadline and no retry or

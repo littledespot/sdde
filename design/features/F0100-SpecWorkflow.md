@@ -207,8 +207,11 @@ current-authority/applicability validation. Response acceptance and applicabilit
 remain open. §3.12 implements refresh, rendering and write-time protection;
 no stage completion is inferred.
 
-Accepting submitted answers requires a trusted authentication mechanism that has
-not been selected ([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
+Accepting submitted answers requires the trusted authentication mechanism that
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) selects: the
+operating-system account that runs the engine, with the run that reads valid closed
+forms as the act of acceptance. It is not yet implemented
+([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
 Merely editing a form or loading an actor/evidence ID is not authentication. This does not affect user-close file
 protection, which applies even when acceptance is blocked.
 

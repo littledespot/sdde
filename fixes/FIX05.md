@@ -1526,9 +1526,19 @@ Complete the [§17.4 lifecycle](../design/contracts/17-specify.md#174-specificat
 authentication, response publication, current applicability, dependent invalidation,
 response-owned literals, generation, review and readback.
 
-**Decision first:** the trusted authentication source and the persistence model
-(former FIX03 Phase 7: 7A decisions, 7B source-driven resolution, 7C fresh answers).
-Don't treat a closed form as authenticated or fabricate reference citations.
+**Decided 21 October 2026** in
+[ADR 0025](../design/decisions/0025-clarification-answer-authentication.md), which
+covers former FIX03 Phase 7 (7A decisions, 7B source-driven resolution, 7C fresh
+answers):
+- the account that runs the engine is the actor, and the run that reads valid closed
+  forms accepts them;
+- one invalid closed form stops the run, accepts no answers and reports a typed reason
+  for each failing form;
+- evidence goes in the shared actor-evidence registry;
+- the scope is Specify only.
+
+A closed form alone is not authentication, and answers never receive fabricated
+reference citations.
 
 Native [coverage](../src/domain/specification_coverage.zig#L45) cannot discover facts
 that were never extracted. Keep ADR 0021's optional pre-generation source check, and
@@ -2835,6 +2845,19 @@ A third review led to these changes:
   row size limit;
 - the binding directory opens beneath the locked run directory;
 - a prune failure stays the reported cause when release also fails.
+
+**Amended 21 October 2026** (user decision): a stray regular file in the log folders,
+such as Finder's `.DS_Store`, no longer blocks every later run. Two entry classifiers
+now serve every listing of `logs/events` and `logs/prompts`: one for collection and
+run directories, one for binding directories. The listings they serve are prior-run
+discovery, the under-lock check and prune, the current run's recovery and segment
+account, and the debugger. They leave alone a regular file whose name is not a
+segment name. These still block:
+- symlinks and other special entries;
+- directories inside a binding directory;
+- segment-named files outside one.
+
+The current run's two scans of its other bindings are now one pass.
 
 Two shared logging gaps stay as known work:
 - cancellation during segment reads and under the lock is reported as a logging
