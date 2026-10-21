@@ -29,19 +29,14 @@ pub const Chunk = struct {
     id: identity.ChunkId,
     source_id: identity.SourceId,
     block_id: identity.BlockId,
-    /// Position within its block; a block holds one or more chunks.
     ordinal: u32,
     /// Identity source map for the current lossless reader; bytes are never copied
     /// into a competing chunk body or reread from a source path.
     span: input.Span,
-    /// Source lines that introduce a list item chunk: its nearest heading and
-    /// lead-in paragraph. They give the model context and are never citable.
-    lead_in: []const input.Span = &.{},
 };
 pub const Chunks = struct {
     state_id: identity.StateId,
-    /// The native partition (ADR 0027), owned by `reference_chunk_partition.zig`.
-    partition: enum { source_list_items_v1 },
+    partition: enum { source_blocks_v1 },
     entries: []const Chunk,
 };
 pub const Inputs = struct { corpus: Corpus, chunks: Chunks };

@@ -1,6 +1,6 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 21 October 2026. It mirrors the repository's active fix
+Dated snapshot, last updated 20 October 2026. It mirrors the repository's active fix
 record, which stays authoritative. Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
 
@@ -10,14 +10,13 @@ already made.
 
 ## Spec workflow failure classes seen in live runs
 
-- **Extraction collapsed structured sources.** Extraction returned one claim for a
-  whole Markdown list of distinct requirements, in every hello-world sample. It also
-  weakened an obligation: "must renew" became "may renew", and review judged that
-  supported. *Built 21 October 2026 (ADR 0027):* each top-level list item is its own
-  extraction chunk, with its heading and lead-in paragraph as context. Not yet
-  measured live:
-  - whether claims stay per item and keep obligation strength;
-  - whether the added calls and records fit the budget.
+- **Extraction collapses structured sources.** Extraction returns one claim for a
+  whole Markdown list of distinct requirements, in every hello-world sample. It has
+  also weakened an obligation: "must renew" became "may renew", and review judged
+  that supported. *Proposed, not approved:* segment list items natively before
+  extraction. Measure first: replay both cases' retained extraction requests, split
+  per item. That replay is billed and needs bounded approval. Then decide the §16
+  chunking and extraction amendment.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
   `candidate_omission`, has judged byte-identical text both supported and omitted,

@@ -297,10 +297,10 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         try std.testing.expectEqualStrings("openai.gpt-oss-20b-1:0", context.model);
         try std.testing.expectEqualStrings("low", context.reasoning_effort.?);
         try std.testing.expectEqual(.native_schema, context.response_mode);
-        // The first exchange extracts the source's first chunk, which starts at
-        // its first line (ADR 0027 partitions list items into later chunks).
         var lines = std.mem.tokenizeScalar(u8, example.sources[0].text, '\n');
-        const first_requirement = lines.next() orelse return error.MissingBaselineSourceRequirement;
+        const first_requirement = while (lines.next()) |line| {
+            if (std.mem.startsWith(u8, line, "- ")) break line;
+        } else return error.MissingBaselineSourceRequirement;
         const quoted = try std.json.Stringify.valueAlloc(a, first_requirement, .{});
         var source_visible = false;
         for (context.content) |content| if (std.mem.indexOf(u8, content.bytes(), first_requirement) != null or

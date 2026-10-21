@@ -28,23 +28,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         .passive_literals = try passiveChoices(scratch, registry, inputs, &.{scope}),
         .exact_candidates = selected.items,
     };
-    // A list item chunk shows the text that introduces it (ADR 0027). It is
-    // read-only context: citations still select only this chunk's source_lines.
-    const lead_in = try scratch.alloc([]const u8, chunk.chunk.lead_in.len);
-    for (lead_in, chunk.chunk.lead_in) |*text, span| text.* = std.mem.trimEnd(u8, chunk.source.bytes[span.start.byte..span.end.byte], "\r\n");
-    const body = if (lead_in.len == 0)
-        try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload)
-    else body: {
-        const introduced = .{
-            .source_id = payload.source_id,
-            .block_id = payload.block_id,
-            .lead_in = lead_in,
-            .source_lines = payload.source_lines,
-            .passive_literals = payload.passive_literals,
-            .exact_candidates = payload.exact_candidates,
-        };
-        break :body try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(introduced), scratch, introduced);
-    };
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
     const packet = try packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
     defer packets.release(packet);
     const witnessed = try packets.withOriginalSources(allocator, packet, inputs);

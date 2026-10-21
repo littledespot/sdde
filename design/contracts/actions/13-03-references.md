@@ -537,10 +537,9 @@ current registry. No separate resolver action or historical-schema registry is n
 
 ## `ChunkReferenceAction`
 
-- **Input:** one identified source, its content blocks and the native list-item partition
-  ([ADR 0027](../../decisions/0027-list-item-extraction-chunks.md))
-- **Output:** ordered bounded chunk proposals with any non-citable lead-in spans
-- **Responsibility:** Partition one source's blocks while preserving exact source ranges.
+- **Input:** one identified content block and workflow-declared chunking contract
+- **Output:** ordered bounded chunk proposals
+- **Responsibility:** Partition one block while preserving exact source ranges.
 
 ## `AssignReferenceChunkIdAction`
 

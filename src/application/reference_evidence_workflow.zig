@@ -53,9 +53,7 @@ pub const ValidateChunks = struct {
         const directory = values.read(&input.step.data, feature_values.directory, feature.Directory) catch |operation_error| return operation_error;
         const corpus = values.read(&input.step.data, corpus_schema, evidence.Corpus) catch |operation_error| return operation_error;
         const chunks = values.read(&input.step.data, chunks_schema, evidence.Chunks) catch |operation_error| return operation_error;
-        var scratch: std.heap.ArenaAllocator = .init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), source.*, directory.selector.feature_id, corpus.*, chunks.*) catch |operation_error| return operation_error;
+        const result = self.action.execute(source.*, directory.selector.feature_id, corpus.*, chunks.*) catch |operation_error| return operation_error;
         return publish(self.allocator, inputs_schema, evidence.Inputs, result);
     }
 };

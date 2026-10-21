@@ -244,7 +244,7 @@ Four registered operations extend that boundary:
 | Operation | Contract |
 | --- | --- |
 | `assign-reference-identities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
-| `build-reference-chunks` | Identified corpus → state-bound chunks; `source_list_items_v1` makes each top-level list item and each run of text between lists a chunk within its block; a list whose lead-in holds an exact value stays whole with its text ([ADR 0027](../decisions/0027-list-item-extraction-chunks.md)). |
+| `build-reference-chunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
 | `validate-reference-chunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
 | `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
@@ -313,8 +313,8 @@ explicit in the selected YAML:
   when preservation produces at least one deterministic claim.
 - Missing/duplicate/foreign chunks fail; any blocked chunk makes total accounting
   blocked, even when other chunks contain claims.
-- `source_list_items_v1` chunks tile each block exactly, so exact chunk coverage also
-  proves block coverage.
+- `source_blocks_v1` has one chunk per block, so exact chunk coverage also proves block
+  coverage.
 - Claim/citation IDs start at one in each fresh reference state and follow
   chunk/claim/citation order; response arrival order cannot change them.
 - No ID counters or ledgers are persisted.
@@ -802,8 +802,7 @@ validators:
   provide the explicit native summary path described in §3.9.
 
 - Each extraction packet contains the complete captured chunk as lossless `source_lines`
-  with request-local IDs, scoped passive choices and token candidates. An item chunk's
-  packet also shows its non-citable `lead_in` heading and paragraph ([ADR 0027](../decisions/0027-list-item-extraction-chunks.md)).
+  with request-local IDs, scoped passive choices and token candidates.
 - Reconciliation packets retain all partition claim/summary membership and exact-token
   references.
 - Collection reads only schema-admitted phase candidates or summary assemblies

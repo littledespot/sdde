@@ -10,7 +10,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "claim_ids": [
@@ -21,7 +21,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "clarification_response_ids": []
@@ -46,7 +46,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "claim_ids": [
@@ -57,7 +57,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "clarification_response_ids": []
@@ -82,7 +82,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "claim_ids": [
@@ -93,7 +93,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "clarification_response_ids": []
@@ -120,7 +120,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "claim_ids": [
@@ -131,7 +131,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "clarification_response_ids": []
@@ -157,7 +157,7 @@
               "ordinal": 2
             },
             {
-              "ordinal": 4
+              "ordinal": 3
             }
           ],
           "claim_ids": [
@@ -168,7 +168,7 @@
               "ordinal": 2
             },
             {
-              "ordinal": 4
+              "ordinal": 3
             }
           ],
           "clarification_response_ids": []
@@ -209,7 +209,7 @@
             "ordinal": 2
           },
           {
-            "ordinal": 4
+            "ordinal": 3
           }
         ],
         "clarification_response_ids": []
@@ -219,7 +219,7 @@
           {
             "exact_copy": {
               "claim_id": {
-                "ordinal": 3
+                "ordinal": 4
               }
             }
           },
@@ -278,7 +278,7 @@
                 "ordinal": 2
               },
               {
-                "ordinal": 4
+                "ordinal": 3
               }
             ],
             "claim_ids": [
@@ -289,7 +289,7 @@
                 "ordinal": 2
               },
               {
-                "ordinal": 4
+                "ordinal": 3
               }
             ],
             "clarification_response_ids": []
@@ -324,7 +324,7 @@
                 "ordinal": 2
               },
               {
-                "ordinal": 4
+                "ordinal": 3
               }
             ],
             "claim_ids": [
@@ -335,7 +335,7 @@
                 "ordinal": 2
               },
               {
-                "ordinal": 4
+                "ordinal": 3
               }
             ],
             "clarification_response_ids": []

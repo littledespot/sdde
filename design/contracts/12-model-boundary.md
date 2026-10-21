@@ -307,9 +307,6 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 ### 12.5 Low-capability model operating rules
 
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
-  a reference chunk is one top-level list item or one run of text between lists,
-  clipped to its reader block; a list whose lead-in holds an exact value stays
-  whole with its text ([ADR 0027](../decisions/0027-list-item-extraction-chunks.md));
 - strict JSON schema with enums and `additionalProperties: false`;
 - temperature `0.1` whenever the selected registered model supports temperature; omit
   the control only when unsupported, without relying on it for correctness (workflow
@@ -758,8 +755,7 @@ authenticated answer acceptance and protected history (§23.2).
 
 - Persisted extraction-contract metadata is derived from the current compiled workflow,
   complete result schema, composition and part-operation bindings, plus the native
-  `source_list_items_v1` partition identity ([ADR 0027](../decisions/0027-list-item-extraction-chunks.md)). No separate partition
-  resource is configured.
+  `source_blocks_v1` partition identity. No separate partition resource is configured.
 - `ReferenceSnapshot.extraction_contract` records the workflow ID/version, extraction
   and assembly nodes, `model-request/v1`, exact schema/composition resource IDs and
   bytes, and part-operation IDs/parameters. Derived part schemas remain owned by the

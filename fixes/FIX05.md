@@ -1199,32 +1199,6 @@ First, replay both cases' retained extraction requests split per item, with
 repetitions under bounded approval. Score claim count and obligation-strength
 preservation.
 
-**Implemented offline — 21 October 2026** as
-[ADR 0027](../design/decisions/0027-list-item-extraction-chunks.md). The user
-directed "implement B7" and chose:
-- one extraction call per top-level list item, with nested items kept with their
-  parent;
-- lead-in context: the nearest heading and the list's introducing paragraph, which
-  are non-citable;
-- implementing first, then measuring with a separately approved live pair instead
-  of the billed replay.
-
-Mechanism:
-- The native partition `source_list_items_v1` replaces `source_blocks_v1` in place.
-  The shared Markdown parser classifies list markers.
-- Reader blocks are unchanged; chunks tile them.
-- The chunk validator and snapshot readback compare against the recomputed
-  partition.
-- `specification-state` is now v20.
-
-Three frozen calibration captures with list sources had claim and citation IDs
-renumbered for the new chunk order, without changing meaning. Still to measure
-live:
-- claim count;
-- obligation-strength preservation (B7's weakening half has no native check);
-- the extra extraction calls;
-- downstream record and review cost against the 100,000-token budget.
-
 ### B8. The model classifies and disposes exact-value tokens
 
 In the B3 baseline, loan-renewal's reconciliation asked the model to dispose its two

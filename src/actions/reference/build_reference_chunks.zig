@@ -12,6 +12,17 @@ pub const Action = struct {
     };
 
     pub fn execute(_: Action, allocator: std.mem.Allocator, corpus: evidence.Corpus) evidence.Error!evidence.Chunks {
-        return @import("../../domain/reference_chunk_partition.zig").partition(allocator, corpus);
+        var chunks: std.ArrayList(evidence.Chunk) = .empty;
+        for (corpus.sources) |source| for (source.blocks) |block| {
+            const ordinal: u32 = @intCast(chunks.items.len + 1);
+            try chunks.append(allocator, .{
+                .id = try evidence.identity.chunkId(allocator, ordinal),
+                .source_id = source.id,
+                .block_id = block.id,
+                .ordinal = 1,
+                .span = block.span,
+            });
+        };
+        return .{ .state_id = corpus.state_id, .partition = .source_blocks_v1, .entries = try chunks.toOwnedSlice(allocator) };
     }
 };

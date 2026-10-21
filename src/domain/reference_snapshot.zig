@@ -48,7 +48,7 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
     const path = @import("relative_directory_path.zig");
     path.validate(value.directory.bytes) catch return error.InvalidReferenceSnapshot;
     if (corpus.state_id.bytes.len == 0 or !corpus.state_id.eql(inputs.chunks.state_id) or !corpus.state_id.eql(ledger.state_id) or
-        corpus.sources.len != corpus.source_mappings.len or
+        corpus.sources.len != corpus.source_mappings.len or corpus.block_mappings.len != inputs.chunks.entries.len or
         ledger.chunks.len != inputs.chunks.entries.len or ledger.next_claim_ordinal != ledger.claims.len + 1 or
         ledger.next_citation_ordinal != ledger.citations.len + 1 or value.dispositions.len != ledger.claims.len) return error.InvalidReferenceSnapshot;
     var block_index: usize = 0;
@@ -59,15 +59,18 @@ pub fn validate(allocator: std.mem.Allocator, value: Snapshot) Error!void {
         for (corpus.sources[0..source_index]) |prior| if (std.mem.eql(u8, prior.path.bytes, source.path.bytes)) return error.InvalidReferenceSnapshot;
         var coverage: @import("reference_source_coverage.zig").Cursor = .{ .bytes = source.bytes };
         for (source.blocks, 0..) |block, index| {
-            if (block_index >= corpus.block_mappings.len or block.id.ordinal != block_index + 1 or block.ordinal != index + 1) return error.InvalidReferenceSnapshot;
+            if (block_index >= inputs.chunks.entries.len or block.id.ordinal != block_index + 1 or block.ordinal != index + 1) return error.InvalidReferenceSnapshot;
             coverage.accept(block.span) catch return error.InvalidReferenceSnapshot;
-            if (corpus.block_mappings[block_index].canonical.ordinal != block.id.ordinal) return error.InvalidReferenceSnapshot;
+            const chunk = inputs.chunks.entries[block_index];
+            var buffer: [32]u8 = undefined;
+            if (!chunk.id.eql(e.identity.formatChunkId(&buffer, @intCast(block_index + 1))) or chunk.source_id.ordinal != source.id.ordinal or
+                chunk.block_id.ordinal != block.id.ordinal or chunk.ordinal != 1 or !std.meta.eql(chunk.span, block.span) or
+                corpus.block_mappings[block_index].canonical.ordinal != block.id.ordinal) return error.InvalidReferenceSnapshot;
             block_index += 1;
         }
         coverage.finish() catch return error.InvalidReferenceSnapshot;
     }
-    if (block_index != corpus.block_mappings.len) return error.InvalidReferenceSnapshot;
-    @import("reference_chunk_partition.zig").validate(allocator, corpus, inputs.chunks) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceSnapshot;
+    if (block_index != inputs.chunks.entries.len) return error.InvalidReferenceSnapshot;
     var claim_index: usize = 0;
     var citation_index: usize = 0;
     for (inputs.chunks.entries, ledger.chunks) |chunk, result| {
