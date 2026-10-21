@@ -3,15 +3,15 @@ const binding = @import("diagnostic_binding.zig");
 const debug = @import("../../src/domain/request_debugger.zig");
 
 const catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
 ;
 const prompt_catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"anthropic.claude-3-5-haiku-20241022-v1:0","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
 ;
 const captured: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "MOCK-generation",
     .workflow_id = "MOCK-workflow",
     .workflow_version = 1,
@@ -39,8 +39,8 @@ test "diagnostic binding validates requested low high and omitted effort without
 test "diagnostic model change derives target deployment config and preserves omission and content" {
     var original = captured;
     original.response_mode = .prompt_only;
-    const selected = try binding.rebind(std.testing.allocator, original, prompt_catalogue, "anthropic.claude-3-5-haiku-20241022-v1:0", null);
-    try std.testing.expectEqualStrings("anthropic.claude-3-5-haiku-20241022-v1:0", selected.model);
+    const selected = try binding.rebind(std.testing.allocator, original, prompt_catalogue, "MOCK.vendor.model-v1:0", null);
+    try std.testing.expectEqualStrings("MOCK.vendor.model-v1:0", selected.model);
     try std.testing.expectEqual(.@"us-west-2", selected.provider_config.aws_bedrock.region);
     try std.testing.expectEqualDeep(original.controls, selected.controls);
     try std.testing.expectEqualDeep(original.content, selected.content);
@@ -71,7 +71,7 @@ test "diagnostic binding rejects unknown model effort and incompatible provider 
     // A currently declared different response mode cannot silently rewrite a
     // historical request, even when the target supports both modes.
     try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, captured, prompt_catalogue, captured.model, "low"));
-    try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, captured, catalogue, "anthropic.claude-3-5-haiku-20241022-v1:0", null));
+    try std.testing.expectError(error.InvalidEvaluationContract, binding.rebind(std.testing.allocator, captured, catalogue, "MOCK.vendor.model-v1:0", null));
 }
 
 test "diagnostic binding rejects the entire malformed duplicate or unsupported catalogue" {
@@ -80,11 +80,11 @@ test "diagnostic binding rejects the entire malformed duplicate or unsupported c
         ,
         \\{"providers":[],"providers":[]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2","family":"unknown","maxOutputTokens":16000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"us-west-2","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"unknown-1","family":"gpt-oss","maxOutputTokens":16000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
         ,
         "not-json",
     };
@@ -96,19 +96,19 @@ test "diagnostic binding rejects the entire malformed duplicate or unsupported c
 test "diagnostic authorization accepts content edits and rejects binding drift before dispatch" {
     var authority: binding.Authorization = .{ .binding = captured };
     const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
-    try std.testing.expectEqual(.openai_oss, try binding.Authorization.authorize(context, captured));
+    try std.testing.expectEqual(.@"gpt-oss", (try binding.Authorization.authorize(context, captured)).bedrockFamily().?);
     var edited = captured;
     edited.content = &.{.{ .user = "MOCK changed prompt" }};
     edited.schema = "MOCK changed schema";
-    try std.testing.expectEqual(.openai_oss, try binding.Authorization.authorize(context, edited));
+    try std.testing.expectEqual(.@"gpt-oss", (try binding.Authorization.authorize(context, edited)).bedrockFamily().?);
     for (0..8) |mode| {
         var rejected = captured;
         switch (mode) {
             // A description cannot replay with a maximum other than the catalogue's.
-            7 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 4096 } } },
+            7 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
             0 => rejected.provider = "unknown-provider",
-            1 => rejected.model = "anthropic.claude-3-5-haiku-20241022-v1:0",
-            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } },
+            1 => rejected.model = "MOCK.vendor.model-v1:0",
+            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
             3 => rejected.reasoning_effort = "high",
             4 => rejected.controls.temperature = null,
             5 => rejected.response_mode = .prompt_only,
@@ -119,20 +119,25 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
     }
 }
 
-test "diagnostic authorization derives request profile from each validated registered tuple" {
+test "diagnostic authorization derives the family from each validated registered tuple" {
     const registered = @import("../../src/composition/provider_model_contracts.zig");
     for (registered.registry.entries) |entry| {
-        var selected = captured;
-        selected.provider = entry.provider.bytes;
-        selected.model = entry.model.bytes;
-        selected.provider_config = .{ .aws_bedrock = .{ .region = entry.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } };
-        selected.controls = entry.capabilities.inferenceControls();
-        selected.response_mode = if (entry.capabilities.structured_response == .bedrock_json_schema) .native_schema else .prompt_only;
-        selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];
-        var authority: binding.Authorization = .{ .binding = selected };
-        const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
-        try std.testing.expectEqual(entry.bedrock_request_profile, try binding.Authorization.authorize(context, selected));
-        authority.binding.model = "unregistered-model";
-        try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, authority.binding));
+        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        if (entry.facts != .aws_bedrock) continue;
+        for (@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids) |model| {
+            var selected = captured;
+            selected.provider = entry.provider.bytes;
+            selected.model = model;
+            selected.provider_config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = entry.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 } } };
+            selected.controls = entry.capabilities.inferenceControls();
+            selected.response_mode = if (entry.capabilities.structured_response == .native_json_schema) .native_schema else .prompt_only;
+            selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];
+            var authority: binding.Authorization = .{ .binding = selected };
+            const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
+            try std.testing.expectEqualDeep(entry.facts, try binding.Authorization.authorize(context, selected));
+            // Another provider family's configuration never authorizes a Bedrock replay.
+            authority.binding.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } };
+            try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, authority.binding));
+        }
     }
 }

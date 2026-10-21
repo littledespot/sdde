@@ -1,6 +1,6 @@
 //! Shared validation of the frozen diagnostic cohort's production requests.
 const std = @import("std");
-const transport = @import("../../src/adapters/provider/bedrock_transport.zig");
+const transport = @import("../../src/adapters/provider/model_http_transport.zig");
 const Description = @import("../../src/domain/model_request_description.zig").Description;
 
 fn protocol(a: std.mem.Allocator) !@import("generation_comparison.zig").Protocol {
@@ -25,13 +25,22 @@ pub fn maximumOutput(a: std.mem.Allocator) !@import("../../src/domain/llm_provid
     return (try protocol(a)).max_output_tokens;
 }
 
+/// The frozen cohort is one Bedrock binding; no other family's target qualifies.
+fn bedrockTarget(wire: transport.Request) error{FrozenBindingRejected}!@FieldType(transport.Target, "aws_bedrock") {
+    return switch (wire.target) {
+        .aws_bedrock => |target| target,
+        .anthropic => error.FrozenBindingRejected,
+    };
+}
+
 pub fn validateWire(a: std.mem.Allocator, wire: transport.Request) !void {
-    try @import("model_cost_policy.zig").require(.{ .bytes = "aws-bedrock" }, wire.model);
+    const target = try bedrockTarget(wire);
+    try @import("model_cost_policy.zig").require(.generation, .{ .bytes = "aws-bedrock" }, target.model);
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const frozen = try protocol(arena.allocator());
-    if (wire.kind != .inference or !std.mem.eql(u8, @tagName(wire.region), frozen.region) or
-        !std.mem.eql(u8, wire.model.bytes, frozen.model)) return error.FrozenBindingRejected;
+    if (target.kind != .inference or !std.mem.eql(u8, @tagName(target.region), frozen.region) or
+        !std.mem.eql(u8, target.model.bytes, frozen.model)) return error.FrozenBindingRejected;
     // The frozen maximum output is a bound setting: a drifted catalogue cannot send another.
     const body = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), wire.body, .{}) catch |err|
         return if (err == error.OutOfMemory) error.OutOfMemory else error.FrozenBindingRejected;
@@ -42,6 +51,7 @@ pub fn validateWire(a: std.mem.Allocator, wire: transport.Request) !void {
 
 pub fn validateDescription(a: std.mem.Allocator, description: Description, wire: transport.Request, expected_models: *const @import("../../src/domain/config.zig").ModelsConfig) !void {
     try validateWire(a, wire);
+    const target = try bedrockTarget(wire);
     @import("diagnostic_binding.zig").validateBinding(description) catch return error.FrozenBindingRejected;
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
@@ -54,8 +64,8 @@ pub fn validateDescription(a: std.mem.Allocator, description: Description, wire:
         !@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
         !std.mem.eql(u8, description.provider, expected.provider) or !std.mem.eql(u8, description.model, expected.model) or
         !std.meta.eql(temperature, @as(?f64, frozen.temperature)) or
-        !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = wire.region, .max_output_tokens = frozen.max_output_tokens } }) or
-        !std.mem.eql(u8, description.model, wire.model.bytes)) return error.FrozenBindingRejected;
+        !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = target.region, .family = frozen.family, .max_output_tokens = frozen.max_output_tokens } }) or
+        !std.mem.eql(u8, description.model, target.model.bytes)) return error.FrozenBindingRejected;
     if (std.mem.eql(u8, description.model_slot, frozen.generation_slot) and
         (description.reasoning_effort == null or !std.mem.eql(u8, description.reasoning_effort.?, @tagName(frozen.reasoning_effort)))) return error.FrozenBindingRejected;
 }
@@ -76,7 +86,7 @@ test "frozen slot controls retain each role's effort without substituting genera
         const description: Description = .{
             .provider = frozen.provider,
             .model = frozen.model,
-            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = frozen.max_output_tokens } },
+            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = frozen.family, .max_output_tokens = frozen.max_output_tokens } },
             .model_slot = example.slot,
             .workflow_id = "current-native-workflow",
             .workflow_version = 1,
@@ -89,7 +99,7 @@ test "frozen slot controls retain each role's effort without substituting genera
             .reasoning_effort = example.effort,
             .operation_kind = .inference,
         };
-        const wire: transport.Request = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model }, .kind = .inference, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "", .deadline_monotonic_ms = 1 };
+        const wire: transport.Request = .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model }, .kind = .inference } }, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "", .deadline_monotonic_ms = 1 };
         try validateDescription(a, description, wire, &models);
         var changed = description;
         changed.reasoning_effort = "medium";

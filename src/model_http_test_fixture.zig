@@ -1,8 +1,8 @@
 //! In-memory sockets and event-driven faults below the concrete HTTP adapter.
 //! All filesystem, process, DNS and real network operations remain disabled.
 const std = @import("std");
-const http = @import("adapters/provider/bedrock_http.zig");
-const transport = @import("adapters/provider/bedrock_transport.zig");
+const http = @import("adapters/provider/model_http_exchange.zig");
+const transport = @import("adapters/provider/model_http_transport.zig");
 const lease = @import("ports/provider_authorization_lease.zig");
 
 pub const Adapter = http.HttpAdapter(openRequest);
@@ -78,7 +78,7 @@ pub const Fixture = struct {
     }
 
     pub fn request(self: *const Fixture, kind: @import("domain/llm_provider_operation.zig").ProviderOperationKind) transport.Request {
-        return .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = kind, .body = "{\"messages\":[]}", .api_key = &self.canary, .deadline_monotonic_ms = 1100 };
+        return .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = kind } }, .body = "{\"messages\":[]}", .api_key = &self.canary, .deadline_monotonic_ms = 1100 };
     }
 
     pub fn expectJoined(self: *const Fixture) !void {

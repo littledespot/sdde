@@ -5,9 +5,9 @@ const configuration = @import("configuration.zig");
 
 pub fn run(io: std.Io, allocator: std.mem.Allocator, config: configuration.Config, key: []const u8, inputs: c.Capture, store: @import("evidence.zig").Store) !@import("report.zig").Report {
     try configuration.validate(config);
-    try @import("model_cost_policy.zig").require(.{ .bytes = if (config.api == .bedrock_converse) "aws-bedrock" else "openai" }, c.ModelId.parse(config.model).?);
+    try @import("model_cost_policy.zig").require(.judge, .{ .bytes = if (config.api == .bedrock_converse) "aws-bedrock" else "openai" }, c.ModelId.parse(config.model).?);
     var clock: @import("../../src/adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
-    var transport: @import("../../src/adapters/provider/bedrock_http.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
+    var transport: @import("../../src/adapters/provider/model_http_exchange.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
     var adapter: union(configuration.Api) {
         openai_responses: @import("http.zig").Adapter,
         bedrock_converse: @import("bedrock.zig").Adapter,

@@ -97,6 +97,7 @@ fn report() reports.Report {
             .api = .bedrock_converse,
             .model = generation.model,
             .region = .@"ap-southeast-2",
+            .family = .@"gpt-oss",
             .reasoning_effort = .low,
             .temperature = 0.1,
             .timeout_ms = 120000,
@@ -158,7 +159,7 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
     const a = arena.allocator();
     const bytes = try reports.json(a, report());
     const parsed = try reports.parse(a, bytes);
-    try std.testing.expectEqualStrings("evaluation-report/v7", parsed.schema);
+    try std.testing.expectEqualStrings("evaluation-report/v8", parsed.schema);
     try std.testing.expectEqualDeep(report().acceptance, parsed.acceptance);
     for ([_][]const u8{ "schema", "prompt_revision", "judgment_schema", "protocol_sha256", "acceptance", "grader_qualification" }) |key| {
         var tree = try @import("../../src/domain/strict_json.zig").parse(a, bytes, c.json_limits, false, null);
@@ -167,7 +168,7 @@ test "persisted evaluation reports require explicit acceptance and protocol iden
         try std.testing.expectError(error.InvalidEvaluationContract, reports.parse(a, try std.json.Stringify.valueAlloc(a, tree.value, .{})));
     }
     for ([_][2][]const u8{
-        .{ "evaluation-report/v7", "evaluation-report/v6" },
+        .{ "evaluation-report/v8", "evaluation-report/v7" },
         // Retired acceptance shapes: judge independence and a model-scored decision union.
         .{ "\"acceptance\": {", "\"acceptance\": {\"independence\": \"unknown_generation\"," },
         .{ "\"decision\": \"human_adjudication_required\"", "\"decision\": {\"unresolved\": \"human_adjudication_required\"}" },

@@ -79,7 +79,8 @@ pub const Runtime = struct {
 
     pub const Credentials = union(enum) {
         environment: *const std.process.Environ.Map,
-        snapshot: ?@import("../adapters/provider/bedrock_api_key.zig").Snapshot,
+        /// Harness-supplied keys; ownership of each snapshot transfers here.
+        snapshots: @import("../adapters/provider/provider_api_key.zig").Supplied,
     };
 
     pub fn init(self: *Runtime, io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, control: pipeline.NodeRuntime) void {
@@ -130,13 +131,15 @@ pub const Runtime = struct {
     }
 
     /// Construct the single invocation after successful bootstrap. Takes ownership
-    /// of a supplied snapshot; environment capture stays in provider preparation.
+    /// of supplied snapshots; environment capture stays in provider preparation.
     pub fn invocation(self: *Runtime, arguments: []const []const u8, credentials: Credentials) engine_invocation.Assembly {
         std.debug.assert(self.boot == .ready and !self.invocation_created);
         self.invocation_created = true;
         switch (credentials) {
             .environment => |environment| self.provider_runtime.environment = environment,
-            .snapshot => |snapshot| self.provider_runtime.authorization.material = if (snapshot) |value| .{ .ready = value } else .unavailable,
+            .snapshots => |supplied| for (std.enums.values(@import("../adapters/provider/provider_api_key.zig").Family)) |family| {
+                if (supplied.get(family)) |value| self.provider_runtime.authorization.materials.set(family, .{ .ready = value });
+            },
         }
         var result = engine_invocation.Assembly.init(self.allocator, &self.boot.ready, arguments, &self.native.registry, self.providers.bind(), self.control);
         result.provider_clock = self.clock.clock();
@@ -157,7 +160,7 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
         .failed => |failure| .{ .bootstrap_failed = failure },
         .cancelled => .{ .execution = .cancelled },
         .ready => execute: {
-            var invocation = assembly.invocation(arguments, if (environment) |map| .{ .environment = map } else .{ .snapshot = null });
+            var invocation = assembly.invocation(arguments, if (environment) |map| .{ .environment = map } else .{ .snapshots = .initFill(null) });
             defer invocation.deinit();
             const outcome = workflow_engine.run(invocation.bindings());
             if (outcome.executionStatus() == .needs_user) if (invocation.pipeline_runner) |*runner| {

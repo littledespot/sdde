@@ -7,7 +7,7 @@ const acquisition = @import("../harness/baseline/acquisition.zig");
 const dispatch = @import("../harness/baseline/dispatch.zig");
 const fixture = @import("../harness/e2e/fixture.zig");
 const files = @import("../harness/files.zig");
-const transport = @import("../../src/adapters/provider/bedrock_transport.zig");
+const transport = @import("../../src/adapters/provider/model_http_transport.zig");
 const paths: frozen_inputs.InputPaths = .{
     .protocol = "test/calibration/semantic-simplicity/protocol.json",
     .cases = "test/calibration/semantic-simplicity/cases.json",
@@ -222,7 +222,7 @@ test "test.integration.baseline freezes explicit scored rubric and refuses evalu
 
 const Fault = enum { none, source_changed, response_capture_failed };
 const Wire = struct {
-    native: @import("../../src/bedrock_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response },
+    native: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response },
     parent: std.Io.Dir,
     facts: *acquisition.Facts,
     gate: *dispatch.Gate,

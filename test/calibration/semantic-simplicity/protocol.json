@@ -1,10 +1,11 @@
 {
-  "schema": 2,
+  "schema": 3,
   "cohort": "small",
   "provider": "aws-bedrock",
   "model": "openai.gpt-oss-20b-1:0",
   "generation_slot": "spec_generation",
   "region": "ap-southeast-2",
+  "family": "gpt-oss",
   "reasoning_effort": "low",
   "response_mode": "native_schema",
   "temperature": 0.1,

@@ -835,7 +835,7 @@ test "nested type-disjoint alternatives accept but overlapping and nonobject res
     try std.testing.expect(shapes.get("kind") == null);
     try std.testing.expectEqualStrings("string", shapes.get("types").?.array.items[0].string);
     try std.testing.expectEqualStrings("object", shapes.get("types").?.array.items[1].string);
-    const bedrock = (try std.json.parseFromSlice(std.json.Value, a, try projection.render(a, text_schema, .bedrock), .{})).value;
+    const bedrock = (try std.json.parseFromSlice(std.json.Value, a, try projection.render(a, text_schema, .native), .{})).value;
     const alternatives = bedrock.object.get("properties").?.object.get("value").?.object.get("anyOf").?.array.items;
     try std.testing.expectEqual(@as(usize, 2), alternatives.len);
     try std.testing.expectEqualStrings("object", alternatives[1].object.get("type").?.string);

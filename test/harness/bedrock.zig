@@ -7,7 +7,7 @@ const packet = @import("packet.zig");
 const http = @import("http.zig");
 const encoding = @import("../../src/adapters/provider/bedrock_request.zig");
 const decoding = @import("../../src/adapters/provider/bedrock_response.zig");
-const transport = @import("../../src/adapters/provider/bedrock_transport.zig");
+const transport = @import("../../src/adapters/provider/model_http_transport.zig");
 const lease = @import("../../src/ports/provider_authorization_lease.zig");
 const operation = @import("../../src/domain/llm_provider_operation.zig");
 const strict = @import("../../src/domain/strict_json.zig");
@@ -16,7 +16,6 @@ const Region = @import("../../src/domain/llm_provider_contracts.zig").BedrockReg
 pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture, correction: ?@import("correction.zig").Correction) c.Error![]const u8 {
     try configuration.validate(config);
     if (config.api != .bedrock_converse) return error.InvalidEvaluationContract;
-    const supported = @import("../../src/composition/provider_model_contracts.zig").registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(config.model).?) orelse return error.InvalidEvaluationContract;
     const judged = [_]operation.ModelVisibleContent{
         .{ .system = packet.instructions },
         .{ .user = try packet.input(a, capture) },
@@ -33,8 +32,8 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .schema = .{ .native = .{ .guidance = schema, .structure = schema } },
         .schema_name = "rubric_judgment",
         .temperature = if (config.temperature != null) .fixed else null,
-        .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
-        .request_profile = supported.bedrock_request_profile,
+        .reasoning_effort = @import("../../src/adapters/provider/model_text_request.zig").reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
+        .family = config.family.?,
         .max_output_tokens = config.max_output_tokens,
     }, .inference) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
@@ -59,9 +58,7 @@ pub const Adapter = struct {
         const now = self.clock.now() catch return .{ .failure = .provider_failed };
         const deadline = std.math.add(u64, now, timeout_ms) catch return .{ .failure = .configuration };
         const received = try self.transport.exchange(a, .{
-            .region = self.region,
-            .model = self.model,
-            .kind = .inference,
+            .target = .{ .aws_bedrock = .{ .region = self.region, .model = self.model, .kind = .inference } },
             .body = body,
             .api_key = self.api_key,
             .deadline_monotonic_ms = deadline,

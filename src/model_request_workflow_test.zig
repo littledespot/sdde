@@ -111,7 +111,7 @@ test "static JSON guidance stays separate from dynamic input in both preparation
             try std.testing.expectEqualStrings(context_bytes, prepared.content[0].guidance);
             try std.testing.expectEqualStrings(prompt_bytes, prepared.content[1].guidance);
             try std.testing.expectEqualStrings(body, prepared.content[2].user);
-            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 16000 } }, .inference);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null, .family = .converse, .max_output_tokens = .{ .tokens = 16000 } }, .inference);
             var parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             defer parsed.deinit();
             const messages = parsed.value.object.get("messages").?.array.items;
@@ -146,38 +146,40 @@ test "static context rejects missing resources and conflicting resource kinds be
 }
 
 test "protocol corrections retain static context dynamic input and registered controls" {
-    var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0, true);
-    defer fixture.deinit();
-    var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
-    defer models.slots.deinit(std.testing.allocator);
-    const model = @import("composition/provider_model_contracts.zig").registry.entries[0];
-    try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes });
-    const allowlist = @import("domain/repository_model_allowlist.zig");
-    const owner = try allowlist.createValidated(std.testing.allocator, &models, fixture.services.registry());
-    allowlist.deinitOwner(fixture.services.allowlist_owner);
-    fixture.services.allowlist_owner = owner;
-    const graph = try fixture.compileWithContext(try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture)), true);
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    fake.invocation_plan.complete.content = malformed_protocol_items;
-    try prepareProtocolAttempt(&runner, false);
-    const original = (try currentRequest(&runner)).id();
-    const original_controls = (try currentRequest(&runner)).prepared().?.controls;
-    try std.testing.expectEqualDeep(model.capabilities.inferenceControls(), original_controls);
-    try rejectProtocolResponse(&runner, false);
-    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
-    const corrected = try currentRequest(&runner);
-    try std.testing.expect(corrected.id() == original);
-    try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.controls);
-    try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.binding_id.controls);
-    try std.testing.expectEqualStrings("context", corrected.sourceResources().context.?.bytes);
-    const parts = corrected.prepared().?.content;
-    try std.testing.expectEqualStrings(context_bytes, parts[0].guidance);
-    try std.testing.expectEqualStrings(prompt_bytes, parts[1].guidance);
-    try std.testing.expectEqualStrings(input_bytes, parts[2].user);
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, true);
+        defer fixture.deinit();
+        var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
+        defer models.slots.deinit(std.testing.allocator);
+        const model = fixture.services.registry().resolveId(.{ .ordinal = 1 }).?;
+        try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes });
+        const allowlist = @import("domain/repository_model_allowlist.zig");
+        const owner = try allowlist.createValidated(std.testing.allocator, &models, fixture.services.registry());
+        allowlist.deinitOwner(fixture.services.allowlist_owner);
+        fixture.services.allowlist_owner = owner;
+        const graph = try fixture.compileWithContext(try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture)), true);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan.complete.content = malformed_protocol_items;
+        try prepareProtocolAttempt(&runner, false);
+        const original = (try currentRequest(&runner)).id();
+        const original_controls = (try currentRequest(&runner)).prepared().?.controls;
+        try std.testing.expectEqualDeep(model.capabilities.inferenceControls(), original_controls);
+        try rejectProtocolResponse(&runner, false);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        const corrected = try currentRequest(&runner);
+        try std.testing.expect(corrected.id() == original);
+        try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.controls);
+        try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.binding_id.controls);
+        try std.testing.expectEqualStrings("context", corrected.sourceResources().context.?.bytes);
+        const parts = corrected.prepared().?.content;
+        try std.testing.expectEqualStrings(context_bytes, parts[0].guidance);
+        try std.testing.expectEqualStrings(prompt_bytes, parts[1].guidance);
+        try std.testing.expectEqualStrings(input_bytes, parts[2].user);
+    }
 }
 
 test "consolidated preparation publishes the same request and selected schema in one delta" {
@@ -3425,8 +3427,8 @@ test "response admission preserves selected requests captured authority and seri
         try std.testing.expectEqualStrings(before.response_schema.modelBytes(), after.response_schema.modelBytes());
         try std.testing.expectEqualDeep(before.model_operation_id, after.model_operation_id);
         const encode = @import("adapters/provider/bedrock_request.zig").encode;
-        const before_wire = try encode(allocator, before, .inference, (try currentRequest(&first)).binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
-        const after_wire = try encode(allocator, after, .inference, (try currentRequest(&second)).binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
+        const before_wire = try encode(allocator, before, .inference, .converse, .{ .tokens = 16000 });
+        const after_wire = try encode(allocator, after, .inference, .converse, .{ .tokens = 16000 });
         try std.testing.expectEqualStrings(before_wire, after_wire);
         for ([_][]const u8{ before_wire, after_wire }, [_][]const u8{ "before", "after" }) |wire, label| {
             const path = try std.fmt.allocPrint(allocator, ".zig-cache/chunk13-admission-{s}-{s}.json", .{ if (selected) "selected" else "root", label });
@@ -4383,7 +4385,7 @@ test "protocol repetition requires the current correction association and same t
         try std.testing.expectEqual(@as(u32, @intCast(index + 1)), correction_origin.model_attempt_ordinal.value);
         if (prior_correction) |stale| try std.testing.expect(!correction_origin.eql(stale));
         prior_correction = correction_origin;
-        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference, correction.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 });
+        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference, .converse, .{ .tokens = 16000 });
         defer std.testing.allocator.free(wire);
         try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
         try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
@@ -7376,7 +7378,7 @@ const Fixture = struct {
         return self.initWithProvider(allocator, null, false);
     }
 
-    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?usize, json: bool) !void {
+    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?ProviderChoice, json: bool) !void {
         self.arena = .init(allocator);
         errdefer self.arena.deinit();
         self.services = try providerServices(allocator, production, &.{"selected"}, json);
@@ -7461,18 +7463,44 @@ fn preserveNativeResult(fixture: *Fixture, descriptor: @import("domain/workflow_
     fixture.entries[fixture.entries.len - 1].contract.outcome_association = .{ .preserve = binding };
 }
 
-pub fn providerServices(allocator: std.mem.Allocator, production: ?usize, slots: []const []const u8, json: bool) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
-    const selected: contracts.ProviderModelContract = if (production) |index| @import("composition/provider_model_contracts.zig").registry.entries[index] else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .config_schema = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
+/// The provider contract a fixture binds through the production adapter, with a
+/// catalogue model and Region that name nothing real (ADR 0029).
+pub const ProviderChoice = union(enum) {
+    /// One compiled Bedrock family.
+    bedrock: contracts.BedrockFamily,
+    /// The plain Converse family with the synthetic count-capable test capabilities:
+    /// no compiled family registers CountTokens, but the production adapter owns it.
+    bedrock_counting,
+};
+
+fn compiledBedrockContract(family: contracts.BedrockFamily) contracts.ProviderModelContract {
+    for (@import("composition/provider_model_contracts.zig").registry.entries) |entry| {
+        if (entry.facts.bedrockFamily() == family) return entry;
+    }
+    unreachable;
+}
+
+pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoice, slots: []const []const u8, json: bool) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+    const selected: contracts.ProviderModelContract = if (production) |choice| switch (choice) {
+        .bedrock => |family| compiledBedrockContract(family),
+        .bedrock_counting => counting: {
+            var contract = compiledBedrockContract(.converse);
+            contract.capabilities = @import("model_contract_test_fixture.zig").capabilities;
+            break :counting contract;
+        },
+    } else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .facts = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
     const registered: contracts.Registry = .{ .entries = &.{selected} };
     var candidate = try registry.Candidate.init(allocator, 1);
     defer candidate.deinit();
     const contract = registered.entries[0];
-    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .json = json, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
+    const model = contract.model orelse @import("domain/llm_provider_identity.zig").ModelId{ .bytes = @import("model_contract_test_fixture.zig").bedrock_model_ids[0] };
+    const config: contracts.ValidatedProviderConfig = if (contract.facts.bedrockFamily()) |family| .{ .aws_bedrock = .{ .region = std.enums.values(contracts.BedrockRegion)[0], .family = family, .max_output_tokens = .{ .tokens = 16000 } } } else .empty_object;
+    candidate.entries[0] = .{ .provider = contract.provider, .model = model, .implementation_id = contract.implementation_id, .json = json, .config = config, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(allocator);
-    for (slots) |slot| try models.slots.map.put(allocator, slot, .{ .provider = contract.provider.bytes, .model = contract.model.bytes });
+    for (slots) |slot| try models.slots.map.put(allocator, slot, .{ .provider = contract.provider.bytes, .model = model.bytes });
     const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
     return .init(.init(owner), allowlist);
 }
@@ -7561,62 +7589,64 @@ const ModelCaptureSink = struct {
 };
 
 test "production request capture failure records non-delivery and response capture failure retains usage" {
-    const Case = struct { direction: ModelCaptureSink.prompt.PromptDirection, overshoot: bool = false };
-    for ([_]Case{ .{ .direction = .request }, .{ .direction = .response }, .{ .direction = .response, .overshoot = true } }) |case| {
-        var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0, false);
-        defer fixture.deinit();
-        const graph = try fixture.compile(try invocationYaml(&fixture));
-        var environment = try bedrockEnvironment(std.testing.allocator);
-        defer environment.deinit();
-        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-            .environment = &environment,
-            .operations = &fixture.native,
-            .authorization = .{ .allocator = std.testing.allocator },
-            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-        };
-        defer runtime.deinit();
-        var runner = fixture.runner(graph, std.testing.allocator);
-        defer runner.deinit();
-        var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = case.direction };
-        runner.model_capture.logs = sink.barrier();
-        try runtime.bind(&runner);
-        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002") else bedrock_complete_body;
-        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
-        runtime.provider.?.aws_bedrock.transport = wire.port();
-        var harness: Harness = .{ .runner = &runner };
-        const outcome = harness.result();
-        const failure = outcome.execution_rejected.model_capture;
-        try std.testing.expectEqual(.LOG_FLUSH_FAILURE, failure.code);
-        try std.testing.expectEqual(.persistence, failure.stage);
-        try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .sink = .LOG_FLUSH_FAILURE }, failure.cause);
-        try std.testing.expectEqual(case.direction, failure.direction);
-        try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
-        try std.testing.expectEqualStrings("MODEL_CAPTURE_PERSISTENCE_FAILURE", outcome.execution_rejected.diagnostic());
-        try std.testing.expectEqual(.blocked, outcome.executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-        try std.testing.expect(runner.model_capture.current == null);
-        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
-        const tokens = runner.tokenLedger();
-        try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
-        try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
-        const accounted = tokens.accounted_operations.items[0];
-        try std.testing.expect(accounted.id.eql((try invokedOperation(&runner)).operation().id));
-        try std.testing.expect(failure.origin.?.matches(try requestLedger(&runner), accounted.id));
-        if (case.direction == .request) {
-            try std.testing.expectEqual(@as(usize, 0), wire.calls);
-            try std.testing.expect(accounted.reconciliation == .not_sent);
-            try std.testing.expectEqual(@as(u128, 0), tokens.committed());
-            try std.testing.expectEqual(.available, tokens.status());
-            try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
-        } else {
-            const expected: u64 = if (case.overshoot) 100002 else 12;
-            try std.testing.expectEqual(@as(usize, 1), wire.calls);
-            try std.testing.expectEqual(expected, accounted.reconciliation.exact_usage.total_tokens);
-            try std.testing.expectEqual(@as(u128, expected), tokens.committed());
-            try std.testing.expectEqual(@as(@TypeOf(tokens.status()), if (case.overshoot) .exceeded else .available), tokens.status());
-            try std.testing.expect(sink.fragments.items.len > 0);
-            for (sink.fragments.items) |fragment| try std.testing.expectEqual(.request, fragment.direction);
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        const Case = struct { direction: ModelCaptureSink.prompt.PromptDirection, overshoot: bool = false };
+        for ([_]Case{ .{ .direction = .request }, .{ .direction = .response }, .{ .direction = .response, .overshoot = true } }) |case| {
+            var fixture: Fixture = undefined;
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+            defer fixture.deinit();
+            const graph = try fixture.compile(try invocationYaml(&fixture));
+            var environment = try bedrockEnvironment(std.testing.allocator);
+            defer environment.deinit();
+            var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+                .environment = &environment,
+                .operations = &fixture.native,
+                .authorization = .{ .allocator = std.testing.allocator },
+                .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+            };
+            defer runtime.deinit();
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = case.direction };
+            runner.model_capture.logs = sink.barrier();
+            try runtime.bind(&runner);
+            const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002") else bedrock_complete_body;
+            var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+            runtime.provider.?.transport = wire.port();
+            var harness: Harness = .{ .runner = &runner };
+            const outcome = harness.result();
+            const failure = outcome.execution_rejected.model_capture;
+            try std.testing.expectEqual(.LOG_FLUSH_FAILURE, failure.code);
+            try std.testing.expectEqual(.persistence, failure.stage);
+            try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .sink = .LOG_FLUSH_FAILURE }, failure.cause);
+            try std.testing.expectEqual(case.direction, failure.direction);
+            try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+            try std.testing.expectEqualStrings("MODEL_CAPTURE_PERSISTENCE_FAILURE", outcome.execution_rejected.diagnostic());
+            try std.testing.expectEqual(.blocked, outcome.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+            try std.testing.expect(runner.model_capture.current == null);
+            try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+            const tokens = runner.tokenLedger();
+            try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+            try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
+            const accounted = tokens.accounted_operations.items[0];
+            try std.testing.expect(accounted.id.eql((try invokedOperation(&runner)).operation().id));
+            try std.testing.expect(failure.origin.?.matches(try requestLedger(&runner), accounted.id));
+            if (case.direction == .request) {
+                try std.testing.expectEqual(@as(usize, 0), wire.calls);
+                try std.testing.expect(accounted.reconciliation == .not_sent);
+                try std.testing.expectEqual(@as(u128, 0), tokens.committed());
+                try std.testing.expectEqual(.available, tokens.status());
+                try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
+            } else {
+                const expected: u64 = if (case.overshoot) 100002 else 12;
+                try std.testing.expectEqual(@as(usize, 1), wire.calls);
+                try std.testing.expectEqual(expected, accounted.reconciliation.exact_usage.total_tokens);
+                try std.testing.expectEqual(@as(u128, expected), tokens.committed());
+                try std.testing.expectEqual(@as(@TypeOf(tokens.status()), if (case.overshoot) .exceeded else .available), tokens.status());
+                try std.testing.expect(sink.fragments.items.len > 0);
+                for (sink.fragments.items) |fragment| try std.testing.expectEqual(.request, fragment.direction);
+            }
         }
     }
 }
@@ -7624,7 +7654,7 @@ test "production request capture failure records non-delivery and response captu
 test "production count capture failure blocks inference without changing token accounting" {
     for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 1, false);
+        try fixture.initWithProvider(std.testing.allocator, .bedrock_counting, false);
         defer fixture.deinit();
         const graph = try fixture.compile(try countInferenceYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7641,8 +7671,8 @@ test "production count capture failure blocks inference without changing token a
         var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = direction };
         runner.model_capture.logs = sink.barrier();
         try runtime.bind(&runner);
-        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
-        runtime.provider.?.aws_bedrock.transport = wire.port();
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.transport = wire.port();
         var harness: Harness = .{ .runner = &runner };
         const outcome = harness.result();
         const failure = outcome.execution_rejected.model_capture;
@@ -7661,117 +7691,121 @@ test "production count capture failure blocks inference without changing token a
 }
 
 test "production source snapshot capture failure preserves its cause and unsent accounting" {
-    var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0, false);
-    defer fixture.deinit();
-    const a = fixture.arena.allocator();
-    const source = try invocationYaml(&fixture);
-    var graph = (try fixture.compile(source)).*;
-    graph.source = .{ .path = "request.workflow.yaml", .content = source };
-    const steps = try a.dupe(compilation.CompiledStep, graph.authority.steps);
-    for (steps) |*step| if (std.mem.eql(u8, step.id.bytes, "call")) {
-        step.source_chain = &.{};
-    };
-    graph.authority.steps = steps;
-    var environment = try bedrockEnvironment(std.testing.allocator);
-    defer environment.deinit();
-    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-        .environment = &environment,
-        .operations = &fixture.native,
-        .authorization = .{ .allocator = std.testing.allocator },
-        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-    };
-    defer runtime.deinit();
-    var runner = fixture.runner(&graph, std.testing.allocator);
-    defer runner.deinit();
-    var sink: ModelCaptureSink = .{ .allocator = a };
-    runner.model_capture.logs = sink.barrier();
-    try runtime.bind(&runner);
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
-    runtime.provider.?.aws_bedrock.transport = wire.port();
-    var harness: Harness = .{ .runner = &runner };
-    const outcome = harness.result();
-    const failure = outcome.execution_rejected.model_capture;
-    try std.testing.expectEqual(.blocked, outcome.executionStatus().?);
-    try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, failure.code);
-    try std.testing.expectEqual(.source_snapshot, failure.stage);
-    try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .source_snapshot = .missing_source_chain }, failure.cause);
-    try std.testing.expectEqual(.request, failure.direction);
-    try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
-    try std.testing.expectEqualStrings("MODEL_CAPTURE_SOURCE_SNAPSHOT_FAILURE", outcome.execution_rejected.diagnostic());
-    try std.testing.expectEqual(@as(usize, 0), wire.calls);
-    try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
-    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-    try std.testing.expect(runner.model_capture.current == null);
-    try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
-    const tokens = runner.tokenLedger();
-    try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
-    try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
-    try std.testing.expectEqual(@as(u128, 0), tokens.committed());
-    const accounted = tokens.accounted_operations.items[0];
-    try std.testing.expect(accounted.reconciliation == .not_sent);
-    try std.testing.expect(failure.origin.?.matches(try requestLedger(&runner), accounted.id));
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const source = try invocationYaml(&fixture);
+        var graph = (try fixture.compile(source)).*;
+        graph.source = .{ .path = "request.workflow.yaml", .content = source };
+        const steps = try a.dupe(compilation.CompiledStep, graph.authority.steps);
+        for (steps) |*step| if (std.mem.eql(u8, step.id.bytes, "call")) {
+            step.source_chain = &.{};
+        };
+        graph.authority.steps = steps;
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(&graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = a };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        const failure = outcome.execution_rejected.model_capture;
+        try std.testing.expectEqual(.blocked, outcome.executionStatus().?);
+        try std.testing.expectEqual(.LOG_SERIALIZATION_FAILURE, failure.code);
+        try std.testing.expectEqual(.source_snapshot, failure.stage);
+        try std.testing.expectEqualDeep(@import("domain/model_capture_failure.zig").Cause{ .source_snapshot = .missing_source_chain }, failure.cause);
+        try std.testing.expectEqual(.request, failure.direction);
+        try std.testing.expectEqualDeep(failure, runner.model_capture.failure.?);
+        try std.testing.expectEqualStrings("MODEL_CAPTURE_SOURCE_SNAPSHOT_FAILURE", outcome.execution_rejected.diagnostic());
+        try std.testing.expectEqual(@as(usize, 0), wire.calls);
+        try std.testing.expectEqual(@as(usize, 0), sink.fragments.items.len);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expect(runner.model_capture.current == null);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+        const tokens = runner.tokenLedger();
+        try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+        try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
+        try std.testing.expectEqual(@as(u128, 0), tokens.committed());
+        const accounted = tokens.accounted_operations.items[0];
+        try std.testing.expect(accounted.reconciliation == .not_sent);
+        try std.testing.expect(failure.origin.?.matches(try requestLedger(&runner), accounted.id));
+    }
 }
 
 test "production capture accepts an authorized repair packet without a single producing call" {
-    var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0, false);
-    defer fixture.deinit();
-    const a = fixture.arena.allocator();
-    var source = try invocationYaml(&fixture);
-    for ([_][2][]const u8{
-        .{ "ok: origin, failed: end.failed", "ok: select, failed: end.failed" },
-        .{ ", input: input.txt", "" },
-        .{ ", input: input }", " }" },
-    }) |change| source = try std.mem.replaceOwned(u8, a, source, change[0], change[1]);
-    source = try std.fmt.allocPrint(a, "{s}\n  select: {{ use: test.authorize-repair, on: {{ok: origin, invalid: end.invalid}} }}\n", .{source});
-    var authorization: RepairSequence = .{};
-    var entries = fixture.entries ++ [_]operations.Entry{.{
-        .contract = .{ .id = "test.authorize-repair", .kind = .step, .produces = &.{.model_input_packet}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .repair_role = .authorize },
-        .binding = bindings.bind(RepairSequence, &authorization, RepairSequence.authorize),
-    }};
-    fixture.registry.operations = &entries;
-    var graph = (try fixture.compileWithAssets(source, schema_bytes, false)).*;
-    graph.source = .{ .path = "request.workflow.yaml", .content = source };
-    var environment = try bedrockEnvironment(std.testing.allocator);
-    defer environment.deinit();
-    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-        .environment = &environment,
-        .operations = &fixture.native,
-        .authorization = .{ .allocator = std.testing.allocator },
-        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-    };
-    defer runtime.deinit();
-    var runner = fixture.runner(&graph, std.testing.allocator);
-    defer runner.deinit();
-    var sink: ModelCaptureSink = .{ .allocator = a };
-    runner.model_capture.logs = sink.barrier();
-    try runtime.bind(&runner);
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
-    runtime.provider.?.aws_bedrock.transport = wire.port();
-    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
-    for ([_][]const u8{ "initialize", "select", "origin", "validate", "build", "account", "assign-operation", "authorize", "advance-request", "advance-operation", "call" }) |step|
-        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-    const packet = (try currentRequest(&runner)).packet().?;
-    try std.testing.expect(packet.repairPermit() != null);
-    try std.testing.expect(packet.repairOrigin() == null);
-    try std.testing.expect(runner.model_capture.failure == null);
-    try std.testing.expect(runner.model_capture.current == null);
-    try std.testing.expectEqual(@as(usize, 1), wire.calls);
-    try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
-    try std.testing.expect(sink.fragments.items.len > 0);
-    for (sink.fragments.items) |fragment| {
-        const attribution = fragment.attribution.?;
-        try std.testing.expectEqual(.repair, attribution.links.kind);
-        try std.testing.expectEqual(.assembled_candidate, attribution.links.source);
-        try std.testing.expect(attribution.links.parent == null);
-        try std.testing.expectEqualDeep(attribution.call, attribution.links.original);
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var source = try invocationYaml(&fixture);
+        for ([_][2][]const u8{
+            .{ "ok: origin, failed: end.failed", "ok: select, failed: end.failed" },
+            .{ ", input: input.txt", "" },
+            .{ ", input: input }", " }" },
+        }) |change| source = try std.mem.replaceOwned(u8, a, source, change[0], change[1]);
+        source = try std.fmt.allocPrint(a, "{s}\n  select: {{ use: test.authorize-repair, on: {{ok: origin, invalid: end.invalid}} }}\n", .{source});
+        var authorization: RepairSequence = .{};
+        var entries = fixture.entries ++ [_]operations.Entry{.{
+            .contract = .{ .id = "test.authorize-repair", .kind = .step, .produces = &.{.model_input_packet}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none, .repair_role = .authorize },
+            .binding = bindings.bind(RepairSequence, &authorization, RepairSequence.authorize),
+        }};
+        fixture.registry.operations = &entries;
+        var graph = (try fixture.compileWithAssets(source, schema_bytes, false)).*;
+        graph.source = .{ .path = "request.workflow.yaml", .content = source };
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(&graph, std.testing.allocator);
+        defer runner.deinit();
+        var sink: ModelCaptureSink = .{ .allocator = a };
+        runner.model_capture.logs = sink.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+        runtime.provider.?.transport = wire.port();
+        try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+        for ([_][]const u8{ "initialize", "select", "origin", "validate", "build", "account", "assign-operation", "authorize", "advance-request", "advance-operation", "call" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        const packet = (try currentRequest(&runner)).packet().?;
+        try std.testing.expect(packet.repairPermit() != null);
+        try std.testing.expect(packet.repairOrigin() == null);
+        try std.testing.expect(runner.model_capture.failure == null);
+        try std.testing.expect(runner.model_capture.current == null);
+        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+        try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
+        try std.testing.expect(sink.fragments.items.len > 0);
+        for (sink.fragments.items) |fragment| {
+            const attribution = fragment.attribution.?;
+            try std.testing.expectEqual(.repair, attribution.links.kind);
+            try std.testing.expectEqual(.assembled_candidate, attribution.links.source);
+            try std.testing.expect(attribution.links.parent == null);
+            try std.testing.expectEqualDeep(attribution.call, attribution.links.original);
+        }
     }
 }
 
 test "production capture attributes count and inference bodies to the existing request ledger" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 1, false);
+    try fixture.initWithProvider(std.testing.allocator, .bedrock_counting, false);
     defer fixture.deinit();
     const a = fixture.arena.allocator();
     const yaml_source = try std.mem.concat(a, u8, &.{ try countInferenceYaml(&fixture), "\n# " ++ "source snapshot " ** 1000 });
@@ -7792,8 +7826,8 @@ test "production capture attributes count and inference bodies to the existing r
     var sink: ModelCaptureSink = .{ .allocator = a };
     runner.model_capture.logs = sink.barrier();
     try runtime.bind(&runner);
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
-    runtime.provider.?.aws_bedrock.transport = wire.port();
+    var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+    runtime.provider.?.transport = wire.port();
     var harness: Harness = .{ .runner = &runner };
     try std.testing.expectEqual(.ok, harness.run());
     try std.testing.expectEqual(@as(usize, 2), wire.calls);
@@ -7816,7 +7850,7 @@ test "production capture attributes count and inference bodies to the existing r
                 try body.appendSlice(a, fragment.content);
             }
             const expected = if (direction == .request)
-                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind, request.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 })
+                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind, request.binding().registry_entry.facts.bedrockFamily().?, .{ .tokens = 16000 })
             else if (kind == .input_token_count)
                 "{\"inputTokens\":10}"
             else
@@ -7862,7 +7896,7 @@ test "production capture attributes count and inference bodies to the existing r
 
 test "production protocol correction counts current input before the corrected inference" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 1, false);
+    try fixture.initWithProvider(std.testing.allocator, .bedrock_counting, false);
     defer fixture.deinit();
     const a = fixture.arena.allocator();
     var source = try countInferenceYaml(&fixture);
@@ -7886,8 +7920,8 @@ test "production protocol correction counts current input before the corrected i
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     try runtime.bind(&runner);
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{};
-    runtime.provider.?.aws_bedrock.transport = wire.port();
+    var wire: @import("model_transport_test_fixture.zig").Wire = .{};
+    runtime.provider.?.transport = wire.port();
     try std.testing.expectEqualDeep(execution.Applied{ .outcome = .ok }, runner.bindings().invokeInvocation());
     for ([_][]const u8{ "initialize", "origin", "validate", "build" }) |step|
         try std.testing.expectEqualDeep(execution.Applied{ .outcome = .ok }, runner.bindings().invokeStep(.{ .bytes = step }));
@@ -7898,7 +7932,7 @@ test "production protocol correction counts current input before the corrected i
         if (attempt == 0) try std.testing.expectEqualDeep(execution.Applied{ .outcome = .ok }, runner.bindings().invokeStep(.{ .bytes = "advance-request" }));
         for ([_][]const u8{ "advance-operation", "call", "validate-count", "complete-count", "observe", "assign-inference", "authorize-inference", "advance-inference" }) |step|
             try std.testing.expectEqualDeep(execution.Applied{ .outcome = .ok }, runner.bindings().invokeStep(.{ .bytes = step }));
-        wire.inference_body = if (attempt == 0) @import("bedrock_transport_test_fixture.zig").complete else bedrock_complete_body;
+        wire.inference_body = if (attempt == 0) @import("model_transport_test_fixture.zig").complete else bedrock_complete_body;
         for ([_][]const u8{ "infer", "validate-response", "complete-inference", "decode" }) |step|
             try std.testing.expectEqualDeep(execution.Applied{ .outcome = .ok }, runner.bindings().invokeStep(.{ .bytes = step }));
         try std.testing.expectEqualDeep(execution.Applied{ .outcome = if (attempt == 0) .invalid else .ok }, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }));
@@ -7915,13 +7949,195 @@ test "production protocol correction counts current input before the corrected i
 }
 
 test "production Bedrock composition executes count inference validation and request closure from YAML" {
-    for ([_]bool{ false, true }) |count_first| {
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        for ([_]bool{ false, true }) |count_first| {
+            var fixture: Fixture = undefined;
+            try fixture.initWithProvider(std.testing.allocator, if (count_first) ProviderChoice.bedrock_counting else ProviderChoice{ .bedrock = family }, false);
+            defer fixture.deinit();
+            const graph = try fixture.compile(if (count_first) try countInferenceYaml(&fixture) else try requestCompletionYaml(&fixture));
+            // A fresh invocation captures its own environment snapshot and ledger.
+            for (0..2) |_| {
+                var environment = try bedrockEnvironment(std.testing.allocator);
+                defer environment.deinit();
+                var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+                    .environment = &environment,
+                    .operations = &fixture.native,
+                    .authorization = .{ .allocator = std.testing.allocator },
+                    .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+                };
+                defer runtime.deinit();
+                var runner = fixture.runner(graph, std.testing.allocator);
+                defer runner.deinit();
+                try runtime.bind(&runner);
+                // Changing the environment after preloading cannot refresh a lease.
+                try environment.put("AWS_BEARER_TOKEN_BEDROCK", "");
+                var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
+                runtime.provider.?.transport = wire.port();
+                var harness: Harness = .{ .runner = &runner };
+                try std.testing.expectEqual(.ok, harness.run());
+                try std.testing.expectEqual(@as(usize, if (count_first) 2 else 1), wire.calls);
+                try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
+                try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
+                const request = try currentRequest(&runner);
+                try std.testing.expectEqual(.terminal, (try requestLedger(&runner)).record(request.id()).?.status);
+                try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
+            }
+        }
+    }
+}
+
+test "production Bedrock YAML records budget overshoot and blocks another call" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, if (count_first) 1 else 0, false);
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
         defer fixture.deinit();
-        const graph = try fixture.compile(if (count_first) try countInferenceYaml(&fixture) else try requestCompletionYaml(&fixture));
-        // A fresh invocation captures its own environment snapshot and ledger.
-        for (0..2) |_| {
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try runtime.bind(&runner);
+        const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002");
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const result = harness.result();
+        try std.testing.expect(result == .execution_rejected);
+        try std.testing.expectEqual(@as(u128, 100002), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u64, 100002), runner.tokenLedger().accounted_operations.items[0].reconciliation.exact_usage.total_tokens);
+        try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
+        const repeated = runner.bindings().invokeStep(.{ .bytes = "call" });
+        try std.testing.expect(repeated == .rejected);
+        try std.testing.expectEqual(@as(usize, 1), wire.calls);
+    }
+}
+
+test "production Bedrock missing credentials follow explicit pre-call termination without effects" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
+        var environment: std.process.Environ.Map = .init(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{};
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.failed, harness.run());
+        try std.testing.expectEqual(@as(usize, 0), wire.calls);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        const request = try currentRequest(&runner);
+        try std.testing.expectEqual(.not_invoked_authorization_failure, (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
+    }
+}
+
+const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+
+test "production missing-answer observation retains usage and can close without correction" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        for ([_]bool{ false, true }) |overshoot| {
+            var fixture: Fixture = undefined;
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, false);
+            defer fixture.deinit();
+            const graph = try fixture.compile(try requestCompletionYaml(&fixture));
+            var environment = try bedrockEnvironment(std.testing.allocator);
+            defer environment.deinit();
+            var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+                .environment = &environment,
+                .operations = &fixture.native,
+                .authorization = .{ .allocator = std.testing.allocator },
+                .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+            };
+            defer runtime.deinit();
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            try std.testing.expectEqual(@as(usize, 0), runner.envelope.records.items.len);
+            try runtime.bind(&runner);
+            const body = if (overshoot)
+                "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":100000,\"outputTokens\":48,\"totalTokens\":100048}}"
+            else
+                "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}";
+            var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = body };
+            runtime.provider.?.transport = wire.port();
+            var harness: Harness = .{ .runner = &runner };
+            const result = harness.result();
+            const actual = switch (result) {
+                .execution => |outcome| outcome,
+                .execution_rejected => |rejection| rejected: {
+                    if (overshoot) break :rejected rejection.status();
+                    std.debug.print("missing-answer execution rejected: {any}\n", .{rejection});
+                    return error.TestUnexpectedResult;
+                },
+                .bootstrap_failed, .invocation_invalid => return error.TestUnexpectedResult,
+            };
+            try std.testing.expectEqual(@as(workflow.OutcomeTag, if (overshoot) .failed else .invalid), actual);
+            try std.testing.expectEqual(@as(usize, 1), wire.calls);
+            const tokens = runner.tokenLedger();
+            try std.testing.expectEqual(@as(u128, if (overshoot) 100048 else 932), tokens.committed());
+            try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
+            try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
+            if (overshoot) {
+                try std.testing.expectEqual(.exceeded, tokens.status());
+                try std.testing.expect(runner.bindings().invokeStep(.{ .bytes = "call" }) == .rejected);
+            } else {
+                const observation = @import("application/provider_observation_workflow.zig");
+                const history = runner.envelope.latestInformation(observation.schema.key);
+                const retained = try values.read(&history, observation.schema, observation.Result);
+                const evidence = retained.outcome().validated;
+                try std.testing.expectEqual(.response_invalid, evidence.result().failed.cause);
+                try std.testing.expectEqual(.never, evidence.result().failed.retry_class);
+                try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, evidence.result().failed.content.?);
+                try std.testing.expectEqual(@as(u64, 932), evidence.usage().?.total_tokens);
+                try std.testing.expectEqual(.available, tokens.status());
+                const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
+                const encode = @import("adapters/provider/bedrock_request.zig").encode;
+                const policy = fixture.services.registry().resolveId(evidence.request().binding_id.registry_entry_id).?.facts.bedrockFamily().?;
+                const before = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
+                defer std.testing.allocator.free(before);
+                _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
+                const after = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
+                defer std.testing.allocator.free(after);
+                try std.testing.expectEqualStrings(before, after);
+                try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });
+                try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-after.json", .data = after });
+                try std.testing.expectEqual(@as(u128, 932), tokens.committed());
+                try std.testing.expectError(error.TokenUsageAlreadyAccounted, @import("domain/workflow_token_accounting.zig").proposeReconciliation(tokens, tokens.revision(), retained.operationId(), .{ .exact_usage = evidence.usage().? }));
+            }
+            try std.testing.expectEqual(@as(usize, 1), wire.calls);
+        }
+    }
+}
+
+test "missing answers share protocol allowance through mixed failure and successful recovery" {
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        const missing = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"reasoning must not become an answer\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+        const shapes = [_]struct { schema: []const u8, valid: []const u8 }{
+            .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
+            .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
+        };
+        for ([_]bool{ false, true }) |json| for (shapes) |shape| for ([_]bool{ false, true }) |consolidated| for (0..3) |sequence| {
+            var fixture: Fixture = undefined;
+            try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = family }, json);
+            defer fixture.deinit();
+            const source = try withStaticContext(fixture.arena.allocator(), try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated));
+            const graph = try fixture.compileResources(source, shape.schema, true, null, context_bytes);
             var environment = try bedrockEnvironment(std.testing.allocator);
             defer environment.deinit();
             var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
@@ -7934,238 +8150,66 @@ test "production Bedrock composition executes count inference validation and req
             var runner = fixture.runner(graph, std.testing.allocator);
             defer runner.deinit();
             try runtime.bind(&runner);
-            // Changing the environment after preloading cannot refresh a lease.
-            try environment.put("AWS_BEARER_TOKEN_BEDROCK", "");
-            var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_complete_body };
-            runtime.provider.?.aws_bedrock.transport = wire.port();
-            var harness: Harness = .{ .runner = &runner };
-            try std.testing.expectEqual(.ok, harness.run());
-            try std.testing.expectEqual(@as(usize, if (count_first) 2 else 1), wire.calls);
-            try std.testing.expectEqual(@as(u128, 12), runner.tokenLedger().committed());
-            try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
-            const request = try currentRequest(&runner);
-            try std.testing.expectEqual(.terminal, (try requestLedger(&runner)).record(request.id()).?.status);
-            try runner.model_accounting.?.current_operations.validateRequestClosure(request.id());
-        }
-    }
-}
-
-test "production Bedrock YAML records budget overshoot and blocks another call" {
-    var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0, false);
-    defer fixture.deinit();
-    const graph = try fixture.compile(try invocationYaml(&fixture));
-    var environment = try bedrockEnvironment(std.testing.allocator);
-    defer environment.deinit();
-    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-        .environment = &environment,
-        .operations = &fixture.native,
-        .authorization = .{ .allocator = std.testing.allocator },
-        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-    };
-    defer runtime.deinit();
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    try runtime.bind(&runner);
-    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002");
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
-    runtime.provider.?.aws_bedrock.transport = wire.port();
-    var harness: Harness = .{ .runner = &runner };
-    const result = harness.result();
-    try std.testing.expect(result == .execution_rejected);
-    try std.testing.expectEqual(@as(u128, 100002), runner.tokenLedger().committed());
-    try std.testing.expectEqual(@as(u64, 100002), runner.tokenLedger().accounted_operations.items[0].reconciliation.exact_usage.total_tokens);
-    try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
-    const repeated = runner.bindings().invokeStep(.{ .bytes = "call" });
-    try std.testing.expect(repeated == .rejected);
-    try std.testing.expectEqual(@as(usize, 1), wire.calls);
-}
-
-test "production Bedrock missing credentials follow explicit pre-call termination without effects" {
-    var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0, false);
-    defer fixture.deinit();
-    const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
-    var environment: std.process.Environ.Map = .init(std.testing.allocator);
-    defer environment.deinit();
-    var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-        .environment = &environment,
-        .operations = &fixture.native,
-        .authorization = .{ .allocator = std.testing.allocator },
-        .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-    };
-    defer runtime.deinit();
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    try runtime.bind(&runner);
-    var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{};
-    runtime.provider.?.aws_bedrock.transport = wire.port();
-    var harness: Harness = .{ .runner = &runner };
-    try std.testing.expectEqual(.failed, harness.run());
-    try std.testing.expectEqual(@as(usize, 0), wire.calls);
-    try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
-    const request = try currentRequest(&runner);
-    try std.testing.expectEqual(.not_invoked_authorization_failure, (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
-}
-
-const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
-
-test "production missing-answer observation retains usage and can close without correction" {
-    for ([_]bool{ false, true }) |overshoot| {
-        var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0, false);
-        defer fixture.deinit();
-        const graph = try fixture.compile(try requestCompletionYaml(&fixture));
-        var environment = try bedrockEnvironment(std.testing.allocator);
-        defer environment.deinit();
-        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-            .environment = &environment,
-            .operations = &fixture.native,
-            .authorization = .{ .allocator = std.testing.allocator },
-            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-        };
-        defer runtime.deinit();
-        var runner = fixture.runner(graph, std.testing.allocator);
-        defer runner.deinit();
-        try std.testing.expectEqual(@as(usize, 0), runner.envelope.records.items.len);
-        try runtime.bind(&runner);
-        const body = if (overshoot)
-            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":100000,\"outputTokens\":48,\"totalTokens\":100048}}"
-        else
-            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}";
-        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
-        runtime.provider.?.aws_bedrock.transport = wire.port();
-        var harness: Harness = .{ .runner = &runner };
-        const result = harness.result();
-        const actual = switch (result) {
-            .execution => |outcome| outcome,
-            .execution_rejected => |rejection| rejected: {
-                if (overshoot) break :rejected rejection.status();
-                std.debug.print("missing-answer execution rejected: {any}\n", .{rejection});
-                return error.TestUnexpectedResult;
-            },
-            .bootstrap_failed, .invocation_invalid => return error.TestUnexpectedResult,
-        };
-        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (overshoot) .failed else .invalid), actual);
-        try std.testing.expectEqual(@as(usize, 1), wire.calls);
-        const tokens = runner.tokenLedger();
-        try std.testing.expectEqual(@as(u128, if (overshoot) 100048 else 932), tokens.committed());
-        try std.testing.expectEqual(@as(usize, 1), tokens.accounted_operations.items.len);
-        try std.testing.expectEqual(@as(u64, 1), tokens.revision().value);
-        if (overshoot) {
-            try std.testing.expectEqual(.exceeded, tokens.status());
-            try std.testing.expect(runner.bindings().invokeStep(.{ .bytes = "call" }) == .rejected);
-        } else {
-            const observation = @import("application/provider_observation_workflow.zig");
-            const history = runner.envelope.latestInformation(observation.schema.key);
-            const retained = try values.read(&history, observation.schema, observation.Result);
-            const evidence = retained.outcome().validated;
-            try std.testing.expectEqual(.response_invalid, evidence.result().failed.cause);
-            try std.testing.expectEqual(.never, evidence.result().failed.retry_class);
-            try std.testing.expectEqual(provider.ProviderContentDiagnostic.missing_final_text, evidence.result().failed.content.?);
-            try std.testing.expectEqual(@as(u64, 932), evidence.usage().?.total_tokens);
-            try std.testing.expectEqual(.available, tokens.status());
-            const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
-            const encode = @import("adapters/provider/bedrock_request.zig").encode;
-            const policy = fixture.services.registry().resolveId(evidence.request().binding_id.registry_entry_id).?.bedrock_request_profile;
-            const before = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
-            defer std.testing.allocator.free(before);
-            _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
-            const after = try encode(std.testing.allocator, evidence.request(), .inference, policy, .{ .tokens = 16000 });
-            defer std.testing.allocator.free(after);
-            try std.testing.expectEqualStrings(before, after);
-            try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });
-            try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-after.json", .data = after });
-            try std.testing.expectEqual(@as(u128, 932), tokens.committed());
-            try std.testing.expectError(error.TokenUsageAlreadyAccounted, @import("domain/workflow_token_accounting.zig").proposeReconciliation(tokens, tokens.revision(), retained.operationId(), .{ .exact_usage = evidence.usage().? }));
-        }
-        try std.testing.expectEqual(@as(usize, 1), wire.calls);
-    }
-}
-
-test "missing answers share protocol allowance through mixed failure and successful recovery" {
-    const missing = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"reasoning must not become an answer\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
-    const shapes = [_]struct { schema: []const u8, valid: []const u8 }{
-        .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
-        .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
-    };
-    for ([_]bool{ false, true }) |json| for (shapes) |shape| for ([_]bool{ false, true }) |consolidated| for (0..3) |sequence| {
-        var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0, json);
-        defer fixture.deinit();
-        const source = try withStaticContext(fixture.arena.allocator(), try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated));
-        const graph = try fixture.compileResources(source, shape.schema, true, null, context_bytes);
-        var environment = try bedrockEnvironment(std.testing.allocator);
-        defer environment.deinit();
-        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
-            .environment = &environment,
-            .operations = &fixture.native,
-            .authorization = .{ .allocator = std.testing.allocator },
-            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
-        };
-        defer runtime.deinit();
-        var runner = fixture.runner(graph, std.testing.allocator);
-        defer runner.deinit();
-        try runtime.bind(&runner);
-        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .expected_json = json };
-        runtime.provider.?.aws_bedrock.transport = wire.port();
-        var original_id: ?*const identity.ModelRequestId = null;
-        for (0..3) |attempt| {
-            const absent = if (sequence == 0) attempt == 1 else if (sequence == 1) true else attempt != 1;
-            const succeeds = sequence == 0 and attempt == 2;
-            const body = if (succeeds) shape.valid else if (sequence == 2) "{}" else "{";
-            wire.inference_body = if (absent) missing else try std.json.Stringify.valueAlloc(fixture.arena.allocator(), .{
-                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = body }} } },
-                .stopReason = "end_turn",
-                .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 2), .totalTokens = @as(u64, 12) },
-            }, .{});
-            try prepareProtocolAttempt(&runner, attempt != 0);
-            const request = try currentRequest(&runner);
-            if (original_id == null) original_id = request.id();
-            try std.testing.expect(request.id() == original_id.?);
-            try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
-            try std.testing.expectEqual(.fixed, request.prepared().?.controls.temperature.?);
-            try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
-            try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
-            for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
-                try std.testing.expectEqualDeep(execution.Applied{ .outcome = if (absent) .failed else .ok }, runner.bindings().invokeStep(.{ .bytes = step }));
-            const decoded: workflow.OutcomeTag = if (absent or (!succeeds and sequence == 0)) .invalid else .ok;
-            if (!consolidated) try std.testing.expectEqual(decoded, runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
-            try std.testing.expectEqual(@as(workflow.OutcomeTag, if (succeeds) .ok else .invalid), runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
-            try std.testing.expectEqual(@as(u128, (attempt + 1) * 12), runner.tokenLedger().committed());
-            try std.testing.expectEqual(attempt + 1, runner.tokenLedger().accounted_operations.items.len);
-            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-            if (succeeds) {
-                const accepted = (try payloadResult(&runner)).outcome().valid.candidate();
-                try std.testing.expectEqualStrings(shape.valid, accepted.association().result().complete.content());
-                for ([_][]const u8{ "close-request", "observe" }) |step|
-                    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-                try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record(original_id.?).?.terminal_reason.?);
-            } else {
-                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
-                const correction = (try currentRequest(&runner)).prepared().?;
-                try std.testing.expect(correction.model_request_id == original_id.?);
-                try std.testing.expectEqualStrings(context_bytes, correction.content[0].guidance);
-                try std.testing.expectEqualStrings(prompt_bytes, correction.content[1].guidance);
-                try std.testing.expectEqualStrings(input_bytes, correction.content[2].user);
-                try std.testing.expectEqual(@as(usize, if (absent) 5 else 6), correction.content.len);
-                if (absent) {
-                    try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "missing_final_text") != null);
-                    try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "Final-answer admission failed: no final answer was received.") != null);
-                    for (correction.content) |part| try std.testing.expect(part != .evidence);
-                    try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
+            var wire: @import("model_transport_test_fixture.zig").Wire = .{ .expected_json = json };
+            runtime.provider.?.transport = wire.port();
+            var original_id: ?*const identity.ModelRequestId = null;
+            for (0..3) |attempt| {
+                const absent = if (sequence == 0) attempt == 1 else if (sequence == 1) true else attempt != 1;
+                const succeeds = sequence == 0 and attempt == 2;
+                const body = if (succeeds) shape.valid else if (sequence == 2) "{}" else "{";
+                wire.inference_body = if (absent) missing else try std.json.Stringify.valueAlloc(fixture.arena.allocator(), .{
+                    .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = body }} } },
+                    .stopReason = "end_turn",
+                    .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 2), .totalTokens = @as(u64, 12) },
+                }, .{});
+                try prepareProtocolAttempt(&runner, attempt != 0);
+                const request = try currentRequest(&runner);
+                if (original_id == null) original_id = request.id();
+                try std.testing.expect(request.id() == original_id.?);
+                try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
+                try std.testing.expectEqualDeep(request.binding().registry_entry.capabilities.inferenceControls(), request.prepared().?.controls);
+                try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
+                try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
+                for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
+                    try std.testing.expectEqualDeep(execution.Applied{ .outcome = if (absent) .failed else .ok }, runner.bindings().invokeStep(.{ .bytes = step }));
+                const decoded: workflow.OutcomeTag = if (absent or (!succeeds and sequence == 0)) .invalid else .ok;
+                if (!consolidated) try std.testing.expectEqual(decoded, runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
+                try std.testing.expectEqual(@as(workflow.OutcomeTag, if (succeeds) .ok else .invalid), runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+                try std.testing.expectEqual(@as(u128, (attempt + 1) * 12), runner.tokenLedger().committed());
+                try std.testing.expectEqual(attempt + 1, runner.tokenLedger().accounted_operations.items.len);
+                try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+                if (succeeds) {
+                    const accepted = (try payloadResult(&runner)).outcome().valid.candidate();
+                    try std.testing.expectEqualStrings(shape.valid, accepted.association().result().complete.content());
+                    for ([_][]const u8{ "close-request", "observe" }) |step|
+                        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                    try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record(original_id.?).?.terminal_reason.?);
+                } else {
+                    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+                    const correction = (try currentRequest(&runner)).prepared().?;
+                    try std.testing.expect(correction.model_request_id == original_id.?);
+                    try std.testing.expectEqualStrings(context_bytes, correction.content[0].guidance);
+                    try std.testing.expectEqualStrings(prompt_bytes, correction.content[1].guidance);
+                    try std.testing.expectEqualStrings(input_bytes, correction.content[2].user);
+                    try std.testing.expectEqual(@as(usize, if (absent) 5 else 6), correction.content.len);
+                    if (absent) {
+                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "missing_final_text") != null);
+                        try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "Final-answer admission failed: no final answer was received.") != null);
+                        for (correction.content) |part| try std.testing.expect(part != .evidence);
+                        try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
+                    }
+                    try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, "The previous correction still failed this validation."));
                 }
-                try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, "The previous correction still failed this validation."));
             }
-        }
-        if (sequence != 0) {
-            const stopped = runner.bindings().invokeStep(.{ .bytes = "account" });
-            try std.testing.expectEqual(@as(u64, 3), stopped.rejected.retry_limit.completed_executions);
-            try std.testing.expectEqual(@as(u32, 2), stopped.rejected.retry_limit.limit.value);
-        }
-        try std.testing.expectEqual(@as(usize, 3), wire.calls);
-        try std.testing.expectEqual(@as(u128, 36), runner.tokenLedger().committed());
-    };
+            if (sequence != 0) {
+                const stopped = runner.bindings().invokeStep(.{ .bytes = "account" });
+                try std.testing.expectEqual(@as(u64, 3), stopped.rejected.retry_limit.completed_executions);
+                try std.testing.expectEqual(@as(u32, 2), stopped.rejected.retry_limit.limit.value);
+            }
+            try std.testing.expectEqual(@as(usize, 3), wire.calls);
+            try std.testing.expectEqual(@as(u128, 36), runner.tokenLedger().committed());
+        };
+    }
 }
 
 fn bedrockEnvironment(allocator: std.mem.Allocator) !std.process.Environ.Map {

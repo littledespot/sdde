@@ -3761,7 +3761,7 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
     .provider = test_provider_id,
     .model = llm_provider_identity.ModelId.parse("model-a").?,
     .implementation_id = llm_provider_contracts.RegisteredProviderImplementationId.init(1).?,
-    .config_schema = .empty_object,
+    .facts = .empty_object,
     .capabilities = @import("../../src/model_contract_test_fixture.zig").capabilities,
 }} };
 const test_provider_document =

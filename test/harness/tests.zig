@@ -9,6 +9,7 @@ test {
     _ = @import("acceptance_gate_test.zig");
     _ = @import("grader_qualification_test.zig");
     _ = @import("model_cost_policy.zig");
+    _ = @import("environment.zig");
     _ = @import("generation_comparison.zig");
     _ = @import("baseline/tests.zig");
     _ = @import("e2e/tests.zig");
@@ -196,7 +197,7 @@ const configuration = @import("configuration.zig");
 const test_environment = @import("environment.zig");
 const test_selection: configuration.Selection = .{ .api = .openai_responses, .model = c.ModelId.parse("scripted-judge").? };
 const bedrock = @import("bedrock.zig");
-const bedrock_selection: configuration.Selection = .{ .api = .bedrock_converse, .model = c.ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" };
+const bedrock_selection: configuration.Selection = .{ .api = .bedrock_converse, .model = c.ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2", .family = .@"gpt-oss" };
 const config_bytes =
     \\{"schema":"evaluation-config/v2","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100,"max_output_tokens":16000}
 ;
@@ -326,9 +327,13 @@ test "evaluation selection is required from test environment and reaches request
         try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
     }
     try environment.put("TEST_EVALUATION_PROVIDER", "bedrock");
-    try environment.put("TEST_EVALUATION_REGION", "ap-southeast-2");
-    for ([_][]const u8{"openai.gpt-oss-20b-1:0"}) |model| {
+    try environment.put("TEST_EVALUATION_REGION", @tagName(bedrock_selection.region.?));
+    // Every permitted Bedrock judge tuple, under every compiled family.
+    for (@import("model_cost_policy.zig").permitted) |tuple| for (std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockFamily)) |family| {
+        if (!std.mem.eql(u8, tuple.provider, "aws-bedrock") or std.mem.indexOfScalar(@import("model_cost_policy.zig").Use, tuple.uses, .judge) == null) continue;
+        const model = tuple.model;
         try environment.put("TEST_EVALUATION_MODEL", model);
+        try environment.put("TEST_EVALUATION_FAMILY", @tagName(family));
         const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
         const inputs = try capture(a);
         const request = try c.decode(std.json.Value, a, try @import("request.zig").encode(a, config, inputs, null));
@@ -340,7 +345,8 @@ test "evaluation selection is required from test environment and reaches request
         const recorded = rendered.object.get("configuration").?;
         try std.testing.expectEqualStrings(model, recorded.object.get("model").?.string);
         try std.testing.expectEqualStrings("bedrock_converse", recorded.object.get("api").?.string);
-    }
+        try std.testing.expectEqualStrings(@tagName(family), recorded.object.get("family").?.string);
+    };
 }
 
 test "evaluator credentials accept only the test key without production or Bedrock fallback" {
@@ -362,50 +368,71 @@ test "Bedrock evaluation validates explicit test selection and registered contro
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
+    const domain = @import("../../src/domain/llm_provider_contracts.zig");
+    const cost_policy = @import("model_cost_policy.zig");
     var environment: std.process.Environ.Map = .init(std.testing.allocator);
     defer environment.deinit();
     try environment.put("TEST_EVALUATION_PROVIDER", "bedrock");
     try environment.put("TEST_EVALUATION_MODEL", bedrock_selection.model.bytes);
     try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_FAMILY", @tagName(bedrock_selection.family.?));
     for ([_][]const u8{ "", "unknown", "us-west-2.evil.invalid" }) |region| {
         try environment.put("TEST_EVALUATION_REGION", region);
         try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
     }
+    try environment.put("TEST_EVALUATION_REGION", @tagName(bedrock_selection.region.?));
+    for ([_][]const u8{ "", "unknown", "GPT-OSS" }) |family| {
+        try environment.put("TEST_EVALUATION_FAMILY", family);
+        try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    }
+    // Placeholder models and every permitted cost tuple: selection admits exactly the judge tuples.
+    var models: std.ArrayList([]const u8) = .empty;
+    try models.appendSlice(a, &@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids);
+    for (cost_policy.permitted) |tuple| try models.append(a, tuple.model);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        try environment.put("TEST_EVALUATION_MODEL", entry.model.bytes);
-        try environment.put("TEST_EVALUATION_REGION", @tagName(entry.bedrock_regions[0]));
-        const selection: configuration.Selection = .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] };
-        if (std.mem.eql(u8, entry.model.bytes, "openai.gpt-oss-20b-1:0")) {
-            try std.testing.expectEqualDeep(selection, try test_environment.selection(&environment));
-        } else try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
-        if (entry.capabilities.structured_response != .bedrock_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, selection));
-            continue;
-        }
-        // Mechanical provider conformance accepts synthetic inputs separately
-        // from the guarded live environment selection.
-        const config = try configuration.parse(a, config_bytes, selection);
-        try std.testing.expectEqual(.bedrock_converse, config.api);
-        try std.testing.expectEqualStrings(entry.model.bytes, config.model);
-        var invalid = config;
-        invalid.region = null;
-        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
-        invalid = config;
-        invalid.region = if (config.region == .@"us-west-2") .@"ap-southeast-2" else .@"us-west-2";
-        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
-        invalid = config;
-        invalid.model = "unregistered-model";
-        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
-        invalid = config;
-        invalid.reasoning_effort = .xhigh;
-        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
-        invalid = config;
-        invalid.temperature = 1.01;
-        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        const family = entry.facts.bedrockFamily() orelse continue;
+        for (std.enums.values(domain.BedrockRegion)) |region| for (models.items) |raw_model| {
+            const model = c.ModelId.parse(raw_model).?;
+            try environment.put("TEST_EVALUATION_MODEL", raw_model);
+            try environment.put("TEST_EVALUATION_REGION", @tagName(region));
+            try environment.put("TEST_EVALUATION_FAMILY", @tagName(family));
+            const selection: configuration.Selection = .{ .api = .bedrock_converse, .model = model, .region = region, .family = family };
+            if (cost_policy.require(.judge, .{ .bytes = "aws-bedrock" }, model)) |_| {
+                try std.testing.expectEqualDeep(selection, try test_environment.selection(&environment));
+            } else |_| try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
+            // Mechanical provider conformance accepts synthetic inputs separately
+            // from the guarded live environment selection.
+            const config = try configuration.parse(a, config_bytes, selection);
+            try std.testing.expectEqual(.bedrock_converse, config.api);
+            try std.testing.expectEqualStrings(raw_model, config.model);
+            try std.testing.expectEqual(family, config.family.?);
+            var invalid = config;
+            invalid.region = null;
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+            invalid = config;
+            invalid.family = null;
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+            invalid = config;
+            invalid.model = "";
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+            // Every effort outside this entry's registered set, whichever family registers it.
+            for (std.enums.values(std.meta.Child(@TypeOf(config.reasoning_effort)))) |effort| {
+                if (domain.supportsReasoningEffort(entry.supported_reasoning_efforts, @tagName(effort))) continue;
+                invalid = config;
+                invalid.reasoning_effort = effort;
+                try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+            }
+            invalid = config;
+            invalid.temperature = 1.01;
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
+        };
     }
     try environment.put("TEST_EVALUATION_PROVIDER", "openai");
     try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
     try environment.put("TEST_EVALUATION_REGION", "");
+    try std.testing.expectError(error.InvalidEvaluationContract, test_environment.selection(&environment));
+    try environment.put("TEST_EVALUATION_FAMILY", "");
     try environment.put("TEST_EVALUATION_MODEL", "gpt-6-luna");
     try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
 }
@@ -423,10 +450,17 @@ test "live evaluator cost rejection precedes credential use and adapter construc
         config.model = model;
         try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
     }
+    // Every family covers any model ID, so only the cost policy stops an unlisted judge.
     config.api = .bedrock_converse;
-    config.region = .@"ap-southeast-2";
-    config.model = "global.openai.gpt-6-luna";
-    try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
+    config.region = bedrock_selection.region;
+    for (std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockFamily)) |family| {
+        config.family = family;
+        for (@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids) |model| {
+            config.model = model;
+            config.temperature = (try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = .{ .bytes = model }, .region = config.region, .family = family })).temperature;
+            try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
+        }
+    }
 }
 
 test "Bedrock evaluator reads only its test credential without other provider or production fallback" {
@@ -448,14 +482,19 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        if (entry.capabilities.structured_response != .bedrock_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] }));
+        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // with a judge model and Region that name nothing real (ADR 0029).
+        const family = entry.facts.bedrockFamily() orelse continue;
+        const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
+        const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
+        if (entry.capabilities.structured_response != .native_json_schema) {
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family }));
             continue;
         }
-        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
+        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
         const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
-        switch (entry.bedrock_request_profile) {
-            .openai_luna => {
+        switch (family) {
+            .luna => {
                 // No temperature; only the judge model's documented maximum.
                 try std.testing.expectEqual(@as(usize, 1), baseline.object.get("inferenceConfig").?.object.count());
                 const additional = baseline.object.get("additionalModelRequestFields").?.object;
@@ -463,7 +502,12 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
                 try std.testing.expect(additional.get("reasoning") == null);
                 try std.testing.expect(additional.get("reasoning_effort") == null);
             },
-            .none, .openai_oss => {},
+            .claude => {
+                // No temperature, and no effort field until one is selected.
+                try std.testing.expectEqual(@as(usize, 1), baseline.object.get("inferenceConfig").?.object.count());
+                try std.testing.expect(baseline.object.get("additionalModelRequestFields") == null);
+            },
+            .converse, .@"gpt-oss" => {},
         }
         inline for (.{ .low, .medium, .high, .none, .minimal, .xhigh }) |effort| {
             config.reasoning_effort = effort;
@@ -472,9 +516,14 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
             } else {
                 const encoded = try bedrock.request(a, config, inputs, null);
                 const root = try c.decode(std.json.Value, a, encoded);
-                switch (entry.bedrock_request_profile) {
-                    .openai_oss => try std.testing.expectEqualStrings(@tagName(effort), root.object.get("additionalModelRequestFields").?.object.get("reasoning_effort").?.string),
-                    .none, .openai_luna => return error.TestUnexpectedResult,
+                switch (family) {
+                    .@"gpt-oss" => try std.testing.expectEqualStrings(@tagName(effort), root.object.get("additionalModelRequestFields").?.object.get("reasoning_effort").?.string),
+                    .claude => {
+                        const additional = root.object.get("additionalModelRequestFields").?.object;
+                        try std.testing.expectEqualStrings(@tagName(effort), additional.get("output_config").?.object.get("effort").?.string);
+                        try std.testing.expect(additional.get("reasoning_effort") == null);
+                    },
+                    .converse, .luna => return error.TestUnexpectedResult,
                 }
                 const temperature = entry.capabilities.inferenceControls().temperature;
                 if (temperature) |fixed| try std.testing.expectEqual(fixed.wireValue(), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
@@ -517,12 +566,18 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         .usage = .{ .inputTokens = 10, .outputTokens = 20, .totalTokens = 30 },
     }, .{});
     const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nX-Amzn-RequestId: bedrock-request-1\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
-    const fixture_module = @import("../../src/bedrock_http_test_fixture.zig");
+    const fixture_module = @import("../../src/model_http_test_fixture.zig");
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        if (entry.capabilities.structured_response != .bedrock_json_schema) {
+        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family,
+        // with a judge model and Region that name nothing real (ADR 0029).
+        const family = entry.facts.bedrockFamily() orelse continue;
+        const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
+        const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
+        if (entry.capabilities.structured_response != .native_json_schema) {
             var forged = try configuration.parse(a, config_bytes, bedrock_selection);
-            forged.model = entry.model.bytes;
-            forged.region = entry.bedrock_regions[0];
+            forged.model = model.bytes;
+            forged.region = region;
+            forged.family = family;
             var fake: Fake = .{ .observations = &.{} };
             try std.testing.expectError(error.InvalidEvaluationContract, evaluator.run(std.testing.io, a, fake.port(), forged, try capture(a)));
             try std.testing.expectEqual(@as(usize, 0), fake.count);
@@ -531,10 +586,10 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         var socket: fixture_module.Fixture = undefined;
         socket.init(response);
         defer socket.deinit();
-        socket.expected_host = try std.fmt.allocPrint(a, "bedrock-runtime.{s}.amazonaws.com", .{@tagName(entry.bedrock_regions[0])});
+        socket.expected_host = try std.fmt.allocPrint(a, "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
         var transport = socket.adapter();
-        var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = entry.model, .region = entry.bedrock_regions[0], .api_key = &socket.canary };
-        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] });
+        var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = model, .region = region, .api_key = &socket.canary };
+        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
         config.timeout_ms = 100;
         const inputs = try capture(a);
         const encoded = try @import("request.zig").encode(a, config, inputs, null);
@@ -550,9 +605,9 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         if (entry.capabilities.inferenceControls().temperature) |temperature| {
             try std.testing.expectEqual(temperature.wireValue(), inference_config.get("temperature").?.float);
         } else try std.testing.expect(!inference_config.contains("temperature"));
-        switch (entry.bedrock_request_profile) {
-            .openai_luna => try std.testing.expect(root.object.get("additionalModelRequestFields").?.object.get("text").?.object.get("format").?.object.get("strict").?.bool),
-            .none, .openai_oss => {},
+        switch (family) {
+            .luna => try std.testing.expect(root.object.get("additionalModelRequestFields").?.object.get("text").?.object.get("format").?.object.get("strict").?.bool),
+            .converse, .@"gpt-oss", .claude => {},
         }
         const format = root.object.get("outputConfig").?.object.get("textFormat").?.object;
         try std.testing.expectEqualStrings("json_schema", format.get("type").?.string);
@@ -574,8 +629,8 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
         try std.testing.expectEqual(@as(u64, 30), report.attempts[0].usage.?.total_tokens);
         try std.testing.expectEqualStrings("bedrock-request-1", report.attempts[0].request_id.?);
-        try std.testing.expectEqualStrings(entry.model.bytes, report.attempts[0].identity.bedrock_target.model);
-        try std.testing.expectEqual(entry.bedrock_regions[0], report.attempts[0].identity.bedrock_target.region);
+        try std.testing.expectEqualStrings(model.bytes, report.attempts[0].identity.bedrock_target.model);
+        try std.testing.expectEqual(region, report.attempts[0].identity.bedrock_target.region);
         const json = try reports.json(a, report);
         const markdown = try reports.markdown(a, report);
         try std.testing.expect(std.mem.indexOf(u8, json, "non-candidate metadata") == null);
@@ -756,7 +811,7 @@ test "Bedrock concrete HTTP cancellation and deadlines stop without retry or inv
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const fixture_module = @import("../../src/bedrock_http_test_fixture.zig");
+    const fixture_module = @import("../../src/model_http_test_fixture.zig");
     const body = try bedrockResponseBytes(a, "end_turn", good);
     const response = try std.fmt.allocPrint(a, "HTTP/1.1 200 OK\r\nContent-Length: {d}\r\n\r\n{s}", .{ body.len, body });
     for ([_]fixture_module.Fault{ .cancelled, .deadline }) |fault| {
@@ -968,7 +1023,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence and a fai
         try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
         try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
         const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
-        try std.testing.expectEqualStrings("evaluation-report/v7", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings("evaluation-report/v8", encoded.get("schema").?.string);
         try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("attempts").?.array.items[0].object.get("diagnostic").?.object.get("reason").?.string);
         try std.testing.expect(!encoded.contains("judgment_diagnostic"));
         const markdown = try reports.markdown(a, report);
@@ -1605,7 +1660,7 @@ test "CLI requires explicit live opt-in and all paths and rejects secret-shaped 
 }
 
 test "native OpenAI evaluator cannot connect from tests with credentials" {
-    const http_fixture = @import("../../src/bedrock_http_test_fixture.zig");
+    const http_fixture = @import("../../src/model_http_test_fixture.zig");
     var connection: http_fixture.Fixture = undefined;
     connection.init("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}");
     defer connection.deinit();
@@ -1836,8 +1891,15 @@ test "Bedrock temperature follows the registered capability and rejects configur
     const a = arena.allocator();
     const inputs = try capture(a);
     for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
-        const selection: configuration.Selection = .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] };
-        if (entry.capabilities.structured_response != .bedrock_json_schema) {
+        // The Bedrock-only evaluator and diagnostic bindings cover the Bedrock family.
+        const family = entry.facts.bedrockFamily() orelse continue;
+        const selection: configuration.Selection = .{
+            .api = .bedrock_converse,
+            .model = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] },
+            .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0],
+            .family = family,
+        };
+        if (entry.capabilities.structured_response != .native_json_schema) {
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, selection));
             continue;
         }

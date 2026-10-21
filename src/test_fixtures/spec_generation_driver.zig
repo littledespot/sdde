@@ -238,7 +238,7 @@ pub const Driver = struct {
                     .compiled_steps = self.runner.selected.graph.authority.steps.len,
                     .content = parts,
                     .schema = current_request.prepared().?.response_schema.modelBytes(),
-                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, current_request.binding().registry_entry.bedrock_request_profile, .{ .tokens = 16000 }) catch unreachable,
+                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, measuredFamily(current_request), .{ .tokens = 16000 }) catch unreachable,
                     .composition = if (current_request.part()) |part| .{
                         .part = part.plan.parts()[part.part].id.bytes,
                         .canonical_schema = part.plan.completeSchema().modelBytes(),
@@ -378,7 +378,7 @@ pub const Driver = struct {
                 if (view.contains(.source_omission_repair)) self.source_repair_calls += 1;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review) self.support_repair_calls += 1;
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                assertRepairRequest(arena.allocator(), current_request, packet, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable;
+                assertRepairRequest(arena.allocator(), current_request, packet, measuredFamily(current_request)) catch unreachable;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review and std.mem.startsWith(u8, current_request.id().immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) self.principle_repair_calls += 1;
             }
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
@@ -811,7 +811,13 @@ fn assertGenerationContext(a: std.mem.Allocator, request: *const @import("../dom
     try std.testing.expectEqual(@as(usize, 1), count);
 }
 
-fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/model_request_handoff.zig").Request, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockRequestProfile) !void {
+/// The driver measures the Bedrock Converse serializer. A binding outside the
+/// Bedrock family is measured with plain Converse fields (ADR 0029).
+fn measuredFamily(current: *const @import("../domain/model_request_handoff.zig").Request) @import("../domain/llm_provider_contracts.zig").BedrockFamily {
+    return current.binding().registry_entry.facts.bedrockFamily() orelse .converse;
+}
+
+fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/model_request_handoff.zig").Request, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockFamily) !void {
     const request = current.prepared().?;
     // Presentation is model-facing data. The exact native packet remains the
     // independent authorization/schema/evidence association throughout retries.

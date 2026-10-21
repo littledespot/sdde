@@ -8,7 +8,7 @@ const body = "{\"MOCK\":\"captured wire body\"}";
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "MOCK-model",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 3,
@@ -21,21 +21,23 @@ const description: debug.Description = .{
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
-const context: Context = .{
-    .schema = .@"model-call-evidence/v1",
+const current: Context = .{
+    .schema = .@"model-call-evidence/v2",
     .call = 9,
     .origin = .{ .request = .{ .value = 72 }, .attempt = .{ .value = 3 } },
     .request_step = description.request_step,
     .slot = description.model_slot,
     .attempt = 3,
+    .provider = description.provider,
     .model = description.model,
-    .region = description.provider_config.aws_bedrock.region,
+    .provider_config = description.provider_config,
     .kind = .inference,
     .reasoning_effort = description.reasoning_effort,
     .content = description.content,
     .response_schema = description.schema,
     .response_mode = description.response_mode,
 };
+const context: context_contract.Captured = .{ .current = current };
 const call: debug.Call = .{
     .run = "MOCK-run",
     .sequence = 201,
@@ -97,34 +99,41 @@ test "capture selection rejects incomplete redacted replay and noninference reco
     invalid = call;
     invalid.description.?.operation_kind = .input_token_count;
     try std.testing.expectError(error.CaptureNotInference, capture.select(&.{invalid}, context, description.workflow_id, 9, body));
-    var count = context;
+    var count = current;
     count.kind = .input_token_count;
     count.origin.kind = .input_token_count;
-    try std.testing.expectError(error.CaptureNotInference, capture.select(&.{call}, count, description.workflow_id, 9, body));
+    try std.testing.expectError(error.CaptureNotInference, capture.select(&.{call}, .{ .current = count }, description.workflow_id, 9, body));
 }
 
 test "capture selection compares all recorded context fields and exact request bytes" {
     inline for (.{ "request_step", "slot", "model", "reasoning_effort", "response_schema" }) |field| {
-        var mismatch = context;
+        var mismatch = current;
         @field(mismatch, field) = "MOCK-mismatch";
-        try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, mismatch, description.workflow_id, 9, body));
+        try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     }
     inline for (.{ "request_step", "model_slot", "model", "workflow_id", "schema", "reasoning_effort" }) |field| {
         var mismatch = call;
         @field(mismatch.description.?, field) = "MOCK-mismatch";
         try std.testing.expectError(error.CaptureMismatch, capture.select(&.{mismatch}, context, description.workflow_id, 9, body));
     }
-    var mismatch = context;
+    var mismatch = current;
     mismatch.content = &.{ .{ .guidance = "different MOCK guidance" }, .{ .user = "MOCK request" } };
-    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, mismatch, description.workflow_id, 9, body));
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     mismatch.content = &.{ .{ .user = "MOCK guidance" }, .{ .user = "MOCK request" } };
-    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, mismatch, description.workflow_id, 9, body));
-    mismatch = context;
-    mismatch.region = .@"us-west-2";
-    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, mismatch, description.workflow_id, 9, body));
-    mismatch = context;
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
+    mismatch = current;
+    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } };
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
+    mismatch = current;
+    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } };
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
+    mismatch = current;
+    mismatch.provider = "anthropic";
+    mismatch.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } };
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
+    mismatch = current;
     mismatch.response_mode = .native_schema;
-    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, mismatch, description.workflow_id, 9, body));
+    try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, context, description.workflow_id, 9, body ++ " "));
 }
 
@@ -152,15 +161,15 @@ test "capture preserves source evidence and rejects foreign node or redacted sou
     try std.testing.expectError(error.CaptureRedacted, capture.select(&.{source}, context, description.workflow_id, 9, body));
 }
 
-test "shared context retains v1 wire shape and rejects unknown version fields and inconsistent origin" {
+test "shared context retains v2 wire shape and rejects unknown version fields and inconsistent origin" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const bytes = try std.json.Stringify.valueAlloc(a, context, .{});
-    try std.testing.expectEqualDeep(context, try Context.decode(a, bytes));
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v1\"") != null);
+    const bytes = try std.json.Stringify.valueAlloc(a, current, .{});
+    try std.testing.expectEqualDeep(current, try Context.decode(a, bytes));
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v2\"") != null);
     for ([_][2][]const u8{
-        .{ "model-call-evidence/v1", "model-call-evidence/v2" },
+        .{ "model-call-evidence/v2", "model-call-evidence/v3" },
         .{ "\"call\":9", "\"call\":9,\"extra\":true" },
         .{ "\"call\":9", "\"call\":9,\"call\":10" },
     }) |change| {
@@ -170,9 +179,48 @@ test "shared context retains v1 wire shape and rejects unknown version fields an
         .{ "\"call\":9", "\"call\":0" },
         .{ "\"attempt\":3", "\"attempt\":2" },
         .{ "prepare-sample", "../outside" },
+        // A configuration of one family cannot accompany another provider.
+        .{ "\"provider\":\"aws-bedrock\"", "\"provider\":\"anthropic\"" },
     }) |change| {
         try std.testing.expectError(error.InvalidCallContext, Context.decode(a, try std.mem.replaceOwned(u8, a, bytes, change[0], change[1])));
     }
+}
+
+test "captured contexts dispatch on their exact schema and keep v1 as historical Bedrock evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const current_bytes = try std.json.Stringify.valueAlloc(a, current, .{});
+    const decoded = try context_contract.Captured.decode(a, current_bytes);
+    try std.testing.expect(decoded == .current);
+    try std.testing.expect(decoded.recordsConfig(description.provider, description.provider_config));
+    try std.testing.expect(!decoded.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } }));
+    const historical: context_contract.HistoricalCallContextV1 = .{
+        .schema = .@"model-call-evidence/v1",
+        .call = current.call,
+        .origin = current.origin,
+        .request_step = current.request_step,
+        .slot = current.slot,
+        .attempt = current.attempt,
+        .model = current.model,
+        .region = .@"ap-southeast-2",
+        .kind = current.kind,
+        .reasoning_effort = current.reasoning_effort,
+        .content = current.content,
+        .response_schema = current.response_schema,
+        .response_mode = current.response_mode,
+    };
+    const historical_bytes = try std.json.Stringify.valueAlloc(a, historical, .{});
+    const old = try context_contract.Captured.decode(a, historical_bytes);
+    try std.testing.expect(old == .historical_v1);
+    try std.testing.expectEqualDeep(decoded.common(), old.common());
+    // A v1 capture records only a Bedrock region.
+    try std.testing.expect(old.recordsConfig("aws-bedrock", description.provider_config));
+    try std.testing.expect(!old.recordsConfig("aws-bedrock", .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } }));
+    try std.testing.expect(!old.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } }));
+    // Unknown versions and a v1 body labelled v2 reject.
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v2", "model-call-evidence/v9")));
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v2")));
 }
 
 const config_bytes =
@@ -227,7 +275,7 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
     try write(root, run_path ++ "/case.json", case_bytes);
     try write(root, run_path ++ "/project/.sddtoolkit.json", config_bytes);
     try write(root, run_path ++ "/project/settings/.sddproviders.json", provider_bytes);
-    try write(root, run_path ++ "/evidence/generation/call-000009/context.json", try std.json.Stringify.valueAlloc(a, context, .{}));
+    try write(root, run_path ++ "/evidence/generation/call-000009/context.json", try std.json.Stringify.valueAlloc(a, current, .{}));
     try write(root, run_path ++ "/evidence/generation/call-000009/request.json", body);
     var sink: Sink = .{ .allocator = a };
     try sink.rows.appendSlice(a, format.prompt_heading);
@@ -240,7 +288,7 @@ fn fixture(a: std.mem.Allocator, root: std.Io.Dir) !void {
         .action = .{ .bytes = call.action },
         .operation = .{ .bytes = description.request_step },
         .model_slot = .{ .bytes = description.model_slot },
-        .origin = context.origin,
+        .origin = current.origin,
         .description = description,
     });
     defer logger.end();
@@ -301,6 +349,6 @@ test "capture rejects evidence redaction and legacy descriptions instead of reco
     try write(root.dir, run_path ++ "/evidence/generation/call-000009/request.json", body);
     const path = run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log";
     const bytes = try @import("../files.zig").read(io, a, root.dir, path);
-    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v9", "model-request-debug/v2"));
+    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, @import("../../../src/domain/model_request_description.zig").current_version, "model-request-debug/v2"));
     try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
 }

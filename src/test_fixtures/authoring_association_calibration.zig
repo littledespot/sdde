@@ -282,16 +282,17 @@ pub fn run() !void {
 
 const PreparationAccess = struct {
     expected: @import("../domain/request_debugger.zig").Description,
-    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!@import("../domain/llm_provider_contracts.zig").BedrockRequestProfile {
+    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!@import("../domain/llm_provider_contracts.zig").ProviderFacts {
         const self: *PreparationAccess = @ptrCast(@alignCast(context));
         if (!std.meta.eql(self.expected, supplied)) return error.ReplayUnauthorized;
         const model = @import("../composition/provider_model_contracts.zig").registry.resolve(
             @import("../domain/llm_provider_identity.zig").ProviderId.parse(supplied.provider) orelse return error.ReplayUnauthorized,
             @import("../domain/llm_provider_identity.zig").ModelId.parse(supplied.model) orelse return error.ReplayUnauthorized,
+            supplied.provider_config,
         ) orelse return error.ReplayUnauthorized;
-        if (!model.acceptsConfig(supplied.provider_config) or !model.capabilities.supports(supplied.response_mode, supplied.controls) or
+        if (!model.capabilities.supports(supplied.response_mode, supplied.controls) or
             !@import("../domain/llm_provider_contracts.zig").supportsReasoningEffort(model.supported_reasoning_efforts, supplied.reasoning_effort)) return error.ReplayUnauthorized;
-        return model.bedrock_request_profile;
+        return model.facts;
     }
 };
 
@@ -325,7 +326,7 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
     var access: PreparationAccess = .{ .expected = description };
     var environment: std.process.Environ.Map = .init(a);
     defer environment.deinit();
-    var wire: @import("../bedrock_transport_test_fixture.zig").Wire = .{};
+    var wire: @import("../model_transport_test_fixture.zig").Wire = .{};
     var clock: @import("../provider_authorization_test_fixture.zig").TestClock = .{};
     var compiler: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     var adapter: @import("../adapters/provider/request_replay.zig").Adapter = .{ .authorization = .{ .context = @ptrCast(&access), .authorize_fn = PreparationAccess.authorize }, .environment = &environment, .transport = wire.port(), .clock = clock.port(), .compiler = compiler.compiler() };
@@ -620,7 +621,7 @@ fn receiptChecks(a: std.mem.Allocator, request: Request, answer: []const u8) !vo
         .request_sha256 = request.request.sha256,
         .response_sha256 = try shared.sha256(a, raw),
         .replay_elapsed_ns = null,
-        .result = .{ .request = .{ .id = "MOCK-replay", .run = "MOCK-run", .sequence = 1, .parent_run = run_manifest.parent.run, .parent_call = run_manifest.parent.call, .original_run = run_manifest.parent.run, .original_call = run_manifest.parent.call, .node = "MOCK-node", .mode = .modified, .body = try shared.read(a, request.request.path), .description = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } }, .model_slot = "MOCK-slot", .workflow_id = "MOCK-workflow", .workflow_version = 1, .request_step = "MOCK-step", .content = edit.content, .protocol_prompt = @import("../domain/model_controls.zig").response_format_guidance, .schema = edit.schema, .response_mode = .native_schema, .controls = .{ .temperature = .fixed }, .reasoning_effort = "low", .operation_kind = .inference } }, .response = .{ .id = "MOCK-replay", .outcome = .received, .status = 200, .body = raw } },
+        .result = .{ .request = .{ .id = "MOCK-replay", .run = "MOCK-run", .sequence = 1, .parent_run = run_manifest.parent.run, .parent_call = run_manifest.parent.call, .original_run = run_manifest.parent.run, .original_call = run_manifest.parent.call, .node = "MOCK-node", .mode = .modified, .body = try shared.read(a, request.request.path), .description = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } }, .model_slot = "MOCK-slot", .workflow_id = "MOCK-workflow", .workflow_version = 1, .request_step = "MOCK-step", .content = edit.content, .protocol_prompt = @import("../domain/model_controls.zig").response_format_guidance, .schema = edit.schema, .response_mode = .native_schema, .controls = .{ .temperature = .fixed }, .reasoning_effort = "low", .operation_kind = .inference } }, .response = .{ .id = "MOCK-replay", .outcome = .received, .status = 200, .body = raw } },
     };
     var seen: std.ArrayList(ReplayOrigin) = .empty;
     const accepted = try admitReceipt(a, run_manifest, good.trial_id, request, try std.json.Stringify.valueAlloc(a, good, .{}), &seen);

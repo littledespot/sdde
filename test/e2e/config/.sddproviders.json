@@ -1,6 +1,18 @@
 {
   "providers": [
     {
+      "provider": "anthropic",
+      "models": [
+        {
+          "model": "claude-haiku-5-5",
+          "json": false,
+          "config": {
+            "maxOutputTokens": 128000
+          }
+        }
+      ]
+    },
+    {
       "provider": "aws-bedrock",
       "models": [
         {
@@ -8,7 +20,17 @@
           "json": true,
           "config": {
             "region": "ap-southeast-2",
+            "family": "gpt-oss",
             "maxOutputTokens": 16384
+          }
+        },
+        {
+          "model": "au.anthropic.claude-haiku-5-5",
+          "json": true,
+          "config": {
+            "region": "ap-southeast-2",
+            "family": "claude",
+            "maxOutputTokens": 128000
           }
         }
       ]

@@ -164,7 +164,7 @@ test "test.integration.representation_admission retained F10 F11 and F12 observa
             // are the original, unchanged transport context bytes only, without
             // native field bindings for whole-response composition admission.
             stage = .context;
-            const context = try @import("../harness/e2e/call_context.zig").CallContext.decode(a, capture.context);
+            const context = (try @import("../harness/e2e/call_context.zig").Captured.decode(a, capture.context)).common();
             try std.testing.expectEqual(capture.call, context.call);
             var user_bytes: ?[]const u8 = null;
             for (context.content) |content| if (content == .user) {

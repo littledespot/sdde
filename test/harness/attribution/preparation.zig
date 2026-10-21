@@ -114,7 +114,7 @@ pub fn validateSources(a: std.mem.Allocator) !void {
         if (!matched) return error.CaptureDrift;
     }
     for (std.enums.values(Source)) |selected| {
-        const captured = try @import("../e2e/call_context.zig").CallContext.decode(a, sourceArtifact(if (selected == .records) "records.context.json" else "extraction.context.json").?);
+        const captured = (try @import("../e2e/call_context.zig").Captured.decode(a, sourceArtifact(if (selected == .records) "records.context.json" else "extraction.context.json").?)).common();
         const value = try description(a, selected);
         if (!std.mem.eql(u8, captured.response_schema, value.schema) or !std.mem.eql(u8, try json(a, captured.content), try json(a, value.content))) return error.CaptureDrift;
     }
@@ -152,11 +152,11 @@ pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
     const compiled = try schema.compileSelected(a, parsed.value, value.schema);
     return codec.encodeText(a, .{
         .content = value.content,
-        .schema = .{ .native = .{ .guidance = value.schema, .structure = try @import("../../../src/domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
+        .schema = .{ .native = .{ .guidance = value.schema, .structure = try @import("../../../src/domain/model_schema_projection.zig").render(a, compiled, .native) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = value.controls.temperature,
-        .reasoning_effort = try codec.reasoningEffort(value.reasoning_effort),
-        .request_profile = .openai_oss,
+        .reasoning_effort = try @import("../../../src/adapters/provider/model_text_request.zig").reasoningEffort(value.reasoning_effort),
+        .family = .@"gpt-oss",
         .max_output_tokens = try frozen.maximumOutput(a),
     }, .inference);
 }

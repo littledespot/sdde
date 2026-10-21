@@ -70,7 +70,7 @@ test "catalogue candidate cannot substitute compiled capability facts" {
     defer candidate.deinit();
     candidate.entries[0] = .{
         .provider = provider_contract.provider,
-        .model = provider_contract.model,
+        .model = provider_contract.model.?,
         .implementation_id = provider_contract.implementation_id,
         .config = .empty_object,
         .json = false,
@@ -142,7 +142,7 @@ const provider_contract: contracts.ProviderModelContract = .{
     .provider = .{ .bytes = "compiled-provider" },
     .model = .{ .bytes = "test-model" },
     .implementation_id = .{ .ordinal = 1 },
-    .config_schema = .empty_object,
+    .facts = .empty_object,
     .capabilities = fixture.capabilities,
 };
 const model_operation: operations.Entry = .{

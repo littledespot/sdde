@@ -1,5 +1,5 @@
 const std = @import("std");
-const transport = @import("adapters/provider/bedrock_transport.zig");
+const transport = @import("adapters/provider/model_http_transport.zig");
 
 pub const complete = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
@@ -33,7 +33,7 @@ pub const Wire = struct {
             };
             defer parsed.deinit();
             const sent = if (parsed.value.object.get("inferenceConfig")) |config| config.object.get("maxTokens") else null;
-            switch (request.kind) {
+            switch (request.kind()) {
                 .inference => std.debug.assert(sent != null and sent.?.integer == maximum),
                 .input_token_count => std.debug.assert(std.mem.indexOf(u8, request.body, "maxTokens") == null),
             }
@@ -41,7 +41,7 @@ pub const Wire = struct {
         std.debug.assert(request.api_key.len != 0);
         std.debug.assert(std.mem.indexOf(u8, request.body, request.api_key) == null);
         if (self.cancelled) return error.Cancelled;
-        return self.result orelse .{ .received = .{ .status = 200, .body = if (request.kind == .input_token_count) "{\"inputTokens\":10}" else self.inference_body } };
+        return self.result orelse .{ .received = .{ .status = 200, .body = if (request.kind() == .input_token_count) "{\"inputTokens\":10}" else self.inference_body } };
     }
 };
 

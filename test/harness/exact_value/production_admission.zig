@@ -134,7 +134,7 @@ fn syntaxCapture(a: std.mem.Allocator) !Input {
     try pinned(a, capture.context, capture.context_sha256);
     try pinned(a, capture.output, capture.output_sha256);
     try pinned(a, capture.source, capture.source_sha256);
-    const context = try @import("../e2e/call_context.zig").CallContext.decode(a, capture.context);
+    const context = (try @import("../e2e/call_context.zig").Captured.decode(a, capture.context)).common();
     if (context.call != capture.call) return error.InvalidRetainedAdmissionCapture;
     return .{ .id = "latest-embedded-insertion", .time = "16 October 22:00", .class = .embedded_insertion_syntax, .execution = capture.execution_id, .call = capture.call, .source = capture.source, .output = capture.output, .unit = .brief };
 }

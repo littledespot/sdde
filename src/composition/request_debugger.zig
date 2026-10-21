@@ -42,7 +42,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, feature_name: []const u8, e
 
 const Authority = struct {
     runtime: *runtime_module.Runtime,
-    fn authorize(context: *ports.Context, description: debug.Description) ports.Error!@import("../domain/llm_provider_contracts.zig").BedrockRequestProfile {
+    fn authorize(context: *ports.Context, description: debug.Description) ports.Error!@import("../domain/llm_provider_contracts.zig").ProviderFacts {
         const self: *Authority = @ptrCast(@alignCast(context));
         const services = &self.runtime.boot.ready;
         const graph = services.workflows.registry().resolve(.{ .bytes = description.workflow_id }) orelse return error.ReplayUnauthorized;
@@ -52,7 +52,7 @@ const Authority = struct {
         if (outcome != .ready) return error.ReplayUnauthorized;
         const binding = (@import("../actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, .{ .bytes = description.request_step }, outcome.ready.registry(), outcome.ready.allowlist()) catch return error.ReplayUnauthorized;
         if (!description.matchesBinding(&binding)) return error.ReplayUnauthorized;
-        return binding.registry_entry.bedrock_request_profile;
+        return binding.registry_entry.facts;
     }
 };
 const Session = struct {

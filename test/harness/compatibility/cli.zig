@@ -81,7 +81,7 @@ fn execute(io: std.Io, a: std.mem.Allocator, environment: *const std.process.Env
     var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = report.started_at_utc, .status = .input_invalid };
     var probe: @import("../e2e/invoke.zig").Probe = .{};
     defer reports.applyExecution(report, probe, workflow);
-    _ = try @import("../e2e/invoke.zig").run(io, a, run.project, selected, captured, key, store, &workflow, .{ .purpose = .{ .single_exchange = &probe } });
+    _ = try @import("../e2e/invoke.zig").run(io, a, run.project, selected, captured, @import("../environment.zig").bedrockOnly(key), store, &workflow, .{ .purpose = .{ .single_exchange = &probe } });
     const current = try @import("../files.zig").read(io, a, .cwd(), case_path);
     if (!std.mem.eql(u8, current, case_bytes)) return error.FixtureChanged;
     try fixture.verifySources(io, a, .cwd(), captured);
