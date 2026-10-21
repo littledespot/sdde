@@ -1070,6 +1070,7 @@ naming) was superseded by 0010 and removed.
 | [0024](decisions/0024-native-exact-token-authority.md) | Token-only groups receive no record batch; native canonical-byte evidence forces exact duties independently of semantic kind, and code owns byte-only token dispositions while retaining all original occurrences and obligations. |
 | [0025](decisions/0025-clarification-answer-authentication.md) | **Proposed, not accepted:** how clarification answers are authenticated and persisted before they become authority. |
 | [0026](decisions/0026-header-identity-log-retention.md) | Fresh runs prune prior-run log segments that are closed and past retention, using each segment header's identity. Invalid prior history blocks, and a run with an active tail is kept whole. |
+| [0027](decisions/0027-list-item-extraction-chunks.md) | Each top-level Markdown list item is its own extraction chunk, with its heading and lead-in paragraph as non-citable context (`source_list_items_v1`, `specification-state/v20`). |
 
 Additional accepted feature boundaries:
 

@@ -1,5 +1,17 @@
 # Bound preservation comparison — FIX01-01 Phase 3
 
+**ADR 0027 renumbering — 21 October 2026:** three captures have list-shaped sources:
+- `presentation/captured-story.canonical.json`;
+- `presentation/loan-story.canonical.json`;
+- `citation-completeness/captured-story.associated.json`.
+
+Their claim and citation IDs were renumbered for the list-item chunk order. Each
+exact token now follows its own item's claim, so IDs 3 and 4 swap. Their text,
+groups and meaning are unchanged. This renumbering makes the
+`captured-story.canonical.json` pin in `test/calibration/source-review-record/preparation.json`
+stale. That manifest already held other stale pins, and all of them are refreshed
+when the panel is next regenerated.
+
 Status: **32/32 approved calls executed; semantic acceptance failed.**
 Phase 3 remains open. See the results below; the frozen requests, expected labels
 and gate are unchanged. No Phase 4 E2E invocation ran.

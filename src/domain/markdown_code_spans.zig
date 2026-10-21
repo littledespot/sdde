@@ -1,4 +1,5 @@
-//! Source-coordinate extractor. Values are raw source, not rendered Markdown.
+//! Source-coordinate extractor and the one Markdown line classifier. Values are
+//! raw source, not rendered Markdown; line forms identify structure, not meaning.
 const std = @import("std");
 pub const Form = enum { inline_code, code_block, link_destination };
 pub const Range = struct { start: usize, end: usize, form: Form = .inline_code };
@@ -31,10 +32,7 @@ pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocato
     var markup_end: usize = 0;
     var offset: usize = 0;
     while (offset < bytes.len) {
-        const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;
-        var next = end;
-        if (next < bytes.len and bytes[next] == '\r') next += 1;
-        if (next < bytes.len and bytes[next] == '\n') next += 1;
+        const end, const next = lineAt(bytes, offset);
         const line = bytes[offset..end];
         var prefix = contentStart(line);
         // Indentation cannot start a code block in the middle of a paragraph.
@@ -278,6 +276,75 @@ fn runLength(bytes: []const u8, start: usize, byte: u8) usize {
     return cursor - start;
 }
 
+/// The line starting at `offset`: where its content ends and where the next
+/// line starts. CRLF, CR or LF ends a line.
+pub fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
+    const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;
+    var next = end;
+    if (next < bytes.len and bytes[next] == '\r') next += 1;
+    if (next < bytes.len and bytes[next] == '\n') next += 1;
+    return .{ end, next };
+}
+
+/// The syntactic form of one source line, after at most three columns of
+/// indentation; a tab advances to the next four-column stop.
+pub const LineForm = union(enum) {
+    blank,
+    heading: struct { indent: usize },
+    /// A thematic break, or an `=`/`-` run that underlines a preceding
+    /// paragraph line as a setext heading.
+    separator: struct { underline: bool, indent: usize },
+    /// A list item marker: its indentation, the column where its content
+    /// starts, which nested items must reach, and whether it may interrupt a
+    /// paragraph (a bullet, or an ordered list starting at 1, with content).
+    list_item: struct { indent: usize, content: usize, interrupts: bool },
+    other: struct { indent: usize },
+};
+
+pub fn lineForm(line: []const u8) LineForm {
+    if (std.mem.trim(u8, line, " \t\r").len == 0) return .blank;
+    var indent: usize = 0;
+    var cursor: usize = 0;
+    while (cursor < line.len and (line[cursor] == ' ' or line[cursor] == '\t')) : (cursor += 1) {
+        indent = if (line[cursor] == '\t') (indent / 4 + 1) * 4 else indent + 1;
+    }
+    if (indent >= 4 or std.mem.indexOfScalar(u8, line[0..cursor], '\t') != null) return .{ .other = .{ .indent = indent } };
+    const content = line[cursor..];
+    if (isHeading(content)) return .{ .heading = .{ .indent = indent } };
+    // A thematic break or setext underline wins over a bullet ("* * *"), but a
+    // lone marker followed by space is an empty list item ("- ").
+    if (isBlockSeparator(content) and (std.mem.count(u8, content, content[0..1]) >= 3 or std.mem.indexOfAny(u8, content, " \t") == null)) {
+        const run = runLength(content, 0, content[0]);
+        const underline = (content[0] == '=' or content[0] == '-') and std.mem.trim(u8, content[run..], " \t").len == 0;
+        return .{ .separator = .{ .underline = underline, .indent = indent } };
+    }
+    if (markerLength(content)) |length| {
+        var start = indent + length + 1;
+        var spaces: usize = 0;
+        while (start + spaces < line.len and line[start + spaces] == ' ' and spaces < 4) spaces += 1;
+        // Five or more spaces begin indented content one space after the marker.
+        if (spaces < 4) start += spaces;
+        const ordered = std.ascii.isDigit(content[0]);
+        const first = !ordered or std.mem.eql(u8, std.mem.trimStart(u8, content[0 .. length - 1], "0"), "1");
+        const has_content = std.mem.trim(u8, content[length..], " \t").len != 0;
+        return .{ .list_item = .{ .indent = indent, .content = start, .interrupts = first and has_content } };
+    }
+    return .{ .other = .{ .indent = indent } };
+}
+
+/// The length of a bullet or ordered-list marker that is followed by a space
+/// or tab, or null when the line does not start with one.
+fn markerLength(content: []const u8) ?usize {
+    var cursor: usize = 0;
+    if (cursor < content.len and std.mem.indexOfScalar(u8, "-+*", content[cursor]) != null) {
+        cursor += 1;
+    } else {
+        while (cursor < content.len and std.ascii.isDigit(content[cursor]) and cursor < 9) cursor += 1;
+        if (cursor > 0 and cursor < content.len and (content[cursor] == '.' or content[cursor] == ')')) cursor += 1 else return null;
+    }
+    return if (cursor < content.len and (content[cursor] == ' ' or content[cursor] == '\t')) cursor else null;
+}
+
 fn isHeading(line: []const u8) bool {
     const count = runLength(line, 0, '#');
     return count > 0 and count <= 6 and (count == line.len or line[count] == ' ' or line[count] == '\t');
@@ -304,14 +371,8 @@ fn contentStart(line: []const u8) usize {
             continue;
         }
         const marker = cursor;
-        if (cursor < line.len and std.mem.indexOfScalar(u8, "-+*", line[cursor]) != null) {
-            cursor += 1;
-        } else {
-            while (cursor < line.len and std.ascii.isDigit(line[cursor]) and cursor - marker < 9) cursor += 1;
-            if (cursor > marker and cursor < line.len and (line[cursor] == '.' or line[cursor] == ')')) cursor += 1 else cursor = marker;
-        }
-        if (cursor > marker and cursor < line.len and (line[cursor] == ' ' or line[cursor] == '\t')) {
-            cursor += 1;
+        if (markerLength(line[cursor..])) |length| {
+            cursor += length + 1;
             continue;
         }
         return marker;

@@ -681,7 +681,7 @@ test "audit observes native admitted slots and ignores rejected candidate payloa
     defer tracker.deinit();
     const schema = @import("../../../src/application/reference_evidence_workflow.zig").inputs_schema;
     const source = [_]evidence.Source{.{ .id = .{ .ordinal = 1 }, .path = .{ .bytes = "references/message.md" }, .reader = .markdown_source_v1, .bytes = "Send Delivered. after delivery.", .blocks = &.{} }};
-    const inputs: evidence.Inputs = .{ .corpus = .{ .state_id = .{ .bytes = "state" }, .feature_id = .{ .bytes = "parcel" }, .sources = &source, .source_mappings = &.{}, .block_mappings = &.{} }, .chunks = .{ .state_id = .{ .bytes = "state" }, .partition = .source_blocks_v1, .entries = &.{} } };
+    const inputs: evidence.Inputs = .{ .corpus = .{ .state_id = .{ .bytes = "state" }, .feature_id = .{ .bytes = "parcel" }, .sources = &source, .source_mappings = &.{}, .block_mappings = &.{} }, .chunks = .{ .state_id = .{ .bytes = "state" }, .partition = .source_list_items_v1, .entries = &.{} } };
     const input = try values.create(a, schema, evidence.Inputs, inputs);
     defer values.destroy(input);
     const storage = @import("../../../src/application/specification_values.zig").storage;
@@ -835,7 +835,7 @@ test "source-checked refreshed questions retain native producers without inventi
     defer tracker.deinit();
     const quoted = "{\"kind\":\"exact_copy\",\"claim_id\":7}";
     const sources = [_]evidence.Source{.{ .id = .{ .ordinal = 1 }, .path = .{ .bytes = "requirements.md" }, .reader = .markdown_source_v1, .bytes = "A delivery approval decision remains unresolved. Example: " ++ quoted, .blocks = &.{} }};
-    const inputs: evidence.Inputs = .{ .corpus = .{ .state_id = .{ .bytes = "state" }, .feature_id = .{ .bytes = "parcels" }, .sources = &sources, .source_mappings = &.{}, .block_mappings = &.{} }, .chunks = .{ .state_id = .{ .bytes = "state" }, .partition = .source_blocks_v1, .entries = &.{} } };
+    const inputs: evidence.Inputs = .{ .corpus = .{ .state_id = .{ .bytes = "state" }, .feature_id = .{ .bytes = "parcels" }, .sources = &sources, .source_mappings = &.{}, .block_mappings = &.{} }, .chunks = .{ .state_id = .{ .bytes = "state" }, .partition = .source_list_items_v1, .entries = &.{} } };
     const original_sources = [_]wire.SourceText{.{ .source_id = sources[0].id, .bytes = sources[0].bytes }};
     const records = [_]clarification.Record{.{ .id = "S01", .revision = 1, .subject = .{ .requirement = "specification", .unit = "brief", .slot = "content" }, .authority = &.{.{ .reference = .{ .bytes = "state" } }}, .question = "Which delivery approval rule applies?", .why_required = "The captured source leaves this decision open.", .answer_schema = .{ .bounded_business_text = clarification.max_text_bytes }, .status = .open, .response_id = null, .authority_resolution = null }};
     const ready: clarification_refresh.Ready = .{ .state = .{ .value = .{ .schema = clarification.schema_version, .feature_id = "parcels", .state_ordinal = 1, .revision = 1, .next_ordinal = .{ .spec = 2, .plan = 1, .tasks = 1 }, .next_response_ordinal = 1, .records = &records, .responses = &.{} } }, .original_sources = &original_sources };

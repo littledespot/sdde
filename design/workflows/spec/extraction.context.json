@@ -1,5 +1,5 @@
 {
-  "purpose": "Reference extraction field meanings. Apply only to selected fields. The selected schema defines allowed shapes and fragment forms; use only supplied reference IDs.",
+  "purpose": "Reference extraction field meanings. Apply only to selected fields. The selected schema defines allowed shapes and fragment forms; use only supplied reference IDs. When lead_in is supplied, it is the heading and paragraph that introduce source_lines: context for reading them, not facts to extract. Keep any condition or subject from lead_in that source_lines depend on.",
   "kind": "Use claims when source facts or exact-token obligations exist. Meaningful prose requires claims; claims may be empty only when there are exact-token obligations but no prose facts to extract. Use no_feature_claim with a reason only when neither exists.",
   "claims": "One independently meaningful source fact per entry. Include meaningful identity and purpose headings. Keep each fact's conditions, qualifiers, obligation strength and required literal text; separate independent behavior, implementation and verification facts. Do not invent facts.",
   "content": "The meaning of this one claim. Classify by what the source requires or states, not keywords or obligation strength.",
@@ -14,5 +14,5 @@
   },
   "segments": "Write the complete claim as a string. If a permitted reference is needed, use {\"fragments\":[text or typed references]}; strings include their own separators. References insert supplied display values; surrounding text expresses meaning.",
   "nodes": "Write the complete reference text as a string, or use {\"fragments\":[text or permitted references]} for explicit composition. Fragments concatenate exactly; strings include their own separators.",
-  "citations": "Source evidence for the complete claim, including its conditions. Each first/last pair selects an inclusive range of source_lines IDs from the current input."
+  "citations": "Source evidence for the claim, including conditions stated in source_lines. Each first/last pair selects an inclusive range of source_lines IDs from the current input. lead_in is never cited."
 }

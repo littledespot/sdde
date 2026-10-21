@@ -7,7 +7,7 @@ flowchart TD
     START["Workflow selects a reference directory"] --> INVENTORY["Inventory all sources in deterministic order;<br/>validate containment, supported formats and resource bounds"]
     INVENTORY -->|Valid| CAPTURE["Capture source bytes through authorized readers"]
     CAPTURE --> DECODE["Decode sources and retain their exact locations;<br/>account for every source and block"]
-    DECODE --> CHUNKS["Prepare bounded, citable chunks"]
+    DECODE --> CHUNKS["Prepare bounded, citable chunks:<br/>one per top-level list item (ADR 0027)"]
     NAMING["Compile every selected toolchain naming rule"] --> GRAMMAR["Build shared path-token grammar;<br/>include every captured reference basename"]
     CHUNKS --> GRAMMAR
     GRAMMAR --> LITERALS["Scan source-backed display literals;<br/>assign IDs and validate exact origins"]

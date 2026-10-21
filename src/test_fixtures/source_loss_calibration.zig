@@ -393,14 +393,29 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     errdefer passive.deinit();
     const available = try tokens.candidates(a, sources);
     const raw = try a.alloc(r.extraction.RawResult, sources.chunks.entries.len);
+    var placed: usize = 0;
     for (sources.chunks.entries, raw) |chunk, *result| {
         const resolved = try r.evidence.resolve(sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id });
         var claims: std.ArrayList(r.extraction.Proposal) = .empty;
-        for (example.claims) |claim| if (claim.source == resolved.source.id.ordinal) {
-            try claims.append(a, .{ .content = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = claim.text } }}) } }, .citations = try a.dupe(@import("../domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = claim.first }, .last = .{ .ordinal = claim.last } }}) });
+        // Case claims cite source lines; a chunk's line IDs are local to it, and
+        // a claim must lie within one chunk.
+        const first_line = chunk.span.start.line;
+        const last_line = if (chunk.span.end.column == 1) chunk.span.end.line - 1 else chunk.span.end.line;
+        for (example.claims) |claim| if (claim.source == resolved.source.id.ordinal and claim.first >= first_line and claim.first <= last_line) {
+            if (claim.last < claim.first or claim.last > last_line) return error.ClaimSpansChunks;
+            placed += 1;
+            try claims.append(a, .{ .content = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = claim.text } }}) } }, .citations = try a.dupe(@import("../domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = claim.first - first_line + 1 }, .last = .{ .ordinal = claim.last - first_line + 1 } }}) });
         };
-        result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = claims.items, .token_classifications = try tokens.classifications(a, available, chunk) } }) } };
+        const classifications = try tokens.classifications(a, available, chunk);
+        // A chunk the case assigns no claim, such as a heading, reports no feature claim.
+        const response: @import("../domain/reference_extraction_parser.zig").Response = if (claims.items.len == 0 and classifications.len == 0)
+            .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "MOCK This section introduces the requirements." } }} }, .token_classifications = classifications } }
+        else
+            .{ .claims = .{ .claims = claims.items, .token_classifications = classifications } };
+        result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, response) } };
     }
+    // Every case claim lies in exactly one chunk; none is silently dropped.
+    if (placed != example.claims.len) return error.UnplacedCalibrationClaim;
     const extracted = try extraction.finish(a, sources, raw);
     const context: refs.Context = .{ .inputs = sources, .registry = passive.registry, .current = text.safety.value(passive.owner) };
     const global = try refs.summaries(a, try refs.initialize(a, sources, extracted, 2), context);

@@ -10,8 +10,9 @@ pub const Action = struct {
         .produces = &.{.accounted_reference_extraction},
         .side_effect = .none,
     };
-    /// The current partition has one chunk per source block. Exact chunk cover
-    /// therefore proves block cover too; no second block-status authority.
+    /// The list-item partition tiles every source block with chunks (ADR 0027).
+    /// Exact chunk cover therefore proves block cover too; no second
+    /// block-status authority.
     pub fn execute(_: Action, inputs: evidence.Inputs, assigned: extraction.TokenAssignments, ledger: extraction.Ledger) extraction.Error!extraction.Accounted {
         if (!ledger.state_id.eql(inputs.corpus.state_id) or ledger.chunks.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
         var claim_index: usize = 0;

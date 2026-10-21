@@ -410,8 +410,10 @@ fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,
     };
-    try std.testing.expectEqual(@as(u32, 4), checked.response.content.primary_user_story.value.segments[0].exact_copy.claim_id.ordinal);
-    const echoed = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]}";
+    // Native recognition binds the token's own claim, wherever the partition numbered it.
+    const token = occurrences[0].claim_id.ordinal;
+    try std.testing.expectEqual(token, checked.response.content.primary_user_story.value.segments[0].exact_copy.claim_id.ordinal);
+    const echoed = try std.fmt.allocPrint(a, "{{\"kind\":\"primary_user_story\",\"value\":{{\"fragments\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}},\"signal_ids\":[1,2]}}", .{token});
     try std.testing.expectError(error.InvalidCalibrationPayload, admitResponse(a, schema, current, context, echoed));
 }
 

@@ -874,3 +874,38 @@ test "reconciliation phase recreation retains native source exceptions through r
         }
     }
 }
+
+test "a list item extraction request shows its lead-in as context and cites only its own lines" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: source.IdSource = .{};
+    const bytes = "## Renewal\n\nWhen a loan is active:\n\n- Display `Loan renewed!`.\n";
+    const inputs = try source.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "requirements.md", bytes));
+    const passive = try text.prepare(a, inputs);
+    defer passive.deinit();
+    const candidates = try tokens.candidates(a, inputs);
+    try std.testing.expectEqual(@as(usize, 2), inputs.chunks.entries.len);
+    for (inputs.chunks.entries, 0..) |chunk, index| {
+        const scope: @import("domain/reference_evidence.zig").Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id };
+        const packet = try input.extractionPacket(a, inputs, passive.registry, candidates, scope);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
+        var cited: std.ArrayList(u8) = .empty;
+        for (body.object.get("source_lines").?.array.items) |line| try cited.appendSlice(a, line.object.get("text").?.string);
+        try std.testing.expectEqualStrings(bytes[chunk.span.start.byte..chunk.span.end.byte], cited.items);
+        if (index == 0) {
+            // A text chunk's request is unchanged: it has no lead-in.
+            try std.testing.expect(body.object.get("lead_in") == null);
+            continue;
+        }
+        const lead_in = body.object.get("lead_in").?.array.items;
+        try std.testing.expectEqual(@as(usize, 2), lead_in.len);
+        try std.testing.expectEqualStrings("## Renewal", lead_in[0].string);
+        try std.testing.expectEqualStrings("When a loan is active:", lead_in[1].string);
+        try std.testing.expectEqualStrings("- Display `Loan renewed!`.\n", cited.items);
+        // The lead-in text is context only: no citation can select it.
+        const outside = try @import("domain/source_selections.zig").validate(a, inputs, scope, &.{.{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 2 } }});
+        try std.testing.expect(outside == .invalid);
+    }
+}

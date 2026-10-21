@@ -4,6 +4,7 @@ const spec = g.spec;
 const provenance = @import("domain/specification_provenance.zig");
 const identifiers = @import("domain/specification_identity.zig");
 const references = @import("test_fixtures/reference_reconciliation.zig");
+const evidence_type = @import("domain/reference_evidence.zig");
 const evidence = @import("reference_evidence_test.zig");
 const extraction = @import("reference_extraction_test.zig");
 const text = @import("test_fixtures/reference_text.zig");
@@ -2234,6 +2235,35 @@ test "code samples remain reference evidence and cannot be copied into business 
     try std.testing.expectError(error.InvalidReferenceReconciliation, @import("domain/reference_claim_items.zig").build(a, snapshot.inputs, invalid_extraction));
     const bytes = try @import("domain/reference_context.zig").render(a, snapshot, null, null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "````\n" ++ raw ++ "````\n") != null);
+}
+
+test "a persisted reference snapshot is valid only with the canonical list-item partition" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "## Requirements\n\n- MOCK Renew a loan.\n- MOCK Show the due date.\n");
+    defer fixture.deinit();
+    const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+    const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
+    const snapshot = try @import("domain/reference_snapshot.zig").build(.{ .bytes = "references" }, fixture.context.inputs, fixture.extracted, fixture.context.references, fixture.context.registry, contract);
+    try @import("domain/reference_snapshot.zig").validate(a, snapshot);
+    try std.testing.expectEqual(@as(usize, 3), snapshot.inputs.chunks.entries.len);
+    for ([_]enum { one_chunk_per_block, dropped_lead_in }{ .one_chunk_per_block, .dropped_lead_in }) |fault| {
+        var forged = snapshot;
+        const entries = try a.dupe(evidence_type.Chunk, snapshot.inputs.chunks.entries);
+        switch (fault) {
+            // The superseded `source_blocks_v1` shape: one chunk for the block.
+            .one_chunk_per_block => {
+                entries[0].span.end = entries[2].span.end;
+                forged.inputs.chunks.entries = entries[0..1];
+            },
+            .dropped_lead_in => {
+                entries[1].lead_in = &.{};
+                forged.inputs.chunks.entries = entries;
+            },
+        }
+        try std.testing.expectError(error.InvalidReferenceSnapshot, @import("domain/reference_snapshot.zig").validate(a, forged));
+    }
 }
 
 test "unit parsing rejects model authority and ID ledger allocation remains engine owned" {
@@ -5055,6 +5085,37 @@ fn completedFixtureValue(fixture: *const Fixture, omit_requirements: bool, value
     return current;
 }
 
+/// Like `completedFixtureValue`, but every native record batch authors one
+/// requirement and one criterion bound to its own group, as ADR 0020 requires
+/// of a source with several groups.
+fn completedFixtureEachGroup(fixture: *const Fixture, value: spec.Model.AttributedValue) !@import("domain/specification_session.zig").Session {
+    const sessions = @import("domain/specification_session.zig");
+    const a = fixture.allocator;
+    var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
+    while (current.completed < sessions.unit_count) {
+        const unit = try sessions.unit(current.completed);
+        if (unit == .records) {
+            const bound = (try sessions.currentBinding(a, current, fixture.context)).records;
+            const group = try a.dupe(@TypeOf(bound.signal), &.{bound.signal});
+            // Records of different groups must differ, or they duplicate each other.
+            const text_value: @TypeOf(value.value) = .{ .segments = try a.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = try std.fmt.allocPrint(a, "MOCK Behavior of source group {d}.", .{bound.signal.ordinal}) } }}) };
+            const ac: spec.Model.RecordProposal = .{ .content = .{ .acceptance_criterion = .{ .given = text_value, .when = text_value, .then = text_value } }, .source_group_ids = group, .provenance = bound.selection };
+            const fr: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = text_value } }, .source_group_ids = group, .provenance = bound.selection };
+            const batch: @import("domain/specification_candidate.zig").Candidate = .{ .response = .{ .content = .{ .records = &.{ fr, ac } } } };
+            current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, batch)).valid);
+            continue;
+        }
+        const response: g.Response = .{ .content = switch (unit) {
+            .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
+            .primary_user_story => .{ .primary_user_story = value },
+            .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = value } },
+            .records => unreachable,
+        } };
+        current = try appendMockResponse(a, current, fixture.context, response);
+    }
+    return current;
+}
+
 // Test-only authoring folds explicit mock associations through each native
 // assignment. Empty batches are admitted rather than skipped or fabricated.
 fn appendMockResponse(a: std.mem.Allocator, current: @import("domain/specification_session.zig").Session, context: provenance.Context, response: g.Response) !@import("domain/specification_session.zig").Session {
@@ -7660,7 +7721,7 @@ test "persisted extraction binding resolves fresh compiled authority after origi
         defer execution_arena.deinit();
         const a = execution_arena.allocator();
         const original = try fixture_type.init(a);
-        const binding = try contract.capture(a, original.authority, .source_blocks_v1);
+        const binding = try contract.capture(a, original.authority, .source_list_items_v1);
         break :capture try std.json.Stringify.valueAlloc(std.testing.allocator, binding, .{});
     };
     defer std.testing.allocator.free(bytes);
@@ -7669,9 +7730,9 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     const a = arena.allocator();
     const stored = try @import("domain/strict_json.zig").decode(contract.Binding, a, bytes, .{ .maximum_bytes = 10000, .maximum_depth = 32 });
     var current = try fixture_type.init(a);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, contract.validate, .{ stored, &current.authority, .source_blocks_v1 });
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, contract.validate, .{ stored, &current.authority, .source_list_items_v1 });
     current.authority.workflow_version += 1;
-    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
+    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_list_items_v1));
     current.authority.workflow_version -= 1;
     // Same resource IDs and workflow version, changed schema bytes.
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
@@ -7681,7 +7742,7 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     resources[0].content = .{ .result_schema = changed_schema };
     resources[1].content = .{ .json_composition = changed_plan };
     current.authority.resources = resources;
-    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
+    try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_list_items_v1));
 }
 
 test "incomplete specifications publish supported business evidence and bound questions without completion authority" {
@@ -10418,7 +10479,9 @@ test "post-generation semantic judgments remain admitted advice without content 
         var fixture = try Fixture.init(a, source);
         defer fixture.deinit();
         const authored = if (example_index != 1) example[1] else try std.fmt.allocPrint(a, "{s} Loan renewed! Renewal refused.", .{example[1]});
-        const current = try completedFixtureValue(&fixture, false, try fixture.proposal(authored));
+        // A list source yields one claim and group per item; each record batch
+        // authors its own group's records.
+        const current = try completedFixtureEachGroup(&fixture, try fixture.proposalAllGroups(authored));
         var assigned = try sessions.assemble(a, text.validator, fixture.context, current);
         if (example_index == 1) {
             const relationship = try fixture.value(captured_subject);
@@ -10945,7 +11008,7 @@ test "incomplete source and principle advice survive publication readback withou
         for (0..6) |mutation| {
             var forged = stored;
             switch (mutation) {
-                0 => forged.schema = "specification-state/v18",
+                0 => forged.schema = "specification-state/v19",
                 1 => forged.review.advice_stop = null,
                 2 => forged.review.advice_stop.?.candidate_revision += 1,
                 3 => forged.principle_assessment.advice_stop = null,

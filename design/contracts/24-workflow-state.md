@@ -27,7 +27,7 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v19, after ADR 0023's record families) over canonical `specification/v3`
+`specification-state` contract (currently v20, after ADR 0027's list-item chunks) over canonical `specification/v3`
 content; stage discriminators distinguish the variants. Earlier versions reject
 without migration, aliases or a compatibility reader. The pending variant retains
 reference and clarification data without claiming completed attributed content.
