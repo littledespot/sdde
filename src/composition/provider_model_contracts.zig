@@ -14,7 +14,7 @@ pub const registry: contracts.Registry = .{
             .bedrock_regions = &.{.@"ap-southeast-2"},
             .supported_reasoning_efforts = &.{ "low", "medium", "high" },
             .bedrock_request_profile = .openai_oss,
-            .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = true, .supports_max_output_tokens = true },
+            .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = true },
         },
         .{
             .provider = .{ .bytes = "aws-bedrock" },
@@ -33,7 +33,7 @@ pub const registry: contracts.Registry = .{
             // AWS documents default medium but not its Converse override mapping.
             // Admit omission only until that exact wire contract is established.
             .bedrock_request_profile = .openai_luna,
-            .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = false, .supports_max_output_tokens = true },
+            .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = false },
         },
     },
 };

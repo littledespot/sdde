@@ -295,32 +295,3 @@ pub fn attributedValue(comptime boundary: g.spec.Boundary, response: g.Responses
     var record = records[subject.record];
     return .{ .value = try valueField(&record.content, field), .source_group_ids = record.source_group_ids, .provenance = record.provenance };
 }
-pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, field: ValueField, value: g.spec.BusinessValue) Error!g.CanonicalResponse {
-    _ = try attributedValue(.canonical, response, subject, field);
-    var result = response;
-    if (subject != .record) {
-        (try attributed(.canonical, &result.content, subject)).value = value;
-    } else {
-        const records = try a.dupe(g.spec.RecordProposal, g.recordCollection(.canonical, response.content) orelse return error.InvalidSpecificationRepair);
-        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
-        if (field == .relationship) {
-            const relationships = try a.dupe(g.spec.BusinessValue, records[subject.record].content.entity.relationships);
-            relationships[field.relationship] = value;
-            records[subject.record].content.entity.relationships = relationships;
-        } else _ = try valueAccess(&records[subject.record].content, field, value);
-    }
-    return result;
-}
-
-pub fn replaceCanonicalProvenance(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, provenance: g.spec.Provenance) Error!g.CanonicalResponse {
-    var result = response;
-    if (subject == .record) {
-        if (result != .content) return error.InvalidSpecificationRepair;
-        const prior = g.recordCollection(.canonical, result.content) orelse return error.InvalidSpecificationRepair;
-        if (subject.record >= prior.len) return error.InvalidSpecificationRepair;
-        const records = try a.dupe(g.spec.RecordProposal, prior);
-        records[subject.record].provenance = provenance;
-        (g.recordCollectionPtr(.canonical, &result.content) orelse return error.InvalidSpecificationRepair).* = records;
-    } else (try attributed(.canonical, &result.content, subject)).provenance = provenance;
-    return result;
-}

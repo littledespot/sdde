@@ -7,8 +7,10 @@ const ProviderId = @import("../../src/domain/llm_provider_identity.zig").Provide
 
 pub const Error = std.mem.Allocator.Error || error{InvalidEvaluationContract};
 pub const Source = struct { id: []const u8, path: []const u8 };
-pub const Origin = enum { supplied, recorded, scripted_generation, live_generation };
-pub const WorkflowStatus = enum { not_run, completed, needs_user, failed, blocked, cancelled };
+/// The CLI grades a supplied file that no workflow produced; E2E captures the
+/// completed publication of a live run. No other producer exists.
+pub const Origin = enum { supplied, live_generation };
+pub const WorkflowStatus = enum { not_run, completed };
 pub const GenerationModel = struct { slot: []const u8, provider: []const u8, model: []const u8 };
 pub const Generation = struct {
     origin: Origin,
@@ -107,11 +109,9 @@ pub fn validateCapture(value: Capture) Error!void {
         if (!std.mem.eql(u8, document.id, source.id) or !text(document.text)) return error.InvalidEvaluationContract;
     }
     const g = value.generation;
-    if (g.origin == .supplied) {
-        if (g.workflow_status != .not_run or g.execution_id != null or g.models.len != 0) return error.InvalidEvaluationContract;
-    } else if (g.origin == .live_generation or g.origin == .scripted_generation) {
-        if (g.workflow_status != .completed or g.execution_id == null or !id(g.execution_id.?)) return error.InvalidEvaluationContract;
-        if (g.origin == .live_generation and g.models.len == 0) return error.InvalidEvaluationContract;
+    switch (g.origin) {
+        .supplied => if (g.workflow_status != .not_run or g.execution_id != null or g.models.len != 0) return error.InvalidEvaluationContract,
+        .live_generation => if (g.workflow_status != .completed or g.execution_id == null or !id(g.execution_id.?) or g.models.len == 0) return error.InvalidEvaluationContract,
     }
     if (g.execution_id) |v| if (!id(v)) return error.InvalidEvaluationContract;
     for (g.models, 0..) |model, index| {

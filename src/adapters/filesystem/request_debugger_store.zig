@@ -134,18 +134,26 @@ pub const Store = struct {
     }
 };
 
+/// Depths 0 and 1 are the stream collection and its run directories; depth 2 is
+/// a binding directory.
 fn enumerate(io: std.Io, a: std.mem.Allocator, dir: std.Io.Dir, prefix: []const u8, depth: usize, paths: *std.ArrayList([]const u8)) !void {
-    if (depth > 2) return error.InvalidDebugArchive;
+    const log_file = @import("feature_log_file.zig");
     var iterator = dir.iterate();
     while (try iterator.next(io)) |entry| {
-        if (entry.kind == .directory) {
-            const child = try directories.open(io, dir, entry.name);
-            defer child.close(io);
-            const next = if (prefix.len == 0) try a.dupe(u8, entry.name) else try std.fmt.allocPrint(a, "{s}/{s}", .{ prefix, entry.name });
-            try enumerate(io, a, child, next, depth + 1, paths);
-        } else if (entry.kind == .file and @import("feature_log_file.zig").parseSegmentName(entry.name) != null) {
-            try paths.append(a, try std.fmt.allocPrint(a, "{s}/{s}", .{ prefix, entry.name }));
-        } else if (entry.kind == .sym_link) return error.InvalidDebugArchive;
+        if (depth < 2) switch (log_file.classifyContainerEntry(entry)) {
+            .directory => {
+                const child = try directories.open(io, dir, entry.name);
+                defer child.close(io);
+                const next = if (prefix.len == 0) try a.dupe(u8, entry.name) else try std.fmt.allocPrint(a, "{s}/{s}", .{ prefix, entry.name });
+                try enumerate(io, a, child, next, depth + 1, paths);
+            },
+            .ignored => {},
+            .invalid => return error.InvalidDebugArchive,
+        } else switch (log_file.classifyBindingEntry(entry)) {
+            .segment => try paths.append(a, try std.fmt.allocPrint(a, "{s}/{s}", .{ prefix, entry.name })),
+            .ignored => {},
+            .invalid => return error.InvalidDebugArchive,
+        }
     }
 }
 fn read(io: std.Io, a: std.mem.Allocator, dir: std.Io.Dir, name: []const u8, limit: std.Io.Limit) ![]const u8 {

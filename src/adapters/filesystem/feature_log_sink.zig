@@ -8,7 +8,6 @@ const directory_boundary = @import("feature_log_directory.zig");
 const file_identity = @import("file_identity.zig");
 const lock = @import("feature_log_lock.zig");
 const recovery = @import("feature_log_recovery.zig");
-const retention_store = @import("feature_log_retention_store.zig");
 const segment_store = @import("feature_log_segment_store.zig");
 
 const Io = std.Io;
@@ -133,10 +132,6 @@ pub const Adapter = struct {
         return .{ .context = self, .append_fn = append };
     }
 
-    pub fn segmentPruner(self: *Adapter) sink_port.SegmentPruner {
-        return .{ .context = self, .prune_fn = prune };
-    }
-
     pub fn lockReleaser(self: *Adapter) sink_port.LockReleaser {
         return .{ .context = self, .release_fn = release };
     }
@@ -215,17 +210,6 @@ pub const Adapter = struct {
         const self = cast(context);
         try self.requireHeld(binding);
         return segment_store.close(self.io, self.directory(stream), state, trailer);
-    }
-
-    fn prune(
-        context: *anyopaque,
-        binding: *const log_binding.ValidatedFeatureLogBinding,
-        stream: log_stream.Stream,
-        cutoff_unix_ms: u64,
-    ) sink_port.Error!void {
-        const self = cast(context);
-        try self.requireHeld(binding);
-        return retention_store.prune(self.io, self.directory(stream), cutoff_unix_ms);
     }
 
     fn release(context: *anyopaque) sink_port.Error!void {

@@ -23,14 +23,14 @@ test "closed specification proposal has one content authority and no IDs modalit
     const allocator = arena.allocator();
     const proposed = proposal();
     const bytes = try std.json.Stringify.valueAlloc(allocator, proposed, .{});
-    const decoded = try spec.parseProposal(allocator, bytes);
+    const decoded = try decodeProposal(allocator, bytes);
     try testing.expectEqual(@as(usize, 0), decoded.records.len);
     try testing.expectEqual(.not_applicable, decoded.entities.disposition);
     try testing.expect(!@hasField(spec.RecordProposal, "id"));
     try testing.expect(!@hasField(@FieldType(spec.Content(spec.BusinessValue), "functional_requirement"), "modality"));
     for ([_][]const u8{ "id", "modality", "open_questions", "path", "completed" }) |foreign| {
         const changed = try std.fmt.allocPrint(allocator, "{{\"{s}\":true,{s}", .{ foreign, bytes[1..] });
-        try testing.expectError(error.InvalidSpecification, spec.parseProposal(allocator, changed));
+        try testing.expectError(error.InvalidJsonDocument, decodeProposal(allocator, changed));
     }
 }
 
@@ -52,7 +52,7 @@ test "schema parsing rejects malformed nested union and scalar coercions across 
         "{\"choice\":{\"count\":3},\"label\":[65]}",
         "{\"choice\":{\"count\":3}}",
     }) |bytes| try testing.expectError(error.InvalidJsonDocument, json.decode(Shape, allocator, bytes, .{ .maximum_depth = 8 }));
-    try testing.expectError(error.InvalidSpecification, spec.parseProposal(allocator, "{}"));
+    try testing.expectError(error.InvalidJsonDocument, decodeProposal(allocator, "{}"));
 }
 
 test "optional collections may be empty and presence cannot prove entity applicability" {
@@ -249,7 +249,12 @@ fn parseAllocated(allocator: std.mem.Allocator) !void {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const bytes = try std.json.Stringify.valueAlloc(arena.allocator(), proposal(), .{});
-    _ = try spec.parseProposal(arena.allocator(), bytes);
+    _ = try decodeProposal(arena.allocator(), bytes);
+}
+
+/// The closed content proposal decoded strictly at the model-result depth limit.
+fn decodeProposal(allocator: std.mem.Allocator, bytes: []const u8) !spec.ContentProposal {
+    return json.decode(spec.ContentProposal, allocator, bytes, .{ .maximum_depth = @import("domain/model_result_schema.zig").max_json_depth });
 }
 
 fn proposal() spec.ContentProposal {

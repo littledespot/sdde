@@ -11,6 +11,23 @@
   principle findings into mandatory Plan obligations and the post-generation
   semantic omission/rebuild paths described under ADR 0020. The overall design
   remains **Proposed design**.
+- **Membership amendment:** 2026-10-18, by the user's instruction to "apply best
+  recommendation" after the loan-renewal run blocked on an assignment response that
+  omitted one member. The user then explicitly confirmed this policy change the same
+  day, and chose the follow-up option that opts preservation comparisons into the
+  same admission rule. It amends §12.2 (a native-only `exact_members` rule beside
+  the derived provider schema), §12.7, §17.3, §22.1, §22.4 and §22.6, and advances
+  ADR 0019's request description to `model-request-debug/v8`. See "Assignment
+  membership at response admission".
+- **Record-family amendment:** 2026-10-18, by the user's approval after the 15:33
+  loan-renewal run spent 80,901 tokens on per-record advice, with the scope
+  confirmed on 2026-10-20. Source review assigns one record family per call. It
+  amends §12.6, §12.7, §17.3, §22.4, §24 and §28, and advances
+  `specification-state` to v19. See "Record families".
+- **Unresolvable-verdict amendment:** 2026-10-20, by the user's choice to treat
+  FIX05 route 4 as a typed response-admission defect rather than a terminal one. It
+  amends §12.2, §12.7, §17.3 and §22.6. No contract version changes. See "Unresolvable
+  positive verdicts at response admission".
 
 ## Decision
 
@@ -88,7 +105,7 @@ assignment suffix, reason, revision, authorities and producing origin when a cal
 was sent. Complete admitted assignment prefixes remain intact, including adverse
 or inconclusive findings. An incomplete assignment is discarded atomically;
 no absent finding becomes positive evidence or `assessment_complete`.
-Stored state (`specification-state/v18`) reconstructs these bindings and permits
+Stored state (`specification-state/v19`) reconstructs these bindings and permits
 sparse findings only with this explicit native stop. Native requiredness, exact
 coverage, currentness and publication checks still run independently.
 
@@ -127,9 +144,10 @@ dependency-on-absence rule.
 
 ## Whole-unit assignments
 
-Source review assesses one complete canonical unit or collection per assignment.
-Native ownership groups the brief, story, entity applicability, every field/member
-of a record, and each complete assessed collection or reference subject. Principle
+Source review assesses one complete canonical unit, record family or collection
+per assignment. Native ownership groups the brief, story, entity applicability,
+every field/member of every record of one kind (see "Record families"), and each
+complete assessed collection or reference subject. Principle
 review assesses the complete current subject set for one selected principle set
 in a single assignment. A model cannot select a subset or change either native
 partition. This replaces the acceptance-criterion-only grouping rule.
@@ -141,6 +159,99 @@ per-subject evidence and origins; reject partial, duplicate or foreign membershi
 Correction still targets one invalid finding with unchanged siblings and bounded
 retry ownership. Reuse requires the complete current assignment and dependencies;
 it never converts an assessment into semantic proof.
+
+### Record families (18 October 2026)
+
+A record family is every field and relationship member of every record of one
+kind: all acceptance criteria, all functional requirements, all entity records,
+and so on. Source review assesses each family in one assignment. The family
+replaces the earlier per-record assignment, which spent most of the token budget
+on one call per record.
+
+- The ledger orders requirements by record kind, then ordinal, then slot, so a
+  family is one contiguous native member run. Only its first member starts the
+  assignment.
+- These subjects keep their own assignments: the brief, the primary user story,
+  entity applicability, reference subjects, and the acceptance-criteria,
+  functional-requirement and scenario-coverage collection subjects. Entity records
+  form their own `entity` family, separate from entity applicability.
+- Each member carries its own record in its subject. A family spans several
+  records, so the assignment has no single shared record.
+- A family has one protocol-correction allowance and stops atomically: a rejected
+  or exhausted family discards all of its members, including those of otherwise
+  valid records in it.
+- The token budget, the reviewed record kinds and every membership and admission
+  rule above are unchanged.
+- No size split applies (ADR 0011). A family above ADR 0006's 1,024-member choice
+  bound fails with the typed `ChoiceBoundExceeded` error when its request is
+  prepared, before any member packet is built and before any provider call. The
+  family check and the schema restriction share one bound predicate.
+
+### Assignment membership at response admission (18 October 2026)
+
+- **Classification:** for every whole-unit assignment, source or principle,
+  "exactly one finding per assigned member" is part of the response contract.
+  Missing, repeated and foreign members are malformed responses, not
+  finding-evidence defects or native authority failures. They are checked at
+  response admission, before any member is appended.
+- **Mechanism:** the packet binds the member ordinals as an `exact_members`
+  integer choice on the result schema. That fixes the item count, narrows each
+  ordinal to an assigned member, and rejects a repeated member natively
+  (`duplicate_member`). The guidance schema states the count, and a provider
+  structural projection may keep only its own array floor. Uniqueness stays native.
+- **Correction:** the existing bounded protocol correction resubmits the complete
+  assignment with the typed diagnostic, under the original assignment allowance. It
+  adds no counter, partial merge, insertion or deletion.
+- **Scope:** whole-unit assignments exist only under advisory policy. Required
+  review requests one finding at a time, so it has no assignment membership.
+  Preservation comparisons, which run under required policy, bind their comparison
+  IDs at response admission in the same way; their protocol exhaustion stays
+  terminal.
+- **Exhaustion keeps the existing advisory outcome:** that assignment's advice ends
+  as incomplete (`protocol_exhausted`), keeping the admitted prefix and leaving
+  publication to the native gates.
+- **Diagnostics:** request descriptions (`model-request-debug/v8` and later, ADR 0019) record
+  each applied member set, so debugger inspection and replay enforce the same
+  admission as the original request.
+- **Unchanged:**
+  - native collection still rejects partial, repeated or foreign membership
+    atomically, as the authority behind admission;
+  - native capture, selection and citation failures remain native failures;
+  - finding-evidence defects and repair exhaustion keep their terminal outcomes.
+
+### Unresolvable positive verdicts at response admission (20 October 2026)
+
+- **Defect class:** a schema-valid `supported` or `not_applicable` verdict for a
+  subject to which no claim set can be bound. This happens when the rule is an
+  eligible subset with bound-claim evidence and the candidate has no provenance for
+  the subject. An example is an acceptance-criteria or scenario coverage subject
+  whose collection has no records. Canonicalization could not bind such a verdict,
+  so the assignment was rejected as `invalid_json` with no candidate and the run
+  blocked (FIX05 route 4).
+- **Classification:** offering only verdicts that can resolve is part of the
+  response contract. A withheld verdict is a malformed response, not a
+  finding-evidence defect.
+- **Mechanism:** the canonicalization owner states which verdicts resolve for a
+  subject. Whether a verdict resolves is uniform within an assignment: a record
+  always binds its own provenance, and every other unit has one collection, field
+  or reference rule. The assignment packet withholds each unresolvable positive
+  verdict, alongside the `not_applicable` that applicability already excludes. It
+  does so through the existing excluded-variant restriction, and omits that
+  verdict's guidance rule. A packet whose members disagree is refused as an
+  authority failure before invocation.
+- **Correction and exhaustion:** response admission rejects a withheld verdict as
+  `unknown_variant`, which takes the same bounded protocol correction as a
+  membership defect. Exhaustion ends that assignment's advice as incomplete
+  (`protocol_exhausted`).
+- **Unchanged:**
+  - request descriptions record the restricted provider schema, which already omits
+    withheld verdicts, so `model-request-debug` does not advance;
+  - native canonicalization still rejects an unresolvable verdict, as the
+    authority behind admission;
+  - required review requests one finding at a time and is not changed. Its
+    pre-authoring feature subjects bind original sources, and its reference and
+    preservation subjects bind exact claim sets, so each of their verdicts
+    resolves.
 
 ## Post-generation upstream findings and source repair
 
@@ -204,7 +315,9 @@ notes. Model-reported conflict or uncertainty alone no longer creates a mandator
 Plan obligation or a Spec clarification. Plan still validates current project
 policy and all native required decisions at its own gate; early advice neither
 approves policy nor erases the underlying authority. Missing or invalid principle
-capture, selection, citations or assessment membership remains a native failure.
+capture, selection or citations remains a native failure. Assessment membership
+is classified at response admission under "Assignment membership at response
+admission", which supersedes its earlier listing here as a native failure.
 
 This supersedes the semantic-finding-to-Plan-obligation handoff in ADR 0015 and
 §17.3.1, without adding an assessment model, configuration option or principle
@@ -212,7 +325,7 @@ loader. Model selection and the live-test cost policy are unchanged.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v18`; earlier
+Completed and clarification-pending state use `specification-state/v19`; earlier
 contracts reject without migration or a compatibility reader. Stored validation
 recomputes native policy, authority currentness, complete assignment membership
 or the exact missing suffix authorized by native incomplete-advice evidence,

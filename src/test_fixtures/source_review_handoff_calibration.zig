@@ -171,7 +171,7 @@ pub fn run() !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
         .measurement = "Current whole-unit advisory admission and actual pre-generation preservation controls. Frozen partial candidates are unavailable, never relabeled as current complete generation.",
-        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
+        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = conditional_loss_sends, .maximum_physical_sends = trials.items.len + conditional_loss_sends, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
         .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items, .unavailable_cases = unavailable.items },
         .native_origin_available_from_replayed_receipt = false,

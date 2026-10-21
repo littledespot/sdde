@@ -20,13 +20,13 @@ fn valueSchema(a: std.mem.Allocator, schema: []const u8) ![]const u8 {
     return std.fmt.allocPrint(a, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{schema});
 }
 fn measure(a: std.mem.Allocator, output: []const u8, field: policy.Field) !corpus.Measurement {
-    return measureContract(a, output, field, .current_v6);
+    return measureContract(a, output, field, .current_v9);
 }
 fn measureContract(a: std.mem.Allocator, output: []const u8, field: policy.Field, contract: corpus.MetadataContract) !corpus.Measurement {
     return corpus.measure(a, .{
         .packet = packet,
         .output = try valueOutput(a, output),
-        .schema = if (contract == .current_v6) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
+        .schema = if (contract == .current_v9) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
         .metadata_contract = contract,
         .field_policies = &.{.{ .field = field, .path = &.{.{ .property = "value" }} }},
         .original_sources = &.{},
@@ -426,4 +426,29 @@ test "prototype corpus CLI rejects unknown flags duplicate outputs and overlappi
     try std.testing.expectError(error.InvalidArguments, cli.parse(a, &.{ "--output", "test/report.json" }));
     const valid = try cli.parse(a, &.{ "--output", "test/report.json", "--root", "test/captures", "--root", "test/captures-other" });
     try std.testing.expectEqual(@as(usize, 2), valid.roots.len);
+}
+
+test "recorded assignment membership gates measurement like production admission" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const schema = @import("../../../src/domain/model_result_schema.zig");
+    var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const canonical = try compiler.compiler().compile(a, "{\"type\":\"object\",\"properties\":{\"findings\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"findings\"],\"additionalProperties\":false}");
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "findings" }, .items, .{ .property = "ordinal" } };
+    const exact = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
+    defer exact.release();
+    const repeated = "{\"findings\":[{\"ordinal\":2},{\"ordinal\":2}]}";
+    const input: corpus.Input = .{ .packet = packet, .output = repeated, .schema = exact.selected().modelBytes(), .original_sources = &.{}, .members = exact.selected().memberChoices() };
+    // Production rejected the repeat as duplicate_member; so does measurement.
+    try std.testing.expectEqual(corpus.State.schema_invalid, (try corpus.measure(a, input, classifier)).state);
+    var unrestricted = input;
+    unrestricted.members = &.{};
+    try std.testing.expect((try corpus.measure(a, unrestricted, classifier)).state != .schema_invalid);
+    var foreign = input;
+    foreign.members = &.{.{ .path = path, .allowed = &.{ 2, 4, 6 } }};
+    try std.testing.expectEqual(corpus.State.invalid_field_metadata, (try corpus.measure(a, foreign, classifier)).state);
+    var historical = input;
+    historical.metadata_contract = .historical_v5;
+    try std.testing.expectEqual(corpus.State.invalid_field_metadata, (try corpus.measure(a, historical, classifier)).state);
 }

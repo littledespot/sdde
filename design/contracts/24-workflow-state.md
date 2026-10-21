@@ -27,7 +27,7 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v18) over canonical `specification/v3`
+`specification-state` contract (currently v19, after ADR 0023's record families) over canonical `specification/v3`
 content; stage discriminators distinguish the variants. Earlier versions reject
 without migration, aliases or a compatibility reader. The pending variant retains
 reference and clarification data without claiming completed attributed content.
@@ -47,7 +47,7 @@ Changed authority invalidates affected descendants through the stage rules below
   classification, dispositions and complete original-occurrence coverage (ADR 0024).
   Inconsistent stored authority rejects instead of being inferred from matching
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
-  bytes; `model-request-debug/v6` retains it for diagnostics, not state recovery.
+  bytes; `model-request-debug/v9` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
   port.
 - **Review evidence.** Canonical review evidence retains nullable `authority_gap`,

@@ -109,7 +109,7 @@ pub const Adapter = struct {
         result.request_id = request_id;
     }
 };
-pub fn statusFailure(status: u16) ?reports.Failure {
+pub fn statusFailure(status: u16) ?provider.Failure {
     return switch (status) {
         200 => null,
         401, 403 => .authentication,

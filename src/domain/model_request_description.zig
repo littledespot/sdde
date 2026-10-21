@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v6" } = .@"model-request-debug/v6",
+    version: enum { @"model-request-debug/v9" } = .@"model-request-debug/v9",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -22,6 +22,8 @@ pub const Description = struct {
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     exact_scope: ?@import("model_exact_values.zig").Scope = null,
+    /// Native assignment membership the schema bytes cannot express.
+    members: []const @import("model_result_schema.zig").MemberChoice = &.{},
 
     pub fn from(request: *const provider.IdentifiedProviderNeutralModelRequest, selected: *const binding.ValidatedProviderModelBinding, kind: provider.ProviderOperationKind) Description {
         return .{
@@ -43,7 +45,22 @@ pub const Description = struct {
             .prose_fields = request.prose_fields,
             .field_policies = request.field_policies,
             .exact_scope = request.exact_scope,
+            .members = request.response_schema.memberChoices(),
         };
+    }
+
+    /// Replay authority: the description names exactly the current binding,
+    /// including the catalogue's provider configuration and recorded maximum
+    /// output, so a drifted catalogue cannot replay a stale capture.
+    pub fn matchesBinding(self: Description, selected: *const binding.ValidatedProviderModelBinding) bool {
+        const debug = @import("request_debugger.zig");
+        return std.mem.eql(u8, selected.slot_id.bytes, self.model_slot) and
+            std.mem.eql(u8, selected.registry_entry.provider.bytes, self.provider) and
+            std.mem.eql(u8, selected.registry_entry.model.bytes, self.model) and
+            std.meta.eql(selected.registry_entry.config, self.provider_config) and
+            debug.sameOptional(selected.reasoning_effort, self.reasoning_effort) and
+            std.meta.eql(selected.controls, self.controls) and
+            selected.registry_entry.responseMode() == self.response_mode;
     }
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("strict_json.zig").Error!Description {
@@ -57,12 +74,14 @@ pub const Description = struct {
         // just as the canonical schema syntax adapter does.
         const parsed_schema = try @import("strict_json.zig").parse(scratch.allocator(), value.schema, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }, true, null);
         const selected_schema = @import("model_result_schema.zig").compileSelected(scratch.allocator(), parsed_schema.value, value.schema) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+        const members = @import("model_result_schema.zig").restrictMembers(scratch.allocator(), selected_schema, value.members) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+        members.release();
         const fields = @import("model_text_field.zig").inspectSchema(selected_schema.root(), value.field_policies, value.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and value.exact_scope == null)) return error.InvalidJsonDocument;
         const ids = @import("llm_provider_identity.zig");
         const workflow = @import("workflow.zig");
         if (ids.ProviderId.parse(value.provider) == null or ids.ModelId.parse(value.model) == null or ids.ModelSlotId.parse(value.model_slot) == null or
-            workflow.WorkflowId.parse(value.workflow_id) == null or workflow.WorkflowStepId.parse(value.request_step) == null or value.workflow_version == 0 or value.content.len == 0 or !value.controls.isValid()) return error.InvalidJsonDocument;
+            workflow.WorkflowId.parse(value.workflow_id) == null or workflow.WorkflowStepId.parse(value.request_step) == null or value.workflow_version == 0 or value.content.len == 0) return error.InvalidJsonDocument;
         return value;
     }
 };

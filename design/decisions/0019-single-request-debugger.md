@@ -6,6 +6,15 @@
 - **Amends:** ADR 0018 and design §§12, 26–28, 29 and 31.
 - **Amended by:** [ADR 0020](0020-derived-exact-reference-lineage.md): debug
   descriptions advance to `model-request-debug/v6` and retain the exact-occurrence scope.
+  [ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
+  (18 October 2026): descriptions advance to `model-request-debug/v7` without an
+  output allowance.
+  [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
+  (18 October 2026): descriptions advance to `model-request-debug/v8` and record
+  applied assignment membership.
+  [ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)
+  (18 October 2026): descriptions advance to `model-request-debug/v9`, whose Bedrock
+  provider configuration records the model's maximum output.
 
 ## Diagnostic execution boundary
 
@@ -46,13 +55,15 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v6`
+prompt, exact validation schema and inference settings. `model-request-debug/v9`
 captures the selected schema's complete expanded projection, including named
-selections, composition parts and narrowed repair shapes; the optional output
-allowance (ADR 0011); the native original-source witness and plain-prose selectors
+selections, composition parts and narrowed repair shapes; the native original-source witness and plain-prose selectors
 used by the source-aware model-text wire validator; native wire-field bindings to
 the composition registry, so the selected schema and diagnostic replay enforce the
-same permitted insertions; and the immutable exact-occurrence scope (ADR 0020). This metadata is
+same permitted insertions; the immutable exact-occurrence scope (ADR 0020); and
+each applied exact-membership selection (ADR 0023), whose uniqueness the schema
+bytes cannot express, so replay reapplies it through the same schema restriction
+owner. This metadata is
 diagnostic input, not provider-visible authority. Older descriptions remain
 unchanged and reject readback; replay requires a new capture, with no compatibility
 reader. The shared schema
@@ -107,10 +118,12 @@ serializer validate and assemble the new request. Provider, model and settings
 remain those of the selected call and must still be permitted by the current
 provider registry and repository model allowlist. Credentials are obtained afresh
 from the existing authorization source, never from logs or the browser.
-Settings include the optional output allowance under
-[ADR 0011](0011-provider-owned-request-limits.md#optional-provider-request-output-allowance):
-replay preserves captured omission or value rather than replacing it from current
-configuration.
+Settings carry no output-token allowance under
+[ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
+(amended 18 October 2026); `model-request-debug/v9` has no such field. Its Bedrock
+provider configuration records the model's documented maximum output, which replay
+sends unchanged
+([ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)).
 
 **Converse amendment (user-directed, 15 October 2026):** Bedrock request construction,
 capture, extraction and replay use the same canonical Converse codec as production

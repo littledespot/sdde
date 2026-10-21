@@ -10,7 +10,7 @@ const schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"stri
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "generation",
     .workflow_id = "spec",
     .workflow_version = 1,
@@ -19,7 +19,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("domain/model_controls.zig").response_format_guidance,
     .schema = schema,
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 16384 } },
+    .controls = .{ .temperature = .fixed },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
@@ -94,7 +94,7 @@ test "exact replay retains byte equality and modified replay changes only select
     try std.testing.expectEqualDeep(description.controls, modified.request.description.controls);
     var parsed = try std.json.parseFromSlice(std.json.Value, a, modified.request.body, .{});
     defer parsed.deinit();
-    try std.testing.expectEqual(@as(i64, 16384), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
+    try std.testing.expectEqual(@as(i64, description.provider_config.aws_bedrock.max_output_tokens.tokens), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
     try std.testing.expectEqual(@as(u64, 2), fixture.saved.?.sequence);
     try std.testing.expect(modified.request.source_overrides);
     try std.testing.expectEqualDeep(parent.source_snapshot, modified.request.source_snapshot);
@@ -107,17 +107,47 @@ test "exact replay retains byte equality and modified replay changes only select
     try std.testing.expectEqualDeep(parent.source_snapshot, exact_again.request.source_snapshot);
 }
 
-test "captured descriptions preserve positive output allowance and reject malformed values" {
+test "replay sends the description's recorded model maximum unchanged" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    for ([_]u32{ 8192, 16000 }) |maximum| {
+        var selected = description;
+        selected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = maximum } } };
+        const body = try fixture.provider.provider().prepare(a, selected);
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
+        try std.testing.expectEqual(@as(i64, maximum), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
+        // A persisted description round-trips the value; zero is not a maximum.
+        try std.testing.expectEqual(maximum, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).provider_config.aws_bedrock.max_output_tokens.tokens);
+    }
+    // A recorded maximum is one positive integer: no decoded description holds
+    // zero, a negative, an out-of-range, quoted, fractional or nested value.
+    const bytes = try std.json.Stringify.valueAlloc(a, description, .{});
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bytes, "\"max_output_tokens\":16000"));
+    for ([_][]const u8{ "0", "-1", "5000000000", "\"16000\"", "16000.5", "null", "{\"tokens\":16000}" }) |value| {
+        const rejected = try std.mem.replaceOwned(u8, a, bytes, "\"max_output_tokens\":16000", try std.fmt.allocPrint(a, "\"max_output_tokens\":{s}", .{value}));
+        try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, rejected));
+    }
+}
+
+test "captured descriptions round-trip controls and reject a retired output allowance" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try std.json.Stringify.valueAlloc(a, description, .{});
     const restored = try debug.Description.decode(a, bytes);
     try std.testing.expectEqualDeep(description.controls, restored.controls);
-    for ([_][]const u8{ "0", "-1", "1.5", "4294967296", "\"16384\"" }) |invalid| {
-        const malformed = try std.mem.replaceOwned(u8, a, bytes, "16384", invalid);
-        try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, malformed));
-    }
+    // ADR 0011: no description can carry an output-token allowance.
+    const retired = try std.mem.replaceOwned(u8, a, bytes, "\"temperature\":\"fixed\"", "\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}");
+    try std.testing.expect(!std.mem.eql(u8, bytes, retired));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, retired));
+    // The superseded v8 label, which recorded no model maximum output, cannot be read as current.
+    const superseded = try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v9", "model-request-debug/v8");
+    try std.testing.expect(!std.mem.eql(u8, bytes, superseded));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, superseded));
 }
 
 test "replay rejects redacted incomplete inconsistent and unauthorized requests before dispatch" {
@@ -363,7 +393,7 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
-    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v6", "model-request-debug/v3");
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v9", "model-request-debug/v3");
     try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
     var unsupported: archive.Archive = .{ .allocator = a };
     try unsupported.ingest(obsolete);
@@ -409,7 +439,8 @@ test "debugger reconstructs entire reasoning responses including output-limit an
             .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 16384), .totalTokens = @as(u64, 16394) },
         }, .{});
         try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = body }, &.{secret}));
-        try std.testing.expect(sink.sequence - request_sequence > @import("domain/sanitized_prompt_log.zig").max_fragments_per_batch);
+        // Complete capture has no fragment ceiling; this body spans many fragments.
+        try std.testing.expect(sink.sequence - request_sequence > 32);
         var restored: archive.Archive = .{ .allocator = a };
         try restored.ingest(sink.rows.items);
         const calls = try restored.calls();
@@ -587,23 +618,21 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.model.bytes = description.model;
     production.registry_entry.config = description.provider_config;
     production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
-    production.registry_entry.capabilities.supports_max_output_tokens = true;
     production.registry_entry.bedrock_request_profile = .openai_oss;
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
-    for ([_]?u32{ null, 32768 }) |allowance| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
-        production.provider_binding.controls.max_output_tokens = if (allowance) |value| .{ .value = value } else null;
+    for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         production.request.controls = production.provider_binding.controls;
         production.request.binding_id = production.provider_binding.bindingId();
         production.request.response_guidance_mode = mode;
         production.registry_entry.json = mode == .native_schema;
         try std.testing.expect(production.request.matchesBinding(production.provider_binding));
-        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.bedrock_request_profile);
+        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.bedrock_request_profile, production.registry_entry.config.aws_bedrock.max_output_tokens);
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
         const restored = try debug.Description.decode(a, serialized);
         try std.testing.expectEqualDeep(production.request.controls, restored.controls);
         try std.testing.expectEqualStrings(captured, try fixture.provider.provider().prepare(a, restored));
-    };
+    }
 }
 
 test "events join the exact operation kind as well as request and attempt" {
@@ -752,6 +781,38 @@ test "debugger orders split captures across bindings by recorded sequence includ
     try std.testing.expectEqualStrings(calls[1].id, grouped[5].id);
     try std.testing.expectEqual(@as(u64, 1), grouped[5].execution_order);
 
+    // Regular files without a segment name are left alone at every level.
+    for ([_][]const u8{ "logs/prompts/.DS_Store", "logs/prompts/run-one/Thumbs.db", "logs/prompts/run-one/LOGBIND-2/0001.log.bak" }) |stray| {
+        try directory.dir.writeFile(io, .{ .sub_path = stray, .data = "stray" });
+    }
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+    // A heading-only segment loads cleanly inside a binding, so placement alone
+    // rejects it below.
+    try directory.dir.createDirPath(io, "logs/prompts/run-one/LOGBIND-3");
+    try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-one/LOGBIND-3/0001.log", .data = format.prompt_heading });
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+    try directory.dir.deleteTree(io, "logs/prompts/run-one/LOGBIND-3");
+    // Any other entry a level does not hold rejects the archive.
+    const Misplaced = enum { collection_link, run_link, binding_link, nested_directory, collection_segment, run_segment };
+    for (std.enums.values(Misplaced)) |misplaced| {
+        const path = switch (misplaced) {
+            .collection_link => "logs/prompts/link",
+            .run_link => "logs/prompts/run-one/link",
+            .binding_link => "logs/prompts/run-one/LOGBIND-2/link",
+            .nested_directory => "logs/prompts/run-one/LOGBIND-2/nested",
+            .collection_segment => "logs/prompts/0001.log",
+            .run_segment => "logs/prompts/run-one/0001.log",
+        };
+        switch (misplaced) {
+            .collection_link, .run_link, .binding_link => try directory.dir.symLink(io, "elsewhere", path, .{}),
+            .nested_directory => try directory.dir.createDirPath(io, path),
+            .collection_segment, .run_segment => try directory.dir.writeFile(io, .{ .sub_path = path, .data = format.prompt_heading }),
+        }
+        try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
+        if (misplaced == .nested_directory) try directory.dir.deleteDir(io, path) else try directory.dir.deleteFile(io, path);
+    }
+    try std.testing.expectEqual(grouped.len, (try store.load(a)).len);
+
     // Sequence overlap across bindings must not manufacture an execution order.
     try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-one/LOGBIND-10/0001.log", .data = first });
     try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
@@ -873,7 +934,7 @@ test "source snapshots retain static JSON guidance with its prompt resource kind
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {
-    for (0..7) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for (0..8) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -912,7 +973,7 @@ test "selected request schemas survive capture and graph release without whole-s
             try std.testing.expectEqualStrings(selected.schema.modelBytes(), projection.schema);
             logger.begin(.{ .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"), .workflow_id = .{ .bytes = projection.workflow_id }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = projection.request_step }, .model_slot = .{ .bytes = projection.model_slot }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .description = projection });
             defer logger.end();
-            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.bedrock_request_profile);
+            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.bedrock_request_profile, production.registry_entry.config.aws_bedrock.max_output_tokens);
             try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
             const response = try debugResponse(source, selected.response);
             try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = response }, &.{}));
@@ -925,6 +986,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expect(parent.parent == null);
         const selected = parent.description.?;
         if (shape == 2 or shape == 6) try std.testing.expect(selected.field_policies.len != 0);
+        if (shape == 7) try expectReplayedMembers(a, &fixture, selected);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -939,7 +1001,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v6", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v9", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }
@@ -988,6 +1050,11 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
         );
         return .{ .schema = canonical.select(.{ .bytes = "repair" }).?, .response = "{\"enabled\":true}" };
     }
+    if (shape == 7) {
+        const canonical = try compiler.compile(a, member_schema);
+        const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
+        return .{ .schema = restriction.selected(), .response = "{\"findings\":[{\"ordinal\":4,\"note\":\"b\"},{\"ordinal\":2,\"note\":\"a\"}]}", .restriction = restriction };
+    }
     if (shape == 5) {
         const canonical = try compiler.compile(a,
             \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"keep"},"value":{"type":"string","maxLength":16}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"drop"}},"required":["kind"],"additionalProperties":false}]}
@@ -1011,6 +1078,32 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     if (shape == 3) return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), "{\"token_classifications\":[]}");
     const claim_prior = try std.json.parseFromSlice(std.json.Value, a, "{\"kind\":\"claims\",\"claims\":[]}", .{});
     return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = claim_prior.value }}), "{\"token_classifications\":[]}");
+}
+
+const member_schema = "{\"type\":\"object\",\"properties\":{\"findings\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8},\"note\":{\"type\":\"string\",\"maxLength\":16}},\"required\":[\"ordinal\",\"note\"],\"additionalProperties\":false}}},\"required\":[\"findings\"],\"additionalProperties\":false}";
+const member_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "findings" }, .{ .items = {} }, .{ .property = "ordinal" } };
+
+/// A captured assignment request replays admission's native membership, which
+/// the recorded provider schema bytes cannot express.
+fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
+    try std.testing.expectEqual(@as(usize, 1), selected.members.len);
+    try std.testing.expectEqualSlices(i64, &.{ 2, 4 }, selected.members[0].allowed);
+    const repeated = try debugResponse(a, "{\"findings\":[{\"ordinal\":2,\"note\":\"a\"},{\"ordinal\":2,\"note\":\"b\"}]}");
+    const checked = try fixture.provider.provider().inspect(a, selected, repeated);
+    try std.testing.expectEqual(.invalid, checked.schema);
+    try std.testing.expectEqualStrings("duplicate_member", checked.reason.?);
+    try std.testing.expectEqualStrings("/findings/1", checked.path.?);
+    // Without the record the same bytes pass, so the record is what replays admission.
+    var unrestricted = selected;
+    unrestricted.members = &.{};
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, repeated)).schema);
+    // A record that does not fit the captured schema cannot be read or replayed.
+    var foreign = selected;
+    foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
+    try std.testing.expectEqualStrings("Captured schema and native membership disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
+    try std.testing.expectEqualDeep(selected.members, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).members);
 }
 
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {
@@ -1123,4 +1216,8 @@ test "debugger exposes provider reasoning separately including stopped and missi
     try std.testing.expect(std.mem.indexOf(u8, ui, "p.append(reasoningView(v.reasoning))") != null);
     try std.testing.expect(std.mem.indexOf(u8, ui, "e.textContent = String(text)") != null);
     try std.testing.expect(std.mem.indexOf(u8, ui, "innerHTML") == null);
+    // Every engine normalization is displayed separately from the raw response.
+    inline for (comptime std.meta.tags(@import("domain/model_envelope.zig").Normalization)) |rule| {
+        if (rule != .none) try std.testing.expect(std.mem.indexOf(u8, ui, @tagName(rule) ++ ":") != null);
+    }
 }

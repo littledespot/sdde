@@ -169,7 +169,7 @@ pub const Result = struct {
 /// rejection. Semantic/source/output validation follows once captures are read.
 pub fn parse(a: std.mem.Allocator, bytes: []const u8) Error!Document {
     const document = contracts.decode(Document, a, bytes) catch |err| return map(err);
-    if (document.schema != 2) return error.InvalidAssessment;
+    if (document.schema != 3) return error.InvalidAssessment;
     for (document.entries, 0..) |entry, index| {
         try validateEntryIdentity(entry);
         for (document.entries[0..index]) |prior| {
@@ -187,7 +187,7 @@ pub fn entryFor(document: Document, ordinal: u32) ?Entry {
 /// Reject assessor entries that have no native trial/capture. Callers then
 /// evaluate every planned trial, passing null for missing assessor entries.
 pub fn validateAssociations(document: Document, captures: []const Capture) Error!void {
-    if (document.schema != 2) return error.InvalidAssessment;
+    if (document.schema != 3) return error.InvalidAssessment;
     for (captures, 0..) |capture, index| {
         for (captures[0..index]) |prior| if (prior.trial_ordinal == capture.trial_ordinal) return error.InvalidAssessment;
     }
@@ -841,9 +841,9 @@ test "closed assessment document rejects unknown duplicate foreign and stale ass
     defer arena.deinit();
     const a = arena.allocator();
     const entry = Test.entry();
-    const bytes = try std.json.Stringify.valueAlloc(a, Document{ .schema = 2, .entries = &.{entry} }, .{});
+    const bytes = try std.json.Stringify.valueAlloc(a, Document{ .schema = 3, .entries = &.{entry} }, .{});
     const parsed = try parse(a, bytes);
-    const old_version = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":2", "\"schema\":1");
+    const old_version = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":3", "\"schema\":2");
     try std.testing.expectError(error.InvalidAssessment, parse(a, old_version));
     try validateAssociations(parsed, &.{Test.capture()});
     try std.testing.expect(entryFor(parsed, 3) != null);
@@ -852,7 +852,7 @@ test "closed assessment document rejects unknown duplicate foreign and stale ass
     var capture = Test.capture();
     capture.acquisition_sha256 = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     try std.testing.expectError(error.InvalidAssessment, validateAssociations(parsed, &.{capture}));
-    const duplicate = try std.json.Stringify.valueAlloc(a, Document{ .schema = 2, .entries = &.{ entry, entry } }, .{});
+    const duplicate = try std.json.Stringify.valueAlloc(a, Document{ .schema = 3, .entries = &.{ entry, entry } }, .{});
     try std.testing.expectError(error.InvalidAssessment, parse(a, duplicate));
     const unknown = try std.fmt.allocPrint(a, "{{\"native_status\":\"completed\",{s}", .{bytes[1..]});
     try std.testing.expectError(error.InvalidAssessment, parse(a, unknown));

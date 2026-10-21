@@ -101,7 +101,7 @@ const Fixture = struct {
         self.base.registry_entry.model = contract.model;
         self.base.registry_entry.capabilities = contract.capabilities;
         self.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
-        self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"us-west-2" } };
+        self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } };
         self.base.registry_entry.supported_reasoning_efforts = &.{};
         self.base.provider_binding.reasoning_effort = null;
         self.base.provider_binding.controls = contract.capabilities.inferenceControls();
@@ -151,6 +151,20 @@ const Fixture = struct {
         };
     }
 };
+
+test "Bedrock sends the selected catalogue entry's maximum, not a fixed value" {
+    for ([_]u32{ 8192, 16000 }) |maximum| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, .bedrock);
+        defer fixture.deinit();
+        fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = maximum } } };
+        fixture.wire.expected_max_tokens = maximum;
+        const authorized = try fixture.start(.inference);
+        var observed = try fixture.call(authorized);
+        defer observed.deinit();
+        try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
+    }
+}
 
 test "shared fake and Bedrock inference conformance: identity usage owned content and single use" {
     inline for (std.meta.tags(Backend)) |backend| {
@@ -526,28 +540,76 @@ test "production contracts require exact externally selected model region and cl
     try contracts.registry.validate();
     const model = contracts.registry.entries[0];
     try std.testing.expect(!model.capabilities.input_token_count);
-    try std.testing.expect(model.capabilities.supports_max_output_tokens);
-    const counted = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "anthropic.claude-3-5-haiku-20241022-v1:0" }).?;
-    try std.testing.expect(!counted.capabilities.supports_max_output_tokens);
     for ([_][]const u8{"global.openai.gpt-6-luna"}) |name| {
         const current = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = name }).?;
-        try std.testing.expect(current.capabilities.supports_max_output_tokens);
         try std.testing.expect(!current.capabilities.temperature);
         try std.testing.expect(!current.capabilities.input_token_count);
         try std.testing.expectEqual(.bedrock_json_schema, current.capabilities.structured_response);
         try std.testing.expectEqual(.openai_luna, current.bedrock_request_profile);
         try std.testing.expectEqual(@as(usize, 0), current.supported_reasoning_efforts.len);
-        try std.testing.expect(current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } }));
-        try std.testing.expect(!current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2" } }));
+        try std.testing.expect(current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } }));
+        try std.testing.expect(!current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } }));
     }
-    try std.testing.expect(model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } }));
-    try std.testing.expect(!model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2" } }));
+    try std.testing.expect(model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } }));
+    try std.testing.expect(!model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } }));
     const config = @import("domain/llm_provider_config_schema.zig");
-    for ([_][]const u8{ "{}", "{\"region\":null}", "{\"region\":\"unknown\"}", "{\"region\":\"ap-southeast-2\",\"apiKey\":null}", "{\"region\":\"ap-southeast-2\",\"endpoint\":null}", "{\"region\":\"ap-southeast-2\",\"inputTokens\":10}" }) |bytes| {
+    // The catalogue records the model's documented maximum output: required,
+    // positive and exact, with no default, lookup or clamp.
+    var accepted = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":16000}", .{});
+    defer accepted.deinit();
+    try std.testing.expectEqualDeep(@import("domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } }, config.decode(.aws_bedrock, accepted.value).?);
+    for ([_][]const u8{
+        "{}",
+        "{\"region\":null,\"maxOutputTokens\":16000}",
+        "{\"region\":\"unknown\",\"maxOutputTokens\":16000}",
+        "{\"region\":\"ap-southeast-2\"}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":0}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":-1}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":5000000000}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":\"16000\"}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":16000.5}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":16000,\"apiKey\":null}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":16000,\"endpoint\":null}",
+        "{\"region\":\"ap-southeast-2\",\"maxOutputTokens\":16000,\"inputTokens\":10}",
+    }) |bytes| {
         var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, bytes, .{});
         defer parsed.deinit();
         try std.testing.expect(config.decode(.aws_bedrock, parsed.value) == null);
     }
+}
+
+test "a model maximum output is one positive integer admitted only through its parse rule" {
+    const Maximum = @import("domain/llm_provider_contracts.zig").ModelMaximumOutput;
+    for ([_]i64{ 1, 4096, 16384, std.math.maxInt(u32) }) |tokens| try std.testing.expectEqual(@as(u32, @intCast(tokens)), Maximum.parse(tokens).?.tokens);
+    for ([_]i64{ 0, -1, std.math.maxInt(u32) + 1, std.math.minInt(i64) }) |tokens| try std.testing.expect(Maximum.parse(tokens) == null);
+    // Every decoder sees the same integer-written wire form.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Holder = struct { maximum: Maximum };
+    const closed = @import("domain/strict_json.zig");
+    const accepted = try closed.decode(Holder, a, "{\"maximum\":16384}", .{ .maximum_depth = 4 });
+    try std.testing.expectEqual(@as(u32, 16384), accepted.maximum.tokens);
+    try std.testing.expectEqualStrings("{\"maximum\":16384}", try std.json.Stringify.valueAlloc(a, accepted, .{}));
+    for ([_][]const u8{
+        "{\"maximum\":0}",
+        "{\"maximum\":-1}",
+        "{\"maximum\":5000000000}",
+        "{\"maximum\":\"16384\"}",
+        "{\"maximum\":16384.5}",
+        "{\"maximum\":16384.0}",
+        "{\"maximum\":1.6384e4}",
+        "{\"maximum\":16384e0}",
+        "{\"maximum\":-0}",
+        "{\"maximum\":null}",
+        "{\"maximum\":true}",
+        "{\"maximum\":{\"tokens\":16384}}",
+        "{}",
+    }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, closed.decode(Holder, a, bytes, .{ .maximum_depth = 4 }));
+    // The written-form rule is the type's own, not the strict decoder's.
+    for ([_][]const u8{ "{\"maximum\":\"16384\"}", "{\"maximum\":16384.0}", "{\"maximum\":1.6384e4}" }) |bytes|
+        try std.testing.expect(std.meta.isError(std.json.parseFromSliceLeaky(Holder, a, bytes, .{})));
+    try std.testing.expectEqual(@as(u32, 16384), (try std.json.parseFromSliceLeaky(Holder, a, "{\"maximum\":16384}", .{})).maximum.tokens);
 }
 
 test "Bedrock endpoint encoding is HTTPS fixed-region with no target reinterpretation" {
@@ -595,7 +657,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     defer observed.deinit();
 }
 
-test "Bedrock projects the exact input once without an unconfigured output allowance or identity echoes" {
+test "Bedrock projects the exact input once with only the model maximum and no identity echoes" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
@@ -604,9 +666,9 @@ test "Bedrock projects the exact input once without an unconfigured output allow
         \\{ "$defs": {"flag": {"type":"boolean"}}, "type":"object", "properties":{"ok":{"$ref":"#/$defs/flag"}}, "required":["ok"], "additionalProperties":false }
     );
     const encoding = @import("adapters/provider/bedrock_request.zig");
-    const infer = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
+    const infer = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none, .{ .tokens = 16000 });
     defer std.testing.allocator.free(infer);
-    const count_body = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
+    const count_body = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none, .{ .tokens = 16000 });
     defer std.testing.allocator.free(count_body);
     var first = try strict.parse(std.testing.allocator, infer, .{ .maximum_depth = 32 }, false, null);
     defer first.deinit();
@@ -630,35 +692,35 @@ test "Bedrock projects the exact input once without an unconfigured output allow
     }
 }
 
-test "Bedrock serializes exact output allowance only in Converse inference controls" {
+test "Bedrock serializes exactly the configured model maximum and no smaller allowance" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     const controls = @import("domain/model_controls.zig");
     for (std.enums.values(controls.ResponseGuidanceMode)) |mode| {
-        for ([_]?u32{ null, 1, 12288, std.math.maxInt(u32) }) |limit| {
+        for (contracts.registry.entries[0..1]) |contract| {
             var fixture: Fixture = undefined;
             try fixture.init(std.testing.allocator, .bedrock);
             defer fixture.deinit();
-            fixture.base.registry_entry.capabilities = contracts.registry.entries[0].capabilities;
+            fixture.base.registry_entry.capabilities = contract.capabilities;
             fixture.base.registry_entry.json = mode == .native_schema;
-            fixture.base.provider_binding.controls.max_output_tokens = if (limit) |value| controls.OutputTokenAllowance.init(value).? else null;
+            fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
             fixture.base.request.controls = fixture.base.provider_binding.controls;
             fixture.base.request.response_guidance_mode = mode;
             try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
 
-            const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
+            // Inference sends the model's documented maximum exactly as configured;
+            // Bedrock would otherwise apply a smaller default (ADR 0011).
+            const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none, .{ .tokens = 16000 });
             defer std.testing.allocator.free(encoded);
             var parsed = try strict.parse(std.testing.allocator, encoded, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
-            const field = if (parsed.value.object.get("inferenceConfig")) |config| config.object.get("maxTokens") else null;
-            if (limit) |value| {
-                try std.testing.expectEqual(value, try std.fmt.parseInt(u32, field.?.number_string, 10));
-            } else try std.testing.expect(field == null);
-            try std.testing.expect(!parsed.value.object.contains("max_output_tokens"));
-            try std.testing.expect(!parsed.value.object.contains("max_tokens"));
+            const inference_config = parsed.value.object.get("inferenceConfig").?.object;
+            try std.testing.expectEqualStrings("16000", inference_config.get("maxTokens").?.number_string);
+            try std.testing.expectEqual(@as(usize, if (fixture.base.request.controls.temperature != null) 2 else 1), inference_config.count());
+            for ([_][]const u8{ "max_output_tokens", "max_tokens" }) |field| try std.testing.expect(std.mem.indexOf(u8, encoded, field) == null);
 
             // The wrapper is tested independently of model CountTokens support.
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none, .{ .tokens = 16000 });
             defer std.testing.allocator.free(counted);
             const decoded = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, counted, .input_token_count);
             defer std.testing.allocator.free(decoded);
@@ -669,55 +731,38 @@ test "Bedrock serializes exact output allowance only in Converse inference contr
             try std.testing.expectEqualStrings(input_only, decoded);
         }
     }
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator, .bedrock);
-    defer fixture.deinit();
-    fixture.base.request.controls.max_output_tokens = .{ .value = 0 };
-    for (std.enums.values(operation.ProviderOperationKind)) |kind| {
-        try std.testing.expectError(error.InvalidRequest, encoding.encode(std.testing.allocator, &fixture.base.request, kind, .none));
-    }
 }
 
-test "shared fake and Bedrock retain actual stopped usage with an allowance and reject withdrawn support" {
-    const allowance = @import("domain/model_controls.zig").OutputTokenAllowance.init(12288).?;
+test "shared fake and Bedrock retain actual usage when the provider stops at its own output maximum" {
     inline for (std.meta.tags(Backend)) |backend| {
-        for ([_]bool{ false, true }) |withdraw_support| {
-            var fixture: Fixture = undefined;
-            try fixture.init(std.testing.allocator, backend);
-            defer fixture.deinit();
-            const contract = contracts.registry.entries[0];
-            fixture.base.registry_entry.provider = contract.provider;
-            fixture.base.registry_entry.model = contract.model;
-            fixture.base.registry_entry.capabilities = contract.capabilities;
-            fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
-            fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
-            fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
-            fixture.base.provider_binding.controls.max_output_tokens = allowance;
-            fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
-            fixture.base.request.controls = fixture.base.provider_binding.controls;
-            const authorized = try fixture.start(.inference);
-            if (withdraw_support) fixture.base.registry_entry.capabilities.supports_max_output_tokens = false;
-            fixture.fake_provider.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } };
-            fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}" } };
-            var observed = try fixture.call(authorized);
-            defer observed.deinit();
-            if (withdraw_support) {
-                try std.testing.expectEqual(.authorization_denied, observed.failed.cause);
-                try std.testing.expectEqual(.not_sent, observed.failed.delivery);
-                try std.testing.expectEqual(@as(usize, 0), fixture.effects());
-            } else {
-                const stopped = observed.completed.raw_result.stopped;
-                try std.testing.expectEqual(.output_limit, stopped.reason);
-                try std.testing.expectEqual(@as(u64, 10), stopped.usage.input_tokens);
-                try std.testing.expectEqual(@as(u64, 2), stopped.usage.output_tokens);
-                try std.testing.expectEqual(@as(u64, 12), stopped.usage.total_tokens);
-                try std.testing.expectEqual(@as(usize, 1), fixture.effects());
-                var repeated = try fixture.call(authorized);
-                defer repeated.deinit();
-                try std.testing.expectEqual(.authorization_denied, repeated.failed.cause);
-                try std.testing.expectEqual(@as(usize, 1), fixture.effects());
-            }
-        }
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, backend);
+        defer fixture.deinit();
+        const contract = contracts.registry.entries[0];
+        fixture.base.registry_entry.provider = contract.provider;
+        fixture.base.registry_entry.model = contract.model;
+        fixture.base.registry_entry.capabilities = contract.capabilities;
+        fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
+        fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } };
+        fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
+        fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
+        fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
+        fixture.base.request.controls = fixture.base.provider_binding.controls;
+        const authorized = try fixture.start(.inference);
+        fixture.fake_provider.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } };
+        fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}" } };
+        var observed = try fixture.call(authorized);
+        defer observed.deinit();
+        const stopped = observed.completed.raw_result.stopped;
+        try std.testing.expectEqual(.output_limit, stopped.reason);
+        try std.testing.expectEqual(@as(u64, 10), stopped.usage.input_tokens);
+        try std.testing.expectEqual(@as(u64, 2), stopped.usage.output_tokens);
+        try std.testing.expectEqual(@as(u64, 12), stopped.usage.total_tokens);
+        try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+        var repeated = try fixture.call(authorized);
+        defer repeated.deinit();
+        try std.testing.expectEqual(.authorization_denied, repeated.failed.cause);
+        try std.testing.expectEqual(@as(usize, 1), fixture.effects());
     }
 }
 
@@ -737,7 +782,7 @@ test "Bedrock native projection retains complete guidance and registered mode wi
     for (accepted) |bytes| {
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-        const body = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none);
+        const body = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none, .{ .tokens = 16000 });
         defer std.testing.allocator.free(body);
         var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
         defer parsed.deinit();
@@ -755,7 +800,7 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         const bytes = try std.fmt.allocPrint(fixture.base.schema_arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{property});
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-        const native = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none);
+        const native = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none, .{ .tokens = 16000 });
         defer std.testing.allocator.free(native);
         var wire = try strict.parse(std.testing.allocator, native, .{ .maximum_depth = 32 }, false, null);
         defer wire.deinit();
@@ -780,6 +825,7 @@ test "Converse native schema rejects malformed projected data instead of weakeni
                 .schema_name = "test",
                 .temperature = null,
                 .reasoning_effort = null,
+                .max_output_tokens = .{ .tokens = 16000 },
             }, kind));
         }
     }
@@ -796,7 +842,7 @@ test "Bedrock reasoning controls follow the exact registered policy in inference
             fixture.base.registry_entry.model = contract.model;
             fixture.base.registry_entry.capabilities = contract.capabilities;
             fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
-            fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
+            fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } };
             fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
             fixture.base.provider_binding.reasoning_effort = effort;
             fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
@@ -817,7 +863,7 @@ test "Bedrock reasoning controls follow the exact registered policy in inference
             }
             try std.testing.expect(observed == .completed);
             try std.testing.expectEqual(@as(usize, 1), fixture.effects());
-            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, contract.bedrock_request_profile);
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, contract.bedrock_request_profile, .{ .tokens = 16000 });
             defer std.testing.allocator.free(bytes);
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
@@ -830,7 +876,7 @@ test "Bedrock reasoning controls follow the exact registered policy in inference
                 } else try std.testing.expect(additional == null),
                 .openai_luna => try std.testing.expect(additional == null),
             }
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, contract.bedrock_request_profile);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, contract.bedrock_request_profile, .{ .tokens = 16000 });
             defer std.testing.allocator.free(counted);
             const counted_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, counted, .input_token_count);
             defer std.testing.allocator.free(counted_body);
@@ -850,6 +896,7 @@ test "Bedrock reasoning controls follow the exact registered policy in inference
             .temperature = null,
             .reasoning_effort = effort,
             .request_profile = .openai_oss,
+            .max_output_tokens = .{ .tokens = 16000 },
         }, .inference));
     }
     try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
@@ -859,6 +906,7 @@ test "Bedrock reasoning controls follow the exact registered policy in inference
         .temperature = null,
         .reasoning_effort = .low,
         .request_profile = .none,
+        .max_output_tokens = .{ .tokens = 16000 },
     }, .inference));
 }
 
@@ -899,7 +947,7 @@ test "Converse accepts empty server tool usage across registered profiles and un
                 fixture.base.registry_entry.capabilities = contract.capabilities;
                 fixture.base.registry_entry.json = contract.capabilities.structured_response == .bedrock_json_schema;
                 fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
-                fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
+                fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0], .max_output_tokens = .{ .tokens = 16000 } } };
                 fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
                 fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
                 fixture.base.request.controls = fixture.base.provider_binding.controls;
@@ -1346,14 +1394,16 @@ test "Bedrock inference serializes 0.1 for every registered model and omits unsu
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
             fixture.base.request.controls = fixture.base.provider_binding.controls;
             try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none, .{ .tokens = 16000 });
             defer std.testing.allocator.free(bytes);
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
+            const inference_config = parsed.value.object.get("inferenceConfig").?.object;
+            try std.testing.expectEqualStrings("16000", inference_config.get("maxTokens").?.number_string);
             if (temperature_supported) {
-                try std.testing.expectEqualStrings("0.1", parsed.value.object.get("inferenceConfig").?.object.get("temperature").?.number_string);
-            } else try std.testing.expect(parsed.value.object.get("inferenceConfig") == null);
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
+                try std.testing.expectEqualStrings("0.1", inference_config.get("temperature").?.number_string);
+            } else try std.testing.expect(!inference_config.contains("temperature"));
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none, .{ .tokens = 16000 });
             defer std.testing.allocator.free(counted);
             try std.testing.expect(std.mem.indexOf(u8, counted, "\"temperature\"") == null);
             var altered = fixture.base.request;
@@ -1538,7 +1588,7 @@ test "Luna native JSON emits its required strict flag only for inference and pre
         .temperature = null,
         .reasoning_effort = null,
         .request_profile = .openai_luna,
-        .max_output_tokens = .{ .value = 16384 },
+        .max_output_tokens = .{ .tokens = 16000 },
     };
     const body = try encoding.encodeText(std.testing.allocator, request, .inference);
     defer std.testing.allocator.free(body);
@@ -1554,8 +1604,9 @@ test "Luna native JSON emits its required strict flag only for inference and pre
     try std.testing.expectEqual(@as(usize, 1), additional.count());
     try std.testing.expect(additional.get("text").?.object.get("format").?.object.get("strict").?.bool);
     try std.testing.expect(!additional.contains("reasoning") and !additional.contains("reasoning_effort") and !additional.contains("thinking"));
-    try std.testing.expect(!root.get("inferenceConfig").?.object.contains("temperature"));
-    try std.testing.expectEqualStrings("16384", root.get("inferenceConfig").?.object.get("maxTokens").?.number_string);
+    // Luna has no temperature, so its inference config holds only the maximum.
+    try std.testing.expectEqual(@as(usize, 1), root.get("inferenceConfig").?.object.count());
+    try std.testing.expect(root.get("inferenceConfig").?.object.contains("maxTokens"));
     // This tests the common CountTokens input serializer in isolation. The Luna
     // production contract rejects CountTokens before transport because unsupported.
     const count = try encoding.encodeText(std.testing.allocator, request, .input_token_count);
@@ -1593,6 +1644,7 @@ test "Luna request profile rejects unverified reasoning and temperature override
         .temperature = null,
         .reasoning_effort = null,
         .request_profile = .openai_luna,
+        .max_output_tokens = .{ .tokens = 16000 },
     };
     inline for (std.meta.tags(encoding.ReasoningEffort)) |effort| {
         var value = base;

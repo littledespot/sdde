@@ -49,6 +49,11 @@ A stronger model would likely hide these weaknesses rather than remove them.
 | Pre-B3 retained run (22:00, modified `3303498`) | `RetryLimitExhausted` at brief generation after 10 calls and 13,797 tokens: `embedded_insertion_syntax`, and a `{"token{` envelope prefix on call 2 |
 | B3 live baselines, 17 October (AEDT), committed `dfae959` | Both pass the local mechanical admission gate with zero observed escapes; hello-world blocks later on competing records (12 calls, 18,757 tokens), loan-renewal fails during review on budget (38 calls, 101,933 tokens). Neither publishes (§B3). |
 | B5/B8/R8 live diagnostics, 17 October (AEDT), committed `8ed40ba` | Both reach post-generation review. Hello-world exhausts the budget in principle review (30 calls, 103,873 tokens); loan-renewal fails on a runaway review response at the provider output limit (13 calls, 45,322 tokens). Neither publishes (§1). |
+| B4/B9 live diagnostics, 17 October (AEDT), committed `f086dd1` | Hello-world publishes for the first time (26 calls, 70,830 tokens); human adjudication is pending and the advisory grader fails to parse. Loan-renewal blocks on a forbidden source-review verdict (23 calls, 64,636 tokens), fixed offline in §10 (§1). |
+| §10–§12 live diagnostics, 18 October (AEDT), uncommitted build on `85556b2` | 09:58/10:00: hello-world publishes (24 calls, 64,489 tokens); loan-renewal finishes source review, then fails on budget (31 calls, 111,880 tokens) after five truncated-prefix retries. 10:43/10:44, after §12: both cases publish for the first time (27 calls / 72,434 and 23 / 93,621). All three grader runs fail `quote_not_found` (§1); line locators replace quotes in §13. |
+| §13 live diagnostics, 18 October (AEDT), committed `fb0f670` | Hello-world publishes (24 calls, 62,894 tokens); the grader's line locators all resolve, but it omits source evidence for one criterion. Loan-renewal blocks at its first source-review assignment, which omitted one member (11 calls, 21,989 tokens); fixed offline in §14 (§1). |
+| §14 live diagnostics, 18 October (AEDT), committed `96fb905` | Hello-world publishes (25 calls, 65,728 tokens); the grader again omits source evidence for one criterion. Loan-renewal no longer blocks: source review runs 21 assignments without a membership defect, then exhausts the token budget (31 calls, 100,441 tokens) (§1). |
+| §16 live diagnostics, 18 October (AEDT), committed `3e53153` | Both cases publish (25 calls / 66,297 and 31 / 97,475 tokens). Both grades end `invalid_judgment` after the §15 correction: each first judgment cites no source lines for three criteria, the validator names only the first, and the correction may change only that one. The user then removed the grader from E2E (§17). |
 | B2/W1 live diagnostics, 17 October (AEDT), committed `b4c7b07` | Neither reaches review. Hello-world blocks on the token-only record batch again (11 calls, 17,754 tokens); loan-renewal fails at its first record batch on the provider output limit after runaway entity output (10 calls, 32,333 tokens). Neither publishes (§1). |
 | Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
 | Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
@@ -249,6 +254,174 @@ cannot change the output now consumes most of the budget and decides whether
 anything publishes. That inverts the intent: advice should inform, not gate, and it
 should not cost more than producing the output. B4 records the options.
 
+### Post-B4/B9 live diagnostics — 17 October 2026
+
+Both runs used committed `f086dd1` (B4 option 3 and B9), unmodified; each was
+separately approved and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Furthest point | Terminal | R8 acceptance |
+| --- | --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T07-40-56Z-42741c03ae9491dd21356847f896c273/report.json) | 17 Oct 18:40 | 26 / 70,830 | Publication | `ok`; principle advice incomplete (provider output limit) | `human_adjudication_required`; grader `invalid_judgment` |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T07-41-55Z-70ace07a65f0a8a981d08fbf6512409f/report.json) | 17 Oct 18:41 | 23 / 64,636 | Source review | Blocked: `UnsafeSupportRepair` | Failed: no publication |
+
+Admission escape is zero in both runs (21 and 15 admitted values). This is the first
+publication since 16 October: 1 of 16 runs. Whether it is useful awaits human
+adjudication.
+
+What improved:
+
+- **Principle review is one call.** It took 1 call and 10,621 tokens, against 7 calls
+  and 50,258 tokens after R8. Hello-world finished within budget.
+- **Advice no longer gates publication.** The principle call stopped at the 2,048-token
+  output allowance, and the run still published with explicit incomplete advice.
+
+What blocks or misleads now:
+
+- **Forbidden verdict offered, then blocked (loan-renewal).** Source review returned
+  `not_applicable` for entity applicability. Admission rejects that verdict whenever a
+  candidate exists, and no repair applies, so the run blocked. The whole-assignment
+  schema from B2 always offered it. §10 fixes this offline.
+- **Principle advice is structurally truncated.** The single principle call covered
+  16 subjects, and each finding cited all seven chunks. It reached about subject 11
+  before the 2,048-token allowance, so it was not runaway output. B4 option 3 and B9's
+  allowance conflict on any feature that isn't trivial. **Decided 18 October 2026:**
+  the user directed that there be no output token limits; §11 removes the allowance
+  and logs every provider-applied stop.
+- **The advisory grader cannot parse this provider.** Every GPT-OSS response in both
+  runs, including the grader's, began with the `{"{` opening artifact. Production
+  envelope parsing strips it under the approved §22.6 exception. The grader
+  ([judgment.zig](../test/harness/judgment.zig)) parses strict JSON directly with no
+  retry, so it reported `invalid_judgment`. **Approved 18 October 2026:** the grader
+  now uses the canonical envelope parser (§11). Its unadmitted output scored every
+  criterion 4/4, despite the unsupported content below.
+- **Content defects in the published hello-world specification:**
+  - AS-001 "The system clock is set to UTC." is unsupported by the source;
+  - entity applicability is `required`, with an invented "Application Start" entity,
+    where both B3 baselines judged it `not_applicable` (B6);
+  - the three source requirements remain one FR and one AC (B7), BR-001 repeats FR-001,
+    and the title is the whole requirement sentence.
+- **B7 reproduced again.** Loan-renewal extraction produced one claim saying "may
+  renew".
+- **Truncated-key prefix.** `{"find{` cost one protocol retry in each run (B6),
+  later normalized (§12).
+
+### §10–§12 live diagnostics — 18 October 2026
+
+All four runs used an uncommitted build on `85556b2` (`modified: true`). It included
+§10–§12 and another party's unfinished reference-extraction edits. Each run was
+separately approved and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Retries | Terminal | Grader |
+| --- | --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T22-58-49Z-4e3589f14a064581bd107bf4a73d00e4/report.json) | 18 Oct 09:58 | 24 / 64,489 | 0 | Published | `quote_not_found` |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T23-00-08Z-5210055c5d2617259529446984f05612/report.json) | 18 Oct 10:00 | 31 / 111,880 | 5 | `WorkflowTokenBudgetExceeded` in principle review | Not run |
+| [Hello-world](../zig-out/e2e-spec/2026-10-17T23-43-23Z-050dc69173887cb5f0b9d63922650155/report.json) | 18 Oct 10:43 | 27 / 72,434 | 0 | Published | `quote_not_found` |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-17T23-44-18Z-9f793695f5dc438e28b7d9f4b8a5f8d9/report.json) | 18 Oct 10:44 | 23 / 93,621 | 0 | **Published** (first loan-renewal publication) | `quote_not_found` |
+
+Admission escape is zero in all four runs (19, 48, 20 and 55 admitted values).
+
+What improved:
+
+- **§10:** loan-renewal finished source review in both runs. No forbidden verdict was
+  offered, and nothing blocked.
+- **§11, grader:** the grader parsed every judge response.
+- **§11, output allowance:** no stop occurred while the allowance was absent and the
+  largest legitimate output was 2,772 tokens.
+- **§12:** at 10:00, the truncated `{"find{` prefix appeared six times and cost five
+  retries and 18,802 tokens. At 10:44 the engine normalized the one occurrence and
+  logged a `REMOVED_PARTIAL_FIELD_PREFIX` warning, with no retry.
+- **Principle review completed** in every run that reached it.
+
+What blocks or misleads now:
+
+- **The grader cannot match its quotes.**
+  - None of the eight specification quotes at 10:44 appear in the captured bytes,
+    even after removing Markdown backslash escapes.
+  - The judge also drops inline code, bold labels and emphasis markers, and changes
+    case.
+  - **Decided 18 October:** the judge cites line locators instead (§13).
+- **Bedrock caps output when no allowance is sent.**
+  - At 10:44, source-review call 22 stopped at exactly 4,096 output tokens
+    (`OUTPUT_LIMIT`). The runner logged it as `model.provider_stopped`.
+  - When no `maxTokens` is sent, Bedrock's default for this model is therefore 4,096,
+    not the 16,384 that requests used to reach.
+  - Here the cap only cut a whitespace runaway (about 96% whitespace after a broken
+    JSON close), holding it to 6,758 tokens. That assignment's advice closed
+    incomplete and publication continued.
+  - Decision deferred: keep the default unless a stop cuts legitimate output.
+- **Loan-renewal duplicates records (B7).**
+  - Extraction produced one claim.
+  - The single record call generated 74 records, and 32 published, with heavy
+    paraphrase duplication: AC-003 repeats AC-001, there are five overlapping
+    user-visible outcomes, six overlapping edge cases, and FR-003 to FR-005 restate
+    FR-001.
+  - Every record traces to one claim, so native normalization cannot tell distinct
+    duties from paraphrases.
+  - AS-001 adds an implementation assumption (a renewal flag), and the title is a
+    paragraph.
+- **The budget margin is thin.** Loan-renewal finished at 93,621 of 100,000 tokens,
+  with review at 78% of usage.
+
+Content gains: loan-renewal preserved all five duties, including "must allow", for
+the first time with a refusal acceptance criterion (AC-002) and both exact
+messages. Hello-world's title and earlier unsupported assumption are fixed. It still
+merges the three requirements and invents a "Greeting" entity. These reports are
+`spec-e2e-report/v5`, which the current adjudicator no longer reads (§13).
+
+### §13 live diagnostics — 18 October 2026
+
+Both runs used committed `fb0f670` (`modified: false`). Each was separately approved
+and ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Terminal | Grader |
+| --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-18T01-10-09Z-2c88ca9292b1d2df35136bd8c47b830d/report.json) | 18 Oct 12:10 | 24 / 62,894 | Published | `missing_source_evidence` (`organization`) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-18T01-11-19Z-2c6a7e7aa61b7090db33fb3bfabc2b6b/report.json) | 18 Oct 12:11 | 11 / 21,989 | Blocked: `UnsafeSupportRepair` | Not run |
+
+Admission escape is zero in both runs (18 and 19 admitted values). Neither run
+retried.
+
+- **Line locators work.** All 13 of the judge's citations resolve to in-range lines
+  that have text. The judgment failed only because `organization` cited no source
+  lines, while the contract requires source evidence. The grader still has no
+  correction for an invalid judgment, which is an open decision.
+- **Loan-renewal blocked on a membership defect.**
+  - Its first source-review assignment (display name, description, primary goal)
+    returned findings for two members and none for `primary_goal`.
+  - Native collection rejected the whole assignment and kept no candidate.
+    Support repair cannot authorize without a candidate, so authorization returned
+    `UnsafeSupportRepair` and the workflow ended `blocked`.
+  - This is the second advisory block of this class after 17 October's
+    `invalid_decision`. §14 fixes it offline.
+
+### §14 live diagnostics — 18 October 2026
+
+Both runs used committed `96fb905` (`modified: false`). The user approved the pair,
+and each case ran once.
+
+| Case | Run (AEDT) | Calls / tokens | Terminal | Grader |
+| --- | --- | --- | --- | --- |
+| [Hello-world](../zig-out/e2e-spec/2026-10-18T04-31-59Z-3be140e05e0a4438b7b8032623a9f278/report.json) | 18 Oct 15:31 | 25 / 65,728 | Published | `missing_source_evidence` (`clarity-testability`) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-18T04-33-30Z-1f61f06f029c491beac9698bcfd21026/report.json) | 18 Oct 15:33 | 31 / 100,441 | Failed: `WorkflowTokenBudgetExceeded` in post-generation source review | Not run |
+
+Admission escape is zero in both runs (18 and 63 admitted values).
+
+- **The membership block did not recur.** Loan-renewal's source review completed
+  21 assignment calls (calls 11–31) with no membership defect and no retry. No
+  response needed the §14 correction, so this pair shows the block is gone. It
+  does not show live that the correction recovers.
+- **Loan-renewal now fails on budget.** Records generation (call 10) produced
+  duplicate records, which native atomic deletions removed without a model call
+  (B7). Post-generation source review then spent 80,901 tokens on 21 assignments
+  before the 100,000-token budget stopped it (B2). This matches the
+  10:00 run's budget failure (§10–§12 diagnostics).
+- **Hello-world** corrected one malformed JSON response in source review (call 23,
+  a syntax error at byte 4) on its second attempt, then published.
+- **The grader failed for the second run in a row.** It cited no source lines for
+  `clarity-testability`, after `organization` at 12:10. The grader still has no
+  correction for an invalid judgment, so this open decision now blocks every
+  grade.
+
 ## 2. Why the engine is hard to implement
 
 ### A1. Engine lifecycle mechanics live in workflow YAML
@@ -317,8 +490,8 @@ AGENTS.md lists unbounded `anyopaque` at boundaries as a prohibited shortcut.
 
 **Proposal:** where an orchestrator's sequence is fixed, as in bootstrap and feature
 logging, call typed steps with explicit inputs and outputs. Keep spy tests through a
-typed interface. This changes the §14 orchestrator pattern, so confirm its scope
-first.
+typed interface. This changes design §14's orchestrator pattern, so confirm its
+scope first.
 
 ### A4. Rejections do not say why
 
@@ -448,6 +621,47 @@ rebuild, manufacture a mandatory Plan obligation, or manufacture a clarification
 Current native facts, authority-completeness checks and genuine supported human
 decisions remain mandatory. The separate assessment-model/configuration option,
 budget changes and further live calls are not authorized by this approval.
+
+**Approval — 18 October 2026 (record families):** after the 15:33 loan-renewal run
+spent 80,901 tokens on per-record advice, the user approved amending ADR 0023 and
+§17.3 so source review assigns one record family per call, with feature collection
+subjects kept separate, one protocol-correction allowance and atomic stop per family,
+`specification-state` advancing to v19, and the budget and reviewed record kinds
+unchanged. The user also chose to send each Bedrock model's documented maximum output
+from its provider configuration, because Bedrock otherwise stops GPT-OSS-20B at 4,096
+output tokens (§1) and a 21-record family needs about 5,800. That needs an ADR 0011
+amendment. The maximum-output change is implemented offline (§16).
+
+**Record families implemented offline — 20 October 2026.** The user confirmed the
+scope: the three collection-coverage subjects, the brief, the story, entity
+applicability and reference subjects keep their own assignments; entity records form
+their own family; a family above the 1,024-member choice bound gets a typed failure
+and is never split; restatements conform and only `specification-state` advances
+(to v19). The grouping key in `specification_review_subject.zig` changed from record
+ID to record kind; the ledger's kind-major order makes each family one contiguous
+member run, so admission, correction, atomic stop, retention and stored validation
+follow unchanged. Each member now carries its own record in its subject instead of
+one hoisted assignment record. ADR 0023 ("Record families"), §§12, 17.3, 22.4, 24 and
+28, the §32 index, F0100, diagram 21 and `support.prompt.md` match.
+
+- **Bound and memory.** An over-bound family now fails with the schema owner's
+  closed `ChoiceBoundExceeded` error before any member packet is built, through one
+  predicate shared with the schema restriction. It previously failed later, at
+  request handoff, as `InvalidModelRequestSource`. Each member's
+  single packet is built in its own arena, and only its entry is kept. Before this,
+  building a 1,024-member family held about 6 GB of repeated shared evidence.
+- **Tests:**
+  - accepted: a two-criterion family, two-entity and two-requirement families,
+    separate entity applicability, per-member records, the bound control;
+  - rejected: a response covering one complete record of a family, family-only
+    start, a stop forged at a record boundary inside a family (with a valid-boundary
+    control), an over-bound family, and v18 state.
+- **Baseline harness.** It now verifies `assignment_findings` and
+  `principle_assignment_findings`. It had recognised only the removed
+  `record_findings`, so batched review output was always unmeasured.
+- **Still to measure live.** Each member repeats its own record, roughly 18 KB more
+  for a 21-criterion family, against the saved shared context. No live run has
+  measured the net cost change yet.
 
 **Additional approval — 17 October 2026:** the user approved source-only positive
 readiness evidence before an authored candidate exists. The native source-purpose
@@ -622,7 +836,7 @@ test-helper diagnostic-path lifetime defect was fixed before the final checks.
 The shared recognizer, native request scope, response composition, value and
 membership repair bounds, progress comparison and stored readback are integrated.
 Completed/pending state now use `specification-state/v15`; current diagnostic
-requests use `model-request-debug/v6`. Superseded contracts reject; frozen older
+requests use `model-request-debug/v6` (since advanced to v8, §11 and §14). Superseded contracts reject; frozen older
 captures remain historical observations and cannot acquire current authority.
 
 **Approved live baselines — 17 October 2026 (AEDT):** both separately approved
@@ -942,9 +1156,11 @@ Constraints carried from former F1–F8 and FIX04 §§4–5:
 
 - Extraction merging requirements is now tracked as B7, because both B3 baselines
   show it.
-- The GPT-OSS envelope-prefix malformation (`{"token{`) recurs. It is counted, not
-  normalized. It recurred at hello-world call 2 on the B3 build, and the protocol
-  retry corrected it.
+- The GPT-OSS envelope-prefix malformation (`{"token{`) recurs. It recurred at
+  hello-world call 2 on the B3 build, and the protocol retry corrected it.
+  **Resolved 18 October 2026:** the user approved normalizing the truncated
+  member-name form after it appeared in 6 of 20 source-review responses in one run,
+  causing 5 retries and one exhausted assignment (§12).
 - Before B3, entity applicability was marked required for a feature with no business
   data, and the entity-name exception then admitted an insertion-only name. No native
   rule can judge applicability. Both B3 baselines judged it correctly:
@@ -1105,8 +1321,9 @@ counts and live observations remain unchanged.
 
 **Approved amendment — 17 October 2026:** author entity records once per feature
 with their applicability decision; non-entity record batches cannot emit them.
-Both diagnostic cases request 2,048 provider output tokens in their generation
-and repair slots. No array-cardinality ceiling or additional retry is approved.
+The 2,048-token generation and repair allowances were withdrawn on 18 October 2026:
+no request carries an output-token allowance (§11). No array-cardinality ceiling or
+additional retry is approved.
 Required `output_limit` remains a typed failure; advisory `output_limit` ends
 advice as incomplete under B4. [§9](#9-b4b9-implementation--17-october-2026) records
 the implementation and offline evidence; the proposals below are historical.
@@ -1309,9 +1526,19 @@ Complete the [§17.4 lifecycle](../design/contracts/17-specify.md#174-specificat
 authentication, response publication, current applicability, dependent invalidation,
 response-owned literals, generation, review and readback.
 
-**Decision first:** the trusted authentication source and the persistence model
-(former FIX03 Phase 7: 7A decisions, 7B source-driven resolution, 7C fresh answers).
-Don't treat a closed form as authenticated or fabricate reference citations.
+**Decided 21 October 2026** in
+[ADR 0025](../design/decisions/0025-clarification-answer-authentication.md), which
+covers former FIX03 Phase 7 (7A decisions, 7B source-driven resolution, 7C fresh
+answers):
+- the account that runs the engine is the actor, and the run that reads valid closed
+  forms accepts them;
+- one invalid closed form stops the run, accepts no answers and reports a typed reason
+  for each failing form;
+- evidence goes in the shared actor-evidence registry;
+- the scope is Specify only.
+
+A closed form alone is not authentication, and answers never receive fabricated
+reference citations.
 
 Native [coverage](../src/domain/specification_coverage.zig#L45) cannot discover facts
 that were never extracted. Keep ADR 0021's optional pre-generation source check, and
@@ -1414,6 +1641,10 @@ has fifteen. Proposed labels, human approval and actual judge qualification are
 separate; both real human-review and qualification records remain pending. No
 human-reviewed labels, general grader accuracy or E2E quality is claimed.
 
+**Amended 19 October 2026 (§17):** the advisory grader is removed from E2E. Human
+adjudication is the only rubric evaluation of a published run; GPT-OSS-20B grading
+and the calibration panels remain with the standalone supplied-spec evaluator.
+
 ### Summary hierarchy and cross-model variation
 
 Former FIX01 §9.20 recommendations 1–2 are implemented
@@ -1468,7 +1699,7 @@ repair workload.
   resources; packaged execution without a `design/` fallback; the H-017 live
   generation-plus-grading milestone with stale-artifact rejection; live evaluator
   demonstration (H-004/H-006); and the provider-compatibility diagnostic, whose
-  frozen 16,384-token binding rejects the shipped 2,048-token cases. H-011's answer
+  frozen binding the shipped cases now satisfy, since no allowance remains (§11). H-011's answer
   authentication is R2 and H-002/H-016 calibration is R8. The ticket text remains
   in git at `8ed40ba`.
 - **Direct Anthropic provider.** [claude_connector.md](claude_connector.md) remains an
@@ -1510,21 +1741,45 @@ The approved follow-up and remaining proposals below authorize no live calls:
    removal record). Its removal is implemented and verified offline in §9.
    The next diagnostic pair still requires separate
    approval for each billed run.
-2. **B9 is approved:** feature-owned entities and a diagnostic output allowance
-   of 2,048 tokens, with no new cardinality cap or retries. Retained-capture tests
+2. **B9 is approved:** feature-owned entities, with no new cardinality cap or
+   retries. Its 2,048-token output allowance was withdrawn on 18 October 2026 (§11). Retained-capture tests
    and the next separately approved pair establish different evidence; neither
    substitutes for R8 acceptance. B7 remains open.
 3. R8 is implemented. Adjudicate the first published report under it; the advisory
-   grader doesn't decide acceptance.
-4. Consider A4's broader evidence gaps and W5's identical sibling steps separately
+   grader doesn't decide acceptance. Every report published so far (17 October 18:40
+   onward) is `spec-e2e-report/v5`, so the current adjudicator cannot read it (§13).
+4. **After the post-B4/B9 runs:** §10's forbidden-verdict fix, the grader's envelope
+   parsing, the output-allowance removal and provider-stop logging are implemented
+   offline (§11). The next billed pair still needs separate approval for each run.
+   B7 is then the main requirement-preservation risk.
+   **After the 18 October runs:** both cases publish (§1), and §13 replaces quote
+   matching with line locators.
+   - Done: the 12:10/12:11 v6 pair confirmed live locators. §14 fixes the
+     loan-renewal membership block, and the 15:31/15:33 pair on `96fb905` confirms
+     it no longer blocks (§1).
+   - Done offline: the grader's one mechanical correction (§15).
+   - Done offline: each Bedrock model's documented maximum output is sent, for
+     generation and the grader (§16).
+   - Done offline: the grader is removed from E2E, and the `/evaluate-e2e` skill gives
+     advisory rubric and defect-origin analysis of retained runs (§17). The 22:22 and
+     22:25 v8 reports can't be adjudicated; adjudicate a v9 run.
+   - Done offline: source review assigns one record family per call (B2 approval of
+     18 October, implemented 20 October). Measure its effect on loan-renewal's
+     budget in the next separately approved pair.
+   - Done offline: route 4 in §14 is a typed response-admission defect (ADR 0023,
+     20 October 2026).
+   - Adjudicate its reports under `human-spec-adjudication/v2`.
+   - Address B7, which also drives loan-renewal's record duplication.
+   - Repeat both cases before claiming improvement (§7).
+5. Consider A4's broader evidence gaps and W5's identical sibling steps separately
    from the debugging-only A4 scope above.
-5. The experiment's Phase 2 budget/scope decision remains separate from B4's
+6. The experiment's Phase 2 budget/scope decision remains separate from B4's
    implementation. Its single-pool plan stands, because there is one total limit.
-6. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
+7. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
    adding operations for another workflow.
-7. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
+8. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
    and run B5's A/C comparison only if generation-boundary failures remain.
-8. Treat R2 as a separate required feature. Decide R1 before promising stronger
+9. Treat R2 as a separate required feature. Decide R1 before promising stronger
    provenance. Gather R6 and R7 evidence after B2.
 
 ## 7. Acceptance and evidence rules
@@ -1541,7 +1796,9 @@ Rules for every contract change (former FIX04 §1.1):
 - Never tune on the sixteen reserved qualification features.
 - A model limitation under a coherent contract is a valid result. Don't answer it
   with field-, case- or model-specific rules, sampling changes, extra retries, a
-  second model or a weaker admission rule.
+  second model or a weaker admission rule. The development grader's single
+  mechanical correction (§15, user decision of 18 October 2026) is an explicit
+  exception for the harness, not engine policy.
 - Budget-stopped, malformed and exhausted runs stay in the attempted-workload
   denominator.
 
@@ -1590,6 +1847,33 @@ bounded approval, and each E2E run needs its own explicit approval
   and its completed offline verification are recorded in §9.
 - **17 October 2026, after the post-R8 runs:** added §1's post-R8 diagnostics and
   B4's post-R8 evidence, generalized B9 to all runaway output, and updated §6.
+- **18 October 2026, after the post-B4/B9 runs:** added §1's post-B4/B9 diagnostics
+  and §10's forbidden-verdict fix, and updated §6.
+- **18 October 2026, prefix decision:** approved normalizing the truncated Bedrock
+  GPT-OSS member-name prefix, logged as an engine fix. Added §12 and updated B6.
+- **18 October 2026, after the §10–§12 runs:** added §1's §10–§12 live diagnostics and
+  updated §6.
+- **19 October 2026, E2E grader removal:** the user removed the advisory grader from
+  E2E only and asked for a Claude Code evaluation skill that yields engine and prompt
+  improvements. Added §1's §16 live diagnostics, §17 and the R8 amendment, and
+  updated §6.
+- **18 October 2026, grader locators:** approved option D. Added §13 and updated §1
+  and §6.
+- **18 October 2026, model maximum output:** added §16 and updated the B2 approval
+  note and §6.
+- **18 October 2026, grader correction and B2 approvals:** added §15, recorded the
+  record-family and maximum-output approvals under B2, and updated §6 and §7.
+- **18 October 2026, after the §14 runs:** added §1's §14 live diagnostics and
+  updated §6.
+- **18 October 2026, membership at admission:** the user directed applying the best
+  recommendation for the loan-renewal block. Added §1's §13 diagnostics and §14, and
+  updated §6. After four contract reviews and the user's explicit confirmation, §14
+  also covers parent-scoped guidance, the v8 request description and harness, the
+  restriction guards, principle and preservation-comparison membership, and route 4
+  as an open item.
+- **18 October 2026, user decisions:** approved routing the grader through the
+  canonical envelope parser. Directed that there be no output token limits and that
+  provider-applied limits be logged. Added §11 and updated §1, B9, §5, §6 and §9.
 - **17 October 2026, after the B2/W1 reruns:** added §1's post-B2/W1 diagnostics and
   the B9 item, extended B8 to token classification, and updated B5, B7 and §6.
 - **Not carried forward:**
@@ -1626,9 +1910,10 @@ describe the superseded uncommitted implementation, not the governing contract.
 - Each selected principle set assesses all its current subjects in one assignment,
   with the corpus/context once and exact per-member findings and origins.
 - The feature-wide entities unit owns applicability and independently supported
-  entity records. Other record batches reject entities. The diagnostic generation
-  and repair slots request 2,048 provider output tokens; arrays gain no new caps.
-- Current state is `specification-state/v18`; workflow reports are
+  entity records. Other record batches reject entities. Arrays gain no new caps.
+  The 2,048-token slot allowances originally recorded here were withdrawn on
+  18 October 2026 (§11).
+- State was then `specification-state/v18` (v19 since 20 October); workflow reports were
   `spec-e2e-report/v5`, with incomplete advice and explicit unsent operations. The
   separate pool observations and feasibility pool evidence in the uncommitted
   implementation are withdrawn with the advisory allowance; the single-pool
@@ -1716,3 +2001,910 @@ regressions replacing its obsolete ownership assertions.
 
 No billed calls, E2E reruns, baseline freeze or human acceptance are included.
 R8 calibration review and human adjudication remain pending.
+
+## 10. Advisory assignment verdict restriction — 18 October 2026
+
+**Defect.** The 18:41 loan-renewal run blocked because post-generation source review
+offered a verdict that admission always rejects. B2's whole-assignment packets used
+`assignment_findings`, whose value schema includes `not_applicable`. Assignments exist
+only in the advisory specification projection, where a current candidate fixes
+applicability ([required_authority.zig](../src/domain/required_authority.zig)
+`applicability`), so admission rejects that verdict as `invalid_decision`. No repair
+applies, and the result is `UnsafeSupportRepair`. The single-finding path already
+chose `finding` or `applicability_finding` from applicability. The evidence guidance
+listed a `not_applicable` rule on every request except single source-preservation
+findings, even where the verdict was forbidden.
+
+**Authority.** F0100 §3.10: "Only unresolved entity applicability permits
+`not_applicable` … requests select the permitted schema". §12.2 lets native
+availability facts exclude tagged alternatives. ADR 0023 keeps native admission
+mandatory and ends exhausted malformed-response correction as incomplete advice.
+
+**Change.** In [specification_support.zig](../src/domain/specification_support.zig):
+
+- one predicate, `permitsNotApplicable`, now answers whether a subject may receive
+  `not_applicable`. Request definition, assignment exclusion, guidance, admission and
+  readback all use it;
+- each advisory source assignment derives one restriction from every member's native
+  applicability, and excludes `not_applicable` unless all members permit it.
+  Disagreeing members are rejected as an illegal assignment. That guard is currently
+  unreachable, because unit formation never mixes applicability;
+- the evidence guidance lists the `not_applicable` rule only where the verdict is
+  permitted, for single findings and assignments alike;
+- the source-preservation removal of that rule is deleted, because the shared
+  derivation now covers it.
+
+Admission's `invalid_decision` check and its absence of repair are unchanged. No
+verdict is reassessed. A model that still returns `not_applicable` now gets the
+existing schema correction, as single findings already did. Exhausting it ends the
+advice as incomplete under ADR 0023. No schema, prompt, persisted shape or packaged
+asset changed.
+
+**Regression evidence:**
+
+- `source review offers not_applicable only where native applicability permits it`
+  in `src/specification_generation_test.zig` covers two unrelated sources. Before
+  authoring, only entity applicability keeps the verdict and its rule. After
+  authoring, with both entity dispositions, every assignment excludes the verdict.
+  That covers feature-intent, entity-applicability, reference-meaning and
+  preservation subjects. The restricted schema rejects a `not_applicable` finding as
+  `unknown_variant` and accepts the same batch when it says `supported`. A
+  readiness entity-applicability assignment keeps and accepts the verdict. The test
+  fails without the fix.
+- Two offline integration scenarios in `test/integration/workflow_tests.zig` return
+  `not_applicable` from post-generation review:
+  - once: corrected at `/kind` as `unknown_variant`, then published;
+  - persistently: exhausted into incomplete advice, with publication.
+
+  The test driver now derives the assignment's expected verdicts from native
+  applicability instead of pinning the eight-variant schema. Integration fails
+  without the fix.
+
+**Follow-up (not done).** The single path picks a schema definition, while
+assignments exclude a variant. The two definitions also order `candidate_invalid`
+and `inconclusive` differently. Single source-preservation findings separately drop
+the `negative` guidance rule in a projection-specific branch, the same guidance and
+schema pairing. Unifying them on one mechanism would change the workflow schema
+resource and retained request bindings, so it stays a separate change.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-specification-generation -j2 --summary all` | 3/3 steps; 374/374 tests. |
+| `zig build test-model-result-schema test-model-request-workflow test-workflow-repair-retry test-required-authority test-model-request-preparation -j2 --summary all` | All pass, including 446/446 model-request-workflow and 258/258 required-authority tests. |
+| `zig build test-integration -j2 --summary all` | 8/8 steps; 127/127 tests, including the two new scenarios. |
+| `zig build lint test-architecture -j2 --summary all` | 5/5 steps; 156/156 tests; lint passes. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,891/1,891 tests, including clean packaged-executable checks. |
+| `git diff --check` | Pass. |
+
+No billed calls, E2E reruns or human acceptance are included.
+
+## 11. Grader envelope, no output allowance and provider-stop logging — 18 October 2026
+
+User decisions on 18 October 2026:
+
+- the advisory grader may use the engine's envelope parser;
+- "there should be no output token limits";
+- provider-applied output limits "must be logged";
+- remove the control from the engine, not only from configurations.
+
+ADR 0011 records these decisions; the design remains proposed.
+
+**Grader envelope.** [evaluate.zig](../test/harness/evaluate.zig) passes each judge
+response through `model_envelope.parseContent`, including the approved §22.6
+opening-artifact exception, before judgment validation.
+
+- A rejected envelope keeps its original bytes and parser diagnostic.
+- Human adjudication proposals and `judgment.validate` itself stay strict.
+- Raw evidence and the evaluation report schema are unchanged.
+- [evaluator.md](../design/harness/evaluator.md) and §22.6 record the scope.
+
+**No output allowance.**
+
+- The optional slot `maxOutputTokens`, `OutputTokenAllowance` and the
+  `supports_max_output_tokens` capability are removed. So are the Bedrock
+  `inferenceConfig.maxTokens` encoding and the replay retention of the field.
+- The closed configuration now rejects `maxOutputTokens`, so the provider applies
+  the model's own maximum. AWS documents that an unset `maxTokens` defaults to the
+  model's maximum.
+- `InferenceControls.isValid` had nothing left to check and is removed with its
+  callers.
+- Request descriptions advance to `model-request-debug/v7`. No committed evidence
+  used v6. §14 later advanced them to v8.
+- The shared E2E configuration and the protocol fixture drop their allowances, and
+  the semantic-simplicity protocol drops `max_output_tokens`. The shipped cases
+  therefore now satisfy the frozen binding.
+- Drift coverage now uses a new MOCK bad-input fixture,
+  `test/integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json`, whose generation
+  slot changes a still-bound control: `reasoningEffort: "medium"`. It is test input
+  only, never runtime configuration, and must be committed with this change.
+- The historical v5 attribution reader keeps a frozen controls shape for reading
+  retained evidence. Nothing encodes the retired field. Fidelity checks compare the
+  current encoding with the retained bytes minus their single `maxTokens` member, a
+  read-side projection.
+- Committed calibration records are unchanged historical evidence.
+
+**Provider-stop logging.** After `model.completed`, the runner logs a warning-level
+`model.provider_stopped` for every provider non-candidate stop:
+`OUTPUT_LIMIT`, `CONTENT_FILTERED`, `UNSUPPORTED_TOOL_REQUEST`, `MALFORMED_OUTPUT`
+or `CONTEXT_LIMIT`. The event carries the outcome and the provider's reported
+tokens. A logging failure stops the run; outcomes, accounting and retries are
+unchanged. Contract 27 records the event.
+
+**Regression evidence:**
+
+- **Grader:** `{"` and repeated-key prefixes are scored. Since §12, so is a key start
+  (`{"resu`). A non-matching start (`{"resx`) and doubled prefixes are rejected as
+  `json`. The added Bedrock cases fail without the
+  change. A separate guard test shows `judgment.validate` alone still rejects a
+  prefixed proposal.
+- **Configuration:** a `maxOutputTokens` value of 1, 2,048, 16,384 or null is
+  rejected.
+- **Bedrock encoding:** no request in either response mode contains `maxTokens`.
+- **Request descriptions:** a description that carries a retired allowance, or the
+  superseded v6 label, is rejected.
+- **Provider stops:** both backends keep actual usage on a provider output stop.
+- **Frozen binding and drift:**
+  - the frozen-binding tests reject effort, slot and temperature drift;
+  - the drift scenarios reject before any send;
+  - the semantic-simplicity protocol rejects an added `max_output_tokens`.
+- **Logging:**
+  - `runner logs every provider-applied stop with its exact reason and stops on log
+    failure` covers all five reasons, a complete-response control and log failure.
+    The event must directly follow `model.completed` with the same correlation and
+    outcome. The test fails without the runner change.
+  - The production advice scenarios read the real feature log. Advisory source and
+    repair output stops and required stops each log `OUTPUT_LIMIT`; budget and
+    protocol modes log none. These scenarios fail without the change.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator -j2 --summary all` | 3/3 steps; 385/385 tests. |
+| `zig build test-model-request-workflow -j2 --summary all` | 3/3 steps; 448/448 tests. |
+| `zig build test-integration -j2 --summary all` | 8/8 steps; 127/127 tests. |
+| `zig build lint -j2 --summary all` | Pass. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,890/1,890 tests, including clean packaged-executable checks. |
+| `git diff --check` | Pass. |
+
+**Open:** `model.provider_stopped` is a warning-level event, so a configured
+`logs.level` of `error` or `fatal` filters it out like any other warning.
+
+The direct Anthropic proposal ([claude_connector.md](claude_connector.md)) assumes a
+required `maxOutputTokens`. It stays unaccepted and would need a new decision. No
+billed calls, E2E reruns or human acceptance are included.
+
+## 12. Partial member-name prefix normalization — 18 October 2026
+
+**Decision.** On 18 October the user approved normalizing the truncated opening artifact
+that Bedrock GPT-OSS-20B emits. The engine must log each fix as a warning, and the
+change must stay limited to the prefix.
+
+**Evidence.** The 18 October 10:00 AEDT loan-renewal run
+(`2026-10-17T23-00-08Z-5210055c5d2617259529446984f05612`) hit this artifact in 5 of
+its 20 source-review calls, counting retries.
+- Six responses began `{"find{"findings":…`: calls 11, 17, 19, 21, 29 and 30.
+- They caused five protocol retries, which together cost 18,802 tokens.
+- Call 30 was itself the retry for request 25 and failed again. The correction
+  allowance was exhausted, so the advice for requirement ordinals 25–26 closed
+  incomplete, with no source review for those subjects.
+- The run exceeded the 100,000-token budget at 111,880. Without the retries it
+  would have been about 93,000, assuming nothing else changed.
+- The same form, `{"token{` and `{"find{`, appeared once per run from 16 October.
+
+**Change.**
+- In [model_envelope.zig](../src/domain/model_envelope.zig), the shared §22.6
+  parser also accepts `{"name{` when `name` is a nonempty start of the next
+  object's first key, rather than the whole key.
+- That key must end at an unescaped quote followed by a colon.
+- Everything else is unchanged:
+  - only the opening fragment is removed;
+  - escapes, control bytes and recursive or trailing artifacts still reject;
+  - the remainder must strictly parse as one complete object;
+  - schema and native validation still run;
+  - the string-value opener still requires the exact name.
+- The candidate records `removed_partial_field_prefix`. The runner logs the
+  existing warning event `model.response_normalized`, which reports that the engine
+  fixed the response, with diagnostic `REMOVED_PARTIAL_FIELD_PREFIX`.
+- The request debugger shows every normalization rule from one note map; a test
+  requires an entry for each rule.
+- The engine and the grader share this parser.
+- §22.6 and contract 27 record the amendment.
+
+**Regression evidence:**
+
+- **Envelope tests accept:**
+  - `{"find{"findings":…}`, `{"token{"token_classifications":…}` and
+    `{"kind{"kind_extra":…}` (the last was previously listed as rejected);
+  - a whitespace-led key;
+  - a UTF-8 key start (`{"é{"état":…}`).
+- **Envelope tests reject:**
+  - a non-matching start and a longer name;
+  - a missing colon, a trailing fragment, a trailing comma and an incomplete
+    remainder;
+  - an escaped key and a recursive prefix;
+  - a duplicate key, a control byte or invalid UTF-8 in the rest of the key, and a
+    name that splits a character;
+  - a truncated string-value opener.
+- **Runner tests:**
+  - The runner logs `REMOVED_PARTIAL_FIELD_PREFIX` once at warning level, and the
+    request completes without protocol correction.
+  - Partial-prefix responses that fail the schema or the remainder parse still use
+    the protocol retry allowance.
+  - The accepted-case test fails with partial prefixes rejected.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-model-envelope test-model-request-workflow -j2 --summary all` | 6/6 steps; 511/511 tests. |
+| `zig build test-rubric-evaluator -j2 --summary all` | 3/3 steps; 386/386 tests. The grader now accepts `{"resu` and rejects `{"resx`. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,890/1,890 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included.
+
+## 13. Grader evidence by line locator — 18 October 2026
+
+**Decision.** On 18 October the user chose option D: the judge cites where its
+evidence is, and the harness resolves the exact text.
+
+**Evidence.** Every grader run in §1's 18 October diagnostics failed
+`quote_not_found`.
+- None of 21 specification quotes across the three published runs matched the
+  captured bytes.
+- After removing Markdown escapes and markup and folding case, only 2–3 per run
+  matched.
+- GPT-OSS-20B copies the start of a quote, then paraphrases.
+
+**Change (test harness only).**
+- **Judgment contract** ([judgment.zig](../test/harness/judgment.zig)):
+  `rubric-judgment/v2` evidence is `{document_id, first_line, last_line}`, inclusive
+  and 1-based.
+- **Shared line handling:** one owner numbers lines (LF-terminated, with a final LF
+  ending the last line). It resolves each locator's exact bytes and validates:
+  - an unknown document;
+  - `invalid_line_range` for zero, reversed or out-of-range lines;
+  - `blank_evidence` when no cited line has text.
+- **Judge packet** ([packet.zig](../test/harness/packet.zig)):
+  - prompt revision `rubric-judge/v2`;
+  - every source and the specification arrive as numbered lines of the exact
+    captured bytes;
+  - instructions ask for the narrowest supporting lines, without copied text.
+- **Reports:**
+  - `evaluation-report/v4` renders each locator with its resolved lines;
+  - grader qualification reads the version from the report owner;
+  - `spec-e2e-report/v6` embeds it;
+  - human adjudication moves to `human-spec-adjudication/v2` and
+    `spec-adjudication/v2`.
+- **Review follow-ups (same change):**
+  - Line boundaries now come from the engine's shared `source_coordinates.advance`:
+    CR, LF and CRLF each end one line, and a final terminator ends the last line.
+  - The protocol hash binds the numbering through a fixed probe document.
+  - `reports.parse` revalidates a persisted judgment against its capture and
+    rejects unresolvable locators or forged arithmetic. Rendering has no fallback,
+    and qualification no longer revalidates separately.
+  - The baseline contracts that embed judgments or the E2E report advanced:
+    assessor schema `3`, `baseline-score/v4` and `baseline-acquisition/v4`.
+  - acceptance.md gives humans the numbering rule.
+- **Unchanged:**
+  - the engine, the renderer and published bytes;
+  - the baseline experiment's separate quote-based labels;
+  - the pending grader-calibration and qualification records, which bind no
+    judgment.
+- **Docs:** evaluator.md, acceptance.md and e2e.md record the contract.
+
+**Consequence.** Every report written before this change is historical. That covers
+`spec-e2e-report/v5`, from the 17 October 18:40 hello-world run through all four 18
+October runs.
+- The current adjudicator rejects these reports, as the no-compatibility rule
+  requires. They already carry the retired `quote_not_found` diagnostic, so a closed
+  reader could not decode them anyway.
+- Budget-feasibility evidence (`baseline/feasibility.zig`) also stops reading them.
+- A fresh run produces a different specification. The only route to adjudicate
+  those exact specifications is the historical adjudicator at commit `3d48334`,
+  which is a user decision.
+
+**Regression evidence:**
+
+- **Line handling:** `evidence locators cite numbered lines that resolve to exact
+  captured bytes` covers:
+  - line counting, with and without a final terminator, and for an empty document;
+  - CRLF, a lone CR, a trailing blank line, invalid UTF-8 and a `maxInt(u32)`
+    locator;
+  - exact spans, including a blank line and a multi-line range;
+  - rejected zero, reversed and out-of-range locators;
+  - an accepted range that spans a blank line;
+  - packet numbering that matches validation;
+  - report rendering of resolved text;
+  - persisted and in-memory reports with an unresolvable locator, which are
+    rejected.
+- **Validator diagnostics:** reject out-of-range, blank, zero and reversed locators,
+  an unknown document, and the retired `quote` field.
+- **Converted suites:** the acceptance, gate, qualification, useful-completion and
+  E2E acceptance tests now use locators. Their fabricated-evidence cases cite lines
+  outside the document.
+- **Version tests:** reject the immediately superseded versions (`spec-e2e-report/v5`,
+  `human-spec-adjudication/v1` and `evaluation-report/v3`).
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator test-integration test test-baseline -j2 --summary all` | 78/78 steps; 2,547/2,547 tests, after the review follow-ups. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,891/1,891 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included. The first v6 run is the live check that the judge
+cites valid locators.
+
+## 14. Assignment membership at response admission — 18 October 2026
+
+**Decision.** On 18 October the user directed: "perform detail analysis on the issue,
+and apply best recommendation, keeping with the code design principles". After the
+first contract review, the user explicitly confirmed the ADR 0023 policy change and
+chose to fix every review finding, including opting preservation comparisons into
+the same admission rule.
+
+**Analysis.** Four routes let a post-generation review-response defect stop a
+workflow:
+
+1. A whole-assignment membership defect (missing, repeated or foreign member).
+   Native collection rejects the assignment with no candidate, support repair cannot
+   authorize, and the run blocks. This was the 12:11 run.
+2. A finding-level defect that native repair cannot authorize. This was 17
+   October's `invalid_decision`, now excluded by §10's schema narrowing.
+3. Exhausted finding repair, which ends the run with `retry_limit`.
+4. A schema-valid positive verdict (`supported` or `not_applicable`) for a member
+   whose claim set canonicalization cannot resolve: an eligible-subset rule with
+   bound-claim evidence and no candidate provenance, whatever the eligible claim
+   count. `claimsFor` raises a decode error before `admit`, which owns the typed
+   `invalid_selection` rejection, sees the finding. The assignment is therefore
+   rejected as `invalid_json` with no candidate and blocks. The contract review
+   found this route; no run has observed it.
+
+Accepted authority listed membership only as a native failure (ADR 0023's
+assignment and principle-handoff paragraphs), with no non-terminal classification
+for an advisory response defect (design-router gap C1). It explicitly keeps routes
+2 and 3 terminal: §22.6 says "native finding-evidence validation and repair
+exhaustion remain terminal", and ADR 0023 agrees ("Existing native finding-evidence
+validation and bounded repair are preserved"). Route 4 is a finding-evidence
+failure under that same rule, so it stays terminal. Its
+`invalid_json` label is wrong, however. Making canonicalization total would not
+help on its own: `admit` would classify the finding as an evidence-selection
+defect, and selection repair cannot change a verdict, so it would spend repair
+calls before blocking. The schema profile cannot express uniqueness, which stays a
+native check.
+
+**Change.** Membership becomes part of response admission for whole-unit review
+assignments under advisory policy and preservation comparisons under required
+policy. It sits on the shared contract rather than in
+an advisory-only branch.
+- `model_result_schema` gains an `exact_members` integer choice for an integer
+  property of array items. It fixes the item count to the member count, which the
+  guidance schema states (Bedrock's structural projection keeps only
+  `minItems: 1`), and records the member set. A foreign ordinal already fails the
+  narrowed choice.
+- `model_payload_schema` rejects a repeated member natively as `duplicate_member`.
+  A missing member then always appears as a count error or a repeat. Guidance
+  locates the repeat at its item but scopes the expected contract to the parent
+  array.
+- Source and principle assignment packets mark their ordinal choice
+  `exact_members`. So does the preservation-comparison packet, whose native
+  admission already required exactly one assessment per comparison. Its binding
+  always assigns the extracted-claims comparison, so a loss packet with no
+  comparison is refused as an invariant violation. Grouped reconciliation
+  dispositions are also one-per-claim responses but keep their native cardinality
+  checks; they were not examined here.
+- Membership defects take the existing bounded protocol correction of the complete
+  response, with the same allowance and no new counter. Assignments exist only
+  under advisory policy, so their exhaustion closes that assignment's advice as
+  incomplete (`protocol_exhausted`). Preservation comparisons run under required
+  policy, so their exhaustion stays terminal.
+- Native collection still rejects membership defects atomically, as the authority
+  behind admission. Routes 2, 3 and 4 are unchanged.
+- The restriction refuses a key that is not a required, non-nullable scalar
+  integer in every item variant. It also refuses a path through an optional
+  property or a second array, a match that misses any alternative or reaches only
+  a projection parent or another definition, and any later choice, path or
+  tagged, that narrows the key below the member set. Clones keep the restriction.
+- Request descriptions advance to `model-request-debug/v8` and record each applied
+  member set. Debugger inspection, replay and the exact-value harness reapply it
+  through the same `restrict` owner, so none of them reports a response that
+  admission rejected as valid. A record that does not fit its captured schema, or
+  that a pre-v8 harness capture claims to carry, is refused. No v7 reader remains.
+- ADR 0023 records the classification, the confirmation and the supersession in
+  its principle handoff. ADR 0019 records v8.
+  §12.2, §12.7, §17.3, §22.1, §22.4, §22.6, §24 and F0100 match.
+
+**Open decision (route 4).** In post-generation review, whether a positive verdict
+can be resolved is uniform within each assignment:
+- `projectRecords` requires a brief whenever generated content exists, so brief
+  fields always resolve;
+- the primary user story always resolves through its generated value;
+- every other assignment unit shares one record, one collection slot, the entities
+  basis or exact-set reference rules.
+
+Excluding positive verdicts from that assignment's schema when they cannot be
+resolved is therefore §10's move again: it cannot remove a valid verdict from a
+sibling member.
+
+**Route 4 implemented offline — 20 October 2026.** The user chose to treat it as a
+typed response-admission defect: protocol correction of the whole assignment, with
+exhaustion ending that assignment's advice as incomplete. ADR 0023 ("Unresolvable
+positive verdicts at response admission") records the amendment, and §§12.2, 12.7,
+17.3 and 22.6 match.
+- **Premise checked again.** Record families did not break the uniformity above.
+  A record always binds its own provenance, and the specification validator refuses
+  a record with no effective claim. The reachable case is a coverage subject whose
+  collection has no records, such as acceptance criteria or scenario coverage when
+  only functional requirements are authored. One integration scenario reaches it.
+- **Mechanism.** `specification_support_model.resolves` exposes the
+  canonicalization rule, which no longer duplicates it. The assignment packet
+  withholds each unresolvable positive verdict with the existing excluded-variant
+  restriction and omits its guidance rule. One withheld set per assignment
+  replaces the former `not_applicable`-only flag. Members that disagree are
+  refused before invocation. A withheld verdict rejects at admission as
+  `unknown_variant`. Request descriptions record the restricted provider schema,
+  which already omits withheld verdicts, so `model-request-debug` stays at v9.
+- **Follow-up review (20 October 2026).**
+  - The integration driver now checks that every required-review subject resolves
+    a positive verdict, so the "required review is unchanged" premise is enforced.
+  - `ChoiceBoundExceeded` belongs to the support contract. Only principle
+    assessment's two forwarding wrappers name it.
+  - The unit test also covers an acceptance-criteria-only candidate, whose empty
+    collection is functional requirements.
+- **Tests:**
+  - accepted: negative verdicts are admitted for the unresolvable subjects, and
+    the functional-requirement collection and its record family keep `supported`;
+  - rejected: `supported` and `not_applicable` fail admission for both
+    acceptance-criteria and scenario coverage, across two unrelated sources;
+  - the integration driver now derives the expected variants and guidance from
+    the same predicate;
+  - the test fails when resolution is not checked.
+- Required review is unchanged; its subjects all resolve.
+
+**Regression evidence:**
+
+- **Schema owner:**
+  - complete member sets in any order are admitted;
+  - partial, empty, over-count and foreign batches reject;
+  - a repeated member rejects as `duplicate_member` even though the provider bytes
+    alone admit it;
+  - each restriction guard above refuses its case, while the same path under
+    another carried definition is still admitted;
+  - the recorded set survives cloning and rebuilds admission from provider bytes,
+    while ill-fitting records are refused.
+- **Payload correction flow:** a repeated member is reported at `/value/2` with the
+  expected path pinned to `/value` (parent scope). Its schema pointer and outline
+  are checked against the selected schema's projection.
+- **Debugger, replay and harness:** a captured assignment request round-trips its
+  member set through the feature log. Inspection and the exact-value harness reject
+  the repeat, and accept the same bytes without the record. Ill-fitting records
+  and the v7 label are refused.
+- **Packets:** the principle-assignment and preservation-comparison schemas each
+  admit the complete response and reject partial, repeated and foreign ones. The
+  record calibration probe accepts only the complete batch.
+- **Offline integration:**
+  - Source and principle assignments with a partial or repeated member recover
+    after one correction, or exhaust into incomplete advice for that projection
+    only, and the run still publishes.
+  - Source-loss runs that omit or repeat one comparison recover after one
+    correction. A persistent omission ends the run with `retry_limit`, because
+    this request runs under required policy.
+  - Every assignment and comparison request asserts its bound count and exact
+    member set. Every membership correction asserts the reason, located path,
+    expected path, scope and schema pointer.
+  - Without the packet change, the first source scenario blocks at
+    `collect-specification-support`, as the live run did.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-model-result-schema test-model-payload-schema test-specification-generation test-model-logging test-exact-value-replay -j2 --summary all` | 23/23 steps; 875/875 tests. |
+| `zig build test-architecture --summary all` | 3/3 steps; 156/156 tests. |
+| `zig build test-integration -j2 --summary all` | 8/8 steps; 127/127 tests. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,895/1,895 tests, including clean packaged-executable checks. |
+| `zig build lint` and `git diff --check` | Pass. |
+
+No billed calls are included.
+
+## 15. Grader one-shot correction — 18 October 2026
+
+**Decision.** Two consecutive live grades failed with `invalid_judgment`
+(`missing_source_evidence` on `organization`, then `clarity-testability`), so no run
+received an automated grade. On 18 October the user decided:
+
+> Allow one correction attempt per invalid grader judgment. Limit correction to
+> mechanical errors: missing evidence, invalid line references, missing criteria or
+> malformed output. Send the exact validation diagnostic and identify the affected
+> criterion. Keep the specification, sources, rubric, model and unaffected criterion
+> results unchanged. Revalidate the complete corrected judgment using the existing
+> canonical validator. Never retry a valid low score to obtain a passing grade. Count
+> both attempts against the evaluator's token budget and retain their responses,
+> diagnostics and usage. If correction fails or the budget is exhausted, report an
+> evaluator error; do not accept the invalid grade. Add positive and negative tests
+> before enabling this policy.
+
+The user then chose the closed correctable list below and fixed protocol outside
+`retry_limit`.
+
+**Authority.** The grader is development-only harness code under R8: it grants no
+workflow, publication or acceptance authority. No ADR or invariant governs grader
+retries. The superseded text was harness documentation (evaluator.md "invalid
+judgments are not retried") and the tests that pinned it.
+
+**Change** (in `test/harness/`):
+- `correction.zig` owns the policy:
+  - correctable reasons: `json`, `invalid_shape`, `criterion_count`,
+    `missing_criterion`, `missing_source_evidence`,
+    `missing_specification_evidence`, `blank_evidence`, `unknown_document` and
+    `invalid_line_range`;
+  - model-visible guidance: the exact diagnostic, naming the criterion when one
+    exists, a fixed explanation and instruction, and the rejected response;
+  - the preservation check: every result the rejected response made readable and
+    the diagnostic did not name must be returned equal after canonical decoding,
+    or the correction is rejected as `changed_criterion`. After a shape defect
+    each result that decodes on its own under a top-level `results` array is
+    readable; unparseable JSON, a response without that array or one with no
+    decodable result has none, and a readable duplicate is final. The user accepted
+    validation-only correction of unreadable results on condition that it is
+    logged: that attempt records `unconstrained` (`unparseable_json`,
+    `no_results_array`, `no_readable_result` or `some_results_unreadable`) in JSON
+    and Markdown, matching the defect.
+- `judgment.validate` decodes through widened integers, so a negative or oversized
+  score is `invalid_score` and such a line is `invalid_line_range`, not a shape
+  defect. An evidence defect also pins the named result's
+    disposition and score, and its guidance says so.
+- `judgment.validate` detects repeated criteria before counts and order, so a
+  duplicate is always final. Provider observations can no longer report judgment,
+  budget or retry outcomes.
+- `evaluate.zig` sends one correction after a correctable invalid judgment, through
+  both the OpenAI and the Bedrock encoders. The correction is outside `retry_limit`;
+  its transient failures use the remaining retries. Both attempts count against the
+  evaluator budget, and an exhausted budget prevents the correction
+  (`budget_exceeded`). An invalid correction is final (`invalid_judgment`).
+  Valid judgments, including low scores, are never resent.
+- `evaluation-report/v5` gives each attempt its purpose and diagnostic and drops the
+  report-level diagnostic. The reader admits only metered transient retries within
+  `retry_limit` and up to the hashed correction limit after a metered correctable
+  defect. The outcome must be the final attempt's, a pending correction can stop
+  only on the budget or cancellation, and `retries_exhausted` must follow a used-up
+  metered retry. Budget stops must be justified by the recorded usage,
+  cancellation needs a pending retry or correction, and attempts cannot carry
+  evaluator-only failures.
+- `rubric-judge/v3`: the protocol hash binds the correction instruction,
+  explanations, correctable reasons, attempt count, preservation rule, grade-pinned
+  reasons, provider placement and the exact envelope through fixed probes.
+- Qualification accepts one correction; any other shape rejects.
+- `spec-e2e-report/v7` and `baseline-acquisition/v5` follow the embedded report.
+  evaluator.md, e2e.md and acceptance.md record the decision. With no
+  compatibility reader, the retained 18 October `spec-e2e-report/v6` reports
+  (12:10/12:11 and 15:31/15:33) can no longer be read by human adjudication or
+  feasibility evidence. Adjudicate a v7 report from a new run.
+
+**Known limit.** The validator reports the first defect only. A second defective
+readable result cannot be changed, so such a judgment ends as `invalid_judgment`.
+Missing, unknown and absent results can be fixed alongside the named defect. Both
+observed failures had a single defect.
+
+**Regression evidence** (`test/harness/tests.zig`, `grader_qualification_test.zig`):
+- A missing-evidence judgment is corrected once and graded, with `retry_limit` 0.
+  The correction resends the same model, instruction, schema and documents, then
+  the diagnostic and the rejected response; the Bedrock body carries them once.
+- Every listed mechanical defect gets one correction; repeating it ends with no
+  grade. Score, explanation and disposition defects get none, and a valid low score
+  is graded as is. The correctable set is pinned against the closed reason list.
+- A correction that keeps the low sibling score is graded; one that raises it is
+  rejected as `changed_criterion`. After a shape defect, the readable sibling is
+  preserved the same way; unparseable JSON is constrained by validation alone.
+- Fixing an invalid line reference while raising that criterion's score is
+  rejected; fixing the reference alone is graded. Missing-criterion, count and
+  missing-specification-evidence defects are corrected. Duplicates are final in
+  every count and order. Correction requests carry the shared response-format
+  framing once for both providers. A duplicate behind a shape defect is final; a
+  root-array response gets the documented validation-only correction; a changed
+  sibling explanation, evidence or absence claim is rejected; and corrected,
+  budget-stopped, duplicate-stopped and regraded reports round-trip through the
+  reader.
+- Budget exhaustion prevents the correction. A transient failure of the correction
+  request retries the same request within `retry_limit`, or exhausts it.
+- The trace retains the correction request. Forged attempt sequences are rejected:
+  a correction first, after a content defect or without a defect; two corrections;
+  a judgment after a defect; a diagnostic without `invalid_judgment`;
+  `changed_criterion` outside a correction; an unmetered or over-limit retry; and
+  an outcome that is not the final attempt's.
+- A report with one mechanical correction still qualifies. A correction after an
+  uncorrectable defect, or a second correction, does not.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator --summary all` | 3/3 steps; 398/398 tests. |
+| `zig build lint` | Pass. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,906/1,906 tests, including clean packaged-executable checks. |
+
+No live grading ran; whether GPT-OSS-20B fixes its own evidence omission is still
+unmeasured.
+
+## 16. Model maximum output — 18 October 2026
+
+**Decision.** ADR 0011 had removed every output allowance on the premise that an
+omitted Bedrock `maxTokens` applies the model's own maximum. The 10:44 loan-renewal
+run disproved it: call 22 sent no allowance and stopped at exactly 4,096 output
+tokens (`stopReason: max_tokens`). On 18 October the user chose to "Send model's max
+output", extended it to the grader ("yes, allow the max"), and, after the contract
+review found retained runs that reached a 16,384 allowance on this model and
+region, chose 16,384 over 16,000 for `openai.gpt-oss-20b-1:0` (AWS documents
+"16K"). The user also chose to record the maximum in the frozen protocol and check
+it.
+
+**Change:**
+- **Catalogue.** Each Bedrock catalogue entry requires
+  `config.maxOutputTokens`: positive, exact, with no default, lookup or clamp
+  (`llm_provider_config_schema`, `ValidatedProviderConfig.aws_bedrock`).
+- **One maximum type.** The value is a `ModelMaximumOutput`: one non-zero integer
+  admitted only through its single parse rule. The catalogue, persisted
+  descriptions, grader configuration, frozen protocol and encoder share it, so no
+  decoder re-checks zero by hand. Its wire form is one integer-written JSON number,
+  as the catalogue requires, whichever JSON decoder runs. `strict_json` checks a
+  wrapper's declared scalar wire kind before its parse hook runs. A wrapper that
+  declares a wire kind without a parse hook, or names a non-scalar kind, fails to
+  compile.
+- **Encoder.** Every Bedrock inference request sends it as
+  `inferenceConfig.maxTokens`, after `temperature`; CountTokens carries none. The
+  adapter takes the value from the selected binding, so no slot or request can
+  narrow it.
+- **Replay.** Request descriptions advance to `model-request-debug/v9`, whose
+  provider configuration carries the value, so replay sends the same request. No
+  v8 reader remains. Production replay authorization compares a description with
+  the current binding through one `Description.matchesBinding`, so a capture
+  whose maximum or region no longer matches the catalogue is refused.
+- **Grader.** `evaluation-config/v2` requires the judge model's
+  `max_output_tokens`, sent as Bedrock `maxTokens` or OpenAI `max_output_tokens`.
+  The reports that embed that configuration advance: `evaluation-report/v6`,
+  `spec-e2e-report/v8` and `baseline-acquisition/v6`. No retained report uses the
+  superseded labels.
+- **Persisted descriptions.** A description recording a zero, negative, quoted,
+  fractional or nested maximum is refused at readback by the same type.
+- **Shipped configs.** The shipped catalogue, design example, E2E evaluator config
+  and packaged smoke config record 16,384.
+- **Frozen protocol.** The semantic-simplicity protocol advances to schema 2 with
+  a required `max_output_tokens` of 16,384. Frozen-binding checks compare the whole
+  provider configuration and the sent `maxTokens` against it, so a drifted
+  catalogue maximum is rejected before transport.
+- **Historical evidence.** Attribution replay reads retained v5 captures through
+  an explicit historical provider configuration. Retained v5 request bytes are
+  reproduced exactly, except that the retired allowance is replaced by the frozen
+  model's maximum. That maximum is read from the frozen protocol. The source-loss
+  projection resolves it from the shipped catalogue through the production decode,
+  registry build and validation, so no code literal restates the value.
+- **Docs.** ADR 0011 (new "Model maximum output" section), ADR 0019, ADR 0023,
+  design invariant 32 and §31.12, §12, §24, F0006, F0007, e2e.md, evaluator.md,
+  acceptance.md and the semantic-simplicity README match. ADR 0011 names the
+  catalogue as the authority for the maximum: the engine does not verify the
+  recorded value against the provider.
+
+**Open points from the contract review:**
+- **Shipped value: resolved.** The user switched to 16,384 after the review found
+  retained runs that reached it
+  (`test/calibration/authoring-associations/remediations/results.md`, and the
+  insertion-presentation request sources).
+- **Frozen binding: resolved.** The protocol now records the maximum and the
+  binding checks it.
+- **Second review: resolved.** A second contract review found nothing blocking.
+  Its seven minor findings were all fixed:
+  - an allocation failure while reading a frozen wire body stays `OutOfMemory`;
+  - three stale doc sentences (evaluator.md, ADR 0011, the semantic-simplicity
+    README);
+  - two restated 16,384 literals;
+  - six scattered zero checks, replaced by `ModelMaximumOutput`;
+  - an untested production replay match, now `Description.matchesBinding` with
+    accepted and rejected tests.
+- **Third review: resolved.** A third review confirmed those fixes. It found no
+  blocker and four minor items, all fixed:
+  - a missing `controls` rejection case;
+  - float-written maxima (`16384.0`, `1.6384e4`) that strict decoding accepted;
+  - no compile-time guard or owning-boundary test for the wrapper wire rule;
+  - a stale test comment.
+
+  An optional nit was also applied: the source-loss maximum now uses the full
+  registry path.
+
+**Regression evidence:**
+- **Catalogue.** It accepts `{"region","maxOutputTokens":16000}` (a test value)
+  and rejects a
+  missing, zero, negative, oversized, string or fractional maximum, as well as
+  unknown fields beside a valid maximum.
+- **The value comes from configuration.** Every boundary is proven with 8,192 as
+  well as 16,000: the adapter's sent body through the fake transport, the replay
+  body from the description, and the grader's Bedrock and OpenAI bodies. Replay
+  authorization rejects a description whose maximum differs from the catalogue's.
+- **Encoder.** Every registered model's inference request carries exactly
+  the configured `maxTokens`, with temperature where supported; Luna's inference
+  config holds only the maximum; CountTokens carries none.
+- **Maximum type.** `ModelMaximumOutput.parse` accepts 1 through the u32 maximum
+  and rejects zero, negatives and out-of-range values. Strict decoding accepts a
+  plain integer and round-trips it. It rejects zero, negative, oversized, quoted,
+  fractional, float-written (`16384.0`, `1.6384e4`, `16384e0`), `-0`, null,
+  boolean, nested and missing values. Plain `std.json` decoding also rejects quoted
+  and float-written values. Description readback rejects the same malformed values.
+- **Wrapper wire rule.** A `strict_json` test uses an unrelated boolean wrapper. It
+  accepts `true` and rejects `false` (refused by the hook), quoted, numeric,
+  object, null and missing values. A struct without a declared wire kind keeps its
+  closed object shape.
+- **Replay authority.** `Description.matchesBinding` accepts the exact binding. It
+  rejects a drifted maximum, a drifted region, a non-Bedrock configuration, and a
+  changed slot, provider, model, reasoning effort, controls or response mode.
+- **Replay and records.** Replay requests carry the description's value. The v8
+  label is refused. Integration and compatibility probe requests carry the shipped
+  16,384.
+- **Frozen protocol.** It rejects a missing, zero or string maximum and schema 1. A
+  description or sent body with 4,096, or with no `maxTokens`, fails the frozen
+  binding.
+- **Grader.** The grader config rejects a missing, zero, negative or string
+  maximum. OpenAI and Bedrock grader requests carry the configured value.
+
+**Validation:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-provider-conformance test-rubric-evaluator test-e2e-call test-attribution-replay` | Pass. |
+| `zig build test-integration --summary all` | 8/8 steps; 127/127 tests. |
+| `zig build test-architecture --summary all` | 3/3 steps; 156/156 tests. |
+| `zig build verify -j2 --summary all` | 168/168 steps; 1,909/1,909 tests, including clean packaged-executable checks. |
+
+Retained calibration runs show Bedrock accepted 16,384 for GPT-OSS-20B; no run on
+this build has yet confirmed it.
+
+## 17. E2E grader removal and assistant evaluation skill — 19 October 2026
+
+**Decision.** Both 18 October 22:22/22:25 runs on `3e53153` published, and both
+grades still ended `invalid_judgment` (§1). Each first judgment cited no source lines
+for `clarity-testability`, `organization` and `proportionate-business-scope`. The
+validator names only the first defect and §15 lets the correction change only that
+result, so any judgment with two or more defects cannot be corrected. Seven of the
+eight retained first judgments had three or four such defects. Every parsed score
+was 4/4 (70 of 70), including on the 22:25 loan-renewal specification, whose
+repetition and invented prohibition the rubric names as defects. After that review
+the user directed: "remove the grader, only the grader, so add a skill that can be used
+to evaluate the e2e tests"; "it should produce meaningful output that can be used to
+improve the engine or prompts"; and "make sure only the e2e grader is removed".
+
+**Authority.** No ADR or invariant requires an in-run model grader. AGENTS.md and §28
+require rubric evaluation of actual published output, which R8's human adjudication
+supplies. The decision amends R8's "GPT-OSS-20B advisory grading" for E2E only
+(acceptance.md). Accepted ADR grader text (0011, 0014) governs the standalone
+evaluator, which is unchanged.
+
+**Removed from E2E** (`test/harness/e2e/`):
+- the judge call, its `TEST_EVALUATION_*` selection and credential, judge
+  configuration, grader-qualification inspections, independence check and model
+  acceptance gate;
+- `spec-e2e-case/v3` drops `evaluation_config`; `test/e2e/config/evaluation.json` is
+  deleted;
+- `spec-e2e-report/v9` drops `evaluation`, `evaluation_configuration`,
+  `grader_qualification`, `semantic_quality` and the `evaluated` and
+  `evaluator_failed` statuses. A published run ends `generated` with acceptance
+  `human_adjudication_required`. `quality_unresolved` is renamed
+  `threshold_unconfigured`: the rubric has no threshold, checked before any send;
+- `judge_independence.zig` keeps only the `Result` type the standalone gate reports.
+  `fromObserved` (E2E's only use) and the uncalled `fromConfigured` are removed with
+  their tests.
+- **Resolved 20 October 2026** (user: "remove all legacy or unused code"): the
+  standalone CLI passed only `unknown_generation`, and the gate's `decide` ignored
+  its inputs. `judge_independence.zig` is deleted. The gate keeps raw quality and
+  qualification, and its decision is one unresolved enum (`not_evaluated`,
+  `input_changed`, `human_adjudication_required`). `evaluation-report/v7` drops
+  `independence` and the never-produced passed or failed decision, and its reader
+  rejects v6, an `independence` field and the old decision union. A completed
+  evaluation exits 2 as before.
+
+**Unused code removed with it** (no behavior change): the unreferenced canonical
+value, provenance and completed-unit replacement functions left by W2's deleted
+post-generation repair paths; the test-only prompt-batch API and its runner method;
+`claimRequired`, a parallel of `itemRequired`; `recordForGroup`, a parallel of
+`record`; `selectGroups`; `parseProposal`, whose closed-type tests now decode
+directly; two unused feature-log ID constants; an unused alias, fixture method and
+test helper. The evaluator capture's `recorded` and `scripted_generation` origins and
+its non-`completed` workflow statuses had no producer and now reject, in place: no
+written report carries them, so retained `spec-e2e-report/v9` runs stay adjudicable.
+Accessors and test seams used only by tests remain.
+
+**Found, not dead code — unimplemented contract.** Design §26 requires log
+retention after recovery and rotation (the only authorized destructive log
+operation), and F0002 §6.4 fixes `retentionDays = 14`. `LogService.retainHistorical`
+and the filesystem segment-pruner facet have only test callers, so production never
+prunes. This needs its own change, not deletion. **Built 20 October 2026** as
+[ADR 0026](../design/decisions/0026-header-identity-log-retention.md) (user choice:
+header-identity retention). A contract review then found that the first version
+skipped invalid groups, contrary to §26.5, and could prune a crashed run's closed
+stream. It was reworked:
+- invalid prior history blocks;
+- a run with an active tail in either stream is kept whole;
+- discovery and the under-lock prune share recovery's segment inspector;
+- the historical adapter covers one stream and offers lock, prune and release only;
+- cancellation while opening stays distinct, and every failure writes the emergency line;
+- the runner builds the authorization as its first child step.
+
+A second review led to more changes:
+- a last segment torn during creation counts as a crash and keeps its run;
+- sequence arithmetic on persisted bytes is checked;
+- only the expired ordinal prefix is deleted;
+- the current run's unused prune facet is gone;
+- multi-segment, crash-shape and coordinator tests were added.
+
+A third review led to these changes:
+- a rotation crash (a torn last segment behind closed ones) is tested;
+- a lone torn segment must be ordinal 1 and have valid binding directory names;
+- torn bytes must be a prefix of the stream's `segment_header` row, within the
+  row size limit;
+- the binding directory opens beneath the locked run directory;
+- a prune failure stays the reported cause when release also fails.
+
+**Amended 21 October 2026** (user decision): a stray regular file in the log folders,
+such as Finder's `.DS_Store`, no longer blocks every later run. Two entry classifiers
+now serve every listing of `logs/events` and `logs/prompts`: one for collection and
+run directories, one for binding directories. The listings they serve are prior-run
+discovery, the under-lock check and prune, the current run's recovery and segment
+account, and the debugger. They leave alone a regular file whose name is not a
+segment name. These still block:
+- symlinks and other special entries;
+- directories inside a binding directory;
+- segment-named files outside one.
+
+The current run's two scans of its other bindings are now one pass.
+
+Two shared logging gaps stay as known work:
+- cancellation during segment reads and under the lock is reported as a logging
+  failure;
+- the lock action reports every acquire failure as a timeout.
+
+Prior-run crash finalization (§14.10) stays open: it needs a persisted bootstrap
+authority that does not exist. Similarly, §26 and F0002 name the
+compiler-owned `redaction/default-v1` policy, but no code or persisted record carries
+that ID; the removed constant was never read.
+
+**Kept:** the standalone `evaluate-spec` evaluator with its correction, qualification,
+calibration panels, configuration and environment; rubrics; `rubric-judgment/v2`;
+rubric acceptance; `adjudicate-spec`; baseline supplied-judgment scoring. E2E still
+captures the exact source, rubric and published bytes as `evaluation_inputs` for
+adjudication.
+
+**Version consequences** (no compatibility readers): `baseline-freeze/v2` and
+`baseline-acquisition/v7` embed the case and report. None of the 19 retained runs,
+including 22:22/22:25, can be read by `adjudicate-spec` (v8 or older reports),
+replayed by `e2e-call` (14 `spec-e2e-case/v2` and 5 v1 `case.json` files) or used as
+budget-feasibility evidence. Each needs a fresh run.
+
+**Skill.** [`/evaluate-e2e`](../.claude/skills/evaluate-e2e/SKILL.md) reads a retained
+run offline. It scores the captured specification against the captured rubric with
+line citations and the canonical acceptance arithmetic. It traces each defect to the
+generation call that first produced it, classifies the origin, and maps it to the
+prompt, schema, composition or renderer `path:line`. It ranks generalized changes
+with expected effect, risk and verification, and profiles cost per stage. `--panel`
+checks its discrimination against a calibration panel, scoring specimens copied to
+opaque names before it reads any label. Output goes to the
+Git-ignored `evaluations/` as `evaluation.md` and `evaluation.json`. It is advisory
+assistant analysis, not a grade, human review or adjudication input, and it makes no
+provider calls.
+
+**Regression evidence:**
+- E2E acceptance: a published run is `human_adjudication_required` and passes only
+  through a source-bound human judgment. Every non-`generated` status rejects a human
+  pass. An unconfigured threshold stays `grading_unresolved`. Rendering names no
+  grader or judge.
+- Human adjudication reads only v9. A v8 label, or a report carrying any retired
+  grader field or status (`evaluated`, `evaluator_failed`, `quality_unresolved`), is
+  rejected.
+- Baseline freezes reject the retired `config_source`/`config_bytes`; acquisition
+  rejects a workflow report carrying an adjudication capture.
+- Cases reject `spec-e2e-case/v2` and a retired `evaluation_config` field.
+- Integration: the publication handoff captures poor output unchanged, and saved
+  reports round-trip the captured inputs. Compatibility and baseline reports carry
+  no adjudication capture. The launcher test forwards the generation credential.
+- The standalone evaluator's tests and smoke are unchanged and pass.

@@ -80,71 +80,10 @@ pub const ContentChunks = struct {
     }
 };
 
-pub const max_fragments_per_batch: usize = 32;
-pub const BatchOwner = opaque {};
-const BatchOwnerStorage = struct {
-    backing_allocator: std.mem.Allocator,
-    arena: std.heap.ArenaAllocator,
-    fragments: []SanitizedPromptFragment,
-};
-
-pub fn createBatch(
-    backing_allocator: std.mem.Allocator,
-    candidates: []const SanitizedPromptFragment,
-) Error!*BatchOwner {
-    if (candidates.len == 0 or candidates.len > max_fragments_per_batch) return error.InvalidSanitizedPromptFragment;
-    const owner = backing_allocator.create(BatchOwnerStorage) catch return error.InvalidSanitizedPromptFragment;
-    errdefer backing_allocator.destroy(owner);
-    owner.* = .{ .backing_allocator = backing_allocator, .arena = .init(backing_allocator), .fragments = undefined };
-    errdefer owner.arena.deinit();
-    const allocator = owner.arena.allocator();
-    const owned_fragments = allocator.alloc(SanitizedPromptFragment, candidates.len) catch return error.InvalidSanitizedPromptFragment;
-    for (owned_fragments, candidates) |*destination, source| {
-        if (source.fragment_id.bytes.len == 0) return error.InvalidSanitizedPromptFragment;
-        destination.* = source;
-        destination.request_id.bytes = allocator.dupe(u8, source.request_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-        destination.route_id.bytes = allocator.dupe(u8, source.route_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-        destination.model_profile_id.bytes = allocator.dupe(u8, source.model_profile_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-        destination.fragment_id.bytes = allocator.dupe(u8, source.fragment_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-        destination.content = allocator.dupe(u8, source.content) catch return error.InvalidSanitizedPromptFragment;
-        if (source.node_id) |node_id| destination.node_id = .{ .bytes = allocator.dupe(u8, node_id.bytes) catch return error.InvalidSanitizedPromptFragment };
-        if (source.attribution) |attribution| {
-            destination.attribution.?.workflow_id.bytes = allocator.dupe(u8, attribution.workflow_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-            destination.attribution.?.action_id.bytes = allocator.dupe(u8, attribution.action_id.bytes) catch return error.InvalidSanitizedPromptFragment;
-        }
-    }
-    std.mem.sort(SanitizedPromptFragment, owned_fragments, {}, lessThan);
-    for (owned_fragments[1..], owned_fragments[0 .. owned_fragments.len - 1]) |current, prior| {
-        if (std.mem.eql(u8, current.fragment_id.bytes, prior.fragment_id.bytes)) return error.InvalidSanitizedPromptFragment;
-    }
-    owner.fragments = owned_fragments;
-    return @ptrCast(owner);
-}
-
-pub fn batch(owner: *const BatchOwner) []const SanitizedPromptFragment {
-    return storageConst(owner).fragments;
-}
-
-pub fn deinitBatch(owner: *BatchOwner) void {
-    const stored = storage(owner);
-    const allocator = stored.backing_allocator;
-    stored.arena.deinit();
-    allocator.destroy(stored);
-}
-
-fn lessThan(_: void, left: SanitizedPromptFragment, right: SanitizedPromptFragment) bool {
-    return std.mem.order(u8, left.fragment_id.bytes, right.fragment_id.bytes) == .lt;
-}
-
-fn storage(owner: *BatchOwner) *BatchOwnerStorage {
-    return @ptrCast(@alignCast(owner));
-}
-fn storageConst(owner: *const BatchOwner) *const BatchOwnerStorage {
-    return @ptrCast(@alignCast(owner));
-}
-
-test "prompt chunks retain complete content beyond batch and record boundaries" {
-    const bytes = try std.testing.allocator.alloc(u8, limits.max_prompt_content_bytes * (max_fragments_per_batch + 1) + 17);
+test "prompt chunks retain complete content across many record boundaries" {
+    // Chunking has no count ceiling: complete content is never tail-truncated.
+    const minimum_chunks = 33;
+    const bytes = try std.testing.allocator.alloc(u8, limits.max_prompt_content_bytes * minimum_chunks + 17);
     defer std.testing.allocator.free(bytes);
     for (bytes, 0..) |*byte, index| byte.* = @intCast('a' + index % 26);
     var chunks = try ContentChunks.init(bytes);
@@ -158,7 +97,7 @@ test "prompt chunks retain complete content beyond batch and record boundaries" 
         try reconstructed.appendSlice(std.testing.allocator, chunk.content);
         count += 1;
     }
-    try std.testing.expect(count > max_fragments_per_batch);
+    try std.testing.expect(count > minimum_chunks);
     try std.testing.expectEqualSlices(u8, bytes, reconstructed.items);
 }
 

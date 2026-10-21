@@ -11,10 +11,16 @@ pub fn decode(
             else => null,
         },
         .aws_bedrock => blk: {
-            if (raw != .object or raw.object.count() != 1) break :blk null;
+            // The model's documented maximum output is required: no default,
+            // lookup or clamp stands in for it.
+            if (raw != .object or raw.object.count() != 2) break :blk null;
             const region = raw.object.get("region") orelse break :blk null;
-            if (region != .string) break :blk null;
-            break :blk .{ .aws_bedrock = .{ .region = std.meta.stringToEnum(contracts.BedrockRegion, region.string) orelse break :blk null } };
+            const maximum = raw.object.get("maxOutputTokens") orelse break :blk null;
+            if (region != .string or maximum != .integer) break :blk null;
+            break :blk .{ .aws_bedrock = .{
+                .region = std.meta.stringToEnum(contracts.BedrockRegion, region.string) orelse break :blk null,
+                .max_output_tokens = contracts.ModelMaximumOutput.parse(maximum.integer) orelse break :blk null,
+            } };
         },
     };
 }

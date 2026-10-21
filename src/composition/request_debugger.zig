@@ -51,9 +51,7 @@ const Authority = struct {
         defer outcome.deinit();
         if (outcome != .ready) return error.ReplayUnauthorized;
         const binding = (@import("../actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, .{ .bytes = description.request_step }, outcome.ready.registry(), outcome.ready.allowlist()) catch return error.ReplayUnauthorized;
-        if (!std.mem.eql(u8, binding.slot_id.bytes, description.model_slot) or !std.mem.eql(u8, binding.registry_entry.provider.bytes, description.provider) or !std.mem.eql(u8, binding.registry_entry.model.bytes, description.model) or
-            !std.meta.eql(binding.registry_entry.config, description.provider_config) or !debug.sameOptional(binding.reasoning_effort, description.reasoning_effort) or
-            !std.meta.eql(binding.controls, description.controls) or binding.registry_entry.responseMode() != description.response_mode) return error.ReplayUnauthorized;
+        if (!description.matchesBinding(&binding)) return error.ReplayUnauthorized;
         return binding.registry_entry.bedrock_request_profile;
     }
 };

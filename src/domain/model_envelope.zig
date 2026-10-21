@@ -37,6 +37,9 @@ pub const Normalization = enum {
     none,
     removed_leading_brace_quote,
     removed_repeated_field_prefix,
+    /// The unfinished member name was a nonempty start of the first key: the
+    /// observed Bedrock GPT-OSS truncation, for example `{"find{"findings":…`.
+    removed_partial_field_prefix,
 };
 
 /// One model-response syntax boundary, also used by diagnostic inspection.
@@ -85,7 +88,8 @@ pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnosti
 const OpeningPrefix = struct { length: usize, normalization: Normalization };
 
 /// Recognize an unfinished object/member or string-value opener, never search
-/// arbitrary text. A nonempty member name must repeat the object's first key.
+/// arbitrary text. A nonempty member name must repeat the object's first key; only
+/// the unfinished-member form may repeat just a nonempty start of that key.
 fn parseOpeningPrefix(content: []const u8) ?OpeningPrefix {
     if (!std.mem.startsWith(u8, content, "{\"")) return null;
     var end: usize = 2;
@@ -96,17 +100,21 @@ fn parseOpeningPrefix(content: []const u8) ?OpeningPrefix {
     if (end == 2 and content[end] == '{') return .{ .length = end, .normalization = .removed_leading_brace_quote };
     const name = content[2..end];
     if (name.len == 0 or !std.unicode.utf8ValidateSlice(name)) return null;
-    if (content[end] == '"') {
+    const string_opener = content[end] == '"';
+    if (string_opener) {
         if (!std.mem.startsWith(u8, content[end..], "\":\"{")) return null;
         end += 3;
     }
     const first_key = std.mem.trimStart(u8, content[end + 1 ..], " \t\r\n");
     if (first_key.len == 0 or first_key[0] != '"' or !std.mem.startsWith(u8, first_key[1..], name)) return null;
-    const after_name = first_key[1 + name.len ..];
-    if (after_name.len == 0 or after_name[0] != '"') return null;
-    const after_key = std.mem.trimStart(u8, after_name[1..], " \t\r\n");
+    // Escaped member names are never inferred; the remainder parser owns the key.
+    const key_end = std.mem.indexOfAnyPos(u8, first_key, 1 + name.len, "\"\\") orelse return null;
+    if (first_key[key_end] != '"') return null;
+    const partial = key_end != 1 + name.len;
+    if (partial and string_opener) return null;
+    const after_key = std.mem.trimStart(u8, first_key[key_end + 1 ..], " \t\r\n");
     if (after_key.len == 0 or after_key[0] != ':') return null;
-    return .{ .length = end, .normalization = .removed_repeated_field_prefix };
+    return .{ .length = end, .normalization = if (partial) .removed_partial_field_prefix else .removed_repeated_field_prefix };
 }
 
 /// Read-only views of the one parsed tree. Numbers retain their exact JSON

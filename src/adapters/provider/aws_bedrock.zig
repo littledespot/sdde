@@ -36,7 +36,7 @@ pub const Provider = struct {
             !@import("../../domain/llm_provider_contracts.zig").supportsReasoningEffort(selected.registry_entry.supported_reasoning_efforts, selected.reasoning_effort))
             return self.rejectedBeforeSend(.request_rejected);
         const secret = authorization.secret(&capability) orelse return self.rejectedBeforeSend(.authorization_denied);
-        const body = encoding.encode(allocator, request, kind, selected.registry_entry.bedrock_request_profile) catch |err| return switch (err) {
+        const body = encoding.encode(allocator, request, kind, selected.registry_entry.bedrock_request_profile, selected.registry_entry.config.aws_bedrock.max_output_tokens) catch |err| return switch (err) {
             error.OutOfMemory => failed: {
                 if (self.capture) |capture| _ = capture.capture(.response, .{ .transport_outcome = .{ .outcome = .allocation_failed, .delivery = .not_sent } }, &.{});
                 break :failed error.OutOfMemory;

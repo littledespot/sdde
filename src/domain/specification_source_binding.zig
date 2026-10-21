@@ -136,11 +136,6 @@ pub fn resolveGroups(a: std.mem.Allocator, records: refs.Records, inputs: eviden
     errdefer a.free(owned_claims);
     return .{ .source_group_ids = try groups.toOwnedSlice(a), .selection = .{ .claim_ids = owned_claims, .clarification_response_ids = &.{} } };
 }
-pub fn selectGroups(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, ids: []const r.SignalId, mode: Mode) Error!spec.Selection {
-    const resolved = try resolveGroups(a, records, inputs, ids, mode);
-    a.free(resolved.source_group_ids);
-    return resolved.selection;
-}
 pub fn recordCount(records: refs.Records) Error!usize {
     var count: usize = 0;
     for (records.signals, 0..) |_, index| if (try recordSignal(records, index)) {
@@ -161,16 +156,6 @@ pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inpu
         cursor += 1;
     }
     return error.InvalidSpecificationBinding;
-}
-pub fn recordForGroup(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, id: r.SignalId) Error!Bound {
-    _ = try recordCount(records);
-    const eligible = for (records.signals, 0..) |signal, index| {
-        if (signal.id.ordinal == id.ordinal) break try recordSignal(records, index);
-    } else false;
-    if (!eligible) return error.InvalidSpecificationBinding;
-    const selected = try resolveGroups(a, records, inputs, &.{id}, .question);
-    defer a.free(selected.source_group_ids);
-    return .{ .records = .{ .signal = id, .selection = selected.selection, .catalogue = .{ .records = records, .inputs = inputs } } };
 }
 pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, unit: Unit, record_index: usize) Error!Bound {
     const available: Catalogue = .{ .records = records, .inputs = inputs };

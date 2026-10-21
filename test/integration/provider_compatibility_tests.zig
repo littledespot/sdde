@@ -91,7 +91,7 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
     return runScenarioWithBinding(case_path, scenario, .frozen_protocol);
 }
 
-fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: enum { frozen_protocol, current_shipped }) !void {
+fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: enum { frozen_protocol, drifted_protocol }) !void {
     const io = std.testing.io;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -105,7 +105,8 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     defer project.close(io);
 
     const shipped = try contracts.parse(a, try files.read(io, a, .cwd(), case_path));
-    const selected = if (binding == .frozen_protocol) try @import("frozen_protocol_fixture.zig").select(a, shipped) else shipped;
+    var selected = if (binding == .frozen_protocol) try @import("frozen_protocol_fixture.zig").select(a, shipped) else shipped;
+    if (binding == .drifted_protocol) selected.config = @import("frozen_protocol_fixture.zig").mock_bad_input_config_source;
     const case_bytes = try std.json.Stringify.valueAlloc(a, selected, .{});
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);
@@ -126,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v5",
+        .schema = .@"spec-e2e-report/v9",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -142,7 +143,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
         .purpose = .{ .single_exchange = &probe },
         .transport = if (scenario == .partial_cancelled) prefix_cancellation.port() else wire.port(),
     }) catch |err| {
-        if (binding == .current_shipped) {
+        if (binding == .drifted_protocol) {
             // Preflight rejects before a captured call exists. Final evidence
             // correlation independently rejects that absent call; the retained
             // primary diagnostic must still identify the frozen policy drift.
@@ -155,10 +156,10 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try std.testing.expect(report.workflow_outcome != .ok);
             try std.testing.expect(report.specification == null);
             try std.testing.expectEqual(.not_run, report.publication_check);
-            try std.testing.expectEqual(.not_run, report.semantic_quality);
+            try std.testing.expect(report.evaluation_inputs == null);
             var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, try files.read(io, a, project, ".sddtoolkit.json"));
             defer current.deinit();
-            try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+            try std.testing.expectEqualStrings("medium", current.value().models.slots.map.get("spec_generation").?.reasoningEffort.?);
             try fixture.verifySources(io, a, .cwd(), captured);
             return;
         }
@@ -174,7 +175,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
         try std.testing.expect(report.workflow_outcome != null and report.workflow_outcome.? != .ok);
         return;
     };
-    if (binding == .current_shipped) return error.TestExpectedError;
+    if (binding == .drifted_protocol) return error.TestExpectedError;
     if (scenario == .capture_failed) return error.TestExpectedError;
     try std.testing.expect(published == null);
     try std.testing.expectEqual(@as(usize, 1), wire.calls);
@@ -184,8 +185,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expect(report.terminal_rejection != null);
     try std.testing.expect(report.specification == null);
     try std.testing.expectEqual(.not_run, report.publication_check);
-    try std.testing.expectEqual(.not_run, report.semantic_quality);
-    try std.testing.expect(report.evaluation == null);
+    try std.testing.expect(report.evaluation_inputs == null);
     // The probe terminates at invoke-model. Later production parsing, payload
     // validation and repairs must remain unexecuted even for invalid text.
     try std.testing.expect(report.model_diagnostic == null);
@@ -230,7 +230,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expect(readback.call.request_complete);
     try std.testing.expect(readback.call.source_snapshot != null);
     try std.testing.expectEqualStrings(selected.workflow_id, readback.call.description.?.workflow_id);
-    try std.testing.expectEqual(@as(u64, 16384), readback.call.description.?.controls.max_output_tokens.?.value);
+    try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, "\"maxTokens\":16384") != null);
     try std.testing.expectEqualStrings("low", readback.call.description.?.reasoning_effort.?);
     try std.testing.expectEqual(.fixed, readback.call.description.?.controls.temperature.?);
     try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, key) == null);
@@ -478,8 +478,8 @@ test "test.integration.provider_compatibility frozen protocol production request
     for (cases) |case_path| try runScenario(case_path, .complete);
 }
 
-test "test.integration.provider_compatibility current shipped output allowance cannot substitute for the frozen protocol before send" {
-    for (cases) |case_path| try runScenarioWithBinding(case_path, .complete, .current_shipped);
+test "test.integration.provider_compatibility drifted slot controls cannot substitute for the frozen protocol before send" {
+    for (cases) |case_path| try runScenarioWithBinding(case_path, .complete, .drifted_protocol);
 }
 
 test "test.integration.provider_compatibility empty server tool metadata retains exact usage and shared prefix normalization in unrelated domains" {
@@ -540,7 +540,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
         .purpose = .whole_workflow,
@@ -564,7 +564,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
     try std.testing.expectEqual(@as(usize, 1), log.records.items.len);
     try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
     try std.testing.expect(report.workflow_outcome != .ok and report.specification == null);
-    try std.testing.expectEqual(.not_run, report.semantic_quality);
+    try std.testing.expect(report.evaluation_inputs == null);
     const receipt = log.records.items[0];
     try std.testing.expectEqual(@as(usize, 1), receipt.call);
     try std.testing.expectEqual(@as(u64, 1), receipt.experiment_send.?.ordinal);

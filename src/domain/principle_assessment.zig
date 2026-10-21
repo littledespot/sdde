@@ -81,7 +81,10 @@ pub fn project(allocator: std.mem.Allocator, context: Context) Error!a.Inputs {
 pub fn policyAuthority(value: registry.Registry) a.Authority {
     return .{ .canonical = .{ .kind = .principles, .ordinal = value.id.ordinal, .revision = value.id.revision } };
 }
-pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.Context, scope: @import("specification_support.zig").Contract(.principles).Scope) Error!*packets.Packet {
+/// Errors forwarded from the support contract, whose assignment packet may also
+/// refuse an over-bound member set.
+pub const SupportError = Error || @import("model_result_schema.zig").ChoiceBoundError;
+pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.Context, scope: @import("specification_support.zig").Contract(.principles).Scope) SupportError!*packets.Packet {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -154,7 +157,7 @@ pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: @import
     if (inputs.authorities.len != evidence.authorities.len) return error.InvalidRequiredAuthority;
     for (inputs.authorities) |authority| if (!a.contains(a.Authority, evidence.authorities, authority)) return error.InvalidRequiredAuthority;
 }
-pub fn validateStored(allocator: std.mem.Allocator, business: a.Inputs, sources: @import("reference_evidence.zig").Inputs, value: Canonical) Error!void {
+pub fn validateStored(allocator: std.mem.Allocator, business: a.Inputs, sources: @import("reference_evidence.zig").Inputs, value: Canonical) SupportError!void {
     if (business.revision != value.candidate_revision) return error.InvalidRequiredAuthority;
     var inputs = try project(allocator, .{ .business = try businessInput(allocator, business), .registry = value.registry, .selection = value.selection });
     inputs.evidence = value.evidence;

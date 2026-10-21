@@ -5,13 +5,14 @@ pub const Error = std.mem.Allocator.Error || error{InvalidRequest};
 
 pub const ReasoningEffort = enum { low, medium, high, xhigh, max };
 pub const RequestProfile = @import("../../domain/llm_provider_contracts.zig").BedrockRequestProfile;
+const ModelMaximumOutput = @import("../../domain/llm_provider_contracts.zig").ModelMaximumOutput;
 
 pub fn reasoningEffort(value: ?[]const u8) error{InvalidRequest}!?ReasoningEffort {
     const selected = value orelse return null;
     return std.meta.stringToEnum(ReasoningEffort, selected) orelse error.InvalidRequest;
 }
 
-pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, profile: RequestProfile) Error![]const u8 {
+pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, profile: RequestProfile, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
     const schema: TextSchema = switch (request.response_guidance_mode) {
         .prompt_only => .{ .prompt_only = request.response_schema.modelBytes() },
         .native_schema => .{ .native = .{
@@ -25,9 +26,9 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .schema = schema,
         .schema_name = "sdde_model_envelope_v1",
         .temperature = request.controls.temperature,
-        .max_output_tokens = request.controls.max_output_tokens,
         .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
         .request_profile = profile,
+        .max_output_tokens = max_output_tokens,
     }, kind);
 }
 
@@ -48,14 +49,14 @@ pub const TextRequest = struct {
     schema: TextSchema,
     schema_name: []const u8,
     temperature: ?@import("../../domain/model_controls.zig").Temperature,
-    max_output_tokens: ?@import("../../domain/model_controls.zig").OutputTokenAllowance = null,
     reasoning_effort: ?ReasoningEffort,
     request_profile: RequestProfile = .none,
+    /// The model's documented maximum output (ADR 0011); never a smaller allowance.
+    max_output_tokens: ModelMaximumOutput,
 };
 
 // Shared text serialization; callers supply validated settings and schema.
 pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
-    if (request.max_output_tokens) |allowance| if (!allowance.isValid()) return error.InvalidRequest;
     if (request.schema == .native) {
         var projected = @import("../../domain/strict_json.zig").parse(allocator, request.schema.native.structure, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequest;
         defer projected.deinit();
@@ -87,19 +88,17 @@ fn writeConverse(writer: *std.Io.Writer, request: TextRequest, kind: operation.P
     try writeInput(&json, request);
     try writeModelFields(&json, request, kind);
     if (kind == .inference) {
-        if (request.temperature != null or request.max_output_tokens != null) {
-            try json.objectField("inferenceConfig");
-            try json.beginObject();
-            if (request.temperature) |temperature| {
-                try json.objectField("temperature");
-                try json.write(temperature.wireValue());
-            }
-            if (request.max_output_tokens) |allowance| {
-                try json.objectField("maxTokens");
-                try json.write(allowance.value);
-            }
-            try json.endObject();
+        // The model's documented maximum is sent, because Bedrock otherwise
+        // applies a smaller default; no slot can narrow it (ADR 0011).
+        try json.objectField("inferenceConfig");
+        try json.beginObject();
+        if (request.temperature) |temperature| {
+            try json.objectField("temperature");
+            try json.write(temperature.wireValue());
         }
+        try json.objectField("maxTokens");
+        try json.write(request.max_output_tokens.tokens);
+        try json.endObject();
         if (request.schema == .native) {
             try json.objectField("outputConfig");
             try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.native.structure } } } });

@@ -1,6 +1,6 @@
 ---
 name: preflight
-description: Produce the AGENTS.md "Before editing" analysis for an SDDE engine change. It covers the observable outcome and non-goals; the owning abstraction; the governing design sections, invariants and acceptance criteria; affected producers, consumers and siblings; persistence, security, packaging and recovery impact; the causal defect or planned contract change; and expected files, tests and approvals. Use before any code, schema, configuration, test or architecture change in this repository.
+description: Produce the AGENTS.md "Before editing" analysis for an SDDE engine change. It covers the outcome and non-goals, owning abstraction, governing authority, affected producers and consumers, impact on persistence, security, packaging and recovery, the causal defect, and expected files, tests and approvals. Use before any code, schema, configuration, test or architecture change in this repository.
 argument-hint: <task or defect description>
 ---
 
@@ -22,8 +22,9 @@ skill.
    type, validator or normalizer, action or runner, and YAML operation entry. List its
    producers, consumers, transitions, repair and recovery paths, and sibling
    implementations. State the general violated invariant, not only the symptom.
-4. **Check tracked work.** Note any FIX05 item that already covers this
-   failure class, with its recorded status.
+4. **Check known work.** Read [known-work.md](../../known-work.md). Note any item
+   that already covers this failure class, with its status and approval. Apply
+   CLAUDE.md's evidence rules to any contract change.
 5. **Report** under the AGENTS.md "Before editing" headings:
    1. Observable outcome and explicit non-goals.
    2. Owning abstraction: the narrowest shared contract that owns the whole failure

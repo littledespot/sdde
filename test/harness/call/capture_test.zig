@@ -8,7 +8,7 @@ const body = "{\"MOCK\":\"captured wire body\"}";
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "MOCK-model",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 3,
@@ -17,7 +17,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 123 } },
+    .controls = .{ .temperature = .fixed },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
@@ -176,12 +176,12 @@ test "shared context retains v1 wire shape and rejects unknown version fields an
 }
 
 const config_bytes =
-    \\{"logs":{"level":"debug","console":false},"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low","maxOutputTokens":123}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
+    \\{"logs":{"level":"debug","console":false},"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low"}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
 ;
 const run_path = "runs/unrelated-run";
 const provider_bytes = "MOCK provider catalogue read without workflow execution";
 const case_bytes =
-    \\{"schema":"spec-e2e-case/v2","id":"MOCK-case","expected_outcome":"publication","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","evaluation_config":"fixture/evaluation-config.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
+    \\{"schema":"spec-e2e-case/v3","id":"MOCK-case","expected_outcome":"publication","workflow_id":"sample-workflow","feature":"nested/feature","reference":"selected","config":"fixture/config.json","evaluation_case":"fixture/evaluation.json","directories":[],"files":[{"source":"fixture/input.md","destination":"references/input.md"}],"expected_artifacts":["specification","reference_context","clarification_state","workflow_state"]}
 ;
 
 const Sink = struct {
@@ -261,8 +261,8 @@ test "capture loads configured feature and provider locations and preserves requ
     try std.testing.expectEqualStrings("documents/nested/feature", loaded.feature_path);
     try std.testing.expectEqualStrings(run_path ++ "/evidence/generation/call-000009/context.json", loaded.context_path);
     try std.testing.expectEqualStrings("settings/.sddproviders.json", loaded.config.paths.providers);
-    try std.testing.expectEqual(@as(?u32, 123), loaded.config.models.slots.map.get("sample-slot").?.maxOutputTokens);
-    try std.testing.expectEqual(@as(u32, 123), loaded.call.description.?.controls.max_output_tokens.?.value);
+    try std.testing.expectEqualStrings("low", loaded.config.models.slots.map.get("sample-slot").?.reasoningEffort.?);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/model_controls.zig").Temperature, .fixed), loaded.call.description.?.controls.temperature);
     try std.testing.expectError(error.CapturedWorkflowMismatch, capture.load(std.testing.io, std.testing.allocator, root.dir, run_path, "different-workflow", 9));
     try std.testing.expectError(error.InputUnavailable, capture.load(std.testing.io, std.testing.allocator, root.dir, run_path, description.workflow_id, 1));
 }
@@ -301,6 +301,6 @@ test "capture rejects evidence redaction and legacy descriptions instead of reco
     try write(root.dir, run_path ++ "/evidence/generation/call-000009/request.json", body);
     const path = run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log";
     const bytes = try @import("../files.zig").read(io, a, root.dir, path);
-    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v6", "model-request-debug/v2"));
+    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v9", "model-request-debug/v2"));
     try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
 }

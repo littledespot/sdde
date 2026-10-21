@@ -1469,6 +1469,12 @@ test "feature log paths have one opaque artifact authority and one sink consumer
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(sink, "bindFeatureLogSinkAdapter"));
     try expectAbsent(root_domain, "physical_identity: ?roots.PhysicalDirectoryIdentity");
     try expectAbsent(sink, "createDirPathOpen");
+    // Prior-run paths come only from the registry, one stream at a time, and
+    // only the retention adapter receives them.
+    const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(historical, "bindHistoricalFeatureLogStream("));
+    try expectAbsent(sink, "bindHistoricalFeatureLogStream");
+    try expectAbsent(@embedFile("adapters/filesystem/feature_log_history.zig"), "bindHistoricalFeatureLogStream");
 }
 
 test "feature log activation owns only registered target write authority" {
@@ -1557,8 +1563,21 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(adapter, "allocRemaining");
     try std.testing.expect(std.mem.indexOf(u8, adapter, "feature_log_lock.zig") != null);
     try std.testing.expect(std.mem.indexOf(u8, adapter, "feature_log_recovery.zig") != null);
-    try std.testing.expect(std.mem.indexOf(u8, adapter, "feature_log_retention_store.zig") != null);
+    // Only the historical stream adapter prunes; the current run's sink cannot.
+    try expectAbsent(adapter, "feature_log_retention_store.zig");
+    try expectAbsent(adapter, "segmentPruner");
     try std.testing.expect(std.mem.indexOf(u8, adapter, "feature_log_segment_store.zig") != null);
+
+    // Prior-run discovery only reads, through recovery's one segment validator.
+    const discovery = @embedFile("adapters/filesystem/feature_log_history.zig");
+    for ([_][]const u8{ "deleteFile", "createFile", "setLength", "writeFile", "deleteTree", ".read_write", ".truncate", "recovery.recover(", "feature_log_retention_store.zig", "feature_log_segment_store.zig", "feature_log_lock.zig" }) |forbidden| try expectAbsent(discovery, forbidden);
+    try std.testing.expect(std.mem.indexOf(u8, discovery, "recovery.inspectGroup(") != null);
+    try expectAbsent(discovery, "validatePersistedIdentityRow");
+    try expectAbsent(discovery, "validatePersistedControlRow");
+    // The historical stream offers lock, prune and release only.
+    const historical = @embedFile("adapters/filesystem/feature_log_historical_stream.zig");
+    for ([_][]const u8{ "feature_log_segment_store.zig", "segmentCreator", "segmentRotator", "streamCloser", "recordAppender", "streamRecoverer", "recovery.recover(", ".truncate" }) |forbidden| try expectAbsent(historical, forbidden);
+    try std.testing.expect(std.mem.indexOf(u8, historical, "recovery.inspectGroup(") != null);
 
     const recovery = @embedFile("adapters/filesystem/feature_log_recovery.zig");
     try std.testing.expect(std.mem.indexOf(u8, recovery, "domain/feature_log_format.zig") != null);

@@ -217,16 +217,6 @@ pub const ContentProposal = struct {
     entities: ApplicabilityProposal,
 };
 
-/// Structural candidate parsing only; current authority/text validation is a
-/// subsequent boundary. No model-supplied identity or completion field exists.
-pub fn parseProposal(allocator: std.mem.Allocator, bytes: []const u8) (std.mem.Allocator.Error || Error)!ContentProposal {
-    return @import("strict_json.zig").decode(ContentProposal, allocator, bytes, .{
-        .maximum_depth = @import("model_result_schema.zig").max_json_depth,
-    }) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecification,
-    };
-}
 pub const IdentifiedRecord = struct { id: Id, proposal: RecordProposal };
 pub const IdentifiedContent = struct {
     display_name: AttributedValue,

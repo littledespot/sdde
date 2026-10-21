@@ -7,12 +7,16 @@ pub const ChildBindings = struct {
     vtable: *const VTable,
 
     pub const VTable = struct {
+        authorize: *const fn (*anyopaque) StepOutcome,
         resolve_stream: *const fn (*anyopaque) StepOutcome,
         acquire: *const fn (*anyopaque) StepOutcome,
         prune: *const fn (*anyopaque) StepOutcome,
         release: *const fn (*anyopaque) StepOutcome,
     };
 
+    pub fn invokeAuthorize(self: ChildBindings) StepOutcome {
+        return self.vtable.authorize(self.context);
+    }
     pub fn invokeResolveStream(self: ChildBindings) StepOutcome {
         return self.vtable.resolve_stream(self.context);
     }

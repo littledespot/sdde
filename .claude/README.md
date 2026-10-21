@@ -15,7 +15,9 @@ imports it and adds the Claude Code specifics.
 | `agents/contract-reviewer.md` | Read-only subagent that reviews a diff against the AGENTS.md review rules. |
 | `skills/preflight/` | `/preflight <task>`: the AGENTS.md "Before editing" analysis. |
 | `skills/verify/` | `/verify`: the offline validation ladder and the definition-of-done report. |
-| `skills/live-e2e/` | `/live-e2e <case>`: one approved, billed live Spec E2E run. Only the user can invoke it. |
+| `skills/live-e2e/` | `/live-e2e <case>`: one approved, billed live Spec E2E run, then the advisory `evaluate-e2e` assessment of that run by the session's selected model. Only the user can invoke it. |
+| `skills/evaluate-e2e/` | `/evaluate-e2e <run>`: offline, advisory rubric assessment of a retained E2E run that traces each defect to the call, prompt and engine stage that produced it. Writes to the Git-ignored `evaluations/` and never adjudicates. `scripts/prepare.py` numbers captured documents and prepares blind panels; `panel.md` covers `--panel` calibration. |
+| `known-work.md` | Dated snapshot of known failure classes and open work, mirroring the active fix record. CLAUDE.md, `/preflight` and `/evaluate-e2e` point to it, and it loads only on demand. Update its facts when work completes. Change an approval label only to record a decision the user has made. |
 
 ## Permission model
 

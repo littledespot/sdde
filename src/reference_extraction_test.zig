@@ -11,6 +11,33 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
+test "prepared reference text retains passive literal and source authority on reuse" {
+    for ([_][2][]const u8{
+        .{ "requirements.md", "Display the greeting. Consult requirements.md.\n" },
+        .{ "policy.md", "Renew eligible loans. Consult policy.md.\n" },
+    }) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, example[0], example[1]));
+        const prepared = try text_fixture.prepare(a, inputs);
+        defer prepared.deinit();
+        try std.testing.expect(prepared.registry.records.len > 0);
+        const literal = prepared.registry.records[0].id;
+        const candidate = try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try passiveReply(a, inputs.chunks.entries[0], literal.ordinal))} });
+        for (0..2) |_| {
+            const checked = try prepared.check(a, inputs, candidate);
+            try std.testing.expectEqualDeep(literal, checked.entries[0].outcome.claims[0].content.business.value.segments[1].passive.passive_literal_id);
+        }
+        const unknown = try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try passiveReply(a, inputs.chunks.entries[0], 999))} });
+        try std.testing.expectError(error.InvalidPassiveLiteral, prepared.check(a, inputs, unknown));
+        var foreign = inputs;
+        foreign.corpus.state_id.bytes = "foreign-reference-state";
+        try std.testing.expectError(error.InvalidPathTokenGrammar, prepared.check(a, foreign, candidate));
+    }
+}
+
 test "native extraction composition defects cannot authorize unit repair or change candidates" {
     const repair = @import("domain/reference_extraction_text_repair.zig");
     const contexts = @import("domain/reference_extraction_context.zig");

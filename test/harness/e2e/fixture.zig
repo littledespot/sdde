@@ -11,8 +11,6 @@ pub const Evaluation = struct {
     case: evaluator.Case,
     rubric_bytes: []const u8,
     rubric: evaluator.Rubric,
-    config_source: []const u8,
-    config_bytes: []const u8,
     sources: []const evaluator.Document,
 };
 pub const Capture = struct {
@@ -48,8 +46,6 @@ pub fn capture(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir,
         .case = evaluation_case,
         .rubric_bytes = rubric_bytes,
         .rubric = rubric,
-        .config_source = selected.evaluation_config,
-        .config_bytes = try files.read(io, allocator, repository, selected.evaluation_config),
         .sources = sources,
     } };
 }
@@ -77,7 +73,6 @@ pub fn verifySources(io: std.Io, allocator: std.mem.Allocator, repository: std.I
     for ([_]struct { path: []const u8, bytes: []const u8 }{
         .{ .path = captured.evaluation.case_source, .bytes = captured.evaluation.case_bytes },
         .{ .path = captured.evaluation.case.rubric, .bytes = captured.evaluation.rubric_bytes },
-        .{ .path = captured.evaluation.config_source, .bytes = captured.evaluation.config_bytes },
     }) |input| {
         const current = try files.read(io, allocator, repository, input.path);
         defer allocator.free(current);
@@ -93,7 +88,7 @@ pub fn verifySources(io: std.Io, allocator: std.mem.Allocator, repository: std.I
     }
 }
 
-/// The judge receives exactly the reference files supplied to this invocation,
+/// Adjudication receives exactly the reference files supplied to this invocation,
 /// with bytes borrowed from the same immutable fixture capture.
 pub fn validateEvaluationSources(allocator: std.mem.Allocator, captured: Capture, root: []const u8, selector: []const u8) !void {
     const selected_root = try std.fs.path.join(allocator, &.{ root, selector });

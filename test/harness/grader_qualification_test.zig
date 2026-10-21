@@ -12,7 +12,7 @@ const specimen_paths = [_][]const u8{ "faithful-a.md", "faithful-b.md", "wrong-v
 const report_paths = [_][]const u8{ "judge-a.json", "judge-b.json", "judge-wrong.json" };
 const specimen_texts = [_][]const u8{ "After startup, the application shows READY.", "The startup outcome includes the displayed value READY.", "After startup, the application shows FINISHED." };
 const config: configuration.Config = .{
-    .schema = "evaluation-config/v1",
+    .schema = "evaluation-config/v2",
     .api = .bedrock_converse,
     .model = "openai.gpt-oss-20b-1:0",
     .region = .@"ap-southeast-2",
@@ -22,6 +22,7 @@ const config: configuration.Config = .{
     .retry_limit = 0,
     .retry_delay_ms = 0,
     .total_token_budget = 1000,
+    .max_output_tokens = .{ .tokens = 16000 },
 };
 const rubric_bytes =
     \\{"schema":"evaluation-rubric/v2","id":"startup-value","revision":1,"minimum_score":0,"maximum_score":4,"pass_threshold_percent":80,"criteria":[{"id":"value-fidelity","description":"Preserve the displayed startup value.","evidence":"Compare the original and specified behavior.","weight":1,"anchors":[{"score":0,"description":"Absent or contradicted"},{"score":1,"description":"Mostly lost"},{"score":2,"description":"Material omission"},{"score":3,"description":"Minor ambiguity"},{"score":4,"description":"Preserved"}],"allow_not_applicable":false,"minimum_acceptable_score":3}]}
@@ -69,15 +70,15 @@ const Fixture = struct {
                 .disposition = .scored,
                 .score = if (index < 2) 4 else 0,
                 .explanation = "Compare the original startup display with the specification.",
-                .evidence = &.{ .{ .document_id = source.id, .quote = source.text }, .{ .document_id = "specification", .quote = specimen_texts[index] } },
+                .evidence = &.{ .{ .document_id = source.id, .first_line = 1, .last_line = @intCast(try judgment.lineCount(source.text)) }, .{ .document_id = "specification", .first_line = 1, .last_line = @intCast(try judgment.lineCount(specimen_texts[index])) } },
                 .missing_from_specification = false,
             }} };
             result.* = .{
-                .schema = "evaluation-report/v3",
+                .schema = reports.schema_version,
                 .protocol_sha256 = try q.protocolSha256(a),
                 .capture = input,
                 .configuration = config,
-                .attempts = try a.dupe(reports.Attempt, &.{.{ .ordinal = 1, .request_id = "unit-request", .identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } }, .usage = reports.Usage.init(1, 1, 2).?, .failure = null }}),
+                .attempts = try a.dupe(reports.Attempt, &.{.{ .ordinal = 1, .purpose = .judgment, .request_id = "unit-request", .identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } }, .usage = reports.Usage.init(1, 1, 2).?, .failure = null }}),
                 .outcome = .{ .evaluated = try judgment.validate(a, null, input, try std.json.Stringify.valueAlloc(a, proposal, .{})) },
             };
             const bytes = try reports.json(a, result.*);
@@ -268,11 +269,46 @@ test "reports cannot qualify foreign captures forged arithmetic missing usage or
             },
         }
         try fixture.saveReport(0, value);
-        if (fault == .protocol) {
+        // Forged arithmetic, and an outcome that is not the final attempt's, are
+        // malformed persisted reports: reports.parse rejects them.
+        if (fault == .protocol or fault == .arithmetic or fault == .no_attempts or fault == .failed_attempt or fault == .no_usage) {
             try std.testing.expectError(error.InvalidGraderQualification, fixture.inspect());
         } else {
             try unresolved(expected, try fixture.inspect());
         }
+    }
+}
+
+test "one mechanical correction remains qualification evidence; any other attempt shape does not" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]enum { corrected, uncorrectable, second_correction }{ .corrected, .uncorrectable, .second_correction }) |shape| {
+        var tmp = std.testing.tmpDir(.{});
+        defer tmp.cleanup();
+        var fixture = try Fixture.init(a, tmp.dir);
+        var value = fixture.results[0];
+        const graded = value.attempts[0];
+        const affected = value.outcome.evaluated.results[0].criterion_id;
+        var rejected = graded;
+        rejected.failure = .invalid_judgment;
+        rejected.diagnostic = .{ .reason = if (shape == .uncorrectable) .invalid_score else .missing_source_evidence, .criterion_id = affected };
+        var corrected = graded;
+        corrected.ordinal = 2;
+        corrected.purpose = .correction;
+        var repeated = rejected;
+        repeated.ordinal = 2;
+        repeated.purpose = .correction;
+        var final = corrected;
+        final.ordinal = 3;
+        value.attempts = switch (shape) {
+            .corrected, .uncorrectable => try a.dupe(reports.Attempt, &.{ rejected, corrected }),
+            .second_correction => try a.dupe(reports.Attempt, &.{ rejected, repeated, final }),
+        };
+        try fixture.saveReport(0, value);
+        if (shape == .corrected) {
+            try std.testing.expect(try fixture.inspect() == .qualified);
+        } else try std.testing.expectError(error.InvalidGraderQualification, fixture.inspect());
     }
 }
 

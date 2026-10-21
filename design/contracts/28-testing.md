@@ -103,8 +103,9 @@ Each action is tested with immutable fixtures and fake narrow ports. Required ca
   - Under ADR 0023, retain positive and adverse post-generation findings with
     `assessment_complete` candidate bindings. Neither finding type can discharge
     a native forced gap, create clarification authority or authorize repair.
-  - Reject incomplete, duplicate, foreign and stale whole-unit source/principle
-    assignments before append. Reject forged supported resolutions, deterministic
+  - Reject incomplete, duplicate, foreign and stale whole-unit, record-family and
+    principle assignments before append. A record family spans every record of its
+    kind and stops atomically. Reject forged supported resolutions, deterministic
     methods or candidate bindings on persisted advisory findings.
   - Preserve pre-generation source repair while rejecting authorization, packet
     construction and merge after any generation session/content exists, including

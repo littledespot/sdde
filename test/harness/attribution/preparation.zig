@@ -6,16 +6,30 @@ const debug = @import("../../../src/domain/request_debugger.zig");
 const strict = @import("../../../src/domain/strict_json.zig");
 const schema = @import("../../../src/domain/model_result_schema.zig");
 const codec = @import("../../../src/adapters/provider/bedrock_request.zig");
+const frozen = @import("../frozen_binding.zig");
 pub const run = "RUN-dea0536ccfa67b3b2f8db4048f28330c";
 pub const calibration = "test/calibration/insertion-presentation";
 pub const Source = enum { records, extraction };
 /// Closed observation of the two pinned pre-B3 descriptions. This type cannot
 /// become a current request or restore historical model dispatch authority.
+/// Frozen `model-request-debug/v5` controls. These captures predate ADR 0011's
+/// removal of the output-token allowance. The field is read only to describe the
+/// retained evidence; no request is ever encoded with it.
+pub const HistoricalControls = struct {
+    temperature: ?@import("../../../src/domain/model_controls.zig").Temperature = null,
+    max_output_tokens: ?struct { value: u32 } = null,
+};
+/// v5 provider configuration, retained as captured: it predates the recorded
+/// model maximum output, which the current contract requires.
+pub const HistoricalProviderConfig = union(enum) {
+    empty_object,
+    aws_bedrock: struct { region: @import("../../../src/domain/llm_provider_contracts.zig").BedrockRegion },
+};
 pub const CapturedDescription = struct {
     version: enum { @"model-request-debug/v5" },
     provider: []const u8,
     model: []const u8,
-    provider_config: @import("../../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig,
+    provider_config: HistoricalProviderConfig,
     model_slot: []const u8,
     workflow_id: []const u8,
     workflow_version: u32,
@@ -24,7 +38,7 @@ pub const CapturedDescription = struct {
     protocol_prompt: []const u8,
     schema: []const u8,
     response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
-    controls: @import("../../../src/domain/model_controls.zig").InferenceControls,
+    controls: HistoricalControls,
     reasoning_effort: ?[]const u8,
     operation_kind: @import("../../../src/domain/llm_provider_operation.zig").ProviderOperationKind,
     original_sources: []const @import("../../../src/domain/model_text_wire.zig").SourceText,
@@ -120,6 +134,17 @@ pub fn json(a: std.mem.Allocator, value: anytype) ![]const u8 {
 pub fn description(a: std.mem.Allocator, selected: Source) !CapturedDescription {
     return strict.decode(CapturedDescription, a, descriptionBytes(selected), .{ .maximum_depth = 64 });
 }
+/// The retained v5 request with its retired allowance replaced by the frozen
+/// model's documented maximum, which current requests send (ADR 0011). The
+/// current encoder must reproduce these bytes exactly. This is a read-side
+/// projection of historical evidence.
+pub fn retainedAtModelMaximum(a: std.mem.Allocator, selected: Source, original: CapturedDescription) ![]const u8 {
+    const retained = requestBytes(selected);
+    const allowance = original.controls.max_output_tokens orelse return error.CaptureDrift;
+    const member = try std.fmt.allocPrint(a, ",\"maxTokens\":{d}", .{allowance.value});
+    if (std.mem.count(u8, retained, member) != 1) return error.CaptureDrift;
+    return std.mem.replaceOwned(u8, a, retained, member, try std.fmt.allocPrint(a, ",\"maxTokens\":{d}", .{(try frozen.maximumOutput(a)).tokens}));
+}
 pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
     // The frozen model registration owns this profile; never select another model.
     if (!std.mem.eql(u8, value.model, "openai.gpt-oss-20b-1:0") or value.response_mode != .native_schema) return error.CaptureDrift;
@@ -130,9 +155,9 @@ pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
         .schema = .{ .native = .{ .guidance = value.schema, .structure = try @import("../../../src/domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = value.controls.temperature,
-        .max_output_tokens = value.controls.max_output_tokens,
         .reasoning_effort = try codec.reasoningEffort(value.reasoning_effort),
         .request_profile = .openai_oss,
+        .max_output_tokens = try frozen.maximumOutput(a),
     }, .inference);
 }
 
@@ -205,7 +230,7 @@ pub fn prepare(a: std.mem.Allocator) !Bundle {
     for (std.enums.values(Arm)) |arm| {
         const selected = source(arm);
         const original = try description(a, selected);
-        if (!std.mem.eql(u8, try request(a, original), requestBytes(selected))) return error.CaptureDrift;
+        if (!std.mem.eql(u8, try request(a, original), try retainedAtModelMaximum(a, selected, original))) return error.CaptureDrift;
         const modified = try edit(a, original, arm);
         var changed = original;
         changed.content = modified.content;
@@ -230,7 +255,8 @@ pub fn trial(bundle: Bundle, id: []const u8) !Trial {
     return error.UnknownTrial;
 }
 /// Historical wire contracts are inspectable evidence, never dispatchable
-/// current requests. A current experiment requires newly captured v6 inputs.
+/// current requests. A current experiment requires newly captured inputs in the
+/// current description version.
 pub fn dispatchRequest(a: std.mem.Allocator, selected: Trial, calls: []const debug.Call) !debug.ReplayInput {
     _ = a;
     _ = selected;

@@ -15,6 +15,12 @@ pub const Prepared = struct {
     candidates: literals.Candidates,
     assigned: literals.Assigned,
     registry: literals.Registry,
+    pub fn check(self: Prepared, allocator: std.mem.Allocator, inputs: @import("../domain/reference_evidence.zig").Inputs, parsed: @import("../domain/reference_extraction.zig").Parsed) !@import("../domain/reference_extraction.zig").TextValidated {
+        return switch (try validate_text.execute(allocator, self.registry, safety.value(self.owner), inputs, parsed)) {
+            .valid => |value| value,
+            .invalid => |rejection| rejection.issue.failure(),
+        };
+    }
     pub fn deinit(self: Prepared) void {
         safety.deinitOwner(self.owner);
     }
@@ -32,8 +38,5 @@ pub fn prepare(allocator: std.mem.Allocator, inputs: @import("../domain/referenc
 pub fn check(allocator: std.mem.Allocator, inputs: @import("../domain/reference_evidence.zig").Inputs, parsed: @import("../domain/reference_extraction.zig").Parsed) !@import("../domain/reference_extraction.zig").TextValidated {
     const prepared = try prepare(allocator, inputs);
     defer prepared.deinit();
-    return switch (try validate_text.execute(allocator, prepared.registry, safety.value(prepared.owner), inputs, parsed)) {
-        .valid => |value| value,
-        .invalid => |rejection| rejection.issue.failure(),
-    };
+    return prepared.check(allocator, inputs, parsed);
 }

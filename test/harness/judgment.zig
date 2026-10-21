@@ -2,16 +2,23 @@
 const std = @import("std");
 const c = @import("contracts.zig");
 const strict = @import("../../src/domain/strict_json.zig");
-/// Report-owned diagnostic data; indices are zero-based, IDs are from the rubric.
+const coordinates = @import("../../src/domain/source_coordinates.zig");
+/// Report-owned diagnostic data; indices are zero-based. Criterion IDs come from
+/// the rubric, except a duplicate's, which is the judge's own repeated ID.
+/// `changed_criterion` is the correction owner's rejection of a corrected
+/// judgment that altered a result its diagnostic did not name.
 pub const Diagnostic = struct {
-    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, empty_quote, unknown_document, quote_not_found, invalid_score, invalid_disposition },
+    reason: enum { json, invalid_shape, criterion_count, duplicate_criterion, missing_criterion, empty_explanation, missing_source_evidence, missing_specification_evidence, unknown_document, invalid_line_range, blank_evidence, invalid_score, invalid_disposition, changed_criterion },
     criterion_id: ?[]const u8 = null,
     evidence_index: ?usize = null,
     document_id: ?[]const u8 = null,
     json: ?strict.Diagnostic = null,
 };
-pub const schema_revision = "rubric-judgment/v1";
-pub const Evidence = struct { document_id: []const u8, quote: []const u8 };
+pub const schema_revision = "rubric-judgment/v2";
+/// Evidence names inclusive, 1-based lines of one supplied document. The
+/// harness resolves their exact bytes; the judge never copies text.
+pub const Evidence = struct { document_id: []const u8, first_line: u32, last_line: u32 };
+pub const NumberedLine = struct { line: u32, text: []const u8 };
 pub const CriterionResult = struct {
     criterion_id: []const u8,
     disposition: enum { scored, uncertain, not_applicable },
@@ -21,6 +28,19 @@ pub const CriterionResult = struct {
     missing_from_specification: bool,
 };
 pub const Proposal = struct { results: []const CriterionResult };
+/// The judge's decoded wire shape before range checks. Integers are widened so a
+/// negative or oversized score or line reaches its typed diagnostic instead of
+/// `invalid_shape`; the result schema still describes `Proposal`.
+pub const RawEvidence = struct { document_id: []const u8, first_line: i64, last_line: i64 };
+pub const RawResult = struct {
+    criterion_id: []const u8,
+    disposition: @FieldType(CriterionResult, "disposition"),
+    score: ?i64,
+    explanation: []const u8,
+    evidence: []const RawEvidence,
+    missing_from_specification: bool,
+};
+pub const RawProposal = struct { results: []const RawResult };
 pub const Assessment = enum { scored, unresolved, no_applicable_criteria };
 pub const Threshold = enum { not_configured, met, not_met, undetermined };
 pub const Result = struct {
@@ -33,7 +53,7 @@ pub const Result = struct {
 pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture: c.Capture, bytes: []const u8) c.Error!Result {
     if (diagnostic) |out| out.* = null;
     try c.validateCapture(capture);
-    const proposal = c.decode(Proposal, allocator, bytes) catch |err| {
+    const proposal = c.decode(RawProposal, allocator, bytes) catch |err| {
         if (err == error.OutOfMemory) return error.OutOfMemory;
         // Diagnose only a failed decode, using the same parser and depth contract.
         if (diagnostic != null) {
@@ -46,49 +66,46 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         }
         return reject(diagnostic, .{ .reason = .invalid_shape });
     };
+    // A repeated criterion is judgment content, whatever the count or rubric order.
+    if (duplicate(proposal.results)) |repeated| return reject(diagnostic, repeated);
     if (proposal.results.len != capture.rubric.criteria.len) return reject(diagnostic, .{ .reason = .criterion_count });
     const ordered = try allocator.alloc(CriterionResult, proposal.results.len);
     var earned: u128 = 0;
     var possible: u128 = 0;
     var uncertain = false;
     for (capture.rubric.criteria, ordered) |criterion, *output| {
-        var matched: ?CriterionResult = null;
-        for (proposal.results) |result| {
-            if (!std.mem.eql(u8, criterion.id, result.criterion_id)) continue;
-            if (matched != null) return reject(diagnostic, .{ .reason = .duplicate_criterion, .criterion_id = criterion.id });
-            matched = result;
-        }
-        const result = matched orelse return reject(diagnostic, .{ .reason = .missing_criterion, .criterion_id = criterion.id });
+        const result = for (proposal.results) |candidate| {
+            if (std.mem.eql(u8, criterion.id, candidate.criterion_id)) break candidate;
+        } else return reject(diagnostic, .{ .reason = .missing_criterion, .criterion_id = criterion.id });
         if (!c.text(result.explanation)) return reject(diagnostic, .{ .reason = .empty_explanation, .criterion_id = criterion.id });
         var source_evidence = false;
         var candidate_evidence = false;
-        for (result.evidence, 0..) |evidence, index| {
-            const location: Diagnostic = .{ .reason = .empty_quote, .criterion_id = criterion.id, .evidence_index = index, .document_id = evidence.document_id };
-            if (!c.text(evidence.quote)) return reject(diagnostic, location);
-            const document = if (std.mem.eql(u8, evidence.document_id, "specification")) blk: {
-                candidate_evidence = true;
-                break :blk capture.specification;
-            } else blk: {
-                for (capture.sources) |source| if (std.mem.eql(u8, source.id, evidence.document_id)) {
-                    source_evidence = true;
-                    break :blk source.text;
-                };
-                var unknown = location;
-                unknown.reason = .unknown_document;
-                return reject(diagnostic, unknown);
-            };
-            if (std.mem.indexOf(u8, document, evidence.quote) == null) {
-                var invalid = location;
-                invalid.reason = .quote_not_found;
-                return reject(diagnostic, invalid);
+        const evidence_out = try allocator.alloc(Evidence, result.evidence.len);
+        for (result.evidence, evidence_out, 0..) |evidence, *converted, index| {
+            const location: Diagnostic = .{ .reason = .unknown_document, .criterion_id = criterion.id, .evidence_index = index, .document_id = evidence.document_id };
+            const text = documentText(capture, evidence.document_id) orelse return reject(diagnostic, location);
+            if (std.mem.eql(u8, evidence.document_id, "specification")) candidate_evidence = true else source_evidence = true;
+            var invalid = location;
+            invalid.reason = .invalid_line_range;
+            const first = std.math.cast(u32, evidence.first_line) orelse return reject(diagnostic, invalid);
+            const last = std.math.cast(u32, evidence.last_line) orelse return reject(diagnostic, invalid);
+            converted.* = .{ .document_id = evidence.document_id, .first_line = first, .last_line = last };
+            const cited = (try lineSpan(text, first, last)) orelse return reject(diagnostic, invalid);
+            if (!c.text(cited)) {
+                var blank = location;
+                blank.reason = .blank_evidence;
+                return reject(diagnostic, blank);
             }
         }
         if (!source_evidence) return reject(diagnostic, .{ .reason = .missing_source_evidence, .criterion_id = criterion.id });
         if (!candidate_evidence and !result.missing_from_specification) return reject(diagnostic, .{ .reason = .missing_specification_evidence, .criterion_id = criterion.id });
+        var score_out: ?u16 = null;
         switch (result.disposition) {
             .scored => {
-                const score = result.score orelse return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
-                if (score < capture.rubric.minimum_score or score > capture.rubric.maximum_score) return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                const raw_score = result.score orelse return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                if (raw_score < capture.rubric.minimum_score or raw_score > capture.rubric.maximum_score) return reject(diagnostic, .{ .reason = .invalid_score, .criterion_id = criterion.id });
+                const score: u16 = @intCast(raw_score);
+                score_out = score;
                 earned += @as(u128, score - capture.rubric.minimum_score) * criterion.weight;
                 possible += @as(u128, capture.rubric.maximum_score - capture.rubric.minimum_score) * criterion.weight;
             },
@@ -100,7 +117,14 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
                 if (!criterion.allow_not_applicable or result.score != null) return reject(diagnostic, .{ .reason = .invalid_disposition, .criterion_id = criterion.id });
             },
         }
-        output.* = result;
+        output.* = .{
+            .criterion_id = result.criterion_id,
+            .disposition = result.disposition,
+            .score = score_out,
+            .explanation = result.explanation,
+            .evidence = evidence_out,
+            .missing_from_specification = result.missing_from_specification,
+        };
     }
     const percent: ?f64 = if (uncertain or possible == 0) null else @as(f64, @floatFromInt(earned)) * 100 / @as(f64, @floatFromInt(possible));
     return .{
@@ -112,6 +136,77 @@ pub fn validate(allocator: std.mem.Allocator, diagnostic: ?*?Diagnostic, capture
         else
             .not_configured,
     };
+}
+
+/// The first repeated criterion ID among results, which no correction may resolve.
+pub fn duplicate(results: []const RawResult) ?Diagnostic {
+    for (results, 0..) |result, index| for (results[0..index]) |prior| {
+        if (std.mem.eql(u8, prior.criterion_id, result.criterion_id)) return .{ .reason = .duplicate_criterion, .criterion_id = result.criterion_id };
+    };
+    return null;
+}
+
+/// The supplied document a locator names, or null when the judge invented one.
+pub fn documentText(capture: c.Capture, id: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, id, "specification")) return capture.specification;
+    for (capture.sources) |source| if (std.mem.eql(u8, source.id, id)) return source.text;
+    return null;
+}
+
+/// Line boundaries for judge packets, evidence checks and reports come from the
+/// shared source-coordinate owner: CR, LF and CRLF each end one line, and a final
+/// terminator ends the last line instead of starting another. Lines are 1-based.
+const LineIterator = struct {
+    text: []const u8,
+    position: coordinates.Position = .{ .byte = 0, .line = 1, .column = 1 },
+    start: usize = 0,
+    const Line = struct { start: usize, end: usize };
+    fn next(self: *LineIterator) c.Error!?Line {
+        while (self.position.byte < self.text.len) {
+            const current = self.position;
+            self.position = coordinates.advance(self.text, current) catch return error.InvalidEvaluationContract;
+            if (self.position.line != current.line) {
+                defer self.start = self.position.byte;
+                return .{ .start = self.start, .end = current.byte };
+            }
+        }
+        if (self.start >= self.text.len) return null;
+        defer self.start = self.text.len;
+        return .{ .start = self.start, .end = self.text.len };
+    }
+};
+
+pub fn lineCount(text: []const u8) c.Error!usize {
+    var lines: LineIterator = .{ .text = text };
+    var count: usize = 0;
+    while (try lines.next()) |_| count += 1;
+    return count;
+}
+
+/// Exact bytes from the start of line `first` to the end of line `last`, without
+/// its terminator; null for an empty, reversed or out-of-range locator.
+pub fn lineSpan(text: []const u8, first: u32, last: u32) c.Error!?[]const u8 {
+    if (first == 0 or first > last) return null;
+    var lines: LineIterator = .{ .text = text };
+    var number: u32 = 0;
+    var span_start: usize = 0;
+    while (try lines.next()) |line| {
+        number += 1;
+        if (number == first) span_start = line.start;
+        if (number == last) return text[span_start..line.end];
+    }
+    return null;
+}
+
+pub fn numberedLines(allocator: std.mem.Allocator, text: []const u8) c.Error![]const NumberedLine {
+    var output: std.ArrayList(NumberedLine) = .empty;
+    errdefer output.deinit(allocator);
+    var lines: LineIterator = .{ .text = text };
+    while (try lines.next()) |line| {
+        const number = std.math.cast(u32, output.items.len + 1) orelse return error.InvalidEvaluationContract;
+        try output.append(allocator, .{ .line = number, .text = text[line.start..line.end] });
+    }
+    return output.toOwnedSlice(allocator);
 }
 
 fn reject(out: ?*?Diagnostic, value: Diagnostic) error{InvalidEvaluationContract} {

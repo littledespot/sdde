@@ -510,10 +510,28 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = .fixed,
-        .max_output_tokens = .{ .value = 16384 },
         .reasoning_effort = .low,
         .request_profile = .openai_oss,
+        .max_output_tokens = try catalogueMaximum(a),
     }, .inference);
+}
+/// The shipped test catalogue owns the GPT-OSS maximum output (ADR 0011). The
+/// production decode, registry build and validation read it, so this projection
+/// cannot drift from it or accept an entry the engine would refuse.
+fn catalogueMaximum(a: std.mem.Allocator) !@import("../domain/llm_provider_contracts.zig").ModelMaximumOutput {
+    const registered = &@import("../composition/provider_model_contracts.zig").registry;
+    var catalogue = try (@import("../actions/provider/decode_llm_provider_config.zig").Action{}).execute(a, try read(a, "test/e2e/config/.sddproviders.json"));
+    defer catalogue.deinit();
+    var candidate = try (@import("../actions/provider/build_llm_provider_registry.zig").Action{ .contracts = registered }).execute(a, catalogue.value());
+    defer candidate.deinit();
+    const registry = @import("../domain/llm_provider_registry.zig");
+    const owner = try (@import("../actions/provider/validate_llm_provider_registry.zig").Action{ .contracts = registered }).execute(a, candidate);
+    defer registry.deinitOwner(owner);
+    const entry = registry.registry(owner).resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "openai.gpt-oss-20b-1:0" }) orelse return error.InvalidCalibrationCatalogue;
+    return switch (entry.config) {
+        .aws_bedrock => |config| config.max_output_tokens,
+        .empty_object => error.InvalidCalibrationCatalogue,
+    };
 }
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     return writeAt(a, output, id, suffix, bytes);

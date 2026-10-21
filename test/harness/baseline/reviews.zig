@@ -328,15 +328,29 @@ pub fn verifyWithHistory(a: std.mem.Allocator, finding: Finding, raw: []const u8
     return .complete;
 }
 
+/// The one value an assignment response gives the finding's member; a missing or
+/// repeated member cannot be verified.
+fn assignedValue(comptime Entry: type, a: std.mem.Allocator, content: []const u8, ordinal: u32) !@FieldType(Entry, "value") {
+    const batch = try @import("../../../src/domain/model_candidate_json.zig").decode(struct { findings: []const Entry }, a, content);
+    var result: ?@FieldType(Entry, "value") = null;
+    for (batch.findings) |entry| if (entry.requirement_ordinal == ordinal) {
+        if (result != null) return error.ReviewOutputMismatch;
+        result = entry.value;
+    };
+    return result orelse error.ReviewOutputMismatch;
+}
+
 /// A retained native result definition selects the canonical wire contract.
 /// Partial repair schemas cannot independently restate the inherited verdict.
 pub fn verifyRaw(a: std.mem.Allocator, finding: Finding, raw: []const u8, definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId) !Verification {
     const selected = definition orelse return .unmeasured;
     const source_single = std.mem.eql(u8, selected.bytes, "finding") or std.mem.eql(u8, selected.bytes, "preservation_finding") or std.mem.eql(u8, selected.bytes, "applicability_finding");
-    const source_record = std.mem.eql(u8, selected.bytes, "record_findings");
+    // Whole-assignment responses: units, record families, collections and principle sets.
+    const source_assignment = std.mem.eql(u8, selected.bytes, "assignment_findings");
     const principle_single = std.mem.eql(u8, selected.bytes, "principle_finding");
+    const principle_assignment = std.mem.eql(u8, selected.bytes, "principle_assignment_findings");
     const preservation = std.mem.eql(u8, selected.bytes, "preservation_comparisons");
-    if (!source_single and !source_record and !principle_single and !preservation) return .unmeasured;
+    if (!source_single and !source_assignment and !principle_single and !principle_assignment and !preservation) return .unmeasured;
     var scratch: std.heap.ArenaAllocator = .init(a);
     defer scratch.deinit();
     const temporary = scratch.allocator();
@@ -355,23 +369,21 @@ pub fn verifyRaw(a: std.mem.Allocator, finding: Finding, raw: []const u8, defini
         if (value.result != finding.kind.preservation or !std.mem.eql(u8, value.explanation, finding.detail) or
             finding.comparison.?.view.id.ordinal != finding.ordinal or
             !std.mem.eql(u8, try std.json.Stringify.valueAlloc(temporary, value.sources, .{}), try std.json.Stringify.valueAlloc(temporary, finding.comparison.?.sources, .{}))) return error.ReviewOutputMismatch;
-    } else if (principle_single) {
+    } else if (principle_single or principle_assignment) {
         if (finding.kind != .principles) return error.ReviewOutputMismatch;
-        const value = try codec.decode(principles.Value, temporary, envelope.content);
+        const value = if (principle_assignment)
+            try assignedValue(@import("../../../src/domain/specification_support.zig").Contract(.principles).Finding, temporary, envelope.content, finding.ordinal)
+        else
+            try codec.decode(principles.Value, temporary, envelope.content);
         if (value.decision != finding.kind.principles or !std.mem.eql(u8, value.detail, finding.detail) or
             !std.mem.eql(u8, try std.json.Stringify.valueAlloc(temporary, value.citations, .{}), try std.json.Stringify.valueAlloc(temporary, finding.principle_citations, .{}))) return error.ReviewOutputMismatch;
     } else {
         if (finding.kind != .source) return error.ReviewOutputMismatch;
         const model = @import("../../../src/domain/specification_support_model.zig");
-        const value = if (source_record) found: {
-            const batch = try codec.decode(model.Batch, temporary, envelope.content);
-            var result: ?model.Value = null;
-            for (batch.findings) |entry| if (entry.requirement_ordinal == finding.ordinal) {
-                if (result != null) return error.ReviewOutputMismatch;
-                result = entry.value;
-            };
-            break :found result orelse return error.ReviewOutputMismatch;
-        } else try codec.decode(model.Value, temporary, envelope.content);
+        const value = if (source_assignment)
+            try assignedValue(model.BatchFinding, temporary, envelope.content, finding.ordinal)
+        else
+            try codec.decode(model.Value, temporary, envelope.content);
         switch (value) {
             inline else => |payload, tag| {
                 const actual = .{
@@ -475,6 +487,13 @@ test "native principle findings retain their own decisions and verify exact sele
     var changed = tracker.findings.items[0];
     changed.kind = .{ .principles = .conflicting };
     try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, changed, raw, .{ .bytes = "principle_finding" }));
+    // A selected principle set answers every subject in one assignment response.
+    const batch = try @import("../../../src/domain/model_candidate_json.zig").encode(struct { findings: []const support.Contract(.principles).Finding }, a, .{ .findings = native.review.entries });
+    try std.testing.expectEqual(Verification.complete, try verifyRaw(a, tracker.findings.items[0], batch, .{ .bytes = "principle_assignment_findings" }));
+    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, changed, batch, .{ .bytes = "principle_assignment_findings" }));
+    var foreign = tracker.findings.items[0];
+    foreign.ordinal = 2;
+    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, batch, .{ .bytes = "principle_assignment_findings" }));
 }
 
 test "native source finding wire verification normalizes syntax and preserves batch membership" {
@@ -495,10 +514,14 @@ test "native source finding wire verification normalizes syntax and preserves ba
     const prefixed = try std.mem.concat(a, u8, &.{ "{\"", raw });
     try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, prefixed, .{ .bytes = "finding" }));
     const batch = try codec.encode(model.Batch, a, .{ .findings = &.{.{ .requirement_ordinal = 1, .value = value }} });
-    try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, batch, .{ .bytes = "record_findings" }));
+    try std.testing.expectEqual(Verification.complete, try verifyRaw(a, finding, batch, .{ .bytes = "assignment_findings" }));
     var foreign = finding;
     foreign.ordinal = 2;
-    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, batch, .{ .bytes = "record_findings" }));
+    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, batch, .{ .bytes = "assignment_findings" }));
+    const repeated = try codec.encode(model.Batch, a, .{ .findings = &.{ .{ .requirement_ordinal = 1, .value = value }, .{ .requirement_ordinal = 1, .value = value } } });
+    try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, finding, repeated, .{ .bytes = "assignment_findings" }));
+    // The retired per-record definition has no current producer and is not measured.
+    try std.testing.expectEqual(Verification.unmeasured, try verifyRaw(a, finding, batch, .{ .bytes = "record_findings" }));
     foreign = finding;
     foreign.detail = "MOCK substituted detail.";
     try std.testing.expectError(error.ReviewOutputMismatch, verifyRaw(a, foreign, raw, .{ .bytes = "finding" }));

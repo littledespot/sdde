@@ -16,11 +16,19 @@ pub const Identity = union(enum) {
         };
     }
 };
+/// Failures a provider observation can report. Judgment, budget and retry
+/// outcomes belong to the evaluator and cannot be supplied by an adapter.
+pub const Failure = enum { authentication, configuration, rate_limited, timeout, cancelled, provider_failed, refused, incomplete, invalid_response, usage_unavailable };
+pub fn reported(failure: Failure) report.Failure {
+    return switch (failure) {
+        inline else => |tag| @field(report.Failure, @tagName(tag)),
+    };
+}
 pub const Observation = struct {
     request_id: ?[]const u8 = null,
     identity: Identity = .unavailable,
     usage: ?report.Usage = null,
-    failure: ?report.Failure = null,
+    failure: ?Failure = null,
     payload: ?[]const u8 = null,
     response_body: ?[]const u8 = null,
 };

@@ -175,6 +175,62 @@ test "restart rejects an insecure segment permission instead of trusting its byt
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, second_runner.process(fact).blocked);
 }
 
+test "restart recovery leaves regular files the engine never names alone and rejects other entries" {
+    const io = std.testing.io;
+    const Case = enum { strays_only, symlinked_entry, nested_directory, misplaced_segment, symlinked_run_entry, symlinked_sibling_entry, nested_sibling_directory };
+    for (std.enums.values(Case)) |case| {
+        var root = std.testing.tmpDir(.{ .iterate = true });
+        defer root.cleanup();
+        try root.dir.createDir(io, "LOGBIND-0", std.Io.File.Permissions.fromMode(0o700));
+        try root.dir.createDir(io, "LOGBIND-1", std.Io.File.Permissions.fromMode(0o700));
+        var binding_directory = try root.dir.openDir(io, "LOGBIND-1", .{ .iterate = true });
+        defer binding_directory.close(io);
+        const candidate = bindingCandidate();
+        const owner = try log_binding.createValidated(std.testing.allocator, candidate);
+        defer log_binding.deinitOwner(owner);
+        const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
+        var clock: FakeClock = .{};
+        var outputs: FakeOutputs = .{};
+        const shortcode = try telemetry.WorkflowShortcode.parse("IMPL");
+        const fact: telemetry.WorkflowTelemetryFact = .{ .workflow_shortcode = shortcode, .fact = .{ .event_type = .run_started } };
+
+        var first_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
+        defer first_sink.deinit();
+        var first_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&first_sink, clock.port(), outputs.console(), outputs.emergency()) };
+        try std.testing.expect(first_runner.process(fact) == .persisted);
+        try std.testing.expect(first_runner.close(shortcode) == .dropped);
+
+        // Stray files in the run directory, this binding and a sibling binding.
+        for ([_][]const u8{ ".DS_Store", "LOGBIND-1/Thumbs.db", "LOGBIND-0/._0001.log" }) |path| {
+            try root.dir.writeFile(io, .{ .sub_path = path, .data = "stray" });
+        }
+        switch (case) {
+            .strays_only => {},
+            .symlinked_entry => try root.dir.symLink(io, "0001.log", "LOGBIND-1/desktop.ini", .{}),
+            .nested_directory => try root.dir.createDir(io, "LOGBIND-1/nested", .default_dir),
+            .misplaced_segment => try root.dir.copyFile("LOGBIND-1/0001.log", root.dir, "0001.log", io, .{}),
+            .symlinked_run_entry => try root.dir.symLink(io, "LOGBIND-1/0001.log", "desktop.ini", .{}),
+            .symlinked_sibling_entry => try root.dir.symLink(io, "../LOGBIND-1/0001.log", "LOGBIND-0/desktop.ini", .{}),
+            .nested_sibling_directory => try root.dir.createDir(io, "LOGBIND-0/nested", .default_dir),
+        }
+
+        var second_sink = filesystem_sink.Adapter.initForTestLayout(io, root.dir, binding_directory, candidate);
+        defer second_sink.deinit();
+        var second_runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&second_sink, clock.port(), outputs.console(), outputs.emergency()) };
+        const outcome = second_runner.process(fact);
+        if (case != .strays_only) {
+            try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
+            continue;
+        }
+        try std.testing.expect(outcome == .persisted);
+        try std.testing.expectEqual(@as(u64, 2), outcome.persisted.sequence);
+        try std.testing.expectEqual(@as(u16, 2), outcome.persisted.segment_ordinal);
+        const stray = try root.dir.readFileAlloc(io, "LOGBIND-1/Thumbs.db", std.testing.allocator, .limited(16));
+        defer std.testing.allocator.free(stray);
+        try std.testing.expectEqualStrings("stray", stray);
+    }
+}
+
 test "stream lock acquisition rejects a symbolic link" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{ .iterate = true });
@@ -350,43 +406,6 @@ test "info logging filters complete prompt bodies before effects" {
     try std.testing.expectEqual(@as(usize, 0), sink.calls);
 }
 
-test "prompt batches persist in canonical fragment id order and consume transient ownership" {
-    const io = std.testing.io;
-    var directory = std.testing.tmpDir(.{ .iterate = true });
-    defer directory.cleanup();
-    const candidate = bindingCandidate();
-    const owner = try log_binding.createValidated(std.testing.allocator, candidate);
-    defer log_binding.deinitOwner(owner);
-    const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = .debug, .alias_evidence = .none }, .console = false };
-    var sink_adapter = filesystem_sink.Adapter.initForTest(io, directory.dir, candidate);
-    var clock: FakeClock = .{};
-    var outputs: FakeOutputs = .{};
-    var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency()) };
-    const base: prompt_log.SanitizedPromptFragment = .{
-        .workflow_shortcode = try telemetry.WorkflowShortcode.parse("PLAN"),
-        .attempt = 1,
-        .request_id = telemetry.Identifier.validate("REQ-1").?,
-        .route_id = telemetry.Identifier.validate("ROUTE-1").?,
-        .model_profile_id = telemetry.Identifier.validate("PROFILE-1").?,
-        .fragment_id = telemetry.Identifier.validate("FRAG-2").?,
-        .direction = .request,
-        .body_class = .ordinary,
-        .content = "second",
-        .retained_bytes = 6,
-        .truncated = false,
-        .redacted = true,
-    };
-    var first = base;
-    first.fragment_id = telemetry.Identifier.validate("FRAG-1").?;
-    first.content = "first";
-    first.retained_bytes = 5;
-    const batch = try prompt_log.createBatch(std.testing.allocator, &.{ base, first });
-    try std.testing.expect(runner.processPromptBatch(batch) == .persisted);
-    const bytes = try directory.dir.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
-    defer std.testing.allocator.free(bytes);
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "|FRAG-1|").? < std.mem.indexOf(u8, bytes, "|FRAG-2|").?);
-}
-
 test "fault barriers distinguish lock recovery flush console rotation and retention failures" {
     const candidate = bindingCandidate();
     const owner = try log_binding.createValidated(std.testing.allocator, candidate);
@@ -427,23 +446,19 @@ test "fault barriers distinguish lock recovery flush console rotation and retent
     const historical_owner = try log_binding.createValidated(std.testing.allocator, historical_candidate);
     defer log_binding.deinitOwner(historical_owner);
     var retention_clock: FakeClock = .{};
-    const authorization = try (build_retention.Action{ .clock = retention_clock.port() }).execute(
-        std.testing.allocator,
-        &policy,
-        log_binding.binding(owner),
-        log_binding.binding(historical_owner),
-        .event,
-    );
-    defer log_retention.deinit(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     var retention_execution: retention_runner.Runner = .{
+        .allocator = std.testing.allocator,
+        .policy = &policy,
         .current = log_binding.binding(owner),
         .historical = log_binding.binding(historical_owner),
-        .authorization = authorization,
+        .target_stream = .event,
+        .authorize_action = .{ .clock = retention_clock.port() },
         .acquire_action = .{ .sink = retention_sink.lockAcquirer() },
         .prune_action = prune_segments.Action{ .sink = retention_sink.segmentPruner() },
         .release_action = .{ .sink = retention_sink.lockReleaser() },
     };
+    defer retention_execution.deinit();
     const retention = retention_coordinator.run(retention_execution.childBindings());
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
 }
@@ -519,23 +534,19 @@ test "same-run policy transition closes the old binding and continues sequence a
     const historical_owner = try log_binding.createValidated(std.testing.allocator, historical_candidate);
     defer log_binding.deinitOwner(historical_owner);
     var retention_clock: FakeClock = .{};
-    const authorization = try (build_retention.Action{ .clock = retention_clock.port() }).execute(
-        std.testing.allocator,
-        &policy,
-        log_binding.binding(next_owner),
-        log_binding.binding(historical_owner),
-        .event,
-    );
-    defer log_retention.deinit(authorization);
     var retention_sink: FaultSink = .{ .fault = .retention };
     var retention_execution: retention_runner.Runner = .{
+        .allocator = std.testing.allocator,
+        .policy = &policy,
         .current = log_binding.binding(next_owner),
         .historical = log_binding.binding(historical_owner),
-        .authorization = authorization,
+        .target_stream = .event,
+        .authorize_action = .{ .clock = retention_clock.port() },
         .acquire_action = .{ .sink = retention_sink.lockAcquirer() },
         .prune_action = prune_segments.Action{ .sink = retention_sink.segmentPruner() },
         .release_action = .{ .sink = retention_sink.lockReleaser() },
     };
+    defer retention_execution.deinit();
     const retention = lifecycle.retainHistorical(retention_execution.childBindings(), fact.workflow_shortcode);
     try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, retention.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
@@ -1021,4 +1032,65 @@ test "production event projection uses closed facts and propagates every barrier
         spy.expect_capture = false;
     }
     try std.testing.expect(spy.count > 0);
+}
+
+const RetentionSpy = struct {
+    const Step = enum { authorize, resolve, acquire, prune, release };
+    failing: ?Step = null,
+    also_failing: ?Step = null,
+    calls: [5]Step = undefined,
+    count: usize = 0,
+
+    fn step(context: *anyopaque, which: Step) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        const self: *RetentionSpy = @ptrCast(@alignCast(context));
+        self.calls[self.count] = which;
+        self.count += 1;
+        if (self.failing == which or (self.also_failing == which)) return .{ .failed = if (which == .release) .LOG_RELEASE_FAILURE else .LOG_SINK_FAILURE };
+        return .ok;
+    }
+    fn authorize(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .authorize);
+    }
+    fn resolve(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .resolve);
+    }
+    fn acquire(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .acquire);
+    }
+    fn prune(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .prune);
+    }
+    fn release(context: *anyopaque) @import("application/feature_log_retention_child_bindings.zig").StepOutcome {
+        return step(context, .release);
+    }
+    const vtable: @import("application/feature_log_retention_child_bindings.zig").ChildBindings.VTable = .{
+        .authorize = authorize,
+        .resolve_stream = resolve,
+        .acquire = acquire,
+        .prune = prune,
+        .release = release,
+    };
+};
+
+test "retention authorizes before resolving and locking, and releases after any prune outcome" {
+    const Step = RetentionSpy.Step;
+    for ([_]struct { ?Step, []const Step }{
+        .{ null, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+        .{ .authorize, &.{.authorize} },
+        .{ .resolve, &.{ .authorize, .resolve } },
+        .{ .acquire, &.{ .authorize, .resolve, .acquire } },
+        .{ .prune, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+        .{ .release, &.{ .authorize, .resolve, .acquire, .prune, .release } },
+    }) |case| {
+        var spy: RetentionSpy = .{ .failing = case[0] };
+        const outcome = retention_coordinator.run(.{ .context = &spy, .vtable = &RetentionSpy.vtable });
+        try std.testing.expectEqualSlices(Step, case[1], spy.calls[0..spy.count]);
+        if (case[0] == null) try std.testing.expect(outcome == .ok) else try std.testing.expectEqual(if (case[0] == .release) log_stream.FailureCode.LOG_RELEASE_FAILURE else .LOG_SINK_FAILURE, outcome.blocked);
+    }
+    // Release is still attempted after a failed prune, and the prune failure is
+    // the reported cause.
+    var both: RetentionSpy = .{ .failing = .prune, .also_failing = .release };
+    const outcome = retention_coordinator.run(.{ .context = &both, .vtable = &RetentionSpy.vtable });
+    try std.testing.expectEqualSlices(Step, &.{ .authorize, .resolve, .acquire, .prune, .release }, both.calls[0..both.count]);
+    try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
 }

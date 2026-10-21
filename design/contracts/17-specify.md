@@ -133,15 +133,24 @@ Typed content covers these concerns; each concern does not require a separate ca
   judgment remains advice; independent native defects retain their typed routes.
 - **Post-generation assessment:**
   [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
-  and principle review. Source review assesses one whole canonical unit or
-  complete collection per call: the brief, story, entity applicability, all
-  fields/relationship members of one record, or an independently assigned
-  collection/reference subject. Principle review assesses the complete generated
+  and principle review. Source review assesses one whole canonical unit, record
+  family or complete collection per call: the brief, story, entity applicability,
+  all fields/relationship members of every record of one kind (a record family,
+  each member carrying its own record), or an independently assigned
+  collection/reference subject. A family stops atomically under one
+  protocol-correction allowance; narrow finding correction keeps its per-target
+  allowance. Principle review assesses the complete generated
   requirement set together, carrying the selected principle corpus once. Native
   ownership defines each complete member set; a model cannot choose a subset.
   Each closed assignment response contains exactly one finding per assigned
-  requirement. Missing, duplicate, foreign or partial membership rejects before
-  any member is appended. Canonical ledger order, per-member evidence, origins,
+  requirement. Missing, duplicate, foreign or partial membership rejects at
+  response admission, before any member is appended. The existing bounded protocol
+  correction resubmits the complete assignment. Assignments exist only under
+  advisory policy, so on exhaustion that assignment's advice closes as incomplete
+  (ADR 0023, 18 October 2026). An assignment also withholds any positive verdict
+  to which no claim set can be bound, such as `supported` for a coverage subject
+  whose collection has no records; one in a response rejects at admission in the
+  same way (ADR 0023, 20 October 2026). Canonical ledger order, per-member evidence, origins,
   current candidate revision and full assignment context remain bound. Initial
   admission cannot fall back to a singleton response for a required batch.
   Narrow finding correction preserves the verdict and every sibling.
@@ -480,6 +489,10 @@ existing policy path once its prerequisites hold; retain its cited advice.
 - A user closes it by changing only `requestedStatus` and the answer region.
 - The submission must name the current state/record revisions, match the configured select-one
   or bounded-text schema, and be associated with an authenticated actor.
+- [ADR 0025](../decisions/0025-clarification-answer-authentication.md) defines that actor as the
+  operating-system account that runs the engine; running Specify with valid closed forms
+  accepts them. If any closed form is invalid, the run accepts none of them, makes no model
+  call and reports a typed reason for each failing form. Not yet implemented.
 - An empty close is invalid; `defer` remains open; `cancel` cancels the run.
 - Path-shaped answer text is scanned into the inert passive registry under the assigned response
   ID, and that complete clarification response is published before refresh.

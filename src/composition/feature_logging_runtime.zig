@@ -57,11 +57,70 @@ pub const Assembly = struct {
             .blocked => |failure| return self.fail(failure),
             .invalid => return self.fail(.LOG_SINK_FAILURE),
         }
+        // §26: retention follows recovery and rotation, before the run starts.
+        switch (self.retainHistory(selected_binding, shortcode)) {
+            .ok => {},
+            .cancelled => return .cancelled,
+            .blocked => |failure| return self.fail(failure),
+        }
         self.inputs.active_feature = directory;
         self.outputs.active_feature = directory;
         const events: @import("../application/workflow_event_capture.zig").Capture = .{ .barrier = self.logs.barrier(), .shortcode = shortcode };
         if (events.emit(.{ .event_type = .run_started })) |failure| return self.fail(failure);
         return .{ .ready = active.directory(directory) };
+    }
+
+    const Retention = union(enum) { ok, cancelled, blocked: Failure };
+
+    /// Prune each prior run's closed segments older than the retention period,
+    /// one group and stream at a time under that run's own stream lock. Every
+    /// prior group must validate; the current run and any run with an active
+    /// tail are never touched (ADR 0026). Each failure is reported through the
+    /// active logger, which owns the bounded emergency line.
+    fn retainHistory(self: *Assembly, current: *const binding.ValidatedFeatureLogBinding, shortcode: telemetry.WorkflowShortcode) Retention {
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const scratch = arena.allocator();
+        const registry = artifacts.registry(self.artifact_owner.?);
+        var history: @import("../adapters/filesystem/feature_log_history.zig").Adapter = .{ .io = self.io, .project_root = self.project };
+        const found = history.discoverer().discover(scratch, registry) catch |err| return switch (err) {
+            error.Cancelled => .cancelled,
+            error.HistoryUnavailable, error.InvalidHistory, error.OutOfMemory => self.reportRetention(shortcode, .LOG_SINK_FAILURE),
+        };
+        var clock: @import("../adapters/system/trusted_log_clock.zig").Adapter = .{ .io = self.io };
+        for (found.groups) |group| {
+            const owner = binding.createValidated(scratch, group.binding) catch return self.reportRetention(shortcode, .LOG_SINK_FAILURE);
+            defer binding.deinitOwner(owner);
+            const historical = binding.binding(owner);
+            var sink = @import("../adapters/filesystem/feature_log_historical_stream.zig").Adapter.init(scratch, self.io, self.project, registry, historical, group.stream) catch |err| return switch (err) {
+                error.Cancelled => .cancelled,
+                else => self.reportRetention(shortcode, .LOG_SINK_FAILURE),
+            };
+            defer sink.deinit();
+            var retention: @import("../application/feature_log_retention_runner.zig").Runner = .{
+                .allocator = scratch,
+                .policy = self.logs.policy(),
+                .current = current,
+                .historical = historical,
+                .target_stream = group.stream,
+                .authorize_action = .{ .clock = clock.clock() },
+                .acquire_action = .{ .sink = sink.lockAcquirer() },
+                .prune_action = .{ .sink = sink.segmentPruner() },
+                .release_action = .{ .sink = sink.lockReleaser() },
+            };
+            defer retention.deinit();
+            // The lifecycle reports lock, prune and release failures itself.
+            switch (self.logs.retainHistorical(retention.childBindings(), shortcode)) {
+                .ok => {},
+                .blocked => |failure| return .{ .blocked = failure },
+            }
+        }
+        return .ok;
+    }
+
+    fn reportRetention(self: *Assembly, shortcode: telemetry.WorkflowShortcode, failure: Failure) Retention {
+        self.logs.barrier().reportFailure(shortcode, failure);
+        return .{ .blocked = failure };
     }
 
     fn fail(self: *Assembly, failure: Failure) port.Outcome {

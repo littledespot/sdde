@@ -36,7 +36,7 @@ pub fn verifyToolchain(a: std.mem.Allocator, expected: Toolchain) !void {
         !std.mem.eql(u8, current.cpu, expected.cpu) or !std.mem.eql(usize, current.features, expected.features) or current.optimize != expected.optimize) return error.BaselineBuildChanged;
 }
 pub const Freeze = struct {
-    schema: enum { @"baseline-freeze/v1" },
+    schema: enum { @"baseline-freeze/v2" },
     acquisition_scope: enum { full_workflow } = .full_workflow,
     build: @import("../../../build/provenance.zig").Identity,
     toolchain: Toolchain,
@@ -90,7 +90,7 @@ pub fn create(a: std.mem.Allocator, build: @import("../../../build/provenance.zi
         try cases.append(a, .{ .id = example.id, .feature_id = example.feature_id, .variant = example.variant, .sources = example.sources });
     };
     return .{
-        .schema = .@"baseline-freeze/v1",
+        .schema = .@"baseline-freeze/v2",
         .build = build,
         .toolchain = try toolchain(a),
         .path_policy = path_policy,
@@ -192,7 +192,7 @@ fn evaluatorSeparation(inputs: fixture.Capture, paths: InputPaths) !void {
     // These source roles are declared evaluator inputs. They cannot become
     // production inputs through a template mapping under another destination.
     for (inputs.files) |file| {
-        for ([_][]const u8{ paths.cases, paths.rubric, inputs.evaluation.case_source, inputs.evaluation.case.rubric, inputs.evaluation.config_source }) |evaluator_path| {
+        for ([_][]const u8{ paths.cases, paths.rubric, inputs.evaluation.case_source, inputs.evaluation.case.rubric }) |evaluator_path| {
             if (std.mem.eql(u8, file.mapping.source, evaluator_path)) return error.EvaluatorInputInProject;
         }
     }

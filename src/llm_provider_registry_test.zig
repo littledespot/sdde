@@ -316,7 +316,7 @@ test "current Bedrock model policy comes only from registered contracts" {
     const a = std.testing.allocator;
     const registered = @import("composition/provider_model_contracts.zig").registry;
     const bytes =
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"global.openai.gpt-6-luna","json":true,"config":{"region":"ap-southeast-2"}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"global.openai.gpt-6-luna","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}}]}]}
     ;
     var raw = try (decode_provider.Action{}).execute(a, bytes);
     defer raw.deinit();
@@ -332,15 +332,14 @@ test "current Bedrock model policy comes only from registered contracts" {
         try std.testing.expectEqual(.native_schema, entry.responseMode());
         try std.testing.expectEqual(contracts.BedrockRegion.@"ap-southeast-2", entry.config.aws_bedrock.region);
         try std.testing.expect(!entry.capabilities.temperature and !entry.capabilities.input_token_count);
-        try std.testing.expect(entry.capabilities.supports_max_output_tokens);
         try std.testing.expect(contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, null));
         try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "medium"));
         try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "low"));
         try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "high"));
     }
-    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"us-west-2" } };
+    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } };
     try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
-    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } };
+    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } };
     candidate.entries[0].model = identity.ModelId.parse("us.openai.gpt-6-luna").?;
     try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
     candidate.entries[0].model = identity.ModelId.parse("openai.gpt-6-luna").?;

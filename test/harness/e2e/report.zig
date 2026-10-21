@@ -38,19 +38,11 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
     const writer = &out.writer;
     try writer.print("E2E result: {s}\n", .{@tagName(report.status)});
     try writeAcceptance(allocator, writer, report);
-    try writer.print("Specification publication: {s}; grading: {s}\n", .{ @tagName(report.publication_check), @tagName(report.semantic_quality) });
+    try writer.print("Specification publication: {s}\n", .{@tagName(report.publication_check)});
     if (report.status == .awaiting_clarification) try writer.print("{s}\n", .{explanation(report)});
     const project_prefix = try std.fmt.allocPrint(allocator, "{s}/{s}/project/", .{ root, run });
     defer allocator.free(project_prefix);
     try writeClarifications(writer, report, project_prefix);
-    if (report.evaluation) |evaluation| switch (evaluation.outcome) {
-        .evaluated => |judgment| {
-            try writer.print("Quality assessment: {s}; threshold: {s}", .{ @tagName(judgment.assessment), @tagName(judgment.threshold) });
-            if (judgment.score_percent) |score| try writer.print("; score: {d:.2}%", .{score});
-            try writer.writeByte('\n');
-        },
-        .evaluator_error => |reason| try writer.print("Quality evaluation failed: {s}\n", .{@tagName(reason)}),
-    };
     const fields = [_]struct { label: []const u8, value: ?[]const u8 }{
         .{ .label = "Terminal step", .value = report.terminal_step },
         .{ .label = "Model step", .value = report.last_model_step },
@@ -160,8 +152,8 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     try escape(writer, report.case_id orelse "unavailable");
     try writer.writeAll("\n\nExecution: ");
     try escape(writer, report.execution_id orelse "unavailable");
-    try writer.print("\n\nWorkflow outcome: {s}; publication: {s}; semantic quality: {s}.\n\n", .{
-        if (report.workflow_outcome) |tag| @tagName(tag) else "not_run", @tagName(report.publication_check), @tagName(report.semantic_quality),
+    try writer.print("\n\nWorkflow outcome: {s}; publication: {s}.\n\n", .{
+        if (report.workflow_outcome) |tag| @tagName(tag) else "not_run", @tagName(report.publication_check),
     });
     try writer.writeAll("Terminal step: ");
     try escape(writer, report.terminal_step orelse "none");
@@ -224,12 +216,6 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         try escape(writer, model.model);
         try writer.writeAll("\n\n");
     }
-    if (report.evaluation_configuration) |config| {
-        try writer.writeAll("Judge: ");
-        try escape(writer, config.model);
-        if (config.region) |region| try writer.print(" in {s}", .{@tagName(region)});
-        try writer.writeAll(".\n\n");
-    }
     if (report.specification) |path| {
         try writer.writeAll("Published specification beneath project/: ");
         try escape(writer, path);
@@ -237,18 +223,12 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     }
     try writer.writeAll("## Evidence for workflow improvement\n\n" ++
         "Use the failure step and diagnostics to locate the failed workflow operation. " ++
-        "case.json and inputs.json retain the selected case and captured configuration, workflow resources, references, rubric and evaluator settings. " ++
+        "case.json and inputs.json retain the selected case and captured configuration, workflow resources, references and rubric. " ++
         "project/ contains the isolated inputs and any actual engine output. report.json provides the structured run record for automated comparisons.\n\n" ++
-        "When grading completes, the criterion scores, explanations and source/specification quotations below identify coverage, grounding and clarity defects. " ++
-        "Compare runs with the same source, rubric revision and model settings, and retain failures and low scores. " ++
-        "The report does not automatically tune or approve the workflow.\n\n");
-    if (report.evaluation) |evaluation| {
-        const assessment = try @import("../report.zig").markdown(allocator, evaluation);
-        defer allocator.free(assessment);
-        try writer.writeAll(assessment);
-    } else {
-        try writer.writeAll("No rubric grade is available. The published/scored baseline is incomplete.\n");
-    }
+        "No model grades this run. A published specification is assessed against the case rubric by human adjudication of this report, " ++
+        "using the exact source, rubric and specification bytes captured in report.json. " ++
+        "Compare runs with the same source, rubric revision and model settings, and retain every failed or poor run. " ++
+        "The report does not automatically tune or approve the workflow.\n");
     return out.toOwnedSlice();
 }
 
@@ -264,23 +244,21 @@ fn writeAcceptance(allocator: std.mem.Allocator, writer: *std.Io.Writer, report:
 
 fn explanation(report: c.Report) []const u8 {
     return switch (report.status) {
-        .input_invalid => "Input setup failed before workflow execution. Check the diagnostic and captured inputs. Use scripts/e2e-spec.sh to load the checkout's .env.e2e; direct Zig invocations require the TEST_EVALUATION_* settings and test credential in their environment.",
-        .harness_error => "The harness encountered an operational error. Any retained candidate or score does not make this a completed E2E run.",
+        .input_invalid => "Input setup failed before workflow execution. Check the diagnostic and captured inputs. Use scripts/e2e-spec.sh to load the checkout's .env.e2e; direct Zig invocations require the test credential in their environment.",
+        .harness_error => "The harness encountered an operational error. Any retained candidate does not make this a completed E2E run.",
         .bootstrap_failed => "The engine rejected project/workflow configuration before generation. Inspect the bootstrap diagnostic and captured project resources.",
-        .awaiting_clarification => "Awaiting clarification. The incomplete specification and registered forms are published. Answer the forms, then run the workflow again. Specification completion and grading have not run.",
-        .workflow_invalid => "The workflow rejected candidate data. Inspect its validation findings; no completed specification is available for grading.",
+        .awaiting_clarification => "Awaiting clarification. The incomplete specification and registered forms are published. Answer the forms, then run the workflow again. Specification completion has not run.",
+        .workflow_invalid => "The workflow rejected candidate data. Inspect its validation findings; no completed specification is available for adjudication.",
         .workflow_blocked => "The workflow is blocked. Inspect its native outcome and diagnostics before another invocation.",
-        .workflow_cancelled => "The workflow was cancelled. No completed specification is available for grading.",
+        .workflow_cancelled => "The workflow was cancelled. No completed specification is available for adjudication.",
         .workflow_failed => if (report.provider_diagnostic != null and std.mem.eql(u8, report.provider_diagnostic.?, "output_limit"))
-            "The provider stopped generation at its output limit before returning a complete candidate. The engine sets no per-call output token limit; its token budget is cumulative across the workflow. The engine rejected partial output, so no published specification was available to grade. Inspect the model assignment, prompt and schema at the reported step; no harness retry or partial-output substitution was applied."
+            "The provider stopped generation at its output limit before returning a complete candidate. The engine sets no per-call output token limit; its token budget is cumulative across the workflow. The engine rejected partial output, so no specification was published. Inspect the model assignment, prompt and schema at the reported step; no harness retry or partial-output substitution was applied."
         else
-            "The workflow failed. Inspect its outcome and separate provider/model diagnostics; no completed specification is available for grading.",
+            "The workflow failed. Inspect its outcome and separate provider/model diagnostics; no completed specification is available for adjudication.",
         .publication_missing, .artifact_missing, .artifact_unreadable, .artifact_changed => "The invocation did not provide all expected, unchanged published artifacts. Inspect publication evidence and the retained project; file existence alone cannot establish success.",
-        .fixture_changed => "Source inputs changed during execution. This run is not accepted as a stable E2E comparison; use the retained capture to inspect what was evaluated.",
-        .generated => "The engine published its validated specification; rubric grading has not completed.",
-        .evaluator_failed => "Generation completed, but the evaluator failed. The published specification remains available; this result has no quality grade.",
-        .quality_unresolved => "Generation completed, but the judge could not resolve every required criterion. Inspect the criterion evidence and uncertainty below.",
-        .evaluated => "Generation, publication checks and rubric scoring completed. Inspect the score and criterion findings below; a completed evaluation may still report poor quality.",
+        .fixture_changed => "Source inputs changed during execution. This run is not accepted as a stable E2E comparison; use the retained capture to inspect what was executed.",
+        .generated => "The engine published its validated specification. Development acceptance requires human adjudication against the case rubric.",
+        .threshold_unconfigured => "The case rubric has no acceptance threshold, so no run of it can be accepted. No workflow ran.",
     };
 }
 

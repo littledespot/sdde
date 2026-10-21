@@ -62,7 +62,6 @@ pub fn rebind(
         .provider = captured.provider,
         .model = requested_model,
         .reasoningEffort = requested_effort,
-        .maxOutputTokens = if (captured.controls.max_output_tokens) |allowance| allowance.value else null,
     });
     const allowlist_contract = @import("../../src/domain/repository_model_allowlist.zig");
     const allowlist_owner = allowlist_contract.createValidated(allocator, &models, registry) catch return error.InvalidEvaluationContract;

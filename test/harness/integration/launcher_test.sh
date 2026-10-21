@@ -19,8 +19,7 @@ if [ "$1" = --help ]; then
     [ "${LAUNCHER_ENV_LOADED:-no}" = no ]
 else
     [ "$1" = --case ] && [ "$#" -eq 2 ]
-    [ "$TEST_EVALUATION_PROVIDER" = bedrock ]
-    [ "$TEST_EVALUATION_MODEL" = "$LAUNCHER_EXPECT_MODEL" ]
+    [ "$TEST_AWS_BEARER_TOKEN_BEDROCK" = "$LAUNCHER_EXPECT_TOKEN" ]
     [ "$PWD" = "$LAUNCHER_EXPECT_ROOT" ]
     [ "$2" = "$LAUNCHER_EXPECT_CASE" ]
 fi
@@ -30,12 +29,10 @@ chmod +x "$launcher_tmp/bin/zig"
 export PATH="$launcher_tmp/bin:$PATH"
 export LAUNCHER_EXPECT_ROOT="$launcher_tmp/project"
 export LAUNCHER_EXPECT_CASE=another/workflow.case.json
-export LAUNCHER_EXPECT_MODEL=from-local-file
-export TEST_EVALUATION_MODEL=from-caller
-export TEST_EVALUATION_PROVIDER=invalid-caller
+export LAUNCHER_EXPECT_TOKEN=from-local-file
+export TEST_AWS_BEARER_TOKEN_BEDROCK=from-caller
 cat > "$launcher_tmp/project/.env.e2e" <<'ENV'
-export TEST_EVALUATION_PROVIDER=bedrock
-export TEST_EVALUATION_MODEL=from-local-file
+export TEST_AWS_BEARER_TOKEN_BEDROCK=from-local-file
 export LAUNCHER_ENV_LOADED=yes
 ENV
 cd "$launcher_tmp/outside"
@@ -54,7 +51,6 @@ else
 fi
 unset LAUNCHER_EXIT
 mv "$launcher_tmp/project/.env.e2e" "$launcher_tmp/local-env-saved"
-export TEST_EVALUATION_PROVIDER=bedrock
-export TEST_EVALUATION_MODEL=from-caller
-export LAUNCHER_EXPECT_MODEL=from-caller
+export TEST_AWS_BEARER_TOKEN_BEDROCK=from-caller
+export LAUNCHER_EXPECT_TOKEN=from-caller
 sh "$launcher_tmp/project/scripts/e2e-spec.sh" --case another/workflow.case.json

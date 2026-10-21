@@ -211,7 +211,7 @@ const Test = struct {
         .pass_threshold_percent = 100,
         .criteria = &.{.{ .id = "deadline", .description = "Retain the deadline.", .evidence = "Compare source deadline.", .weight = 1, .allow_not_applicable = false, .minimum_acceptable_score = 1, .anchors = &.{ .{ .score = 0, .description = "Missing." }, .{ .score = 1, .description = "Preserved." } } }},
     };
-    const criterion: judgment.CriterionResult = .{ .criterion_id = "deadline", .disposition = .scored, .score = 1, .explanation = "The specified deadline matches the source.", .evidence = &.{ .{ .document_id = "policy", .quote = "Return within 30 days." }, .{ .document_id = "specification", .quote = "Return within 30 days." } }, .missing_from_specification = false };
+    const criterion: judgment.CriterionResult = .{ .criterion_id = "deadline", .disposition = .scored, .score = 1, .explanation = "The specified deadline matches the source.", .evidence = &.{ .{ .document_id = "policy", .first_line = 1, .last_line = 1 }, .{ .document_id = "specification", .first_line = 1, .last_line = 1 } }, .missing_from_specification = false };
     const proposal: judgment.Proposal = .{ .results = &.{criterion} };
     fn target(a: std.mem.Allocator) !Target {
         const capture: c.Capture = .{
@@ -283,7 +283,7 @@ test "published rubric rejects substituted output rubric references and unsuppor
     try std.testing.expectError(error.InvalidPublishedAssessment, evaluate(a, true, true, true, target, supplied));
     supplied = Test.supplied(target);
     var criterion = Test.criterion;
-    criterion.evidence = &.{.{ .document_id = "policy", .quote = "Invented deadline." }};
+    criterion.evidence = &.{.{ .document_id = "policy", .first_line = 9, .last_line = 9 }};
     supplied.proposal = .{ .results = &.{criterion} };
     try std.testing.expectError(error.InvalidEvaluationContract, evaluate(a, true, true, true, target, supplied));
     try std.testing.expectError(error.InvalidPublishedAssessment, evaluate(a, true, false, false, null, Test.supplied(target)));

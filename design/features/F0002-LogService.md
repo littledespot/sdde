@@ -364,6 +364,7 @@ Logging-internal nodes are not recursively observed.
 | `model.protocol_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `model.schema_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `model.response_normalized` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | — |
+| `model.provider_stopped` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
 | `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |
@@ -584,6 +585,8 @@ joins raw path strings. There is no shared or global persistent log.
 - File permissions, exclusive locking, sequence, flush, rotation, retention, prior-tail
   recovery, and policy transition behavior are governed once by Sections 13.9, 14.10,
   and 26.5 and are not redefined here.
+  [ADR 0026](../decisions/0026-header-identity-log-retention.md) amends how a fresh run
+  retains prior runs' segments.
 
 The initial implementation processes each fact through the runner-owned
 logging barrier before the next applicable business node. It has no background

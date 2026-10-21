@@ -242,6 +242,12 @@ test "approved prefix normalization preserves content evidence and accounting" {
         .{ .prefix = "{\"replacement\":\"", .object = "{ \"replacement\":\"candidate\",\"sibling\":{\"kept\":true}}", .normalization = .removed_repeated_field_prefix },
         .{ .prefix = "{\"request-id\":\"", .object = "{\n\t\"request-id\" \r\n:9}", .normalization = .removed_repeated_field_prefix },
         .{ .prefix = "{\"état\":\"", .object = "{\"état\":\"active\"}", .normalization = .removed_repeated_field_prefix },
+        // The observed Bedrock GPT-OSS truncation repeats only a start of the first key.
+        .{ .prefix = "{\"find", .object = "{\"findings\":[{\"requirement_ordinal\":1,\"value\":{\"kind\":\"supported\"}}]}", .normalization = .removed_partial_field_prefix },
+        .{ .prefix = "{\"token", .object = "{\"token_classifications\":[]}", .normalization = .removed_partial_field_prefix },
+        .{ .prefix = "{\"kind", .object = "{\"kind_extra\":1}", .normalization = .removed_partial_field_prefix },
+        .{ .prefix = "{\"f", .object = "{\n\t\"findings\" \r\n:[]}", .normalization = .removed_partial_field_prefix },
+        .{ .prefix = "{\"é", .object = "{\"état\":\"active\"}", .normalization = .removed_partial_field_prefix },
     }) |case| {
         const bytes = try std.mem.concat(std.testing.allocator, u8, &.{ case.prefix, case.object });
         defer std.testing.allocator.free(bytes);
@@ -304,8 +310,21 @@ test "prefix normalization preserves valid keys and rejects every other malforme
         "{\"{\"value\":",
         "{\"[1,2]",
         "```json\n{\"{\"value\":1}\n```",
-        "{\"kind{\"other\":\"claims\"}", // The discarded name must repeat the first key.
-        "{\"kind{\"kind_extra\":1}",
+        "{\"kind{\"other\":\"claims\"}", // The discarded name must repeat the first key or its start.
+        "{\"fond{\"findings\":1}",
+        "{\"findingsX{\"findings\":1}",
+        "{\"find{\"findings\" 1}",
+        "{\"find{\"findings\":1} trailing",
+        "{\"find{\"findings\":1,}",
+        "{\"find{\"findings\":",
+        "{\"find{\"findings",
+        "{\"find{\"find\\u0069ngs\":1}", // Escaped member names are never inferred.
+        "{\"fin{\"find{\"findings\":1}", // Never strip recursively.
+        "{\"find{\"findings\":1,\"findings\":2}",
+        "{\"find{\"find\x01ings\":1}",
+        "{\"find{\"find\xffings\":1}",
+        "{\"\xc3{\"état\":1}", // A partial name cannot split a character.
+        "{\"decisio\":\"{\"decision\":1}", // The string-value opener stays exact.
         "{\"kind{\"kind\" 1}",
         "{\"kind{\"kind{\"kind\":\"claims\"}",
         " {\"kind{\"kind\":\"claims\"}",

@@ -30,7 +30,13 @@ test "test.integration.insertion_presentation prepares frozen 21 trial panel wit
         if (p.baseline(arm.arm)) {
             var changed = original;
             changed.content = edit.content;
-            try std.testing.expectEqualStrings(p.requestBytes(arm.source), try p.request(a, changed));
+            // Retained v5 bytes carry the allowance ADR 0011 retired. The current
+            // encoder reproduces everything else exactly and sends the frozen
+            // model's documented maximum in its place.
+            try std.testing.expect(original.controls.max_output_tokens != null);
+            const current = try p.request(a, changed);
+            try std.testing.expect(std.mem.indexOf(u8, current, "\"maxTokens\":16384") != null);
+            try std.testing.expectEqualStrings(try p.retainedAtModelMaximum(a, arm.source, original), current);
         }
         const observed = try strict.parse(a, edit.content[2].user, .{ .maximum_depth = 64 }, false, null);
         if (arm.arm == .records_grouped_rules or arm.arm == .records_both) {

@@ -207,8 +207,11 @@ current-authority/applicability validation. Response acceptance and applicabilit
 remain open. §3.12 implements refresh, rendering and write-time protection;
 no stage completion is inferred.
 
-Accepting submitted answers requires a trusted authentication mechanism that has
-not been selected ([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
+Accepting submitted answers requires the trusted authentication mechanism that
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) selects: the
+operating-system account that runs the engine, with the run that reads valid closed
+forms as the act of acceptance. It is not yet implemented
+([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
 Merely editing a form or loading an actor/evidence ID is not authentication. This does not affect user-close file
 protection, which applies even when acceptance is blocked.
 
@@ -761,6 +764,10 @@ bypasses.
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
+  A whole-unit or record-family assignment's missing, repeated or foreign member
+  is instead a response-admission defect, corrected by protocol correction of the
+  complete assignment (ADR 0023, 18 October 2026). A record family covers every
+  record of one kind in one call.
 - Mechanical coverage defects have no independently supported repair target and
   block (§5.7); a review finding cannot authorize an edit to generated content.
 - Before generation, upstream repair attributes loss to an extraction chunk, token classification,
@@ -1488,8 +1495,8 @@ YAML definition.
   feature-log integration, additional reference formats and the reference-feedback
   API (§16.5).
 - Offline verification does not establish live E2E acceptance; the
-  [harness](../harness/README.md) grades the exact published specification
-  separately, and [FIX05](../../fixes/FIX05.md) tracks open work.
+  [harness](../harness/README.md) captures the exact published specification for
+  separate human adjudication, and [FIX05](../../fixes/FIX05.md) tracks open work.
 
 ## 9. Traceability
 

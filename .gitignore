@@ -1,6 +1,8 @@
 .zig-cache/
 zig-pkg/
 zig-out/
+# Advisory /evaluate-e2e output beside the immutable run evidence
+/evaluations/
 .DS_Store
 /.env.e2e
 

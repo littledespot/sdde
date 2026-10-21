@@ -2,7 +2,7 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
@@ -27,6 +27,7 @@ pub const Diagnostic = struct {
             .constant_mismatch => "Schema validation failed: this value must equal the expected constant.",
             .enum_mismatch => "Schema validation failed: this value is not among the allowed values.",
             .unknown_variant => "Schema validation failed: this discriminator does not identify an allowed kind.",
+            .duplicate_member => "Schema validation failed: this item repeats an assigned member; return exactly one item for every assigned member.",
         };
     }
 
@@ -64,6 +65,14 @@ pub const Diagnostic = struct {
 
     pub fn property(self: Diagnostic, name: []const u8) Diagnostic {
         var result = self.within(.{ .property = name });
+        result.expected_location = .parent;
+        return result;
+    }
+
+    /// An item-level defect whose expected contract belongs to the enclosing
+    /// array, such as a repeated assignment member.
+    pub fn item(self: Diagnostic, index: usize) Diagnostic {
+        var result = self.within(.{ .index = index });
         result.expected_location = .parent;
         return result;
     }

@@ -136,7 +136,10 @@ and dependencies remain in the retained assignment. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
 culprits or permission to expand the finding.
 
-Native admission rejects missing, duplicate, foreign or stale comparisons and
+Response admission first binds the assigned comparison IDs as an `exact_members`
+choice, so a missing, repeated or foreign comparison takes bounded protocol
+correction; exhaustion stays terminal under this required policy. Native admission
+still rejects missing, duplicate, foreign or stale comparisons and
 invalid source joins or native collection identities, including a changed obligation
 binding. The closed response rejects the superseded `members` field; no reader,
 correction or normalization fills member IDs into rejected responses. It derives
@@ -319,11 +322,14 @@ The repair guidance contains:
 
 **Focused-review repair.** All produced findings are
 individually validated before the next native assignment is requested. The
-source unit/collection assignment in §17 produces all its native member findings
+source unit, record-family or collection assignment in §17 produces all its native member findings
 in one call; principle assessment produces the complete current subject set of
 one selected principle set in one call. Exact complete native membership is checked
 before appending any member; partial, duplicate, foreign or misbound responses
-cannot contribute coverage. Native ledger order owns canonical ordering.
+cannot contribute coverage. Response admission first enforces the same membership
+through the packet's `exact_members` choice. A defect there uses the bounded
+protocol correction of the complete assignment, never insertion or deletion
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)). Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -518,13 +524,26 @@ At the first quote or object opener after `{"`, it requires the exact continuati
 above. It rejects escapes, control bytes and any other closing-quote continuation;
 it never searches past another fragment or discards string-value content.
 
+**Partial member-name amendment (user-approved, 18 October 2026):** Bedrock GPT-OSS
+also truncates the unfinished member name, for example `{"find{"findings":…}`.
+- In the `{"name` form only, `name` may be a nonempty start of the first member name
+  rather than the whole name. It must still be unescaped, control-free, valid UTF-8,
+  so it cannot split a character.
+- The key scan then ends at the first quote or backslash after `name`. A backslash
+  rejects; a quote must be followed, after JSON whitespace, by a colon.
+- The strict remainder parse still owns the validity of every key byte.
+- The candidate records `removed_partial_field_prefix`.
+- The string-value opener still requires the exact name.
+- Every other rule in this section is unchanged.
+
 Remove that one prefix and strictly parse the entire remainder. Accept normalization
 only when it is one complete JSON object. Valid input is never altered; no leading
 whitespace, recursive removal, other prefix, fence, suffix, duplicate key or malformed
 remainder is salvaged. Schema and domain validation remain mandatory.
 
-The candidate retains a typed `removed_leading_brace_quote` or
-`removed_repeated_field_prefix` fact and its original invocation evidence.
+The candidate retains a typed `removed_leading_brace_quote`,
+`removed_repeated_field_prefix` or `removed_partial_field_prefix` fact and its
+original invocation evidence.
 The runner logs `model.response_normalized` at warning level
 with that rule, node, request and attempt; logging failure remains terminal.
 Raw provider/text captures are unchanged. The shared domain handoff supplies the
@@ -537,6 +556,8 @@ This exception changes neither provider-wire/configuration/persistence parsing
 nor request, retry, token or publication authority. It is a workaround for the
 observed Bedrock prefix, applied consistently to complete model responses without
 a provider/model/workflow branch; it does not establish a provider-side fix.
+The development rubric evaluator reuses this decoder for judge responses
+([evaluator](../harness/evaluator.md)); that grants the judge no production authority.
 
 For [configured response parts](../decisions/0016-configured-json-response-composition.md),
 the response/schema below is the complete assigned part. Corrections retain its
@@ -570,7 +591,9 @@ defined response-level correction containing:
   a distinct JSON Pointer locating the exact expected node in the complete selected
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
-  constraint; correction does not repeat its subtrees. Syntax correction uses that
+  every constraint that schema syntax can express; `exact_members` uniqueness stays
+  native and is reported as `duplicate_member` with parent scope on the enclosing
+  array. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.
@@ -587,7 +610,10 @@ child-object descriptors only.
   and records incomplete advice. A provider/protocol stop during advisory atomic
   finding repair explicitly retires only the exact active permit, retaining
   counters and unresolved history without claiming that repair succeeded.
-  Native finding-evidence validation and repair exhaustion remain terminal.
+  Native finding-evidence validation and repair exhaustion remain terminal. A
+  positive verdict that no claim set can bind is withheld at response admission
+  and corrected as a malformed response, not a finding-evidence defect (ADR 0023,
+  20 October 2026).
 - Request IDs cannot reset either authority.
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.

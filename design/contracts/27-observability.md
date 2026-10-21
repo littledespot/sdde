@@ -102,13 +102,24 @@ and `retry.exhausted` use existing runner counts; `repair.*` observes accepted
 native repair transitions and does not count or authorize them. Project only each
 operation's newly produced diagnostic evidence, avoiding stale-failure attribution.
 The [§22.6 normalization](22-repair.md#226-unparseable-output) emits one warning
-`model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE` for the
-two-byte opening artifact or `REMOVED_REPEATED_FIELD_PREFIX` for the opening
-artifact repeating the object's first member name, including the string-value opener.
-Both are emitted only after strict syntax failure and successful remainder parsing.
+`model.response_normalized`, which records that the engine fixed the response. Its
+diagnostic is `REMOVED_LEADING_BRACE_QUOTE` for the two-byte opening artifact,
+`REMOVED_REPEATED_FIELD_PREFIX` for an opening artifact repeating the object's first
+member name, including the string-value opener, or `REMOVED_PARTIAL_FIELD_PREFIX`
+for one repeating only a nonempty start of that name.
+Each is emitted only after strict syntax failure and successful remainder parsing.
 Correlation identifies the original request/attempt, whose raw response stays intact. Emit this when
 decoding succeeds even if subsequent schema validation fails; a separate schema
 event retains that failure. Logging rejection prevents continuation.
+
+Every provider-applied non-candidate stop emits one warning `model.provider_stopped`
+after `model.completed` for the same request and attempt
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+Its diagnostic is the exact closed stop reason (`OUTPUT_LIMIT`, `CONTENT_FILTERED`,
+`UNSUPPORTED_TOOL_REQUEST`, `MALFORMED_OUTPUT` or `CONTEXT_LIMIT`), with the outcome and
+the provider's reported input and output tokens. This applies to required and advisory
+inference alike. The event never retries, reclassifies or excuses the stop, and its
+logging rejection prevents continuation.
 
 Useful metrics:
 

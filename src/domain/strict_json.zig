@@ -100,6 +100,16 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
     if (T == std.json.Value) return;
     switch (@typeInfo(T)) {
         .@"struct" => |s| {
+            // A validated wrapper names one scalar closed wire kind; its own
+            // parse hook then admits the value.
+            if (@hasDecl(T, "ClosedJsonWire")) {
+                comptime if (!std.meta.hasFn(T, "jsonParse")) @compileError("A closed wire wrapper must own its parse hook");
+                switch (@typeInfo(T.ClosedJsonWire)) {
+                    .int, .bool, .@"enum" => {},
+                    else => @compileError("A closed wire wrapper names one scalar wire kind"),
+                }
+                return wireTypes(T.ClosedJsonWire, value);
+            }
             if (value != .object or value.object.count() != s.fields.len) return error.InvalidJsonDocument;
             inline for (s.fields) |field| try wireTypes(field.type, value.object.get(field.name) orelse return error.InvalidJsonDocument);
         },
@@ -221,6 +231,28 @@ fn parserFailure(err: std.json.ParseError(std.json.Scanner), position: *const st
 
 fn mapError(err: anyerror) Error {
     return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+}
+
+test "a validated wrapper is checked as its declared scalar wire kind before its own hook admits it" {
+    // An unrelated wrapper: only `true` is admitted, and only as a JSON boolean.
+    const Set = struct {
+        value: bool,
+        pub const ClosedJsonWire = bool;
+        pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!@This() {
+            return if (try std.json.innerParse(bool, a, source, options)) .{ .value = true } else error.UnexpectedToken;
+        }
+    };
+    const Holder = struct { flag: Set };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    try std.testing.expect((try decode(Holder, a, "{\"flag\":true}", .{ .maximum_depth = 4 })).flag.value);
+    for ([_][]const u8{ "{\"flag\":false}", "{\"flag\":\"true\"}", "{\"flag\":1}", "{\"flag\":{\"value\":true}}", "{\"flag\":null}", "{}" }) |bytes|
+        try std.testing.expectError(error.InvalidJsonDocument, decode(Holder, a, bytes, .{ .maximum_depth = 4 }));
+    // A struct without a declared wire kind keeps its closed object shape.
+    const Plain = struct { flag: struct { value: bool } };
+    try std.testing.expect((try decode(Plain, a, "{\"flag\":{\"value\":true}}", .{ .maximum_depth = 4 })).flag.value);
+    try std.testing.expectError(error.InvalidJsonDocument, decode(Plain, a, "{\"flag\":true}", .{ .maximum_depth = 4 }));
 }
 
 test "JSON syntax validation preserves explicit resource caps without requiring model-call caps" {

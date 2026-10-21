@@ -1,5 +1,5 @@
 {
-  "schema": "spec-e2e-case/v2",
+  "schema": "spec-e2e-case/v3",
   "id": "wf-002-loan-renewal-spec",
   "workflow_id": "spec-generation",
   "expected_outcome": "publication",
@@ -154,6 +154,5 @@
     "clarification_state",
     "workflow_state"
   ],
-  "evaluation_case": "test/e2e/wf-002-loan-renewal/spec.case.json",
-  "evaluation_config": "test/e2e/config/evaluation.json"
+  "evaluation_case": "test/e2e/wf-002-loan-renewal/spec.case.json"
 }

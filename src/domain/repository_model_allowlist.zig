@@ -80,11 +80,7 @@ pub fn createValidated(
             selected.reasoningEffort,
         )) return error.InvalidRepositoryModelAllowlist;
 
-        var controls = catalogue_entry.capabilities.inferenceControls();
-        if (selected.maxOutputTokens) |value| {
-            controls.max_output_tokens = @import("model_controls.zig").OutputTokenAllowance.init(value) orelse return error.InvalidRepositoryModelAllowlist;
-            if (!catalogue_entry.capabilities.supports(catalogue_entry.responseMode(), controls)) return error.InvalidRepositoryModelAllowlist;
-        }
+        const controls = catalogue_entry.capabilities.inferenceControls();
 
         destination.* = .{
             .slot_id = .{ .bytes = owner.arena.allocator().dupe(u8, slot_id.bytes) catch {

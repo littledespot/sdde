@@ -18,7 +18,7 @@ fn command(init: std.process.Init) !bool {
     const args = try init.minimal.args.toSlice(a);
     if (args.len == 2 and std.mem.eql(u8, args[1], "--help")) {
         try std.Io.File.stdout().writeStreamingAll(io, "Usage: scripts/e2e-call.sh --run <captured-E2E-directory> --workflow <workflow-id> --call <positive-ordinal> --model <model-id> --reasoning-effort <effort|none> [--repeats <positive-count>]\n" ++
-            "Makes one live diagnostic call per repeat (default 1), using unchanged captured input/schema. Explicit model and reasoning are validated against the retained project's provider catalogue and registered provider capabilities. Preserves temperature, response mode and output-token allowance. No retries, repair, workflow continuation, publication or rubric grading.\n" ++
+            "Makes one live diagnostic call per repeat (default 1), using unchanged captured input/schema. Explicit model and reasoning are validated against the retained project's provider catalogue and registered provider capabilities. Preserves temperature and response mode; sends no output-token allowance. No retries, repair, workflow continuation, publication or rubric grading.\n" ++
             "Live diagnostics permit only openai.gpt-oss-20b-1:0 with supported reasoning and compatible retained controls. Requires TEST_AWS_BEARER_TOKEN_BEDROCK. The shell launcher loads .env.e2e; direct Zig invocation does not. Results: zig-out/e2e-call/<UTC-run>/report.md and report.json.\n");
         return true;
     }

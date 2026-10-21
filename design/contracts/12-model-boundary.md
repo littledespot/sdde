@@ -122,7 +122,9 @@ Each generation request contains only what the current unit needs:
   make filenames available as passive content choices; semantic relevance still requires review.
 - Native availability facts may exclude unavailable tagged alternatives from the selected
   compiled schema. The existing schema owner derives a narrower
-  view; it never adds fields, values or semantic decisions. Initial reference/specification
+  view; it never adds fields, values or semantic decisions. A source-review
+  assignment excludes each positive verdict to which no claim set can be bound for
+  its subjects ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#unresolvable-positive-verdicts-at-response-admission-20-october-2026)). Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
   Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   all model-response wire contracts and schemas omit `exact_copy`. The model types required
@@ -135,7 +137,9 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Unknown locations or definitions reject; a carried sibling
+  and local validation. The one exception is `exact_members` uniqueness (below):
+  provider schema syntax cannot express it, so local admission, request
+  descriptions and replay apply it natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
   existing behavior. No field-name search crosses unrelated ID namespaces.
@@ -145,6 +149,21 @@ Each generation request contains only what the current unit needs:
   cardinality unless the native owner declares a unique-subset selector: its maximum
   is the smaller of the canonical maximum and eligible-ID count. This fact applies
   only to integer collections, never scalar choices, and introduces no token limit.
+  An `exact_members` selector instead names an integer property of array items:
+  - the array must contain exactly one item for each allowed value;
+  - its item count is fixed to the member count, which the guidance schema states
+    (a provider structural projection may keep only its own array floor);
+  - a repeated member rejects natively as `duplicate_member`;
+  - it applies only to a path ending in array items and one property, with a
+    nonempty member set that fits the canonical item bounds;
+  - the key must be a required, non-nullable scalar integer in every item variant;
+  - it must constrain the selected schema itself, through required properties, one
+    array step and every alternative along its path, never through a projection
+    parent or another definition;
+  - after every choice applies, the key must still enumerate exactly the member
+    set, so no later choice, path or tagged, may narrow it.
+  Duplicate-target detection for every integer choice treats a choice naming the
+  selected definition as the same target as one naming none.
   Sets above ADR 0006's 1,024-choice bound reject before invocation.
   Source review and its selection repairs use actual source IDs; reference
   authoring and repairs use their current native claim, signal or group scope.
@@ -257,8 +276,9 @@ not acquire it merely because the API exists.
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
-repair and grading, registered temperature `0.1`, and an optional provider output
-allowance. The separately registered Luna profile retains its strict-output field, omitted
+repair and grading, registered temperature `0.1`, and its documented maximum of
+16,384 output tokens sent on every inference request
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)). The separately registered Luna profile retains its strict-output field, omitted
 temperature/reasoning controls and unavailable CountTokens capability.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
@@ -316,7 +336,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   every post-generation source/principle finding remains advice unless an
   independent owning deterministic validator establishes the corresponding
   defect. Complete current assessment is a native fact; semantic support is not.
-  Whole-unit/collection assignments retain one finding per native member, with
+  Whole-unit, record-family and collection assignments retain one finding per native member, with
   exact association, per-member origins and narrow correction. Pre-generation
   source-readiness/preservation policy remains separate and mandatory.
 
@@ -363,7 +383,8 @@ reuse, not provider caching or deterministic semantic proof.
 
 **Focused semantic reviews.** For a review whose required subjects are known
 natively, the review owner selects one complete native assignment from its ordered
-ledger (a whole unit or collection, or one selected principle set; ADR 0023) and
+ledger (a whole unit, record family or collection, or one selected principle set;
+ADR 0023) and
 binds its ordered members, purpose, parent and current dependencies to the request.
 The response returns exactly one finding per assigned member, keyed by its
 assignment ordinal, under the selected canonical finding schema; it returns no
@@ -386,9 +407,10 @@ findings. Only complete native collection validation permits authority advanceme
   compilation or run preparation before provider I/O.
 - Provider APIs own request, response and context-size limits under ADR 0011.
 - The engine, operation, slot and model contract add no engine-enforced byte/token
-  capacity ceilings, intersections or size-fit gates. Optional slot `maxOutputTokens`
-  is instead a retained provider-request control under
-  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
+  capacity ceilings, intersections or size-fit gates, and no request carries an
+  output allowance below the model's own maximum: Bedrock requests send the
+  catalogue's documented maximum. A provider-applied stop is logged with its reason
+  under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output).
 
 - Model-operation identity is the compiled `(workflowId, workflowVersion,
   originatingWorkflowStepId)` tuple retained across consumer steps.
@@ -657,6 +679,11 @@ The existing codec decodes source candidates with `kind`; native candidates reta
 optional question data for diagnostics and the same decision-dependent checks.
 Persisted evidence retains its existing finding/resolution representation.
 Missing/forbidden questions reject at schema admission, before native collection.
+So do missing, repeated or foreign assignment members: the packet's `exact_members`
+ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
+So does a positive verdict the assignment withholds because no claim set can be
+bound to it: it rejects as `unknown_variant`.
 Existing protocol correction resubmits the whole assigned review under its original
 assignment allowance, including otherwise correct siblings; insertion still corrects
 only its selected finding. No partial-response merge, new counter or verdict
@@ -1083,6 +1110,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v6` retains native scope for diagnostic replay; request logs
+`model-request-debug/v9` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

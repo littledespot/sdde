@@ -165,7 +165,7 @@ pub fn run() !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
         .factor = "Source-review scope presentation: current production per-member assessment_scope and its referring prompt; baseline omits only those fields and uses the pinned prior prompt. Partial historical candidates without complete native context remain unavailable.",
-        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
+        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions_per_arm = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .maximum_physical_sends = trials.items.len, .stop_at_actual_input_plus_output_tokens = 600000, .retries_corrections_repairs_loss_calls_model_judges_e2e = 0 },
         .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items, .unavailable_cases = unavailable.items },
         .cases = try filePin(a, root ++ "/cases.json"),

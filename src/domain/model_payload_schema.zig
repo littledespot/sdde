@@ -25,6 +25,14 @@ pub fn validate(candidate: *const envelope.Candidate) Result {
     return .{ .valid = @ptrCast(candidate) };
 }
 
+/// The admitted integer key one assignment item names, if present.
+fn memberKey(item: envelope.Value, property: []const u8) ?i64 {
+    if (item != .object) return null;
+    const key = item.object.get(property) orelse return null;
+    if (key != .number) return null;
+    return exactInteger(key.number) catch null;
+}
+
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.
 pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnostic {
@@ -91,6 +99,15 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             if (count < contract.minimum or count > contract.maximum) return reject(.array_length, node);
             for (0..count) |index| {
                 if (validateValue(value.array.at(index).?, contract.items)) |diagnostic| return diagnostic.within(.{ .index = index });
+            }
+            // Each item already names one allowed member and the count equals the
+            // member count, so the only remaining defect is a repeat; a missing
+            // member then shows up as a repeat or as the item count.
+            if (contract.members) |members| {
+                for (1..count) |index| {
+                    const key = memberKey(value.array.at(index).?, members.property);
+                    for (0..index) |prior| if (memberKey(value.array.at(prior).?, members.property) == key) return (reject(.duplicate_member, node)).item(index);
+                }
             }
         },
         .one_of => |variants| {

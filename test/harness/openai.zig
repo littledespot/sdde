@@ -7,19 +7,26 @@ const strict_json = @import("../../src/domain/strict_json.zig");
 const provider = @import("provider.zig");
 const configuration = @import("configuration.zig");
 
-pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
+pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture, correction: ?@import("correction.zig").Correction) c.Error![]const u8 {
     try configuration.validate(config);
     if (config.api != .openai_responses) return error.InvalidEvaluationContract;
     const schema_bytes = try packet.resultSchema(a);
     const schema = try c.decode(std.json.Value, a, schema_bytes);
     const body = try packet.input(a, capture);
     const Reasoning = struct { effort: []const u8 };
+    const Message = struct { role: []const u8, content: []const u8 };
+    const input: []const Message = if (correction) |selected| try a.dupe(Message, &.{
+        .{ .role = "user", .content = body },
+        .{ .role = "user", .content = try @import("correction.zig").guidance(a, selected.diagnostic) },
+        .{ .role = "user", .content = try @import("correction.zig").evidence(a, selected.rejected) },
+    }) else try a.dupe(Message, &.{.{ .role = "user", .content = body }});
     return std.json.Stringify.valueAlloc(a, .{
         .model = config.model,
         .instructions = packet.instructions ++ "\n" ++ @import("../../src/domain/model_controls.zig").response_format_guidance,
-        .input = [_]struct { role: []const u8, content: []const u8 }{.{ .role = "user", .content = body }},
+        .input = input,
         .text = .{ .format = .{ .type = "json_schema", .name = "rubric_judgment", .strict = true, .schema = schema } },
         .reasoning = if (config.reasoning_effort) |effort| @as(?Reasoning, .{ .effort = @tagName(effort) }) else null,
+        .max_output_tokens = config.max_output_tokens,
         .temperature = config.temperature,
         .tools = [_]struct {}{},
         .store = false,

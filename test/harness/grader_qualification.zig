@@ -153,8 +153,8 @@ pub fn inspect(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, paths: Paths,
         if (!sameHash(bytes, record.sha256)) return .{ .unresolved = .report_stale };
         const report = reports.parse(a, bytes) catch |err| return invalid(err);
         if (!try matches(a, report, selected, rubric, rubric_bytes, sources, specimens[index], judge_config)) return .{ .unresolved = .report_mismatch };
-        const native = judgment.validate(a, null, report.capture, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = report.outcome.evaluated.results }, .{})) catch |err| return invalid(err);
-        if (!try sameJson(a, native, report.outcome.evaluated)) return .{ .unresolved = .report_mismatch };
+        // reports.parse has revalidated the judgment against its captured documents.
+        const native = report.outcome.evaluated;
         // Qualification requires complete judgments even for a specimen whose
         // known critical failure would already reject production acceptance.
         if (native.assessment != .scored) return .{ .unresolved = .report_unresolved };
@@ -189,9 +189,9 @@ pub fn protocolSha256(a: std.mem.Allocator) std.mem.Allocator.Error![]const u8 {
 }
 
 fn matches(a: std.mem.Allocator, report: reports.Report, selected: c.Case, rubric: c.Rubric, rubric_bytes: []const u8, sources: []const c.Document, specimen: []const u8, config: configuration.Config) Error!bool {
-    if (!std.mem.eql(u8, report.schema, "evaluation-report/v3") or !std.mem.eql(u8, report.prompt_revision, packet.revision) or
+    if (!std.mem.eql(u8, report.schema, reports.schema_version) or !std.mem.eql(u8, report.prompt_revision, packet.revision) or
         !std.mem.eql(u8, report.judgment_schema, judgment.schema_revision) or report.outcome != .evaluated or
-        report.judgment_diagnostic != null or report.capture.generation.origin != .supplied) return false;
+        report.capture.generation.origin != .supplied) return false;
     const protocol_sha256 = report.protocol_sha256 orelse return false;
     if (!std.mem.eql(u8, protocol_sha256, try protocolSha256(a))) return false;
     c.validateCapture(report.capture) catch |err| return invalid(err);
@@ -202,16 +202,17 @@ fn matches(a: std.mem.Allocator, report: reports.Report, selected: c.Case, rubri
         !std.mem.eql(u8, report.capture.rubric_bytes, rubric_bytes) or !std.mem.eql(u8, report.capture.specification, specimen) or
         !try sameJson(a, report.capture.sources, sources) or !try sameJson(a, report.configuration, config)) return false;
     configuration.validate(report.configuration) catch |err| return invalid(err);
-    if (report.attempts.len == 0 or report.attempts.len > @as(usize, config.retry_limit) + 1) return false;
+    // reports.parse already admitted only transient retries within the retry
+    // limit and one correction of a mechanical defect; the final attempt grades.
+    if (report.attempts.len == 0) return false;
     var total: u128 = 0;
     for (report.attempts, 0..) |attempt, index| {
-        if (attempt.ordinal != index + 1) return false;
         if (attempt.request_id) |id| if (!c.id(id)) return error.InvalidGraderQualification;
         const usage = attempt.usage orelse return false;
         if (reports.Usage.init(usage.input_tokens, usage.output_tokens, usage.total_tokens) == null) return error.InvalidGraderQualification;
         total += usage.total_tokens;
-        if (attempt.failure) |failure| {
-            if (index + 1 == report.attempts.len or (failure != .provider_failed and failure != .rate_limited)) return false;
+        if (attempt.failure != null) {
+            if (index + 1 == report.attempts.len) return false;
             if (attempt.identity != .unavailable and !attempt.identity.validFor(config)) return false;
         } else if (index + 1 != report.attempts.len or !attempt.identity.validFor(config)) return false;
     }

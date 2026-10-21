@@ -104,7 +104,7 @@ pub fn run() !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
         .factor = "Three unchanged native Given/When/Then findings: three singleton requests versus one complete record request. Both arms use current guidance and native evidence restrictions.",
-        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
+        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions_per_arm = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .single_field_review_sends = 36, .joint_record_review_sends = 12, .maximum_review_sends = 48, .maximum_conditional_loss_sends = 72, .maximum_physical_sends_including_loss = 120, .stop_at_actual_input_plus_output_tokens = 500000, .retries_corrections_repairs_model_judges_e2e = 0 },
         .admission = "Complete native membership, three retained findings, per-finding evidence and serialized omission localization; a record verdict cannot substitute for any finding.",
         .receipt_authority = "No dispatch, synthetic native provider origin, or receipt admission implementation. Use the existing exact receipt and current native collector owners for separately authorized actual outputs.",
@@ -154,8 +154,9 @@ fn pairedAssignment(a: std.mem.Allocator, member: usize, single: *const packets.
     const subject = selected.object.get("subject").?.object;
     const slots = [_][]const u8{ "given", "when", "then" };
     try std.testing.expectEqualStrings(slots[member], subject.get("slot").?.string);
-    try std.testing.expect(!subject.contains("record"));
-    try sameJson(a, left.object.get("subject").?.object.get("record").?, right.object.get("record").?);
+    // A record family has no shared assignment record; each member keeps its own.
+    try std.testing.expect(!right.object.contains("record"));
+    try sameJson(a, left.object.get("subject").?.object.get("record").?, subject.get("record").?);
     try sameJson(a, left.object.get("subject").?.object.get("text").?, subject.get("text").?);
 }
 fn schemaProbe(a: std.mem.Allocator, schema: *const schema_owner.Schema, packet: *const packets.Packet) !void {
@@ -164,14 +165,22 @@ fn schemaProbe(a: std.mem.Allocator, schema: *const schema_owner.Schema, packet:
     const body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
     var findings: std.ArrayList(@import("../domain/specification_support_model.zig").BatchFinding) = .empty;
     for (body.object.get("requirements").?.array.items) |requirement| try findings.append(a, .{ .requirement_ordinal = @intCast(requirement.object.get("ordinal").?.integer), .value = .{ .supported = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment." } } });
-    // The shared batch schema allows variable nonempty units. Exact member
-    // cardinality is checked by native assignment admission, not an AC-only schema.
+    // Response admission requires the complete assignment: exactly one finding
+    // per member. Partial and empty batches fail the item count.
     for ([_]usize{ 3, 2, 0 }) |length| {
         var document = try @import("../domain/model_envelope.zig").parseContent(a, try codec.encode(@import("../domain/specification_support_model.zig").Batch, a, .{ .findings = findings.items[0..length] }), null);
         defer document.deinit();
         const invalid = @import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root());
-        try std.testing.expect((invalid == null) == (length != 0));
+        try std.testing.expect((invalid == null) == (length == 3));
+        if (invalid) |diagnostic| try std.testing.expectEqual(.array_length, diagnostic.reason);
     }
+    // A complete-sized batch that repeats one member is still rejected.
+    var repeated = try a.dupe(@import("../domain/specification_support_model.zig").BatchFinding, findings.items);
+    repeated[2].requirement_ordinal = repeated[0].requirement_ordinal;
+    var document = try @import("../domain/model_envelope.zig").parseContent(a, try codec.encode(@import("../domain/specification_support_model.zig").Batch, a, .{ .findings = repeated }), null);
+    defer document.deinit();
+    const duplicate = @import("../domain/model_payload_schema.zig").validateValue(@import("../domain/model_envelope.zig").value(&document.parsed.value), restricted.selected().root()).?;
+    try std.testing.expectEqual(.duplicate_member, duplicate.reason);
 }
 fn sameJson(a: std.mem.Allocator, left: std.json.Value, right: std.json.Value) !void {
     try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, left, .{}), try std.json.Stringify.valueAlloc(a, right, .{}));

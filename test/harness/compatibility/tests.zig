@@ -5,7 +5,7 @@ const c = @import("../e2e/contracts.zig");
 const description: @import("../../../src/domain/request_debugger.zig").Description = .{
     .provider = "aws-bedrock",
     .model = "global.openai.gpt-6-luna",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 1,
@@ -14,7 +14,7 @@ const description: @import("../../../src/domain/request_debugger.zig").Descripti
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
     .response_mode = .native_schema,
-    .controls = .{ .temperature = null, .max_output_tokens = .{ .value = 16384 } },
+    .controls = .{ .temperature = null },
     .reasoning_effort = null,
     .operation_kind = .inference,
 };
@@ -32,7 +32,7 @@ test "compatibility requires an explicit case and live opt-in without replay or 
 
 test "compatibility classification requires exact usage capture and an incomplete workflow" {
     const probe: @import("../e2e/invoke.zig").Probe = .{ .physical_sends = 1, .boundary = .exchange_finished };
-    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled };
+    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled };
     const valid: inspection.Inspection = .{
         .request_identity = .{ .run = "run", .call = "call", .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } } },
         .description = description,
@@ -70,7 +70,7 @@ test "compatibility classification requires exact usage capture and an incomplet
     try std.testing.expectEqual(.incompatible, result.status);
     result = valid;
     result.validation.extraction = .invalid;
-    result.validation.reason = "max_output_tokens";
+    result.validation.reason = "output_limit";
     inspection.classify(probe, workflow, &result);
     try std.testing.expectEqual(.incompatible, result.status);
     for ([_]u16{ 401, 403, 429, 503 }) |status| {
@@ -87,7 +87,7 @@ test "compatibility classification requires exact usage capture and an incomplet
 
 test "compatibility missing trusted usage retains precise extraction rejection and stays inconclusive" {
     const probe: @import("../e2e/invoke.zig").Probe = .{ .physical_sends = 1, .boundary = .exchange_finished };
-    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_failed, .workflow_outcome = .failed, .usage_complete = false };
+    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_failed, .workflow_outcome = .failed, .usage_complete = false };
     const missing_usage: inspection.Inspection = .{
         .request_identity = .{ .run = "run", .call = "call", .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } } },
         .description = description,
@@ -123,13 +123,13 @@ test "compatibility report keeps unknown usage separate from accounted tokens" {
     defer arena.deinit();
     const a = arena.allocator();
     var report: reports.Report = .{ .origin = .offline, .started_at_utc = "2026-10-15T00:00:00Z", .case_source = "case.json", .execution_id = "run", .status = .inconclusive };
-    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = false });
+    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = false });
     const bytes = try std.json.Stringify.valueAlloc(a, report, .{});
     const raw = try @import("../contracts.zig").decode(std.json.Value, a, bytes);
     try std.testing.expect(raw.object.get("total_actual_tokens").? == .null);
     try std.testing.expect(!raw.object.get("usage_complete").?.bool);
     try std.testing.expectEqual(@as(i64, 0), raw.object.get("total_accounted_tokens").?.integer);
-    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v5", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = true, .total_tokens = 12 });
+    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = true, .total_tokens = 12 });
     try std.testing.expectEqual(@as(?u128, 12), report.total_actual_tokens);
     try std.testing.expectEqual(@as(u128, 12), report.total_accounted_tokens);
 }
@@ -141,11 +141,9 @@ test "compatibility preflight rejects unpermitted slots and incomplete capture s
     const config = @embedFile("../../integration/fixtures/baseline/protocol.sddtoolkit.json");
     const preflight = @import("cli.zig").preflight;
     try preflight(a, config);
-    const shipped = @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json");
-    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, shipped));
-    var current = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, shipped);
-    defer current.deinit();
-    try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+    // The shipped cases now select the frozen protocol's exact slot controls.
+    try preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json"));
+    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json")));
     const disallowed = try std.mem.replaceOwned(u8, a, config, "openai.gpt-oss-20b-1:0", "unpermitted-model");
     try std.testing.expectError(error.DisallowedTestModel, preflight(a, disallowed));
     const metadata_only = try std.mem.replaceOwned(u8, a, config, "\"level\": \"debug\"", "\"level\": \"info\"");

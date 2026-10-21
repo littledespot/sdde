@@ -28,10 +28,6 @@ pub const Fixture = struct {
         return self.initialize(null, selected, &.{}, &.{}, &.{}, null);
     }
 
-    pub fn initWithOriginalSources(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText) !void {
-        return self.initialize(schema_bytes, null, sources, &.{}, &.{}, null);
-    }
-
     pub fn initWithProseFields(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText, fields: []const @import("domain/model_text_wire.zig").ProseField) !void {
         return self.initialize(schema_bytes, null, sources, fields, &.{}, null);
     }

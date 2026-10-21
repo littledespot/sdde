@@ -150,7 +150,6 @@ test "stored classification replay rejects omitted native duties and forged pres
         try snapshots.validate(a, snapshot);
         const items = try @import("domain/reference_claim_items.zig").build(a, inputs, completed.ledger);
         try std.testing.expect(try duty.itemRequired(items, .{ .ordinal = 2 }));
-        try std.testing.expect(duty.claimRequired(completed.ledger.claims, completed.ledger.claims[1]));
         try std.testing.expect(!(try duty.itemRequired(items, .{ .ordinal = 1 })));
         try std.testing.expectError(error.InvalidReferenceReconciliation, duty.itemRequired(items, .{ .ordinal = 999 }));
         for (0..7) |mode| {

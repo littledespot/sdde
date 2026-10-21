@@ -4,7 +4,9 @@ The evaluator sends captured requirements, a supplied specification and its rubr
 to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and
 writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
-The [live E2E harness](e2e.md) joins production generation to this evaluator.
+The [live E2E harness](e2e.md) does not call this evaluator: since 19 October 2026
+(user decision) a published E2E run is assessed by human adjudication
+([R8](acceptance.md)).
 
 ## Run
 
@@ -70,19 +72,20 @@ The internal test environment supplies the evaluation selection:
 
 ### Judge configuration
 
-- The closed `evaluation-config/v1` JSON object requires every field below.
+- The closed `evaluation-config/v2` JSON object requires every field below.
 - Provider/model selection now belongs exclusively to the test environment: JSON `api`,
   `provider`, `model`, `region` and credential fields reject as unknown fields.
 
 | Field | Value / responsibility |
 | --- | --- |
-| `schema` | `"evaluation-config/v1"` |
+| `schema` | `"evaluation-config/v2"` |
 | `reasoning_effort` | The selected GPT-OSS-20B judge uses explicit `"low"`. The closed parser retains other registered effort values for adapter conformance; reports retain the independently configured judge setting. |
 | `temperature` | The selected GPT-OSS-20B judge uses `0.1`, derived from the engine's fixed supported-temperature control. Bedrock resolves explicit `null` to the same required `0.1`; other values reject. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
 | `total_token_budget` | Positive integer allowance for reported input + output tokens across this evaluation. |
+| `max_output_tokens` | Positive integer: the judge model's documented maximum output (16,384 for GPT-OSS-20B), sent on every request so the provider cannot apply a smaller default ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)). Never a smaller allowance. |
 
 - For reasoning effort and OpenAI temperature, `null` omits the API control.
 - Bedrock temperature always resolves to `0.1` when supported and is otherwise
@@ -146,8 +149,18 @@ The internal test environment supplies the evaluation selection:
 - Complete local judgment validation still owns criterion coverage, score bounds,
   dispositions and exact source/specification evidence. Native schema requests do
   not authorize accepting malformed or unsupported judgments.
-- The evaluator supplies no output allowance, so its requests omit
-  `inferenceConfig.maxTokens`. No tools, truncation or provider-specific retry policy is added.
+- Approved by the user on 18 October 2026: a judge response is model output.
+  - It first crosses the engine's shared model-envelope decoder, including the
+    [§22.6 opening-artifact exception](../contracts/22-repair.md#226-unparseable-output),
+    and judgment validation then reads the decoder-consumed bytes.
+  - A rejected envelope keeps the original bytes, so the report carries the original
+    parser diagnostic.
+  - Human adjudication proposals are not model output and stay strictly parsed.
+  - Raw `model_output.txt` evidence is unchanged. The evaluation report adds no
+    separate normalization fact.
+- The evaluator sends its configured `max_output_tokens`, the judge model's
+  documented maximum, as Bedrock `inferenceConfig.maxTokens` or OpenAI
+  `max_output_tokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 
@@ -181,8 +194,8 @@ calibration retains raw scores while acceptance remains unresolved.
   [configuration.zig](../../test/harness/configuration.zig),
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
-- Cases and rubrics use distinct `/v2` identifiers; configuration remains `/v1`.
-  Reports use `evaluation-report/v3` with typed judgment and acceptance evidence.
+- Cases, rubrics and configuration use distinct `/v2` identifiers.
+  Reports use `evaluation-report/v7` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -203,12 +216,32 @@ Every criterion must receive exactly one of:
 - `uncertain`: a null score and explanation;
 - `not_applicable`: a null score and explanation, only if that criterion permits it.
 
-- All results need reasons and exact quotations linked to captured document IDs.
+- **Line locators (`rubric-judgment/v2`, approved by the user on 18 October 2026).**
+  - The packet supplies every source and the specification as numbered lines of the
+    exact captured bytes. Line boundaries come from the engine's shared source
+    coordinates (`source_coordinates.zig`): CR, LF and CRLF each end one line, and a
+    final terminator ends the last line instead of starting another.
+  - The protocol hash binds that numbering through a fixed probe document, so a
+    change to it invalidates retained qualification. Since `rubric-judge/v3` it also
+    binds the correction instruction, explanations, correctable reasons, attempt
+    count, preservation rule, grade-pinned reasons, provider placement and the exact
+    correction envelope through fixed probe diagnostics.
+  - Evidence is `{document_id, first_line, last_line}`, inclusive and 1-based. The
+    judge cites lines instead of copying text, because verbatim quotes from the
+    small judge drifted into paraphrase and could not be matched.
+- All results need reasons and evidence linked to captured document IDs.
 - Source evidence is required.
 - Candidate evidence is also required unless the judge explicitly reports
-  `missing_from_specification`; absence must not be supported by a fabricated quote.
-- IDs and quotations are checked mechanically.
-- Their semantic relevance, and claims of absence, remain model judgments.
+  `missing_from_specification`; absence must not be supported by fabricated evidence.
+- Mechanical checks:
+  - the document ID exists;
+  - `1 <= first_line <= last_line <=` its line count, else `invalid_line_range`;
+  - at least one cited line has text, else `blank_evidence`.
+- Reports render each locator with its exact resolved lines. Parsing a persisted
+  report revalidates its judgment against its own capture, and an unresolvable
+  locator invalidates the report.
+- Semantic relevance of the cited lines, and claims of absence, remain model
+  judgments.
 
 ### Score calculation
 
@@ -256,18 +289,67 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v3` carries the judgment validator's typed diagnostic in
-  JSON and Markdown: parser byte/line/column for invalid JSON, or the affected
-  criterion, zero-based evidence index and document ID for invalid evidence.
+- `evaluation-report/v7` records each attempt's purpose (`judgment` or `correction`)
+  and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
+  and Markdown: parser byte/line/column for invalid JSON, or the affected
+  criterion, zero-based evidence index and document ID for an unknown document,
+  invalid line range or blank evidence.
   Missing source and specification evidence are distinct. Valid JSON that fails
-  the closed response contract reports `invalid_shape`. Diagnostics add no retry
-  or authority to score an invalid judgment; the E2E report embeds the same value.
+  the closed response contract reports `invalid_shape`. A diagnostic grants no
+  authority to score an invalid judgment.
 
 - Only transient provider failures/rate limits with known actual usage can retry, within
-  the configured count, delay and remaining allowance.
+  the configured count, delay and remaining allowance. A transient retry resends the
+  same request.
 - Unknown consumption stops further calls; ordinary HTTP 429 responses without usage
   therefore stop.
-- Low scores, refusals and invalid judgments are not retried to obtain a pass.
+- **One correction (approved by the user on 18 October 2026).** An invalid judgment
+  whose diagnostic is mechanical gets exactly one correction request:
+  - correctable: `json`, `invalid_shape`, `criterion_count`, `missing_criterion`,
+    `missing_source_evidence`, `missing_specification_evidence`, `blank_evidence`,
+    `unknown_document` and `invalid_line_range`;
+  - not correctable, ending the evaluation: `duplicate_criterion`,
+    `empty_explanation`, `invalid_score`, `invalid_disposition` and
+    `changed_criterion`, as well as refusals, incomplete output and other provider
+    failures;
+  - the request resends the same instruction, documents, rubric, schema and model,
+    plus the validator's typed diagnostic (reason, affected criterion when one
+    exists, evidence location, and parser reason and position; parser context is
+    omitted), a fixed explanation and instruction, and the rejected response. For
+    an evidence defect it also states that the result's disposition and score must
+    stay. Bedrock carries the guidance in its system blocks and the evidence in the
+    user message; OpenAI sends both as user messages after the documents;
+  - judgments decode through widened integers, so a negative or oversized score is
+    `invalid_score` and a negative or oversized line is `invalid_line_range`,
+    never a shape defect;
+  - the complete corrected judgment is revalidated by `judgment.validate`. Every
+    result the rejected response made readable and the diagnostic did not name must
+    be returned equal after canonical decoding, or the correction is rejected as
+    `changed_criterion`. After a shape defect, each result that decodes on its own
+    under a top-level `results` array is readable. Unparseable JSON, or a response
+    without that array or with no decodable result, has no readable result, so its
+    correction is constrained by validation alone; results that do not decode on
+    their own in an otherwise readable response are likewise unconstrained. The
+    user accepted this exception on 18 October 2026 on condition that it is
+    logged: such a correction attempt records `unconstrained`
+    (`unparseable_json`, `no_results_array`, `no_readable_result` or
+    `some_results_unreadable`) with its explanation in JSON and Markdown, and the
+    reader requires the reason to match the defect. A readable duplicate behind a shape defect ends the
+    evaluation as `duplicate_criterion`. For an evidence defect (`missing_*_evidence`,
+    `blank_evidence`, `unknown_document`, `invalid_line_range`) the named result
+    must also keep its disposition and score. Results absent from, unknown to or
+    missing in the rubric may be fixed alongside the named defect, but a second
+    defective readable result cannot be changed, so it ends the evaluation;
+  - repeated criteria are detected before counts and order, so a duplicate always
+    ends the evaluation as `duplicate_criterion`;
+  - the correction is fixed protocol, outside `retry_limit`; its own transient
+    failures use the remaining retries. Both attempts count against the evaluator's
+    total-token allowance, and an exhausted allowance prevents the correction
+    (`budget_exceeded`);
+  - an invalid correction is final (`invalid_judgment`); no invalid grade is
+    accepted.
+- Low scores, refusals and valid judgments are never retried or corrected to obtain a
+  pass.
 
 - The total-token allowance is checked against actual responses; it cannot promise a
   hard billing ceiling for an in-flight request.
@@ -296,19 +378,20 @@ For scored criteria, the percentage is:
 
 - JSON retains exact source/spec bytes, original case/rubric bytes and their parsed
   projections, origin, prompt/schema revisions, judge configuration, per-attempt
-  identity/usage, criterion results and aggregate outcome.
+  identity/usage/purpose/diagnostic/unconstrained, criterion results and aggregate
+  outcome.
 - Markdown is a readable, escaped projection of the same report value.
 - Treat retained inputs as potentially sensitive local data.
 - An input overwritten later cannot alter this capture.
 
 - The CLI always labels its candidate `supplied` and workflow status `not_run`.
 - It never claims to have generated that file.
-- The shared grading call accepts explicit recorded/scripted/live provenance; fresh
-  generation requires a completed execution identity and live generation records each
-  configured slot/provider/model in `generation.models`.
-- The E2E entry point supplies this identity and the exact published artifact directly.
-- Recorded artifacts can preserve a previous failed/needs-user status without changing
-  that status through grading.
+- A capture's provenance is `supplied` (`not_run`, no execution or models) or
+  `live_generation` (`completed`, with an execution identity and each configured
+  slot/provider/model in `generation.models`). No other origin or status has a
+  producer, and both reject.
+- The E2E harness records live identity in its captured adjudication inputs; it does
+  not grade them.
 - Full workflow execution and its failure reports are not implemented by this entry
   point.
 
@@ -319,9 +402,9 @@ For scored criteria, the percentage is:
 
 | Exit | Meaning |
 | --- | --- |
-| `0` | Reserved for authoritative acceptance; model evaluation remains advisory. |
-| `2` | Unresolved acceptance, including every advisory model judgment pending human review. |
-| `1` | Failed acceptance, input, configuration, provider, judgment or reporting failure. |
+| `0` | `--help` only. A model judgment never decides acceptance. |
+| `2` | A completed evaluation: acceptance stays unresolved pending human adjudication. |
+| `1` | Input, configuration, provider, judgment or reporting failure. |
 
 - The machine report keeps workflow status separate from `evaluated` /
   `evaluator_error`.
@@ -357,11 +440,14 @@ zig build verify
 - Tests use scripted results for the original rubric and unrelated criterion IDs, score
   ranges and weights.
 - They exercise closed parsing, evidence/absence joins, uncertainty, provider errors,
-  retry/budget accounting, allocation failures, immutable file capture, unsafe paths and
-  report escaping.
+  retry/budget accounting, the one-correction policy (accepted correction,
+  uncorrectable defects, changed siblings, budget, transient retry and forged attempt
+  sequences), allocation failures, immutable file capture, unsafe paths and report
+  escaping.
 - The clean-directory smoke runs the standalone binary without credentials or
   development assets.
 - Ordinary `test`/`verify` include offline evaluator checks; they never invoke an API.
 
 - Passing mechanical tests does not establish that a live judge grades correctly.
-- Live execution evidence is recorded with the [E2E results](e2e.md).
+- Live evaluator evidence is recorded separately; [E2E results](e2e.md) contain no
+  model grade.

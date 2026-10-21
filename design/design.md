@@ -190,9 +190,11 @@ engine fixes them:
       ID, not the old form bytes.
     - Section 23.2 owns rerun replacement and protection.
 32. Provider APIs own model-call size limits; SDDE adds no byte/token capacity
-    ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). An
-    optional slot `maxOutputTokens` requests a provider-enforced output allowance;
-    omission delegates the provider default. Actual input plus output tokens count
+    ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). SDDE
+    never requests an output allowance below the model's own maximum: each Bedrock
+    model's documented maximum is recorded in the provider catalogue and sent, so a
+    provider default cannot cut output short, and every provider-applied stop is
+    logged with its reason. Actual input plus output tokens count
     against one total-token budget per execution, shared by all inference,
     including advice. No call starts at or above it, and budget rejection is fatal
     for every inference purpose. Retries remain explicitly local.
@@ -846,9 +848,10 @@ The new engine is ready for production evaluation when all of the following are 
       complete raw-fallback rules are never truncated.
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
       estimates or static-capacity checks gate calls.
-    - Optional positive slot output allowances retain their exact presence/value through
-      binding, request authorization, correction, capture and replay; omission delegates
-      the provider default. Unsupported or substituted controls reject without clamping.
+    - No configuration, binding, request, correction, capture or replay carries an
+      output allowance below the model's own maximum. Each Bedrock inference request
+      sends the catalogue's documented model maximum. Every provider-applied stop is
+      logged at warning level with its exact reason (ADR 0011).
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget. Prove this across generation,
       review and correction without partitioning usage. A global-budget rejection
@@ -1051,7 +1054,7 @@ naming) was superseded by 0010 and removed.
 | [0007](decisions/0007-unicode-normalization.md) | Pinned utf8proc NFC, statically packaged Unicode data and license notices. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, optional requested output allowances and actual execution-token accounting. |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, the model's documented maximum output sent explicitly, logged provider stops and actual execution-token accounting. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
@@ -1063,8 +1066,10 @@ naming) was superseded by 0010 and removed.
 | [0020](decisions/0020-derived-exact-reference-lineage.md) | Native raw-byte recognition within current request eligibility derives exact occurrence handles and lineage using contextual delimiters; model-authored exact selections are removed. Selected support remains fixed, canonical field roles and repair bounds remain, and lexical evidence proves no semantic use. |
 | [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
-| [0023](decisions/0023-advisory-post-generation-review.md) | All post-generation semantic findings remain advice; native assessment completeness is distinct from semantic support, whole units/collections are reviewed together, and upstream source repair requires a current pre-generation witness. |
+| [0023](decisions/0023-advisory-post-generation-review.md) | All post-generation semantic findings remain advice; native assessment completeness is distinct from semantic support, whole units, record families (every record of one kind) and collections are reviewed together, and upstream source repair requires a current pre-generation witness. Its 18 October amendments check member sets at response admission (§12.2, ADR 0019) and replace per-record review with record families (`specification-state/v19`). Its 20 October amendment withholds positive verdicts no claim set can bind, so one in a response is an admission defect. |
 | [0024](decisions/0024-native-exact-token-authority.md) | Token-only groups receive no record batch; native canonical-byte evidence forces exact duties independently of semantic kind, and code owns byte-only token dispositions while retaining all original occurrences and obligations. |
+| [0025](decisions/0025-clarification-answer-authentication.md) | The run that reads valid closed Specify clarification forms accepts their answers, with the invoking operating-system account as the actor. One invalid form stops the run, accepts no answers and reports a reason for each failing form. Evidence goes in the shared actor-evidence registry. Not yet implemented. |
+| [0026](decisions/0026-header-identity-log-retention.md) | Fresh runs prune prior-run log segments that are closed and past retention, using each segment header's identity. Invalid prior history blocks, and a run with an active tail is kept whole. Its 21 October amendment leaves a regular file whose name is not a segment name, such as `.DS_Store`, alone in every listing of `logs/events` and `logs/prompts`. |
 
 Additional accepted feature boundaries:
 

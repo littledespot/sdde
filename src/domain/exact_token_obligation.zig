@@ -49,11 +49,6 @@ fn requiredBy(original: extraction.Claim, token: extraction.Claim) bool {
         original.chunk_id.eql(token.chunk_id) and contentRequires(original.content.model, token.content.preserved_token.value.raw_value.bytes);
 }
 
-pub fn claimRequired(original_claims: []const extraction.Claim, token: extraction.Claim) bool {
-    for (original_claims) |original| if (requiredBy(original, token)) return true;
-    return false;
-}
-
 pub fn itemRequired(items: reconciliation.Items, claim_id: reconciliation.ClaimId) reconciliation.Error!bool {
     const token = (try reconciliation.item(items, claim_id)).claim;
     for (items.entries) |original| if (requiredBy(original.claim, token)) return true;
