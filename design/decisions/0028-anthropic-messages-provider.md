@@ -33,11 +33,17 @@
   The overall design remains **Proposed design**. The connector proposal stays an
   unaccepted source document. Its normative content moves here and into
   [F0009](../features/F0009-AnthropicProvider.md).
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, not yet implemented). Each
-  catalogue entry's `config` also requires a positive `requestTimeoutMs`, the
-  provider-operation deadline, which settles "Deadline" under "Not decided here": the
-  deadline is per model. Claude's values wait for measured latency. Provider token
-  counting is removed for every provider.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, not
+  yet implemented). It changes:
+  - "Configuration" (`{"maxOutputTokens": N}` "with no other field"): `config` also
+    requires a positive `requestTimeoutMs`, the provider-operation deadline;
+  - "One token budget, deadline …": the budget stays shared, but each catalogue entry
+    now carries its own deadline;
+  - the shared-owners row for `domain/llm_provider_config_schema.zig`, which gains the
+    required `requestTimeoutMs`;
+  - "Deadline" under "Not decided here", now settled per model. Claude's entries start at
+    the shared 180,000 ms until a measured maximum-output time replaces it;
+  - "Token counting": provider token counting is removed for every provider.
 
 ## Context
 

@@ -57,8 +57,9 @@ already made.
   then ended `output_limit`, its advice closed incomplete and the run published. The
   catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
   cover that model. *Settled in design on 23 October 2026 (ADR 0030 amendment, not yet
-  implemented):* each catalogue entry declares its own `requestTimeoutMs`; Haiku's value
-  waits for measured latency. Lower allowances, bounded
+  implemented):* each catalogue entry declares its own `requestTimeoutMs`; Haiku starts at
+  the shared 180,000 ms until its measured maximum-output time replaces it. Lower
+  allowances, bounded
   correction and cardinality bounds each need a decision; don't tune sampling or add
   retries.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review

@@ -384,8 +384,9 @@ LLMProviderDispatch = union(enum) {
 
 - The neutral contract carries count/inference support, an exact-count mechanism
   (`unavailable | provider_input_token_count`), response support and temperature
-  support. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), count
-  support and the exact-count mechanism are removed.
+  support. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
+  23 October 2026 (not yet implemented), count support and the exact-count mechanism are
+  removed.
 - These are compiler-supplied capability facts, not configuration fields or
   provider-size policy.
 - Canonical/wire capacity fields are absent.
@@ -559,8 +560,8 @@ Resources and outcomes remain in the existing concise workflow structure.
 - Unavailable usage blocks further model calls with `ProviderTokenUsageUnavailable`,
   never a fabricated zero or estimate.
 - The count operation supplies evidence and is not charged again as inference usage.
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not yet implemented) removes the count
-  operation; this accounting is otherwise unchanged.
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not yet
+  implemented) removes the count operation; this accounting is otherwise unchanged.
 - Ordinary non-model cleanup is not prohibited by an exhausted budget.
 
 **Transport and response integrity**

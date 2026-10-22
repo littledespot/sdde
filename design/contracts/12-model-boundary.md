@@ -29,8 +29,9 @@ provider observation contract, including missing final text. Only complete conte
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), provider
-token counting is removed; the count actions and bindings below go with it.
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
+23 October 2026 (not yet implemented), provider token counting is removed; the count
+actions and bindings below go with it.
 
 - Optional `CountModelInputTokensAction` forwards the exact request, binding, invoked count operation and single-use lease through
   the existing provider port once, preserving counts, failures and cancellation.
@@ -280,7 +281,8 @@ Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
 Optional CountTokens uses its `input.converse` shape, without inference-only
 configuration or an encoded legacy chat body. Models without registered count support do
-not acquire it merely because the API exists. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026,
+not acquire it merely because the API exists.
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026,
 not yet implemented) removes CountTokens and all provider token counting.
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
@@ -455,8 +457,8 @@ findings. Only complete native collection validation permits authority advanceme
   workflow, slot or model response. A global budget rejection remains fatal during
   advice and required work; it cannot become incomplete advice.
 - Optional count operations provide observations only and never authorize inference or replace
-  actual-usage accounting. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not yet implemented)
-  removes them; actual-usage accounting is unchanged.
+  actual-usage accounting. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended
+  23 October 2026, not yet implemented) removes them; actual-usage accounting is unchanged.
 
 - Native `advance-model-attempt-accounting` consumes the retained prepared request through an
   explicit YAML step and requires `retry-limit` (`0` means initial execution only).
@@ -493,8 +495,9 @@ findings. Only complete native collection validation permits authority advanceme
 
 - Native `prepare-provider-operation-authorization` consumes that same request, attempt and
   assignment through a separate YAML step with required positive `timeout-ms`. Under
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), the deadline is
-  the bound catalogue entry's required `requestTimeoutMs` instead.
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
+  (not yet implemented), the deadline is the bound catalogue entry's required
+  `requestTimeoutMs` instead.
 - The runner derives one absolute monotonic deadline, allocates the existing private lease slot
   and validates exact result correlation before publication.
 - The action holds only the policy-permitted preloaded `provider-authorization` port: no I/O,

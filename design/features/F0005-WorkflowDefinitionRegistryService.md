@@ -538,8 +538,9 @@ service is published.
   capability are introduced.
 
 - The native authorization-preparation binding requires those same retained inputs and
-  explicit positive `timeout-ms`. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not
-  yet implemented), the deadline is the bound catalogue entry's `requestTimeoutMs`.
+  explicit positive `timeout-ms`. Under
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
+  (not yet implemented), the deadline is the bound catalogue entry's `requestTimeoutMs`.
 - It derives the separate `provider-authorization` capability from its narrow preloaded
   preparation port, not a `model-provider` capability.
 - The runner supplies only the exact facts and one allocated deposit/publication slot

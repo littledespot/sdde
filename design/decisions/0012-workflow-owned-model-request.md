@@ -8,7 +8,11 @@
   yet implemented). One `request-model` step replaces the explicit lifecycle
   operations, which become engine-run stages that YAML cannot name. Request identity,
   retained inputs, consumers and release are unchanged; the step that owns identity and
-  retries becomes the `request-model` step.
+  retries becomes the `request-model` step. Its 23 October 2026 amendment removes the
+  input-token-count operation kind, so the "both operation kinds" cases below cover
+  inference only, and takes the deadline from the bound catalogue entry's
+  `requestTimeoutMs`, so the "missing/invalid deadlines" cases move to catalogue
+  validation.
 
 ## Decision
 

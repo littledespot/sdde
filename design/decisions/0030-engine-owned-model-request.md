@@ -48,7 +48,8 @@
   - design.md §1 (property 1 and the "Workflow YAML owns" boundary), §3.1, §3.3
     (invariant 28 and "Response decoding and lifecycle terminalization remain explicitly
     selected operations") and the §32 index;
-  - contracts §§6.2, 7.3, 12.1, 12.7, 13.4, 14, 21, 22.6, 22.7, 24, 27 and 28 and the
+  - contracts §§6.2, 7.3, 9 (each catalogue entry's closed `config`), 12.1, 12.7, 13.4,
+    14, 21, 22.6, 22.7, 24, 27 and 28 and the
     [model-request operation catalogue](../contracts/model-request-operations.md);
   - [F0005](../features/F0005-WorkflowDefinitionRegistryService.md),
     [F0006](../features/F0006-LLMProviderInterface.md) (including its count semantics),
@@ -220,9 +221,16 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
   that the step's slot selects to every provider operation of that request, including
   protocol corrections. YAML carries no deadline.
 - **Values.** GPT-OSS-20B keeps today's 180,000 ms; its slowest observed call, a
-  16,384-token runaway, took 74.1 s. A model without measured latency, such as Claude
-  Haiku 5.5 (128,000 maximum output tokens), takes its value from that measurement, from
-  the compatibility probe ADR 0028 already requires before live use.
+  16,384-token runaway, took 74.1 s. Every other entry, including both Claude Haiku 5.5
+  entries (128,000 maximum output tokens), also starts at 180,000 ms, the shared deadline
+  ADR 0028 applies today. Its replacement is derived from the measured time the model
+  takes to return its maximum output, not from the latency of one ordinary call, and
+  each change is recorded with its measurement.
+- **Bound.** Catalogue validation rejects a value too large to form a monotonic deadline,
+  so an oversized value fails before any request instead of at authorization.
+- **Replay.** The request debugger ([ADR 0019](0019-single-request-debugger.md)) replays
+  with the captured entry's `requestTimeoutMs`, not a fixed replay deadline, so the
+  catalogue is the deadline's one owner.
 - **Why.** On 21 October 2026 a 60-second deadline, set below GPT-OSS-20B's own maximum
   output time, turned three runaway responses into unexplained timeouts (FIX05 B9). A
   per-step workflow value would repeat the same guess at every call site and apply it to
@@ -262,22 +270,27 @@ This is the one list; other documents refer to it.
   exact stage where a request stopped.
 - **Versions.** Compiled step IDs change. The implementation advances each closed
   contract whose shape changes, with no compatibility reader, and names which ones. The
-  candidates are `model-request-debug`, `prompt-columns`, `e2e-step-event` and
+  candidates are `model-request-debug`, `model-call-evidence` (which carries the provider
+  configuration, ADR 0028), `prompt-columns`, `e2e-step-event` and
   `specification-state`'s persisted extraction contract. Persisted extraction contracts
   made before the change no longer match; that is the existing typed outcome for any
   workflow change.
-- **Retained evidence.** If a contract advances, runs and captures made before the change
-  can't be read by the new build. Measurements that need them, such as FIX05 W4's replay
-  of retained captures, run before the change or use raw response bytes.
+- **Retained evidence.** Captured catalogues have no `requestTimeoutMs`, so every tool
+  that revalidates a retained catalogue through the production registry rejects runs and
+  captures made before the change, whether or not a version advances: the retained-call
+  replay (`e2e-call`), the compatibility inspection, the baseline and the frozen
+  binding. Measurements that need them, such as FIX05 W4's replay, run before the change
+  or use raw response bytes.
 
 ### Token counting is removed
 
 Provider input-token counting, which asks a provider how many input tokens a request would
 use before sending it, is removed. There is no `count-model-tokens` step.
 
-- **Nothing uses it.** No shipped workflow, test fixture or packaging fixture runs a count
-  operation. No registered model can count: the Anthropic contract and every Bedrock
-  family register no CountTokens (ADRs 0028 and 0029).
+- **Nothing uses it.** No shipped workflow or packaging fixture runs a count operation;
+  only unit tests and smoke rejection cases exercise the path. No registered model can
+  count: the Anthropic contract and every Bedrock family register no CountTokens (ADRs
+  0028 and 0029).
 - **Nothing could use it.** ADR 0011 forbids pre-call reservations, capacity prediction
   and local size ceilings, so a count could not gate a request.
 - **The global token count stays.** The workflow token budget, `WorkflowTokenBudgetExceeded`,
@@ -304,11 +317,13 @@ With no compatibility form (AGENTS.md), the implementation removes:
 - the whole token-count path: the count operations and their actions, bindings and
   registry entries, the count branches of provider-operation assignment, authorization,
   invocation, observation, completion and accounting, the `input_token_count` operation
-  kind and capability, the exact-token-counter capability and its failure cause where
-  nothing else uses them, Bedrock's CountTokens encoding and decoding, the count fixtures
-  and the tests of all of these;
+  kind and capability, the exact-token-counter capability and its
+  `exact_token_count_unavailable` failure cause, Bedrock's CountTokens encoding and
+  decoding, the count fixtures and the tests of all of these;
 - the `timeout-ms` parameter of authorization preparation, and every per-step deadline in
-  the Specify definition, the packaging fixture and the smoke test.
+  the Specify definition (180,000 ms), the packaging fixture (60,000 ms) and the smoke
+  test (1,000 ms);
+- the request debugger's fixed 300,000 ms replay deadline.
 
 The inference stage actions and their unit tests stay, including ADR 0012's negative
 cases: forged deltas, stale or foreign evidence, cancellation and allocation cleanup.
@@ -317,7 +332,7 @@ cases: forged deltas, stale or foreign evidence, cancellation and allocation cle
 
 - Model calls, prompts, schemas, token usage and the single workflow budget (ADR 0011),
   including actual-usage accounting of every inference call.
-- Every deadline value in use today: each GPT-OSS-20B request keeps 180,000 ms.
+- The Specify definition's deadline: each GPT-OSS-20B request keeps 180,000 ms.
 - Retry limits and counting scopes, advisory completion and incomplete advice
   (ADR 0023), and response admission (ADRs 0006, 0014, 0016 and 0020).
 - Request identity form, `model-request/v1` and retained-request consumers (ADR 0012).
@@ -352,11 +367,11 @@ changed:
    beside `maxOutputTokens`, and the B9 timeouts came from a deadline set below one
    model's maximum output time. This settles the per-provider and per-family deadline
    questions that ADRs 0028 and 0029 left open.
-4. **Release stays an explicit YAML step** (4a), because sites choose different
+4. **4a. Release stays an explicit YAML step**, because sites choose different
    retirements and a release must follow the request's workflow-specific consumers.
    Engine-owned release needs the compiler to derive each request's lifetime, and stays a
    separate question.
-5. **Advisory routing stays at each advisory call site** (4b), because ADR 0023 requires
+5. **4b. Advisory routing stays at each advisory call site**, because ADR 0023 requires
    per-site propagation or native completion. It applies only to steps declared
    `role: advisory`; see "Advisory role".
 
@@ -419,7 +434,9 @@ All offline. The change makes no model call.
 - **Request deadline:**
   - accepted: catalogue entries of each provider with a positive integer
     `requestTimeoutMs`;
-  - rejected: a missing, zero, negative, fractional or string `requestTimeoutMs`;
+  - rejected: a missing, zero, negative, fractional or string `requestTimeoutMs`, and a
+    value too large to form a monotonic deadline;
+  - replay uses the captured entry's `requestTimeoutMs`;
   - the authorization stage binds the selected entry's value to every provider
     operation of the request, including protocol corrections, and two slots bound to
     entries with different values get different deadlines;
@@ -453,7 +470,7 @@ All offline. The change makes no model call.
 - Whether the engine should also release a request after its consumers, removing the
   per-site release steps. That changes ADR 0012's retained-request handoff, needs the
   compiler to derive each request's lifetime, and needs its own decision.
-- Claude Haiku 5.5's `requestTimeoutMs` value, which waits for measured latency.
+- The measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`.
 - Token counting's return, if a workflow and a counting-capable model ever need it.
 - Any workflow-level parameter default. FIX05 A2 and W3 are decided separately, in
   [ADR 0031](0031-stage-actions.md) and [ADR 0033](0033-generic-repair-operations.md).

@@ -165,7 +165,7 @@ workflow YAML or catalogue changed.
 Open:
 
 - implementation, with ADR 0030's offline acceptance;
-- Claude Haiku 5.5's `requestTimeoutMs`, which waits for measured latency;
+- the measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`;
 - whether the engine should also take over release, which needs the compiler to derive
   each request's lifetime.
 
@@ -551,8 +551,9 @@ changes or extra retries (§7).
   that model, a runaway could again end as an unexplained `timeout`, and one completed
   runaway would exceed the 100,000-token budget. *Settled in design on 23 October 2026*
   (ADR 0030 amendment, not yet implemented): each catalogue entry declares its own
-  required `requestTimeoutMs`, so a deadline follows its model. Claude Haiku 5.5's value
-  still waits for measured latency, and the budget point stands.
+  required `requestTimeoutMs`, so a deadline follows its model. Claude Haiku 5.5 starts at
+  the shared 180,000 ms until its measured maximum-output time replaces it, and the
+  budget point stands.
 - **Lower output allowance.** ADR 0011 permits an optional per-slot `maxOutputTokens`. On
   18 October the user directed that there be no output token limits (§11), so this needs a
   new decision.
@@ -650,9 +651,10 @@ single-source inputs, whether separate dispositions, signals and conflicts calls
 change the claims, groups or conflicts compared with one combined call. Follow the §7
 rules, and count extraction's requirement merging (B7) as its own class.
 
-**Sequencing.** [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) notes
-that if it advances a capture or event contract, captures made before it can't be read by
-the new build. Measure W4 before A1 lands, or from raw response bytes.
+**Sequencing.** [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) adds a
+required `requestTimeoutMs` to every catalogue entry, so tools that revalidate a retained
+catalogue, including the `e2e-call` replay, can't read captures made before it. Measure
+W4 before A1 lands, or from raw response bytes.
 
 ### W5. Identical sibling steps
 
@@ -935,8 +937,10 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
 4. **Then decide the open Spec failure classes:** B7's obligation weakening, B9's open
    choices, B2's review cost and finding-type accuracy, and B4's budget and scope.
 5. **Architecture, in ADR order and independent of 1–4.** Implement ADR 0030 (A1), as
-   amended on 23 October, before adding operations for another workflow; if it advances a
-   capture or report contract, adjudicate the existing v9 runs and measure W4 first. Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
+   amended on 23 October, before adding operations for another workflow. Its catalogue
+   change makes retained runs unreadable to replay tools, so measure W4 first, and
+   adjudicate the existing v9 runs first if it also advances the report contract.
+   Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
    (ADR 0032), then convert repairs (ADR 0033). Fold A4's closed reasons and A5's rule
    style into each conversion, and check whether a conversion absorbs W5's pairs.
 6. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1

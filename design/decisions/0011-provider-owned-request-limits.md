@@ -83,10 +83,10 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
   shipped value for `openai.gpt-oss-20b-1:0` is 16,384: AWS documents "16K", and
   retained calibration runs show Bedrock accepts and reaches a 16,384 allowance for
   this model in `ap-southeast-2`.
-- Under [ADR 0030](0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented),
-  every catalogue entry also declares a required positive `requestTimeoutMs`: the
-  provider-operation deadline, sized to the time the model takes to return this
-  maximum. It replaces the workflow's `timeout-ms`.
+- Under [ADR 0030](0030-engine-owned-model-request.md) as amended on 23 October 2026
+  (not yet implemented), every catalogue entry also declares a required positive
+  `requestTimeoutMs`: the provider-operation deadline, sized to the time the model takes
+  to return this maximum. It replaces the workflow's `timeout-ms`.
 - The frozen semantic-simplicity protocol (schema 2) records the same maximum, and
   its binding checks reject a request or description carrying any other value.
 - Every Bedrock inference request sends that value as `inferenceConfig.maxTokens`

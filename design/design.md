@@ -195,10 +195,10 @@ engine fixes them:
     sequence that competes with the compiled YAML graph.
     [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented)
     adds the fixed stage sequence of one model request to those
-    kernel responsibilities, and removes provider token counting. It is not a domain sequence; YAML still selects each
-    request step and every outcome. Under [ADR 0031](decisions/0031-stage-actions.md)
-    (not yet implemented), a stage action's absorbed steps become functions, not
-    source-only operations. Its fixed internal sequence routes no outcome, so it does
+    kernel responsibilities, and removes provider token counting. It is not a
+    domain sequence; YAML still selects each request step and every outcome. Under
+    [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage
+    action's absorbed steps become functions, not source-only operations. Its fixed internal sequence routes no outcome, so it does
     not compete with the compiled YAML graph.
 29. Workflow YAML uses compact mappings, native scalar parameters, and reusable
     workflow-owned resource aliases. Large prompts and schemas are declared

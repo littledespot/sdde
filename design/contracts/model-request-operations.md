@@ -6,9 +6,11 @@ Detailed contracts for the explicit YAML model-request operations governed by
 > **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
 > being YAML-selectable. Each inference operation becomes a fixed stage of one
-> `request-model` step. The 23 October amendment removes provider token counting, so every
-> count operation below (`input-token-count` assignment, `count-model-input-tokens`,
-> `validate-model-token-count-observation` and `complete-count-operation`) goes. A
+> `request-model` step. The 23 October amendment removes provider token counting, so the
+> four count operations below (`count-model-input-tokens`,
+> `validate-model-token-count-observation`, `complete-count-operation` and
+> `complete-count-request`) go, as does the `input-token-count` value of
+> `assign-provider-operation`'s `kind`. A
 > capability-free kernel orchestrator runs the stages in the order ADR 0030 lists, through
 > runner-owned child bindings. That list also includes the request-phase check, which
 > decides whether the request lifecycle advances (initial attempt only).
