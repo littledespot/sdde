@@ -14,7 +14,7 @@ Part of the [proposed design](../design.md#5-logical-architecture), as amended b
    through runner-owned child bindings. A workflow-visible orchestrator is
    addressable from YAML and cannot hide a workflow-specific graph; all
    orchestrators own ordering and branching only, not domain work.
-3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command.
+3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), a stage action performs one deterministic sequence of internal steps, such as toolchain preparation, through internal functions that each do one of those things, within the limits the ADR lists.
 4. **Domain** contains immutable intermediate representations, identifiers, diagnostics, policies, and result types.
 5. **Infrastructure adapters** implement filesystem, model-provider, parser, command-runner, clock, logging, and reader ports.
 6. **Workflow/preset/config compilers** validate declarative workflow graphs,
@@ -40,6 +40,15 @@ Application and domain code depend on interfaces, never provider implementations
   validator ports.
 - This makes the rule “orchestrators organize; actions do” mechanically enforceable and prevents
   child execution from bypassing the runner.
+- [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) adds a third
+  category, the **engine routine**, for fixed engine sequences: startup, provider bootstrap
+  and feature logging.
+  - It is neither a node nor an orchestrator.
+  - Its typed steps each take only the port they use, and it lives in
+    `application/*_routine.zig`, importing only domain and port modules.
+  - Orchestrators reach it only through a runner-owned child binding that holds its ports, so
+    they stay capability-free. ADR 0032 names its other callers: the composition root for
+    startup, and the logging lifecycle owners.
 
 - The composition root registers concrete generic operation implementations in one registry of
   current operation contracts and binds their pipeline nodes and infrastructure adapters.
@@ -48,6 +57,12 @@ Application and domain code depend on interfaces, never provider implementations
   `ModelProviderBootstrapOrchestrator` accepted by ADR 0004.
 - Project definitions cannot change either mechanism.
 - The startup graph remains unconditional.
+- Under ADR 0032 (not yet implemented), both mechanisms become typed engine routines.
+  - The composition root runs startup before selection.
+  - A composition-built, runner-owned binding runs provider bootstrap after selection.
+  - Both keep these properties, except that provider bootstrap is no longer
+    capability-free: its locate and read steps hold the provider-config port.
+  - Provider bootstrap keeps its single typed-requirement branch.
 - After exact workflow selection, `DeriveProviderRequirementAction` inspects only compiled
   model-binding requirements and provider-call capabilities; the run-preparation orchestrator
   conditionally coordinates the provider-file children before selected-workflow execution.

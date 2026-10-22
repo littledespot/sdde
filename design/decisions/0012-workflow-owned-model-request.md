@@ -4,6 +4,11 @@
 - **Date:** 2026-09-05
 - **Decision authority:** Explicit user direction
 - **Amends:** Design Sections 7.3 and 12, ADRs 0004/0005, and F0005/F0006
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+  yet implemented). One `request-model` step replaces the explicit lifecycle
+  operations, which become engine-run stages that YAML cannot name. Request identity,
+  retained inputs, consumers and release are unchanged; the step that owns identity and
+  retries becomes the `request-model` step.
 
 ## Decision
 
@@ -36,7 +41,9 @@
 - Consumers retain the originating request identity, binding, resources and content;
   they do not rebind to their own step or repeat selection parameters.
 - The existing data-dependency compiler proves the required handoff.
-- There is no new route registry, implicit graph or YAML transport syntax.
+- There is no new route registry, implicit graph or YAML transport syntax. (ADR 0030,
+  not yet implemented, adds one fixed kernel stage sequence behind each `request-model`
+  step; it routes nothing and adds no YAML syntax.)
 - The internal request content contract is `model-request/v1`; it is not a second YAML
   schema resource.
 - Task prompt content and the result schema remain explicitly workflow-selected, never
@@ -79,6 +86,12 @@
 - This is not a second request store or a model-call size policy.
 
 ## Operation contracts
+
+> **Superseded by [ADR 0030](0030-engine-owned-model-request.md) once implemented.**
+> The operations in this section stop being YAML-selectable; the engine runs them as
+> the fixed stages of one `request-model` step, and the detailed and consolidated forms
+> no longer both remain available. Each operation's catalogue rules carry over as stage
+> rules.
 
 YAML selects each operation; request preparation may use either the detailed
 operations or the consolidated pure preparation operation. This does not combine

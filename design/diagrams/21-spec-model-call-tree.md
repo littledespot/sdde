@@ -213,6 +213,12 @@ and publication are deterministic in this YAML and do not add model requests.
 
 ## Shared model-request execution
 
+> This section shows the current YAML. Under
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), one
+> `request-model` step replaces the wrappers and `model-request-body`. A fixed kernel
+> orchestrator runs the same stages in the same order, and release stays a YAML step. Redraw
+> this diagram when the implementation lands.
+
 This diagram uses arrows for **execution order**. `model-request`,
 `model-request-with-context` and `composition-request` prepare
 a request before entering `model-request-body`. The extraction content step prepares its request

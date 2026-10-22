@@ -12,6 +12,12 @@ contract IDs are the only compiler-locked instrumentation-internal IDs and are
 not observed recursively. The logging orchestrator coordinates them but has no
 clock, filesystem, redaction, serializer, or sink port itself.
 
+Under [ADR 0032](../../decisions/0032-engine-routines.md) (not yet implemented), these actions
+become the typed steps of a feature-logging engine routine in its second conversion, and
+only once its logging preconditions hold. Each entry keeps its rules. The lock acquire stays
+one attempt with its fixed deadline, every lock is released on every path, and the emergency
+write stays exactly once.
+
 [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md) makes production
 activation a selected-graph operation: `activate-feature-logging` runs after
 preflight, materializes only the observed selected target and registered log layout,

@@ -58,8 +58,8 @@ The one feature outcome is built by separate owners:
 | Workflow loader actions | Derive the reserved layout, inventory every in-scope entry, capture definition bytes, decode YAML 1.2, validate the closed schema, and totally account for the inventory. |
 | Workflow compiler actions | Resolve registered contracts and compile one validated immutable graph per schema-valid definition. |
 | Registry actions | Index all compiled graphs and prove global uniqueness and total coverage. |
-| Fixed startup orchestrator | Coordinate those runner-owned child bindings in order and branch only on typed outcomes. |
-| Pipeline runner | Invoke nodes, validate/apply deltas, own intermediates, and destroy rejected candidates. |
+| Fixed startup orchestrator | Coordinate those runner-owned child bindings in order and branch only on typed outcomes. Under ADR 0032 (not yet implemented), a typed engine routine run by the composition root replaces it; AC 17's "uses only runner-owned bindings" then means "reached only through the composition root". |
+| Pipeline runner | Invoke nodes, validate/apply deltas, own intermediates, and destroy rejected candidates. Values inside an ADR 0031 stage action are function-local; the runner owns its edge inputs and outputs. |
 | Composition root | Register concrete generic operation implementations in the single operation registry and assemble the fixed nonselectable startup graph. |
 | Registry service | Own and expose only the final immutable validated identity-free registry. |
 
@@ -285,6 +285,14 @@ required inputs and define the `parse` successor, as in the
 - `on` maps every outcome declared by the selected operation contract exactly once to
   either another local step ID or one of `end.ok`, `end.needs-user`, `end.invalid`,
   `end.blocked`, `end.failed`, and `end.cancelled`.
+  - Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+    the four generic repair operations have one contract with a closed variant per
+    `owner`. The compiler selects the variant from the step's `owner` at compile time.
+  - Each variant is a complete contract: outcomes, all data effects including `optional`
+    and `replaces`, side effect, association, repair role, and whether retry authority is
+    required or forbidden, with its maximum and native key population.
+  - Registry admission validates each variant independently. This rule, the rules below
+    and the runner all check the step's own variant, never a union.
 - The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   and `cancelled`; the compiler converts them to the corresponding internal tagged-union
   variants.
@@ -329,7 +337,10 @@ typed content cannot change the compiled semantic graph.
 - The compiler and registry use this same projection; existing gates, dependencies,
   retry/cycle checks, capability policy and runner semantics apply to the complete
   expanded graph.
-- Nothing is hidden in an action.
+- Nothing is hidden in an action. An [ADR 0031](../decisions/0031-stage-actions.md) stage
+  action (not yet implemented) hides no workflow choice either: its internal steps are
+  functions whose non-success outcomes all end the stage, and every routed outcome stays in
+  YAML.
 - See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
 
 ### 3.5 Illustrative structural shape
@@ -474,6 +485,16 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
+> **ADR 0030 amendment (22 October 2026, not yet implemented).** Under
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
+> `request-model` step per model request (and one `count-model-tokens` step per count) instead of
+> the request-lifecycle bindings described below. A `request-model` step declares the slot,
+> resources, `retry-limit`, `timeout-ms` and every outcome; the `count-model-tokens` contract is
+> deferred to a later amendment of ADR 0030. A fixed kernel orchestrator runs the bindings'
+> rules as the stages ADR 0030 lists, and YAML can no longer name them. The step's capability
+> set is the exact union of its stage bindings' derived capabilities, and the selected policy
+> must permit each. ADR 0030's "What stays in YAML" list says which steps remain.
+
 - Request-origin contracts selecting a model binding declare their typed slot.
   The selected catalogue model owns response mode through its required `json` boolean
   (ADR 0012); workflow `response-mode` and `temperature` overrides reject.
@@ -535,7 +556,8 @@ service is published.
 
 - `check-model-request-phase`, `build-model-protocol-retry`, `retire-model-input` and
   `retire-model-request` expose explicit lifecycle coordination without a built-in
-  workflow.
+  workflow. Under ADR 0030 (not yet implemented), the first two become stages of the
+  `request-model` step; the two retirements stay YAML steps.
 - Protocol guidance is selected once by the originating assignment's optional
   `protocol-prompt` resource; consumers cannot replace resources, model controls or
   slots.
@@ -699,7 +721,9 @@ transitions and their existing native authority.
   workflow policy cannot supply or default it. Registered repair scopes retain
   monotonic counts per native key under [§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation).
   Execution bounds multiply their allowances by the finite native key population;
-  request-accounting sites also include their ordinary-request population. Arithmetic
+  request-accounting sites also include their ordinary-request population. Under
+  ADR 0033, a generic repair step's key population and role come from its owner's
+  contract variant, and its retry count stays bound to that step instance. Arithmetic
   overflow and incompatible repair roles/scopes reject before execution;
 - native finite iteration uses registered scope/progress contracts and a cursor
   bound to the validated population under [§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules).

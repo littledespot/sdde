@@ -28,6 +28,13 @@
   FIX05 route 4 as a typed response-admission defect rather than a terminal one. It
   amends §12.2, §12.7, §17.3 and §22.6. No contract version changes. See "Unresolvable
   positive verdicts at response admission".
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+  yet implemented). The advisory `more` and `blocked` request outcomes come from one
+  `request-model` step; their closure is an engine-run stage instead of a separate
+  step occurrence. Per-site routing and the native completion wrapper are unchanged.
+  The compiler's deferred-carrier proof keeps its rules, but its descriptor becomes
+  per-outcome, because one step now carries ordinary closure and both advisory
+  carriers.
 
 ## Decision
 
@@ -128,7 +135,9 @@ The closed native review context determines the policy. Source readiness and
 pre-generation source preservation retain their required authority and repair
 rules. Generated specification source review and principle assessment use the
 advisory policy. The native projection distinguishes readiness from generated
-content; model bytes, workflow names and caller flags cannot select a policy.
+content; model bytes, workflow names and caller flags cannot select a policy. (The
+`owner` parameter of [ADR 0033](0033-generic-repair-operations.md)'s generic repair
+operations is checked against the native owner and selects no policy.)
 Registered readiness and preservation projection builders must prove the current
 pre-generation phase from the native session/content facts. A late preservation
 request or an initialized-but-unassembled generation session rejects before a

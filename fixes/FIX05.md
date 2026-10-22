@@ -456,6 +456,49 @@ The workflow-authoring simplification (former FIX03 Phase 8) and the
 architecture-wide responsibility audit (former FIX01 §8) belong to this decision. A
 supported no-consolidation decision remains a valid outcome.
 
+**Approved — 22 October 2026; documentation updated, implementation not started.** After
+reviewing the pros and cons of keeping the subgraph, the user directed: "A1, replace the
+subgraph as suggested, update documentations. do not make any code change yet". The user's
+stated goal is simpler workflow YAML.
+[ADR 0030](../design/decisions/0030-engine-owned-model-request.md) records the decision:
+
+- **The step.** One `request-model` step per model request, and one `count-model-tokens`
+  step per token count. A `request-model` step declares the slot, resources,
+  `retry-limit`, `timeout-ms` and every outcome. The count step's contract is deferred.
+- **The stages.** A fixed, capability-free kernel orchestrator runs the lifecycle, including
+  the request-phase check and the request's own protocol correction, through runner-owned
+  child bindings. The runner keeps its duties. Each stage stays a separate action with its own
+  narrow ports.
+- **What stays in YAML.** Consumers, release, advisory routing, `retain-json-part` and ledger
+  initialization. Release stays because sites choose different retirements.
+- **Derived, awaiting confirmation:**
+  - the kernel-orchestrator form;
+  - including token counting;
+  - keeping `timeout-ms` as a step parameter;
+  - keeping release and advisory routing in YAML.
+
+  ADR 0030 lists them under "Derived under existing rules".
+- **Documents.** These now point to ADR 0030:
+  - ADRs 0005, 0009, 0011, 0012, 0016, 0019 and 0023;
+  - design.md;
+  - contracts §§6.2, 7.3, 12, 13.4, 14, 21, 22, 24, 27 and 28, and the operation catalogue;
+  - F0005–F0007 and F0100;
+  - diagrams 17 and 21;
+  - the E2E harness.
+
+  A contract review corrected the first draft: the missing phase-check stage, the retry
+  scopes, capability derivation, the call-site counts and the line estimate.
+- **Expected effect.** The 159-line request region goes, including the 61-line body; the
+  measure above counted 14 body nodes, and the body now has 16 steps, at
+  [spec.workflow.yaml](../design/workflows/spec.workflow.yaml#L1030). Call sites still route
+  advisory outcomes and repeat `protocol-prompt` and `timeout-ms`, directly or through thin
+  wrappers, so the estimated net saving is about 35–90 lines (3–8%). The larger gains are no
+  body copy per future workflow, no runner policing of lifecycle order, and lifecycle changes
+  confined to the engine. Model calls, tokens and reliability are not expected to change.
+- **Still open.** Implementation, with the offline acceptance in ADR 0030; whether the engine
+  should also take over release; and whether non-advisory request steps could omit their
+  advisory mappings.
+
 ### A2. Every concept costs about six coordinated edits
 
 There are 266 actions, with a median size of 17 lines. Most delegate to
@@ -479,6 +522,47 @@ cohesive stage, such as extraction together with its own admission. Keep single
 responsibility at the module and function level. Measure the files touched per
 change before and after.
 
+**Approved — 22 October 2026, option (b); documentation updated, implementation not
+started.** The user compared two forms:
+
+- (a) keep each small action and hide runs of them behind a fixed coordinator;
+- (b) one stage action whose internal steps are ordinary typed functions.
+
+The user put "best possible outcomes" for this proof of concept first and directed:
+"update the documentation with the recommendations for option B".
+[ADR 0031](../design/decisions/0031-stage-actions.md) records it:
+
+- **The rule.** One registered stage action may own a deterministic sequence of internal steps
+  that routes no outcome. Its internal
+  steps are functions, each with one responsibility and only the port it uses. Values between
+  them are function-local; only stage-edge data is pipeline data.
+- **What stays out of stages.** Model requests (ADR 0030), writes, publication, commands,
+  clarification persistence, feature-log activation, gate issuers, repairs and every routed
+  outcome stay their own actions or YAML transitions. The "extraction together with its own
+  admission" example above is therefore narrowed. A stage action never calls a model or reads
+  a retained model request; it may process a typed candidate that a separate collect action
+  produced.
+- **Policy.** AGENTS.md's action, port and testing lines now carry the stage-action wording.
+  The unconfirmed read-only limit is kept out of AGENTS.md until the user confirms it.
+- **Documents.** ADRs 0003, 0005, 0016 and 0030, design.md, contracts §§5, 6, 13 (13-01), 27
+  and 28, F0003 and F0005 point to ADR 0031.
+- **Cost recorded.** Absorbed steps are no longer composable from YAML; a different
+  combination needs a new stage action and a rebuild.
+- **Review.** A contract review added mechanical port narrowness inside a stage, contract-field
+  limits, cancellation between internal steps, unchanged failure representation, the
+  composability cost and the two-workflow equivalence evidence.
+- **Derived, awaiting confirmation:**
+  - read-only stages;
+  - the absorption rule;
+  - ADR 0030's kernel form for model requests;
+  - the scope left to A3;
+  - the restated W3;
+  - `prepare-toolchain` first;
+  - offline evidence for structural conversions;
+  - the contract-field and model-output limits.
+- **Next.** Convert `prepare-toolchain` and record the A2 measure before converting another
+  stage.
+
 ### A3. Type-erased child bindings hide data flow
 
 Bootstrap configuration reading is 29 parameterless steps behind a `*anyopaque`
@@ -492,6 +576,43 @@ AGENTS.md lists unbounded `anyopaque` at boundaries as a prohibited shortcut.
 logging, call typed steps with explicit inputs and outputs. Keep spy tests through a
 typed interface. This changes design §14's orchestrator pattern, so confirm its
 scope first.
+
+**Approved — 22 October 2026, option (b); documentation updated, implementation not
+started.** The user compared two forms:
+
+- (a) a typed orchestrator that keeps the orchestrator and step split;
+- (b) one typed engine routine per fixed sequence, in the pattern of ADR 0031.
+
+The user directed: "update the docs around yes, form b".
+[ADR 0032](../design/decisions/0032-engine-routines.md) records it:
+
+- **The rule.** A fixed engine sequence is an engine routine in
+  `src/application/*_routine.zig`. Each step is a typed function with only the port it uses,
+  and values pass as typed arguments. There are no erased child bindings, vtables, shared
+  optional fields or per-step envelope tracking. Only the composition root or a runner-owned
+  child binding reaches a routine.
+- **Order.** Startup (bootstrap, provider config and provider bootstrap) converts first and
+  is measured. Feature logging follows only under preconditions: baseline tests for
+  cancellation under a lock and the emergency-line count, lock release on every path, one
+  emergency line, one finalization owner and the retention order.
+- **Out of scope.** The workflow-engine orchestrator, and ADR 0030's request coordinator,
+  which keeps its form. Specify invocation becomes an ADR 0031 stage action. The earlier "keep
+  spy tests" idea is superseded: routines get fake-port tests.
+- **Policy.** AGENTS.md gains the engine-routine line, its testing line and the review-rule
+  safe path; "startup graph" becomes "startup routine".
+- **Documents.** These point to ADR 0032:
+  - ADRs 0003, 0004, 0018, 0026, 0030 and 0031;
+  - design.md;
+  - contracts §§5, 6, 14, 15, 27, 28 and 29, and the 13-01, 13-02 and 13-09 catalogues;
+  - F0001, F0002, F0004, F0005, F0006 and F0008.
+- **Derived, awaiting confirmation:**
+  - the category and location;
+  - internal branches on typed facts;
+  - reaching a routine through the composition root or a binding;
+  - logging second;
+  - specify invocation as a stage action;
+  - ADR 0030's form kept;
+  - fake-port testing.
 
 ### A4. Rejections do not say why
 
@@ -554,6 +675,22 @@ compatibility, so each amendment becomes a large cross-cutting diff.
 
 **Decision** (scope): add no contracts for Plan, Tasks or Implement until Specify
 publishes on both development cases.
+
+**Decided — 22 October 2026, with a higher bar.** The user directed: "The plan will not
+start until spec workflow is stable and producing high quality output".
+[ADR 0034](../design/decisions/0034-spec-quality-gate.md) records it:
+
+- **What waits.** No Plan, Tasks or Implement contracts, workflow definitions or code until
+  the gate passes.
+- **Quality** means each counted published specification passes R8 human adjudication.
+- **Stability** means repeated runs of both cases on one committed build, counting every
+  attempted run.
+- **There is no fixed run threshold.** The user judges the evidence and decides when Plan is
+  actioned ("I will decide, when plan must be actioned, no need to ask again").
+- **Status on 22 October.** The gate isn't met: no run has been adjudicated, and since
+  20 October loan-renewal has published in only 2 of 6 attempts.
+
+The proposal above, applying the §7 evidence rules to every contract change, stands.
 
 ## 3. Why runs are brittle
 
@@ -1393,7 +1530,9 @@ subgraphs are shared with W1's post-generation path.
 What already applies, and what to keep:
 
 - A1 (request plumbing) and A2 (stage-level operations) apply here unchanged. A2
-  covers the decision-free preparation and publication steps.
+  covers the decision-free preparation and publication steps. Under ADR 0031, A2 covers
+  the read-only parts of publication preparation, such as rendering and validation; the
+  publication writes stay their own action.
 - W1, W3 and W4 also reduce model calls; W2 and W5 only reduce implementation effort.
 - Keep typed outcomes, closed admission, all-or-nothing publication and
   clarification persistence as they are.
@@ -1463,6 +1602,61 @@ Each runs authorize, build input, request, parse, release and merge, which comes
 **Decision** (under A2, after A1): give each owning stage one repair operation that
 performs its authorization, input, request, parse and merge internally. Keep every
 owner's authorization and merge rules. The YAML keeps only the outcome edges.
+
+**Needs restating (22 October 2026).** As written, this puts a model request inside one
+operation, which ADR 0030 (one `request-model` step per request) and ADR 0031 (no model
+call inside a stage action) both forbid. ADR 0031's derived choice 5 proposes the form that
+fits:
+
+- an authorize action as its own YAML step, because it has a repair role and routes
+  `more`, `invalid` and `blocked`;
+- optionally, a stage action that builds the repair input;
+- a `request-model` step;
+- separate parse and merge actions.
+
+That restated W3 needs its own decision. (Decided below.)
+
+**Approved — 22 October 2026, as generic repair operations; documentation updated,
+implementation not started.** The user directed: "update the documentation on the yes, ass
+suggested". [ADR 0033](../design/decisions/0033-generic-repair-operations.md) records it:
+
+- **The rule.** Four generic operations, `authorize-repair`, `build-repair-input`,
+  `parse-repair` and `merge-repair`, replace the 29 per-owner ones. Each takes a closed
+  `owner` enum, selected only through an exhaustive switch. The `owner` is checked against
+  native facts and selects no policy, scope or defect identity. Owner rules stay in owner
+  modules.
+- **Today's counts.** "Eight routes" above is the count at `b2f10a3`. Today there are 29
+  per-owner operations, which become 29 variants across 13 owners, and 7 repair model-call
+  sites.
+- **Contract variants.** Each operation's contract is a set of complete per-owner variants,
+  each validated independently: outcomes, all data effects, association, role, retry
+  authority, maximum and key population. That keeps today's differences:
+  - the no-model `more` paths;
+  - the three reconciliation authorizers;
+  - source omission's two merges, as separate owners;
+  - coverage's `blocked`/`failed` only;
+  - specification support's `merge_validate`;
+  - merges that forbid or require a `retry-limit`.
+- **A mismatched `owner`** is a terminal runner rejection.
+- **Retry identity.** The compiled step instance, as the code already keys it.
+- **Unchanged.** `request-model`, release and the advisory repair stops stay YAML steps,
+  and every repair boundary rule is unchanged.
+- **Sequence.** Converts after ADR 0030 is implemented and ADR 0031's first conversion is
+  measured. All Specify owners convert in one change, on offline equivalence evidence.
+- **Documents.** These point to ADR 0033:
+  - ADRs 0005, 0023 and 0031;
+  - design.md (§22 summary, §32);
+  - contracts §22.1, §22.7, §14.4 and the §13.4 repair entries;
+  - F0005 and F0100.
+- **Derived, awaiting confirmation:**
+  - owner-specialized contracts;
+  - the 13-owner list;
+  - the `owner` check;
+  - "compiled operation" meaning the step instance;
+  - the §22.1 reading;
+  - advisory stops outside the four operations;
+  - one Specify-only conversion;
+  - offline evidence.
 
 ### W4. Reconciliation always makes four calls
 
@@ -1776,9 +1970,19 @@ The approved follow-up and remaining proposals below authorize no live calls:
 6. The experiment's Phase 2 budget/scope decision remains separate from B4's
    implementation. Its single-pool plan stands, because there is one total limit.
 7. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
-   adding operations for another workflow.
+   adding operations for another workflow. A1 was decided on 22 October 2026
+   (ADR 0030); its implementation is pending. A2 was decided the same day as option (b)
+   (ADR 0031); its first conversion, `prepare-toolchain`, is pending. W3 now needs
+   restating to fit both. A3 was decided the same day as option (b) (ADR 0032); its
+   first conversion, startup, is pending. W3 was restated and decided the same day as
+   generic repair operations (ADR 0033); it converts after A1 and A2's first conversion.
+   A6 was decided the same day with a higher bar (ADR 0034). Plan starts only once the
+   Spec workflow is stable and producing human-adjudicated, high-quality output on both
+   cases, and the user decides when Plan is actioned. There is no fixed run threshold.
 8. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
-   and run B5's A/C comparison only if generation-boundary failures remain.
+   and run B5's A/C comparison only if generation-boundary failures remain. If ADR 0030
+   advances a capture or event contract, measure W4 before A1 lands, or from raw response
+   bytes.
 9. Treat R2 as a separate required feature. Decide R1 before promising stronger
    provenance. Gather R6 and R7 evidence after B2.
 
@@ -1885,6 +2089,22 @@ bounded approval, and each E2E run needs its own explicit approval
 - **Retrieving the full text:** both deleted records remain in git at `b2f10a3`.
 - **17 October 2026, design documentation review:** the design/harness ticket
   backlog was deleted and its open items carried into §5 "Wider scope retained".
+- **22 October 2026, A1 decided:** the user approved replacing the request subgraph with one
+  engine-owned step per model request. Added ADR 0030 and the A1 approval record, pointed the
+  governing documents to it, and updated §6 item 7. No code or workflow YAML changed.
+- **22 October 2026, A2 decided:** the user approved option (b), stage actions whose
+  internal steps are typed functions. Added ADR 0031 and the A2 approval record, changed
+  AGENTS.md's action, port and testing wording, and pointed the governing documents to it.
+  Also marked W3 as needing restatement and narrowed the §4 publication note. No code or
+  workflow YAML changed.
+- **22 October 2026, A3 decided:** the user approved option (b), typed engine routines for
+  fixed engine sequences. Added ADR 0032 and the A3 approval record, changed AGENTS.md's
+  startup, routine, testing and review-rule wording, and pointed the governing documents to
+  it. No code or workflow YAML changed.
+- **22 October 2026, W3 decided:** the user approved generic repair operations with
+  owner-supplied rules. Added ADR 0033 and the W3 approval record, and pointed the governing
+  documents to it. AGENTS.md was unchanged, because its shared-mechanism rule already covers
+  this. No code or workflow YAML changed.
 
 ## 9. B4/B9 implementation — 17 October 2026
 

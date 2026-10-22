@@ -4,6 +4,10 @@ Shared model-request path, shown with the production Bedrock adapter. Workflow
 resources supply task instructions/schema; serialization emits universal JSON
 framing once per call.
 
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
+protocol correction becomes a stage of the `request-model` step, bounded by its declared
+`retry-limit`, rather than a YAML-selected step. The flow below is otherwise unchanged.
+
 ```mermaid
 flowchart TD
     Workflow["Workflow YAML selects<br/>task prompt, result schema and model slot"]

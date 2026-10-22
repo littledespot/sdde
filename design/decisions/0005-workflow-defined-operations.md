@@ -18,6 +18,20 @@ composable definition-local subgraphs expanded by the shared compiler before gra
 validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
 The existing operation registry and runner remain the execution owners.
 
+**Single-request amendment (22 October 2026, not yet implemented):**
+[ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request or
+token count to the engine-kernel list below. A workflow makes each request with one
+`request-model` step and still declares its slot, resources, retry limit, timeout and
+every outcome transition. The stage order and the request's own protocol correction
+are no longer YAML steps.
+
+**Stage-action amendment (22 October 2026, not yet implemented):**
+[ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
+sequence of internal steps that routes no outcome. Every routed outcome stays a YAML
+transition. The internal steps are functions, not workflow operations or a second
+workflow graph, so they are no longer addressable or composable from YAML. Composing
+them differently needs a new stage action and an engine rebuild.
+
 ## Context
 
 A fixed catalogue such as `spec.section.generate` or
@@ -46,13 +60,17 @@ workflow behavior without duplicating large resources at every node.
   behind a workflow name or an inaccessible engine registry.
 - Sequencing and branching are visible in the YAML graph.
 - An operation retains one cohesive responsibility and must not conceal a second
-  workflow graph.
+  workflow graph. ADR 0030's `request-model` operation runs one fixed kernel stage
+  sequence for one model request; it is not a workflow graph, and its only internal
+  retry is the protocol correction bounded by the step's declared `retry-limit`.
 
 - Engine-kernel enforcement is not workflow functionality and is not callable or
   bypassable from YAML.
 - Loading, parsing, compilation, contract validation, capability derivation,
   runner-owned invocation and delta application, provider preparation, cancellation,
   cleanup, and security enforcement remain fixed engine responsibilities.
+  [ADR 0030](0030-engine-owned-model-request.md) adds the stage sequence of one model
+  request or token count.
 - They may inspect only the compiled definition and registered contracts; they cannot
   add domain workflow behavior.
 
@@ -60,7 +78,10 @@ workflow behavior without duplicating large resources at every node.
 
 - Explicit user direction removes operation-contract versioning.
 - Each operation has one current contract and one unversioned ID, such as
-  `invoke-model`.
+  `invoke-model`. Under [ADR 0033](0033-generic-repair-operations.md) (not yet
+  implemented), the four generic repair operations each keep one contract and one ID.
+  That contract has a closed variant per repair owner, and the compiler selects it from
+  the step's `owner` at compile time.
 - Both `invoke` and `steps.*.use` name that ID directly.
 - No operation-version field, version suffix, range, compatibility alias or parallel
   legacy contract is retained.
@@ -82,7 +103,8 @@ The exact compact schema is owned by [F0005](../features/F0005-WorkflowDefinitio
 and its formal schema. The [provider-request test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml)
 shows the implemented explicit request operations; the [Specify definition](../workflows/spec.workflow.yaml)
 shows reusable subgraphs. These sources replace the early `model.generate` sketch,
-which was not a registered compound operation.
+which was not a registered compound operation. Both show the explicit request steps that
+ADR 0030 replaces; they change when it is implemented.
 
 Each operation step has one registered reference, optional compact parameters and
 an explicit outcome map. ADR 0013 permits `call` steps expanded by the same compiler.

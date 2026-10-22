@@ -73,11 +73,23 @@ already made.
   membership doesn't mean each record expresses every linked claim. This follows
   ADR 0020 and is not a defect. Decide it before promising stronger provenance.
 - **Architecture decisions before Plan.** Several problems are known:
-  - lifecycle mechanics live in workflow YAML;
-  - each concept costs about six coordinated edits;
-  - type-erased child bindings hide data flow;
+  - lifecycle mechanics live in workflow YAML. *Approved 22 October 2026 (ADR 0030):* one
+    engine-owned `request-model` step per model request replaces the 16-step subgraph and
+    its wrappers. Documentation is updated; implementation hasn't started;
+  - each concept costs about six coordinated edits. *Approved 22 October 2026 (ADR 0031,
+    option (b)):* one stage action whose internal steps are typed functions and route no
+    outcome; its read-only limit awaits confirmation.
+    Documentation is updated; the first conversion, `prepare-toolchain`, hasn't started;
+  - type-erased child bindings hide data flow. *Approved 22 October 2026 (ADR 0032,
+    option (b)):* fixed engine sequences become typed engine routines, startup first and
+    feature logging second under preconditions. Documentation is updated; implementation
+    hasn't started;
   - many rejections carry no reason;
-  - eight repair routes repeat one shape;
+  - repair routes repeat one shape: eight routes at `b2f10a3`; today 29 per-owner
+    operations, 13 owners and 7 repair model-call sites. *Approved 22 October 2026 (ADR 0033):* four
+    generic repair operations with a closed `owner` and owner-supplied rules replace the
+    29 per-owner ones. They convert after A1 and A2's first conversion. Documentation is
+    updated; implementation hasn't started;
   - reconciliation always makes four calls;
   - two pairs of sibling steps are identical. *Proposed:* merge them; this needs no
     ADR change.
@@ -85,3 +97,11 @@ already made.
   Before starting Plan, decide the questions on lifecycle, edit cost, child bindings
   and repair routes, and freeze the contract scope. Move lifecycle mechanics out of
   YAML before adding operations for another workflow.
+  - *Decided 22 October 2026 (ADR 0034):* Plan, Tasks and Implement work doesn't start
+    until the Spec workflow is stable and producing high-quality output on both
+    development cases.
+  - Quality means R8 human adjudication; stability means repeated runs, counting every
+    attempt.
+  - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
+  - It isn't met: no run has been adjudicated, and loan-renewal published in 2 of 6
+    attempts since 20 October.

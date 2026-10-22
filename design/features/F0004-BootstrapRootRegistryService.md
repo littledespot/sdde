@@ -66,6 +66,13 @@ actions through runner-owned bindings:
   filesystem/path adapter and fixed bindings.
 - The orchestrator receives no filesystem, path-normalizer, config, registry-builder, or
   logger capability.
+- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the startup
+  sequence becomes a typed engine routine run by the composition root.
+  - Each step takes only the port it uses, and values pass as typed arguments instead of
+    runner-applied deltas.
+  - Fake-port routine tests replace the spy-binding verification.
+  - The codes, cancellation behaviour and properties here are unchanged, and "uses only
+    runner-owned bindings" (AC 9) is read as "reached only through the composition root".
 - Only after final registry validation does the runner construct one
   `BootstrapRootRegistryService`.
 

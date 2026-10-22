@@ -14,7 +14,11 @@ credentials alone never authorize a test call.
 
 ### 28.1 Action unit tests
 
-Each action is tested with immutable fixtures and fake narrow ports. Required cases include:
+Each action is tested with immutable fixtures and fake narrow ports. An
+[ADR 0031](../decisions/0031-stage-actions.md) stage action (not yet implemented) is tested this
+way at its edge, and each internal function also gets its own unit tests with fake ports. The
+absorbed actions' accepted and rejected cases survive at the function or the stage edge.
+Required cases include:
 
 - schema rejection of unknown keys, missing required fields, and unresolved `<!-- IMPLEMENT -->` placeholders;
 - **Configuration paths:**
@@ -244,6 +248,20 @@ Generate large path/task/requirement spaces to prove invariants:
 
 Use spy child nodes; no real filesystem/model ports are available to the orchestrator.
 
+[ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) replaces the spy-binding
+tests below with routine tests once each sequence converts. This covers the bootstrap,
+provider-bootstrap and feature-logging cases. Each converted engine routine is tested with fake
+ports for:
+
+- step order and every branch;
+- failure propagation with the exact public code;
+- cancellation and deadline between each pair of steps;
+- cleanup on every path;
+- for logging, lock release on every path, one emergency line and idempotent finalization.
+
+Each step also gets its own unit tests. The removed spy tests' accepted and rejected cases
+survive. The `specify` invocation cases become ADR 0031 stage-action tests.
+
 - bootstrap failure prevents every model action;
 - the workflow-engine orchestrator:
   - resolves an explicit workflow ID once;
@@ -307,7 +325,22 @@ Architecture tests also:
   executor callback or service locator;
 - reject node `execute` calls outside orchestrator modules;
 - enforce the orchestrator import allowlist;
-- require orchestrators to receive only child bindings and the capability-free `NodeRuntime`.
+- require orchestrators to receive only child bindings and the capability-free `NodeRuntime`;
+- once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
+  YAML-addressable model-request or token-count stage, keep each stage's narrow ports and keep
+  its kernel orchestrator capability-free. The ADR's acceptance list covers the spy-binding,
+  equivalence, compiler and failure-location tests;
+- once [ADR 0031](../decisions/0031-stage-actions.md) is implemented for a stage action, run its
+  architecture and registry checks, each with rejected fixtures. These cover:
+  - its contract fields;
+  - that `execute` calls no port;
+  - that no internal function takes two ports, the `Action` value, a multi-port struct, a
+    capability bag, `anytype` or `anyopaque`;
+  - that no absorbed operation remains registered;
+  - that no stage action produces or replaces a gate evidence key, absorbs a key with
+    `captured` retention, or requires a retained model request;
+  - that every absorbed step which turned a candidate key into a validated key returns a
+    distinct validated type that the next step requires.
 
 ### 28.4 Model fault-injection tests
 

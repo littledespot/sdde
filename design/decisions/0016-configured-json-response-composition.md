@@ -11,6 +11,13 @@
   finite compiler step limit (now 1,024; §3).
 - **Does not approve:** an unbounded graph, hidden request dispatcher, new semantic
   repair authority, production dependency or live run.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+  yet implemented). Each part's request becomes one `request-model` step with its
+  `composition-part`. The lifecycle stages behind it are no longer visible detailed
+  operations; distinct request identities and `retain-json-part` stay visible.
+  [ADR 0031](0031-stage-actions.md) (22 October 2026, not yet implemented) likewise
+  removes absorbed deterministic operations instead of keeping them available beside a
+  stage action.
 
 ## 1. Problem and intended outcome
 

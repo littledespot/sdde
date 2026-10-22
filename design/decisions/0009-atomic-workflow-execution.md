@@ -5,6 +5,10 @@
 - **Decision authority:** Explicit user direction
 - **Amends:** ADR 0003, Design Sections 7.3, 20, 24–25, 28, 30–31,
   F0006 and F0007, and their transaction/checkpoint/recovery samples and diagrams.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+  yet implemented). A model request's own protocol correction runs inside its
+  `request-model` step, bounded by that step's `retry-limit`. Every other retry still
+  needs an explicit YAML transition.
 
 ## Decision
 

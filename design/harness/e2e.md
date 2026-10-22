@@ -578,7 +578,11 @@ stages.
 The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v9`,
 `baseline-freeze/v2`, `baseline-acquisition/v7`, `baseline-score/v4` and
 `baseline-budget-feasibility/v1`. Step events remain
-`e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
+`e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
+not yet implemented, model-request stages become events of one `request-model` step,
+and this version advances if the event shape changes; retained runs and captures made
+before then stay readable only by the build that made them); evaluator packets remain
+`baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
 `rubric-judgment/v2` because they embed its judgments or the E2E report.
 `spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with

@@ -13,6 +13,9 @@ Bootstrap has a fixed engine-startup portion and workflow-owned setup:
   contracts, and validates the variable-size workflow registry.
 - It acquires no feature transaction lock, is not registered as a project workflow, and cannot
   be changed beneath `paths.workflows`.
+- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), it is a typed
+  engine routine that the composition root runs, with the same properties and public error
+  codes. It is the first ADR 0032 conversion.
 
 - After exact selection, the YAML-named registered invocation operation produces the workflow's
   typed run context.

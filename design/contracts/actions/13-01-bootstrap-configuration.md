@@ -9,6 +9,12 @@ owns the current authored toolchain shapes and stable policy-ID union. The
 policy-compilation and field-override actions below retain the broader proposed
 design; they do not extend the current YAML schema or claim implemented capabilities.
 
+> **ADR 0032 (not yet implemented).** The engine-startup and provider-bootstrap actions in this
+> catalogue become the typed steps of [engine routines](../../decisions/0032-engine-routines.md),
+> starting with startup. Each entry keeps its input, output, responsibility, public code and
+> rejection rules. Its step takes only the port it uses, and its output passes to the next
+> step as a typed value instead of a pipeline key.
+
 
 ## `LocateExactEngineConfigAction`
 
@@ -1234,6 +1240,12 @@ design; they do not extend the current YAML schema or claim implemented capabili
 - **Output:** exact no-follow `toolchain.yaml` descriptor
 - **Responsibility:** Resolve only `<paths.principles>/toolchain.yaml`, rejecting absence,
   alias/case ambiguity, links, special nodes, or any independently supplied path.
+
+> **ADR 0031 (not yet implemented).** The toolchain-preparation actions are the first planned
+> [stage-action](../../decisions/0031-stage-actions.md) conversion: one `prepare-toolchain`
+> stage action replaces the nine workflow steps that F0003 lists. When it lands, these entries
+> become its internal steps. Each keeps its input, output, responsibility and rejection rules,
+> and read versus parse still holds between functions.
 
 ## `CaptureProjectToolchainLayerAction`
 

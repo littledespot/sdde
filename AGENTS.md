@@ -85,6 +85,10 @@ accepted project authority.
 - **design/decisions/0011-provider-owned-request-limits.md** leaves per-call
   limits to providers; the runner accounts actual tokens against the execution
   budget without local size ceilings or reservations.
+- **design/decisions/0034-spec-quality-gate.md** holds back all Plan, Tasks and
+  Implement work until the Spec workflow is stable and producing high-quality,
+  human-adjudicated output on both development cases. Only the user declares
+  the gate passed; if asked to start that work, report the gate instead.
 
 ## Project authority
 
@@ -228,11 +232,15 @@ do not manufacture an architecture exercise.
 
 ### Actions, orchestrators, and runner
 
-- Every action has one verb-object responsibility.
+- Every action has one verb-object responsibility. A stage action's
+  responsibility is one cohesive deterministic sequence of internal steps that
+  routes no outcome internally; each step is a single-responsibility function
+  ([ADR 0031](design/decisions/0031-stage-actions.md)).
 - An action never invokes an action or orchestrator and never selects its
   successor.
 - An action may receive only the narrow operation ports required for its one
-  responsibility.
+  responsibility. Inside a stage action, each function receives only the port
+  it uses.
 - An orchestrator coordinates runner-owned child bindings and branches only on
   typed outcomes/diagnostics.
 - An orchestrator performs no filesystem, model, parsing, rendering, validation,
@@ -242,11 +250,17 @@ do not manufacture an architecture exercise.
   one validated workflow and follows only its compiled typed transitions
   through runner-owned child bindings.
 - Only the runner validates/applies node deltas and invokes node execution.
+- A fixed engine sequence, such as startup or feature logging, becomes an
+  engine routine when its conversion lands
+  ([ADR 0032](design/decisions/0032-engine-routines.md)). A routine is not a
+  node or orchestrator: it is typed functions, each with one responsibility and
+  only the port it uses, passing distinct typed values. Only the callers
+  ADR 0032 names may invoke it.
 - Only the composition root constructs concrete adapters, binds registered node
-  implementations, and assembles the fixed engine-startup graph needed to load
-  project workflows. Only the workflow compiler constructs executable
-  project-workflow graph descriptors, and only from validated definitions and
-  registered node contracts. The startup graph is not project-authored or
+  implementations, and assembles the fixed engine-startup graph (a routine once
+  ADR 0032 lands) needed to load project workflows. Only the workflow compiler
+  constructs executable project-workflow graph descriptors, and only from
+  validated definitions and registered node contracts. Startup is not project-authored or
   selectable through `paths.workflows` and has no project/feature transaction
   lock capability.
 - Domain code imports no infrastructure/provider implementation.
@@ -351,9 +365,11 @@ task.
 ## Testing expectations
 
 - Actions: isolated unit tests with fake narrow ports and immutable
-  input/output assertions.
+  input/output assertions. Stage actions also unit-test each internal function.
 - Orchestrators: spy child-binding tests for order, branching, retry, limits,
   and failure propagation.
+- Engine routines: fake-port tests for order, branching, failure propagation,
+  cleanup and cancellation between steps, plus unit tests for each step.
 - Contracts: accepted/rejected schema fixtures, including unknown fields and,
   for versioned contracts, version mismatch.
 - Properties: paths, DAGs, conflicts, transitions, repairs, rendering, IDs,
@@ -429,7 +445,8 @@ A change is complete only when:
 - Flag any path by which an orchestrator gains an operation capability or an
   action gains child-node execution.
 - Safe path: use/reuse a single-responsibility action and coordinate it through
-  a runner-owned child binding.
+  a runner-owned child binding. A fixed engine sequence may instead be an engine
+  routine (ADR 0032) reached through such a binding.
 
 ### Policy weakening
 

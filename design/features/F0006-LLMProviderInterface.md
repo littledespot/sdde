@@ -98,6 +98,12 @@ facts remain local to the abandoned or completed execution.
 
 2. Place the fixed, capability-free `ModelProviderBootstrapOrchestrator` after
    selected-workflow compilation and before execution, using runner-owned bindings.
+   Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), it becomes
+   a typed engine routine at the same point, reached through one runner-owned binding.
+   - It keeps its single typed-requirement branch, outcomes and public codes.
+   - Each step takes only the port it uses, and values pass as typed arguments instead of
+     runner-applied deltas.
+   - Fake-port routine tests replace the spy-binding checks in §§9 and 12–13.
 
    - This explicitly amends fixed startup-graph authority.
    - Contract: [Conditional bootstrap,
@@ -172,6 +178,22 @@ facts remain local to the abandoned or completed execution.
     - No reservation, estimate or budget-derived output allowance applies.
     - Contract: [Actual-usage accounting,
       §6](#6-providermodel-binding-and-workflow-token-accounting).
+13. Run each model request and token count as one engine-owned step
+    ([ADR 0030](../decisions/0030-engine-owned-model-request.md), 22 October 2026, not yet
+    implemented).
+
+    - One `request-model` step makes one inference request, and one `count-model-tokens`
+      step makes one count request.
+    - A `request-model` step declares the slot, resources, `retry-limit`, `timeout-ms`
+      and every outcome. The `count-model-tokens` contract is deferred to a later
+      amendment of ADR 0030 and of this document.
+    - A fixed, capability-free kernel orchestrator runs the lifecycle in §§7–9 as the
+      stages ADR 0030 lists, through runner-owned child bindings. The runner keeps its
+      §9 duties and chooses no workflow branch.
+    - Where this document says a stage, retry or closure is "explicit YAML", read it as a
+      stage of that one step. Each stage keeps its own action, narrow ports and rules.
+    - Provider failures and timeouts still reach YAML as the step's typed outcomes.
+      Fallback and repair stay YAML transitions.
 
 The two project inputs have distinct responsibilities:
 
@@ -1107,7 +1129,9 @@ undone; it does not make any candidate workflow output successful.
 - It is engine preparation, not workflow behavior.
 - Provider retry, fallback, and protocol-retry branches must each be visible as YAML
   steps and transitions; their registered generic operations perform one bounded
-  responsibility and never select a successor.
+  responsibility and never select a successor. Amendment 13 (ADR 0030, not yet
+  implemented) moves a request's protocol retry inside its `request-model` step, bounded
+  by that step's `retry-limit`; fallback stays a visible YAML branch.
 
 No action invokes another action or selects its successor. Every orchestrator
 receives only runner-owned child bindings and typed outcomes. It has no

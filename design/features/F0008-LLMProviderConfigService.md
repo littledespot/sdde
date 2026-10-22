@@ -72,7 +72,7 @@ reads `config.paths.providers` directly and never resolves the path again.
 | `LocateLLMProviderConfigAction` | Ask the narrow source port to open the one F0004-authorized no-follow regular file and return an exact open-file capability. |
 | `ReadLLMProviderConfigAction` | Capture that already opened file completely under the fixed byte limit and return owned untrusted bytes. |
 | Filesystem adapter | Consume the opaque F0004 capability, walk beneath the bound project root without following links, open read-only, and verify file identity/type/size before and after capture. |
-| `LLMProviderConfigOrchestrator` | Coordinate only the runner-owned locate and read child bindings and preserve failed/cancelled outcomes. |
+| `LLMProviderConfigOrchestrator` | Coordinate only the runner-owned locate and read child bindings and preserve failed/cancelled outcomes. Under ADR 0032 (not yet implemented), it becomes part of the provider-bootstrap engine routine. Locate and read stay separate typed steps (AC 4), with the same outcomes and codes and fake-port tests. |
 | Pipeline runner | Invoke the two actions, validate/apply their declared deltas, own intermediates, and construct the service only after a successful complete read. |
 | `LLMProviderConfigService` | Own the captured bytes and expose one borrowed immutable `bytes()` view. |
 | Composition root | Construct the filesystem adapter, actions, runner, and orchestrator entry point without invoking it during ordinary bootstrap. |
