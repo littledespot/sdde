@@ -1,8 +1,14 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 20 October 2026. It mirrors the repository's active fix
-record, which stays authoritative. Recheck the code before relying on an item. The
+Dated snapshot, last updated 23 October 2026. It mirrors the repository's active fix
+record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
+[Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
+
+All live evidence so far comes from one model, GPT-OSS-20B on Bedrock. The live-test
+policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029), but every E2E
+slot still selects GPT-OSS-20B, so which classes below are model limitations is
+unmeasured.
 
 The labels *Proposed*, *Approved* and "needs a decision" record user decisions. Only
 the user changes them; change a label here only to record a decision the user has
@@ -10,13 +16,13 @@ already made.
 
 ## Spec workflow failure classes seen in live runs
 
-- **Extraction collapses structured sources.** Extraction returns one claim for a
-  whole Markdown list of distinct requirements, in every hello-world sample. It has
-  also weakened an obligation: "must renew" became "may renew", and review judged
-  that supported. *Proposed, not approved:* segment list items natively before
-  extraction. Measure first: replay both cases' retained extraction requests, split
-  per item. That replay is billed and needs bounded approval. Then decide the §16
-  chunking and extraction amendment.
+- **Extraction weakens obligations.** Loan-renewal's "must be able to renew" becomes
+  "may renew" at extraction, and review judges it supported; the published output
+  also lacks a refusal acceptance criterion. Extraction also returns one claim for a
+  whole Markdown list. *Tried and reverted, 21 October 2026:* list-item extraction
+  (ADR 0027, `2bf5ca6`) gave one claim per item but no better output and higher cost,
+  and the user directed its revert (`527f870`, ADR 0027 deleted). The weakening has no
+  current proposal; measure whether it recurs with another permitted model first.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
   `candidate_omission`, has judged byte-identical text both supported and omitted,
@@ -24,7 +30,8 @@ already made.
   post-generation finding is advice: it never repairs content, rebuilds an upstream
   stage or creates a clarification. *Built 20 October 2026 (approved 18 October):*
   source review assigns one record family per call (ADR 0023 "Record families",
-  `specification-state/v19`). Its effect on cost is not yet measured live.
+  `specification-state/v19`). Its effect on cost is not yet measured live, and
+  loan-renewal still ran out of budget in review twice on 21–22 October.
 - **Record authoring duplicates.** A record batch can re-author the whole feature.
   Groups holding only preserved tokens no longer get a batch (ADR 0024). The native
   duplicate rule compares whole typed content, including the record kind, so
@@ -43,8 +50,18 @@ already made.
 - **GPT-OSS envelope prefixes.** GPT-OSS-20B often malforms a response's opening, for
   example `{"token{` or `{"find{`. Admission normalizes the truncated member-name form
   (approved 18 October 2026). Widening the normalizer needs a decision.
-- **Budget headroom.** Loan-renewal has both exhausted the 100,000-token budget and
-  published at 97,475 tokens. Raising the budget doesn't fix reliability.
+- **Runaway output.** GPT-OSS-20B sometimes writes a valid finding, then tens of
+  thousands of whitespace characters until the 16,384-token maximum, mostly in source
+  review. Under the old 60 s request deadline this showed only as a `timeout` (three
+  runs on 21 October). The user raised the deadline to 180 s (`9719dc7`); the runaway
+  then ended `output_limit`, its advice closed incomplete and the run published. The
+  catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
+  cover that model; ADR 0028 leaves its deadline undecided. Lower allowances, bounded
+  correction and cardinality bounds each need a decision; don't tune sampling or add
+  retries.
+- **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
+  (most recently 22 October, at 100,763 tokens) and published at 76,501–97,475 tokens.
+  Raising the budget doesn't fix reliability.
 
 ## Other open work
 
@@ -69,6 +86,10 @@ already made.
 - **Every lock-acquisition failure is reported as `LOG_LOCK_TIMEOUT`.** The shared
   acquire action collapses an insecure or unopenable lock file into a timeout, for
   the current run and for retention.
+- **Provider records.** ADR 0028 names an F0009 feature document and a contract
+  §12.3.2, and neither exists. ADR 0029 says the shipped E2E cases select Claude
+  Haiku 5.5, but their configuration selects GPT-OSS-20B; either the configuration or
+  the ADR text needs to change. No live Claude call has been made.
 - **Group-level provenance precision.** A record binds a whole accepted group, so
   membership doesn't mean each record expresses every linked claim. This follows
   ADR 0020 and is not a defect. Decide it before promising stronger provenance.
@@ -84,7 +105,8 @@ already made.
     option (b)):* fixed engine sequences become typed engine routines, startup first and
     feature logging second under preconditions. Documentation is updated; implementation
     hasn't started;
-  - many rejections carry no reason;
+  - many rejections carry no reason. *Proposed:* closed reasons at their owners; the
+    ADR 0030 and 0031 conversions will move many of the sites first;
   - repair routes repeat one shape: eight routes at `b2f10a3`; today 29 per-owner
     operations, 13 owners and 7 repair model-call sites. *Approved 22 October 2026 (ADR 0033):* four
     generic repair operations with a closed `owner` and owner-supplied rules replace the
@@ -92,7 +114,7 @@ already made.
     updated; implementation hasn't started;
   - reconciliation always makes four calls;
   - two pairs of sibling steps are identical. *Proposed:* merge them; this needs no
-    ADR change.
+    ADR change. An ADR 0031 stage conversion may absorb them first.
 
   Before starting Plan, decide the questions on lifecycle, edit cost, child bindings
   and repair routes, and freeze the contract scope. Move lifecycle mechanics out of
@@ -103,5 +125,5 @@ already made.
   - Quality means R8 human adjudication; stability means repeated runs, counting every
     attempt.
   - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
-  - It isn't met: no run has been adjudicated, and loan-renewal published in 2 of 6
-    attempts since 20 October.
+  - It isn't met: no run has been adjudicated, every 21–22 October run used a modified
+    build, and loan-renewal published in 2 of 6 attempts since 21 October.

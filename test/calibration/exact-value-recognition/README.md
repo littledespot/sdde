@@ -1,7 +1,7 @@
 # Exact-value recognition evidence and approved B3 cutover
 
 This directory retains the historical offline prototype and policy comparisons
-for [FIX05 B3](../../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
+for [FIX05 B3](../../../fixes/Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
 (former FIX04 §1.1 item 1). The tools make no model calls; their captured
 observations remain diagnostic evidence under their original policies.
 

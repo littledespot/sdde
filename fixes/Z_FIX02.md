@@ -313,7 +313,7 @@ The full-workflow diagnostics, in Melbourne time on 16 October:
 | 09:18 | hello-world | uncommitted `94e2838` (source `2a30ee8d…`) | 41 | 101,134 | `WorkflowTokenBudgetExceeded` in review, which used 77% of the tokens |
 | 16:20 | hello-world | committed `bfec3d7` | 8 | 12,896 | `RepairNoProgress`: the insertion-only title was rejected at admission and the repair repeated it |
 | 18:58 | hello-world | `54de975` with uncommitted Phase 1A.2 code (source `fbd52cd8…`) | 14 | 20,374 | `RepairNoProgress` at record generation; admission escape measured zero |
-| 20:22 | hello-world | committed `6676ad8` | 14 | 22,780 | Blocked at native exact-copy coverage before review: the value was typed, never inserted ([FIX04 F13](FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)) |
+| 20:22 | hello-world | committed `6676ad8` | 14 | 22,780 | Blocked at native exact-copy coverage before review: the value was typed, never inserted ([FIX04 F13](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)) |
 | 20:33 | hello-world | committed `6676ad8` | 42 | 100,884 | `WorkflowTokenBudgetExceeded` during re-review, with review at 75.6% of the tokens ([FIX04 F13](FIX05.md#b2-review-dominates-cost-and-drives-harmful-repair)) |
 
 Twenty-two one-send compatibility probes also ran between 15 October 16:25 and
@@ -1703,7 +1703,7 @@ and wrote ignored diagnostic artifacts; text whitespace checks passed.
 #### 5.4.6 Offline native exact-value recognition prototype
 
 **16 October 2026.** The user authorized only the first, offline step of
-[FIX04 §1.1 item 1](FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
+[FIX04 §1.1 item 1](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
 This is engine-development diagnostic tooling, with **zero model calls**. It
 does not amend §7.1, ADR 0020 or the composition contract; production schemas,
 recognition, lineage, coverage, repair, persistence and publication are unchanged.
