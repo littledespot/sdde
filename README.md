@@ -18,6 +18,9 @@ and publication evidence control workflow authority.
   schema across explicit YAML operations. Production Bedrock inference and
   optional token counting use the same provider boundary. Calls account actual
   API token usage against the execution budget; providers own per-call limits.
+  ADR 0030 (accepted, not yet implemented) replaces those operations with one
+  `request-model` step, removes token counting and moves the request deadline to
+  each model's catalogue entry.
 - Specify connects Markdown ingestion, source-backed extraction, reconciliation,
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;

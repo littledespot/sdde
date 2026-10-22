@@ -26,7 +26,10 @@
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
   yet implemented). A request's protocol correction runs inside its `request-model`
   step under that step's `retry-limit`, not as an explicit YAML transition. The runner
-  still accounts every attempt's actual usage against the one workflow budget.
+  still accounts every attempt's actual usage against the one workflow budget. Its
+  23 October 2026 amendment removes CountTokens and all provider token counting, and
+  adds a required `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry
+  (see "Model maximum output"). Actual-usage accounting is unchanged.
 
 ## Decision
 
@@ -80,6 +83,10 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
   shipped value for `openai.gpt-oss-20b-1:0` is 16,384: AWS documents "16K", and
   retained calibration runs show Bedrock accepts and reaches a 16,384 allowance for
   this model in `ap-southeast-2`.
+- Under [ADR 0030](0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented),
+  every catalogue entry also declares a required positive `requestTimeoutMs`: the
+  provider-operation deadline, sized to the time the model takes to return this
+  maximum. It replaces the workflow's `timeout-ms`.
 - The frozen semantic-simplicity protocol (schema 2) records the same maximum, and
   its binding checks reject a request or description carrying any other value.
 - Every Bedrock inference request sends that value as `inferenceConfig.maxTokens`

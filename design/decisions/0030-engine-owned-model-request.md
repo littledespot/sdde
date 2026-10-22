@@ -1,16 +1,22 @@
 # ADR 0030: One engine-owned step per model request
 
-- **Status:** Accepted amendment. **Not yet implemented:** the engine, the Specify
-  definition and the packaging fixture still use the explicit request-lifecycle steps
+- **Status:** Accepted amendment, amended 23 October 2026. **Not yet implemented:** the
+  engine, the Specify definition and the packaging fixture still use the explicit
+  request-lifecycle steps, the four token-count operations and the per-step `timeout-ms`
   until the implementation change lands. Documents that describe those steps carry a
   pointer to this ADR until then.
-- **Date:** 2026-10-22
+- **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
   decides [FIX05](../../fixes/FIX05.md) A1 after a review of the pros and cons of keeping
   the 16-step `model-request-body` subgraph. The user's stated goal is simpler workflow
-  YAML. The choices under "Derived under existing rules" follow from existing authority
-  and await the user's confirmation.
+  YAML.
+- **Amendment authority:** On 23 October 2026 the user asked for "the best possible
+  solution, remember this is a POC and best outcomes is the primary goal", then directed
+  "update docs with" the resulting table of choices. That settles the five choices first
+  derived under existing rules; see "Choices settled on 23 October 2026". The user also
+  confirmed that the global token count stays, because it is built from actual inference
+  usage, not from token counting.
 - **Amends:**
   - [ADR 0005](0005-workflow-defined-operations.md): the engine-kernel list, "Sequencing
     and branching are visible in the YAML graph", "must not conceal a second workflow
@@ -21,22 +27,33 @@
     and consolidated operations that "remain available", and its operation-contract table;
   - [ADR 0009](0009-atomic-workflow-execution.md) and
     [ADR 0011](0011-provider-owned-request-limits.md): retries are "explicit YAML
-    transitions";
+    transitions"; ADR 0011's "Model maximum output" also gains the catalogue's
+    `requestTimeoutMs` beside `maxOutputTokens`, and its CountTokens text no longer
+    applies;
+  - [ADR 0014](0014-universal-response-format-guidance.md): "Explicit input-token
+    counting uses the same model-visible projection as inference", because counting is
+    removed;
   - [ADR 0016](0016-configured-json-response-composition.md): "Keep detailed operations
     available" and "Detailed operations and distinct request identities remain visible";
   - [ADR 0019](0019-single-request-debugger.md): what `node_id`, `route_id` and the
-    action ID name;
+    action ID name, and its token-count observations;
   - [ADR 0023](0023-advisory-post-generation-review.md): the advisory request outcomes
-    as "distinct step occurrences";
+    as "distinct step occurrences", and its deferred-carrier proof, which now applies
+    only to steps declared `role: advisory`;
+  - [ADR 0028](0028-anthropic-messages-provider.md) and
+    [ADR 0029](0029-bedrock-model-families.md): each catalogue entry's `config` gains a
+    required `requestTimeoutMs`, which settles their open per-provider and per-family
+    deadline questions; ADR 0029's retired CountTokens registration now has no
+    counting path to return to;
   - design.md §1 (property 1 and the "Workflow YAML owns" boundary), §3.1, §3.3
     (invariant 28 and "Response decoding and lifecycle terminalization remain explicitly
     selected operations") and the §32 index;
   - contracts §§6.2, 7.3, 12.1, 12.7, 13.4, 14, 21, 22.6, 22.7, 24, 27 and 28 and the
     [model-request operation catalogue](../contracts/model-request-operations.md);
   - [F0005](../features/F0005-WorkflowDefinitionRegistryService.md),
-    [F0006](../features/F0006-LLMProviderInterface.md),
-    [F0007](../features/F0007-AWSBedrockProvider.md),
-    [F0100](../features/F0100-SpecWorkflow.md) and the
+    [F0006](../features/F0006-LLMProviderInterface.md) (including its count semantics),
+    [F0007](../features/F0007-AWSBedrockProvider.md) (including CountTokens),
+    [F0100](../features/F0100-SpecWorkflow.md), diagram 16 and the
     [E2E harness](../harness/e2e.md) step events.
 
   The overall design remains **Proposed design**.
@@ -80,24 +97,29 @@ A workflow makes one model request with one step that uses the registered operat
 - optional `context`, which may accompany either schema form;
 - `retry-limit`, bounded by the operation contract as today (`0` permits only the
   initial attempt);
-- `timeout-ms`, the required positive provider-operation deadline that the
-  authorization step declares today.
+- optional `role: advisory`, for a request whose advice may end incomplete (see
+  "Advisory role").
 
-The step maps every outcome. The outcome set and meanings of today's request body are
-unchanged: `ok`, `invalid`, `more`, `blocked`, `failed` and `cancelled`.
+The step declares no deadline: the provider-operation deadline is the bound catalogue
+entry's `requestTimeoutMs` (see "Request deadline"). A `timeout-ms` parameter is rejected.
+
+The outcome meanings of today's request body are unchanged. Every step maps `ok`,
+`invalid`, `failed` and `cancelled`. Only a `role: advisory` step also maps `more` and
+`blocked`.
 
 - `more` and `blocked` are the advisory incomplete and advisory protocol-exhausted
-  outcomes of ADR 0023. Each call site still routes them to
+  outcomes of ADR 0023. Each advisory step still routes them to
   `propagate-advisory-request-failure` or to a native completion step. The compiler's
-  deferred-carrier proof keeps its rules; because one step now carries ordinary closure
-  and both advisory carriers, its descriptor becomes per-outcome instead of per-step.
+  deferred-carrier proof keeps its rules for advisory steps; because one step now carries
+  ordinary closure and both advisory carriers, its descriptor becomes per-outcome instead
+  of per-step.
 - Exhausting the protocol correction of an ordinary or required request remains a
   terminal runner rejection, not a YAML outcome. It names the step and the stage.
   Exhausting an advisory request's correction returns `blocked`, as today.
 
-A definition may still fix repeated parameters and routing, such as `protocol-prompt`,
-`timeout-ms` and advisory propagation, once in a thin definition-local subgraph
-(ADR 0013). This ADR adds no workflow-level default and no new YAML syntax.
+A definition may still fix repeated parameters and routing, such as `protocol-prompt`
+and advisory propagation, once in a thin definition-local subgraph (ADR 0013). This ADR
+adds no workflow-level default; its only new YAML is the `role` parameter.
 
 ### How the step runs
 
@@ -116,7 +138,7 @@ bindings. This is the one stage list; other documents refer to it.
 1. Preparation: request assignment, binding validation and request building.
 2. Attempt accounting.
 3. Provider-operation assignment.
-4. Authorization preparation, using `timeout-ms`.
+4. Authorization preparation, using the bound catalogue entry's `requestTimeoutMs`.
 5. Request-phase check.
 6. Request invocation-state advance, on the initial attempt only, as the phase check
    decides.
@@ -164,6 +186,48 @@ bindings. This is the one stage list; other documents refer to it.
   rules: inputs, transitions, ownership, rejection, cleanup, token accounting and
   evidence retention.
 
+### Advisory role
+
+`role` is an optional, closed step parameter. Its one value is `advisory`, for a request
+that ADR 0023 classifies as advisory and lets end with incomplete advice. Ordinary
+requests, such as extraction, reconciliation and generation, leave it out.
+
+- **Compiler.** A `role: advisory` step must map `more` and `blocked`, and the
+  deferred-carrier proof applies to it unchanged. A step without the role must not map
+  them. It carries no advisory carrier, so the proof has nothing to check there.
+- **Runtime.** Before the request is invoked, the runner checks the declared role against
+  the request's native advisory classification, the sealed advisory evidence ADR 0023
+  requires before a failure is deferred. A mismatch in either direction is a terminal
+  runner rejection that names the step. So an ordinary step can never produce an advisory
+  stop, and a step marked advisory can never be an ordinary request.
+- **Effect.** Today's generic wrappers route `more` and `blocked` to
+  `propagate-advisory-request-failure` at every call site, including sites whose requests
+  are never advisory. Those unreachable mappings and propagation steps go. Which sites are
+  advisory follows ADR 0023's classification; the equivalence acceptance below proves the
+  marking against today's behaviour.
+
+### Request deadline
+
+The provider-operation deadline is a fact about the model, not the workflow. It bounds a
+stalled exchange, and the longest legitimate exchange is the time the model takes to
+return its documented maximum output (`maxOutputTokens`, ADR 0011).
+
+- **Where it lives.** Every `.sddproviders.json` model entry, for every provider, declares
+  a required positive integer `requestTimeoutMs` in its `config`, beside
+  `maxOutputTokens`. The closed catalogue schema rejects a missing, zero, negative,
+  fractional or unknown field, as it does for `maxOutputTokens`.
+- **How it applies.** The authorization stage binds the deadline of the catalogue entry
+  that the step's slot selects to every provider operation of that request, including
+  protocol corrections. YAML carries no deadline.
+- **Values.** GPT-OSS-20B keeps today's 180,000 ms; its slowest observed call, a
+  16,384-token runaway, took 74.1 s. A model without measured latency, such as Claude
+  Haiku 5.5 (128,000 maximum output tokens), takes its value from that measurement, from
+  the compatibility probe ADR 0028 already requires before live use.
+- **Why.** On 21 October 2026 a 60-second deadline, set below GPT-OSS-20B's own maximum
+  output time, turned three runaway responses into unexplained timeouts (FIX05 B9). A
+  per-step workflow value would repeat the same guess at every call site and apply it to
+  any model the slot selects.
+
 ### What stays in YAML
 
 This is the one list; other documents refer to it.
@@ -177,7 +241,7 @@ This is the one list; other documents refer to it.
   `retire-advisory-protocol-transport` follows an advisory protocol stop. Release is a
   workflow choice, so it stays an explicit step.
 - **Advisory routing:** `propagate-advisory-request-failure` and the native advisory
-  stop steps, wherever a site routes `more` or `blocked`.
+  stop steps, at each `role: advisory` step that routes `more` or `blocked`.
 - **JSON-part retention** after a composition request (`retain-json-part`).
 - **Request-ledger initialization** (`build-initial-model-request-identity-ledger`).
 - **Repairs**, each its own request.
@@ -206,13 +270,22 @@ This is the one list; other documents refer to it.
   can't be read by the new build. Measurements that need them, such as FIX05 W4's replay
   of retained captures, run before the change or use raw response bytes.
 
-### Token counting
+### Token counting is removed
 
-Token counting follows the same rule: one `count-model-tokens` step per count, with the
-same kernel form and the count stages F0006 describes. Counts have no protocol
-correction. The step's exact parameters, outcomes and retry rule are not decided here. The
-implementation proposes them as an amendment to this ADR and F0006, for approval, without
-changing F0006's count semantics. No shipped workflow counts tokens.
+Provider input-token counting, which asks a provider how many input tokens a request would
+use before sending it, is removed. There is no `count-model-tokens` step.
+
+- **Nothing uses it.** No shipped workflow, test fixture or packaging fixture runs a count
+  operation. No registered model can count: the Anthropic contract and every Bedrock
+  family register no CountTokens (ADRs 0028 and 0029).
+- **Nothing could use it.** ADR 0011 forbids pre-call reservations, capacity prediction
+  and local size ceilings, so a count could not gate a request.
+- **The global token count stays.** The workflow token budget, `WorkflowTokenBudgetExceeded`,
+  report token totals and per-call usage evidence all come from the actual API-reported
+  usage of every inference call (ADR 0011 "Workflow token accounting"). Counting never
+  fed them.
+- **Returning it** needs its own decision, made when a workflow needs counting and a
+  model supports it.
 
 ### Removal
 
@@ -227,48 +300,79 @@ With no compatibility form (AGENTS.md), the implementation removes:
   checks that police their YAML ordering;
 - the body and wrapper subgraphs in the Specify definition, and the explicit request
   steps in the [packaging fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml);
-- the tests that pin YAML registration or YAML ordering of the removed operations.
+- the tests that pin YAML registration or YAML ordering of the removed operations;
+- the whole token-count path: the count operations and their actions, bindings and
+  registry entries, the count branches of provider-operation assignment, authorization,
+  invocation, observation, completion and accounting, the `input_token_count` operation
+  kind and capability, the exact-token-counter capability and its failure cause where
+  nothing else uses them, Bedrock's CountTokens encoding and decoding, the count fixtures
+  and the tests of all of these;
+- the `timeout-ms` parameter of authorization preparation, and every per-step deadline in
+  the Specify definition, the packaging fixture and the smoke test.
 
-The stage actions and their unit tests stay, including ADR 0012's negative cases:
-forged deltas, stale or foreign evidence, cancellation and allocation cleanup.
+The inference stage actions and their unit tests stay, including ADR 0012's negative
+cases: forged deltas, stale or foreign evidence, cancellation and allocation cleanup.
 
 ### Unchanged
 
-- Model calls, prompts, schemas, token usage and the single workflow budget (ADR 0011).
+- Model calls, prompts, schemas, token usage and the single workflow budget (ADR 0011),
+  including actual-usage accounting of every inference call.
+- Every deadline value in use today: each GPT-OSS-20B request keeps 180,000 ms.
 - Retry limits and counting scopes, advisory completion and incomplete advice
   (ADR 0023), and response admission (ADRs 0006, 0014, 0016 and 0020).
 - Request identity form, `model-request/v1` and retained-request consumers (ADR 0012).
 - Atomic execution (ADR 0009) and the 1,024-step ceiling (ADR 0016).
 
-## Derived under existing rules
+## Choices settled on 23 October 2026
 
-The user approved the replacement as suggested. These choices are derived from existing
-authority, not from the user's words, and await the user's confirmation:
+On 22 October these five choices were derived from existing rules and awaited the user's
+confirmation. On 23 October the user directed the best option for each, for a proof of
+concept whose primary goal is the best outcome. Two were kept as derived and three
+changed:
 
-1. **Form:** a fixed kernel orchestrator with runner-owned child bindings. The request
+| Choice | Derived on 22 October | Settled on 23 October | Why |
+| --- | --- | --- | --- |
+| 1. Form | Kernel orchestrator | **Kept** | The only form that keeps the engine's core guarantees |
+| 2. Token counting | Rebuild as `count-model-tokens`, contract deferred | **Removed** | Nothing can use it |
+| 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as `requestTimeoutMs` | It depends on the model, not the workflow |
+| 4a. Release | Stays an explicit YAML step | **Kept** | It has to run after workflow-specific consumers |
+| 4b. Advisory routing | Every step maps all six outcomes | **Only `role: advisory` steps map `more` and `blocked`** | Removes unreachable mappings from most sites |
+
+1. **Form: a fixed kernel orchestrator with runner-owned child bindings.** The request
    stages change runner-owned state (accounting, leases and lifecycle ledgers) that the
    runner must apply stage by stage. The split between invoking and interpreting the
    model, and between the model and authorization capabilities, must be checked by the
    runner per binding (§12.1). A single action, including an
-   [ADR 0031](0031-stage-actions.md) stage action, can't give either. Sequencing in the
-   runner itself would give the runner workflow branching (F0006 §9).
-2. **Token counting** gets the same treatment, with its exact contract deferred. The
-   anti-overfitting rule applies a shared change to every path it governs, and AGENTS.md
-   forbids a parallel lifecycle.
-3. **`timeout-ms`** stays a required step parameter. Its ownership doesn't change, and
-   ADRs 0028 and 0029 leave per-provider deadlines open.
-4. **Release** stays an explicit YAML step, because sites choose different retirements.
-5. **Advisory routing** stays at each call site, because ADR 0023 requires per-site
-   propagation or native completion.
+   [ADR 0031](0031-stage-actions.md) stage action, can't give either, and neither can an
+   [ADR 0032](0032-engine-routines.md) routine. Sequencing in the runner itself would give
+   the runner workflow branching (F0006 §9).
+2. **Token counting is removed** rather than rebuilt; see "Token counting is removed". A
+   rebuilt count step would be a lifecycle with no caller and no capable model.
+3. **The deadline moves to the catalogue;** see "Request deadline". It is a model fact
+   beside `maxOutputTokens`, and the B9 timeouts came from a deadline set below one
+   model's maximum output time. This settles the per-provider and per-family deadline
+   questions that ADRs 0028 and 0029 left open.
+4. **Release stays an explicit YAML step** (4a), because sites choose different
+   retirements and a release must follow the request's workflow-specific consumers.
+   Engine-owned release needs the compiler to derive each request's lifetime, and stays a
+   separate question.
+5. **Advisory routing stays at each advisory call site** (4b), because ADR 0023 requires
+   per-site propagation or native completion. It applies only to steps declared
+   `role: advisory`; see "Advisory role".
 
 ## Consequences
 
 - **The request region goes.** The 159-line request region, including the 61-line body,
   leaves the Specify definition, and later workflow files don't copy it.
-- **The net YAML saving is smaller.** Each call site still routes `more` and `blocked`
-  and declares `protocol-prompt` and `timeout-ms`, either itself or through a thin
-  wrapper. The estimated net saving is about 35–90 lines (3–8%) of the Specify
-  definition. The implementation measures it.
+- **The net YAML saving grows.** The 22 October estimate was about 35–90 lines (3–8%) of
+  the Specify definition, because each call site still routed `more` and `blocked` and
+  declared `protocol-prompt` and `timeout-ms`. Ordinary sites now route neither advisory
+  outcome and need no propagation steps, and no site declares a deadline, so the saving
+  is larger. The implementation measures it.
+- **Deadlines follow the model.** Selecting a different model for a slot brings that
+  model's deadline with it; no workflow edit is needed.
+- **Less engine code.** The token-count path, the count operation kind and Bedrock's
+  CountTokens wire code go, with their tests.
 - **Most of the remaining YAML size is outside this decision.** Of the current 283 steps,
   152 only pass `ok` to the next step and `failed` to the end (FIX05 §4 counted 157 of
   282 at `b2f10a3`). FIX05 A2 and W3 address those.
@@ -303,13 +407,33 @@ All offline. The change makes no model call.
   again; the request lifecycle advances once.
 - **Retry scopes.** Separate cases for an ordinary request, an atomic repair request
   (defect-keyed) and a required dependent request (parent-bound).
-- **`count-model-tokens`** keeps F0006's count outcomes, including authorization failure
-  before the first call and cancellation.
+- **Counting removed.** No count operation, operation kind, capability, CountTokens wire
+  path, fixture or test remains. Workflow token accounting reproduces the frozen totals
+  from inference usage alone.
+- **Advisory role:**
+  - a `role: advisory` request whose native classification is advisory reproduces both
+    advisory stops;
+  - an ordinary step whose request is classified advisory, and a `role: advisory` step
+    whose request is ordinary, each end in a terminal runner rejection that names the
+    step, before invocation.
+- **Request deadline:**
+  - accepted: catalogue entries of each provider with a positive integer
+    `requestTimeoutMs`;
+  - rejected: a missing, zero, negative, fractional or string `requestTimeoutMs`;
+  - the authorization stage binds the selected entry's value to every provider
+    operation of the request, including protocol corrections, and two slots bound to
+    entries with different values get different deadlines;
+  - a provider operation past its deadline keeps today's timeout outcome and usage
+    rules.
 - **Compiler cases:**
-  - accepted: a valid request step with each schema form, with and without `context`;
+  - accepted: a valid request step with each schema form, with and without `context`,
+    with and without `role: advisory`;
   - rejected: both or neither of `result-schema` and `composition-part`;
-  - rejected: a missing `retry-limit` or `timeout-ms`;
-  - rejected: an unmapped outcome;
+  - rejected: a missing `retry-limit`, or any `timeout-ms` parameter;
+  - rejected: an unknown `role` value;
+  - rejected: an unmapped outcome, including `more` or `blocked` on a `role: advisory`
+    step;
+  - rejected: `more` or `blocked` mapped on a step without `role: advisory`;
   - rejected: `more` or `blocked` routed to success, or to a model-call or publication
     step, before propagation or native completion;
   - rejected: a removed stage ID, or any attempt to name a stage;
@@ -327,10 +451,9 @@ All offline. The change makes no model call.
 ## Not decided here
 
 - Whether the engine should also release a request after its consumers, removing the
-  per-site release steps. That changes ADR 0012's retained-request handoff and needs its
-  own decision.
-- Whether a request step known to be non-advisory could omit its `more` and `blocked`
-  mappings. That would recover most of the per-site routing lines but changes ADR 0023's
-  carrier proof.
-- FIX05 A2 (stage-sized operations), W3 (one repair operation per stage) and any
-  workflow-level parameter default.
+  per-site release steps. That changes ADR 0012's retained-request handoff, needs the
+  compiler to derive each request's lifetime, and needs its own decision.
+- Claude Haiku 5.5's `requestTimeoutMs` value, which waits for measured latency.
+- Token counting's return, if a workflow and a counting-capable model ever need it.
+- Any workflow-level parameter default. FIX05 A2 and W3 are decided separately, in
+  [ADR 0031](0031-stage-actions.md) and [ADR 0033](0033-generic-repair-operations.md).

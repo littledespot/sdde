@@ -266,9 +266,10 @@ Every orchestrator must:
   graph: its stage is its declared responsibility, and its internal steps are functions with no
   routed outcomes.
 - [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) names the
-  stage sequence of one model request or token count as an ADR 0005 kernel responsibility. A
-  fixed, capability-free kernel orchestrator implements the registered `request-model` and
-  `count-model-tokens` operations, with the stage actions as its runner-owned child bindings.
+  stage sequence of one model request as an ADR 0005 kernel responsibility. A fixed,
+  capability-free kernel orchestrator implements the registered `request-model` operation,
+  with the stage actions as its runner-owned child bindings. Its 23 October amendment removes
+  provider token counting, so there is no count operation.
   ADR 0030 narrowly amends the previous rule for it: its child graph may contain exactly one
   retry, the request's protocol correction, bounded by the step's declared `retry-limit`. It
   still cannot conceal workflow transitions, repair policy, slot or resource selection, or a

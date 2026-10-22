@@ -53,6 +53,10 @@ exists.
   output rejects the whole catalogue before provider I/O. Missing/non-boolean values
   reject. Both maintained catalogues enable it. The captured setting is immutable
   for the invocation; corrections and repairs retain it.
+- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
+  23 October 2026 (not yet implemented), every model's closed `config` requires a positive
+  integer `requestTimeoutMs` beside `maxOutputTokens`: the provider-operation deadline for
+  every request to that model. Workflow YAML declares no deadline.
 - The `models.slots` map in `.sddtoolkit.json` selects the models allowed for this repository:
   every slot's exact case-sensitive `(provider, model)` tuple must resolve to exactly one entry
   in the completely validated provider catalogue.

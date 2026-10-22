@@ -485,12 +485,14 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-> **ADR 0030 amendment (22 October 2026, not yet implemented).** Under
-> [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
-> `request-model` step per model request (and one `count-model-tokens` step per count) instead of
-> the request-lifecycle bindings described below. A `request-model` step declares the slot,
-> resources, `retry-limit`, `timeout-ms` and every outcome; the `count-model-tokens` contract is
-> deferred to a later amendment of ADR 0030. A fixed kernel orchestrator runs the bindings'
+> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
+> Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
+> `request-model` step per model request instead of the request-lifecycle bindings described
+> below, and no count operation. A `request-model` step declares the slot, resources and
+> `retry-limit`, and maps `ok`, `invalid`, `failed` and `cancelled`. Only a step declared
+> `role: advisory` also maps `more` and `blocked`, and only such a step may; the compiler
+> rejects any `timeout-ms`, because the deadline comes from the catalogue entry's
+> `requestTimeoutMs`. A fixed kernel orchestrator runs the bindings'
 > rules as the stages ADR 0030 lists, and YAML can no longer name them. The step's capability
 > set is the exact union of its stage bindings' derived capabilities, and the selected policy
 > must permit each. ADR 0030's "What stays in YAML" list says which steps remain.
@@ -536,7 +538,8 @@ service is published.
   capability are introduced.
 
 - The native authorization-preparation binding requires those same retained inputs and
-  explicit positive `timeout-ms`.
+  explicit positive `timeout-ms`. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not
+  yet implemented), the deadline is the bound catalogue entry's `requestTimeoutMs`.
 - It derives the separate `provider-authorization` capability from its narrow preloaded
   preparation port, not a `model-provider` capability.
 - The runner supplies only the exact facts and one allocated deposit/publication slot

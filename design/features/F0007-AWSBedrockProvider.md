@@ -60,7 +60,11 @@ entries, never an absent entry. No model or region is a runtime default.
 `maxOutputTokens` is the model's documented maximum output (AWS documents "16K" for
 GPT-OSS-20B, and retained runs show Bedrock accepts and reaches 16,384). It is
 required, positive and
-sent unchanged; there is no default.
+sent unchanged; there is no default. Under
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
+(not yet implemented), `config` also requires a positive `requestTimeoutMs`, the
+provider-operation deadline (180,000 for GPT-OSS-20B), in place of the workflow's
+`timeout-ms`.
 
 `json: true` uses Converse with `outputConfig.textFormat.type: "json_schema"`
 and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string
@@ -111,6 +115,9 @@ Separate counting is an explicit YAML operation and cannot authorize inference o
 charge usage. Actual inference input/output usage accounting is mandatory
 regardless of CountTokens support. The [CountTokens contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CountTokens.html)
 accepts the same Converse input where the selected model supports counting.
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not
+yet implemented) removes CountTokens and every CountTokens passage in this document;
+actual-usage accounting is unchanged.
 
 ## Credentials and transport
 

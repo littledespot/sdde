@@ -480,9 +480,13 @@ Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet imple
 `model-request-with-context`, `support-request`, `composition-request` and
 `composition-request-body`) are removed. Each of the 16 call sites becomes one
 `request-model` step, followed by its consumers, any `retain-json-part` and its release
-step. Advisory `more` and `blocked` routing stays at each call site, directly or through a
-thin wrapper, and each call site keeps its own retry counter. The 159-line request region
-goes; the ADR estimates the net saving and the implementation measures it.
+step. Advisory `more` and `blocked` routing stays at each advisory call site, directly or
+through a thin wrapper, and each call site keeps its own retry counter. The 159-line request
+region goes; the ADR estimates the net saving and the implementation measures it. Under the
+ADR's 23 October 2026 amendment, only call sites whose requests ADR 0023 classifies as
+advisory declare `role: advisory` and map `more` and `blocked`; ordinary sites such as
+extraction, reconciliation and generation map neither. No call site declares a deadline:
+each model's catalogue entry carries `requestTimeoutMs`.
 
 Extraction parts derive from one complete extraction schema; reconciliation parts derive from
 existing named definitions in one reconciliation schema. Signals and conflicts

@@ -19,11 +19,13 @@ validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects r
 The existing operation registry and runner remain the execution owners.
 
 **Single-request amendment (22 October 2026, not yet implemented):**
-[ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request or
-token count to the engine-kernel list below. A workflow makes each request with one
-`request-model` step and still declares its slot, resources, retry limit, timeout and
-every outcome transition. The stage order and the request's own protocol correction
-are no longer YAML steps.
+[ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request to
+the engine-kernel list below. A workflow makes each request with one `request-model` step
+and still declares its slot, resources, retry limit and outcome transitions. The stage
+order and the request's own protocol correction are no longer YAML steps. ADR 0030's
+23 October 2026 amendment removes provider token counting, takes the request deadline
+from the model's catalogue entry instead of YAML, and lets only a step declared
+`role: advisory` map the advisory outcomes.
 
 **Stage-action amendment (22 October 2026, not yet implemented):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
@@ -70,7 +72,7 @@ workflow behavior without duplicating large resources at every node.
   runner-owned invocation and delta application, provider preparation, cancellation,
   cleanup, and security enforcement remain fixed engine responsibilities.
   [ADR 0030](0030-engine-owned-model-request.md) adds the stage sequence of one model
-  request or token count.
+  request.
 - They may inspect only the compiled definition and registered contracts; they cannot
   add domain workflow behavior.
 

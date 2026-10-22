@@ -5,6 +5,9 @@
 - **Decision authority:** Explicit user instruction to apply universal response
   guidance without local fixes, duplicate authority or verbose workflow templates
 - **Amends:** Design Section 12.2; ADRs 0006 and 0012's prompt-ownership wording
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (amended 23 October 2026, not yet implemented),
+  which removes provider token counting, so the input-token-counting bullet below no
+  longer applies.
 
 ## Decision
 

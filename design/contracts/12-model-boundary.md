@@ -29,6 +29,9 @@ provider observation contract, including missing final text. Only complete conte
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), provider
+token counting is removed; the count actions and bindings below go with it.
+
 - Optional `CountModelInputTokensAction` forwards the exact request, binding, invoked count operation and single-use lease through
   the existing provider port once, preserving counts, failures and cancellation.
 - The port owns call checks and cleanup; the action adds no capacity gate, inference
@@ -277,7 +280,8 @@ Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
 Optional CountTokens uses its `input.converse` shape, without inference-only
 configuration or an encoded legacy chat body. Models without registered count support do
-not acquire it merely because the API exists.
+not acquire it merely because the API exists. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026,
+not yet implemented) removes CountTokens and all provider token counting.
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
@@ -361,15 +365,20 @@ reuse, not provider caching or deterministic semantic proof.
 
 ### 12.7 Workflow-defined model operations
 
-> **ADR 0030 amendment (22 October 2026, not yet implemented).** One
-> [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
-> preparation step and every explicit lifecycle step below, and token counting gets one
-> `count-model-tokens` step. A fixed kernel orchestrator runs them as the stages ADR 0030
-> lists, through runner-owned child bindings. Where a bullet below says a step is
-> "explicit", "separate YAML work" or "YAML-selected", read it as that stage of the one step.
-> Each stage's rules are otherwise unchanged. `timeout-ms` and `retry-limit` move to the
+> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
+> One [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
+> preparation step and every explicit lifecycle step below. A fixed kernel orchestrator runs
+> them as the stages ADR 0030 lists, through runner-owned child bindings. Where a bullet below
+> says a step is "explicit", "separate YAML work" or "YAML-selected", read it as that stage of
+> the one step. Each stage's rules are otherwise unchanged. `retry-limit` moves to the
 > `request-model` step. Retry counting keeps its scopes, with the compiled operation now
 > being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
+> The 23 October amendment also:
+> - removes provider token counting: read every count operation below as removed; actual
+>   inference usage still feeds the one workflow token budget;
+> - takes the provider-operation deadline from the bound catalogue entry's required
+>   `requestTimeoutMs`, not a YAML `timeout-ms`;
+> - lets only a step declared `role: advisory` map `more` and `blocked`.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
@@ -446,7 +455,8 @@ findings. Only complete native collection validation permits authority advanceme
   workflow, slot or model response. A global budget rejection remains fatal during
   advice and required work; it cannot become incomplete advice.
 - Optional count operations provide observations only and never authorize inference or replace
-  actual-usage accounting.
+  actual-usage accounting. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not yet implemented)
+  removes them; actual-usage accounting is unchanged.
 
 - Native `advance-model-attempt-accounting` consumes the retained prepared request through an
   explicit YAML step and requires `retry-limit` (`0` means initial execution only).
@@ -482,7 +492,9 @@ findings. Only complete native collection validation permits authority advanceme
 - Those operations remain explicit separate YAML work.
 
 - Native `prepare-provider-operation-authorization` consumes that same request, attempt and
-  assignment through a separate YAML step with required positive `timeout-ms`.
+  assignment through a separate YAML step with required positive `timeout-ms`. Under
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), the deadline is
+  the bound catalogue entry's required `requestTimeoutMs` instead.
 - The runner derives one absolute monotonic deadline, allocates the existing private lease slot
   and validates exact result correlation before publication.
 - The action holds only the policy-permitted preloaded `provider-authorization` port: no I/O,

@@ -22,7 +22,8 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
 
 Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-stages of one `request-model` or `count-model-tokens` step are no longer YAML nodes. The runner
+stages of one `request-model` step are no longer YAML nodes (its 23 October amendment removes
+token counting, so there is no count step). The runner
 still emits one event for each stage it runs, attributed to the originating step with a stable
 stage name, so a report can name the exact stage where a request stopped.
 

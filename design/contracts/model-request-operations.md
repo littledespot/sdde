@@ -3,20 +3,24 @@
 Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
-> **ADR 0030 amendment (22 October 2026, not yet implemented).** Under
-> [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop being
-> YAML-selectable. Each becomes a fixed stage of one `request-model` step (or, for counting,
-> one `count-model-tokens` step). A capability-free kernel orchestrator runs them in the order
-> ADR 0030 lists, through runner-owned child bindings. That list also includes the
-> request-phase check, which decides whether the request lifecycle advances (initial attempt
-> only).
+> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
+> Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
+> being YAML-selectable. Each inference operation becomes a fixed stage of one
+> `request-model` step. The 23 October amendment removes provider token counting, so every
+> count operation below (`input-token-count` assignment, `count-model-input-tokens`,
+> `validate-model-token-count-observation` and `complete-count-operation`) goes. A
+> capability-free kernel orchestrator runs the stages in the order ADR 0030 lists, through
+> runner-owned child bindings. That list also includes the request-phase check, which
+> decides whether the request lifecycle advances (initial attempt only).
 >
 > Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
-> that stage within the one step. `timeout-ms` and `retry-limit` are parameters of the
-> `request-model` step. Retry authority names that step instead of the accounting step;
-> ordinary, atomic-repair and dependent counting scopes are unchanged. Correction and closure
-> stay distinct stages. Retirement (release) stays an explicit YAML step.
+> that stage within the one step. `retry-limit` is a parameter of the `request-model` step;
+> the deadline is no longer YAML `timeout-ms` but the bound catalogue entry's required
+> `requestTimeoutMs`. Only a step declared `role: advisory` maps `more` and `blocked`.
+> Retry authority names that step instead of the accounting step; ordinary, atomic-repair
+> and dependent counting scopes are unchanged. Correction and closure stay distinct stages.
+> Retirement (release) stays an explicit YAML step.
 
 ## Accounting integration
 

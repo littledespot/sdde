@@ -20,9 +20,9 @@ An orchestrator “contains” children through composition. It does not contain
 - Only the engine kernel identified by ADR 0005, including the sections explicitly marked
   startup, cleanup, or instrumentation-internal, is not callable from YAML.
 - [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) adds the
-  stage sequence of one model request or token count to that kernel. The `request-model` and
-  `count-model-tokens` steps are selected by `use` and their successors by `on`; their stages
-  are not.
+  stage sequence of one model request to that kernel. The `request-model` step is selected by
+  `use` and its successors by `on`; its stages are not. Its 23 October amendment removes
+  provider token counting.
 
 ### 14.0 `WorkflowEngineOrchestrator`
 

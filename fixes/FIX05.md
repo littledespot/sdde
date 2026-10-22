@@ -137,24 +137,42 @@ error. Any lifecycle change touches YAML, runner checks and tests together.
 
 **Decided 22 October 2026; implementation not started.**
 [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) replaces the request
-subgraph with one `request-model` step per model request and one `count-model-tokens` step
-per count. A fixed, capability-free kernel orchestrator runs the lifecycle through
+subgraph with one `request-model` step per model request (its 22 October text also gave
+counting a `count-model-tokens` step, removed on 23 October; see below). A fixed,
+capability-free kernel orchestrator runs the lifecycle through
 runner-owned child bindings. Consumers, release, advisory routing, `retain-json-part` and
 ledger initialization stay in YAML. The full record is in
 [Z_FIX05](Z_FIX05.md#a1-decision-record).
 
+**Choices settled — 23 October 2026.** The user asked for "the best possible solution,
+remember this is a POC and best outcomes is the primary goal", then directed "update docs
+with" the resulting table. ADR 0030's "Choices settled on 23 October 2026" records it:
+
+| Choice | Derived on 22 October | Settled |
+| --- | --- | --- |
+| 1. Form | Kernel orchestrator | **Kept** |
+| 2. Token counting | Rebuild as `count-model-tokens` | **Removed**: no workflow, fixture or registered model uses it |
+| 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as a required `requestTimeoutMs` |
+| 4a. Release | Explicit YAML step | **Kept** |
+| 4b. Advisory routing | Every step maps all six outcomes | **Only `role: advisory` steps map `more` and `blocked`** |
+
+The global token count is unchanged: the workflow budget, report totals and per-call
+usage come from actual inference usage, never from counting. The amendment points ADRs
+0005, 0011, 0014, 0019, 0023, 0028 and 0029, design.md, contracts §§6, 9, 12, 14, 27 and
+28, the operation catalogue, F0005–F0007, F0100, diagram 16 and the README to it. No code,
+workflow YAML or catalogue changed.
+
 Open:
 
 - implementation, with ADR 0030's offline acceptance;
-- the derived choices awaiting confirmation: the kernel-orchestrator form, including token
-  counting, keeping `timeout-ms` as a step parameter, and keeping release and advisory
-  routing in YAML;
-- whether the engine should also take over release, and whether non-advisory request steps
-  could omit their advisory mappings.
+- Claude Haiku 5.5's `requestTimeoutMs`, which waits for measured latency;
+- whether the engine should also take over release, which needs the compiler to derive
+  each request's lifetime.
 
-A1 is not expected to change model calls, tokens or reliability. Its estimated net YAML
-saving is 35–90 lines (3–8%); the larger gains are no body copy per future workflow and
-lifecycle changes confined to the engine.
+A1 is not expected to change model calls, tokens or reliability. The 22 October estimate
+of a 35–90-line (3–8%) net YAML saving grows, because ordinary sites no longer route
+advisory outcomes and no site declares a deadline. The larger gains are no body copy per
+future workflow, lifecycle changes confined to the engine and less engine code.
 
 ### A2. Every concept costs about six coordinated edits
 
@@ -186,10 +204,11 @@ Open:
 
 - convert `prepare-toolchain` first, and record the A2 measure (files touched per change)
   before converting another stage;
-- the derived choices awaiting confirmation: read-only stages, the absorption rule,
-  ADR 0030's kernel form for model requests, the scope left to A3, `prepare-toolchain`
-  first, offline evidence for structural conversions, and the contract-field and
-  model-output limits. The restated W3, also derived here, was decided as ADR 0033.
+- the derived choices awaiting confirmation: read-only stages, the absorption rule, the
+  scope left to A3, `prepare-toolchain` first, offline evidence for structural
+  conversions, and the contract-field and model-output limits. The restated W3, also
+  derived here, was decided as ADR 0033, and ADR 0030's kernel form for model requests
+  was confirmed on 23 October.
 
 ### A3. Type-erased child bindings hide data flow
 
@@ -530,9 +549,10 @@ changes or extra retries (§7).
 - **Deadline and maximum output.** The 180 s deadline covers GPT-OSS-20B's 16,384-token
   maximum. The catalogue's Claude Haiku 5.5 entries declare 128,000. If a slot selects
   that model, a runaway could again end as an unexplained `timeout`, and one completed
-  runaway would exceed the 100,000-token budget. ADR 0028 leaves Claude's deadline
-  undecided until latency is measured, and ADR 0029 leaves per-family deadlines
-  undecided.
+  runaway would exceed the 100,000-token budget. *Settled in design on 23 October 2026*
+  (ADR 0030 amendment, not yet implemented): each catalogue entry declares its own
+  required `requestTimeoutMs`, so a deadline follows its model. Claude Haiku 5.5's value
+  still waits for measured latency, and the budget point stands.
 - **Lower output allowance.** ADR 0011 permits an optional per-slot `maxOutputTokens`. On
   18 October the user directed that there be no output token limits (§11), so this needs a
   new decision.
@@ -910,13 +930,13 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
    `/evaluate-e2e` for advisory defect origins.
 3. **Separate model limitations from engine defects (R7).** All live evidence comes from
    GPT-OSS-20B. A paired comparison with a second permitted model would show whether B7's
-   obligation weakening, B9's runaways and B6's entity invention recur. Settle B9's
-   deadline point before selecting Claude Haiku 5.5.
+   obligation weakening, B9's runaways and B6's entity invention recur. Measure Claude
+   Haiku 5.5's latency for its `requestTimeoutMs` (B9, ADR 0030) before selecting it.
 4. **Then decide the open Spec failure classes:** B7's obligation weakening, B9's open
    choices, B2's review cost and finding-type accuracy, and B4's budget and scope.
-5. **Architecture, in ADR order and independent of 1–4.** Implement ADR 0030 (A1) before
-   adding operations for another workflow; if it advances a capture contract, measure W4
-   first. Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
+5. **Architecture, in ADR order and independent of 1–4.** Implement ADR 0030 (A1), as
+   amended on 23 October, before adding operations for another workflow; if it advances a
+   capture or report contract, adjudicate the existing v9 runs and measure W4 first. Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
    (ADR 0032), then convert repairs (ADR 0033). Fold A4's closed reasons and A5's rule
    style into each conversion, and check whether a conversion absorbs W5's pairs.
 6. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1
@@ -991,3 +1011,9 @@ bounded approval, and each E2E run needs its own explicit approval
   - Elsewhere: added the design.md §32 rows for ADRs 0028 and 0029, pointed the B3
     links in two calibration READMEs and Z_FIX02 to Z_FIX05, and updated
     `fixes/README.md`, the fix-records rule and `.claude/known-work.md`.
+- **23 October 2026, ADR 0030 choices settled:** the user directed the best option for
+  each derived choice (A1). ADR 0030 now keeps the kernel orchestrator and YAML release,
+  removes provider token counting, moves the request deadline to each catalogue entry as
+  `requestTimeoutMs`, and lets only `role: advisory` steps map `more` and `blocked`.
+  Updated A1, A2, B9 and §6, the affected ADRs, design.md, contracts, features,
+  diagram 16, the README and known-work. No code, workflow YAML or catalogue changed.

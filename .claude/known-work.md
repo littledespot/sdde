@@ -56,7 +56,9 @@ already made.
   runs on 21 October). The user raised the deadline to 180 s (`9719dc7`); the runaway
   then ended `output_limit`, its advice closed incomplete and the run published. The
   catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
-  cover that model; ADR 0028 leaves its deadline undecided. Lower allowances, bounded
+  cover that model. *Settled in design on 23 October 2026 (ADR 0030 amendment, not yet
+  implemented):* each catalogue entry declares its own `requestTimeoutMs`; Haiku's value
+  waits for measured latency. Lower allowances, bounded
   correction and cardinality bounds each need a decision; don't tune sampling or add
   retries.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
@@ -96,7 +98,11 @@ already made.
 - **Architecture decisions before Plan.** Several problems are known:
   - lifecycle mechanics live in workflow YAML. *Approved 22 October 2026 (ADR 0030):* one
     engine-owned `request-model` step per model request replaces the 16-step subgraph and
-    its wrappers. Documentation is updated; implementation hasn't started;
+    its wrappers. *Choices settled 23 October 2026:* kernel orchestrator and YAML release
+    kept; provider token counting removed (the global token count, from actual usage,
+    stays); the deadline moves to each catalogue entry as `requestTimeoutMs`; only
+    `role: advisory` steps map `more` and `blocked`. Documentation is updated;
+    implementation hasn't started;
   - each concept costs about six coordinated edits. *Approved 22 October 2026 (ADR 0031,
     option (b)):* one stage action whose internal steps are typed functions and route no
     outcome; its read-only limit awaits confirmation.

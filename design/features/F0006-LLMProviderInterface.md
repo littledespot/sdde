@@ -178,15 +178,19 @@ facts remain local to the abandoned or completed execution.
     - No reservation, estimate or budget-derived output allowance applies.
     - Contract: [Actual-usage accounting,
       §6](#6-providermodel-binding-and-workflow-token-accounting).
-13. Run each model request and token count as one engine-owned step
-    ([ADR 0030](../decisions/0030-engine-owned-model-request.md), 22 October 2026, not yet
-    implemented).
+13. Run each model request as one engine-owned step
+    ([ADR 0030](../decisions/0030-engine-owned-model-request.md), 22 October 2026, amended
+    23 October 2026, not yet implemented).
 
-    - One `request-model` step makes one inference request, and one `count-model-tokens`
-      step makes one count request.
-    - A `request-model` step declares the slot, resources, `retry-limit`, `timeout-ms`
-      and every outcome. The `count-model-tokens` contract is deferred to a later
-      amendment of ADR 0030 and of this document.
+    - One `request-model` step makes one inference request.
+    - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes.
+      Only a step declared `role: advisory` maps `more` and `blocked`; the runner rejects
+      a declared role that doesn't match the request's native advisory classification.
+    - The provider-operation deadline is the bound catalogue entry's required
+      `requestTimeoutMs`, beside `maxOutputTokens`; YAML declares no `timeout-ms`.
+    - Provider token counting is removed. Read every count operation, count capability
+      and count outcome in this document as removed. Actual-usage accounting (§6) is
+      unchanged and remains the only source of the workflow token total.
     - A fixed, capability-free kernel orchestrator runs the lifecycle in §§7–9 as the
       stages ADR 0030 lists, through runner-owned child bindings. The runner keeps its
       §9 duties and chooses no workflow branch.
@@ -274,6 +278,9 @@ ProviderModelDefinition {
 - There are no common (provider-independent) catalogue `endpoint`, `contextWindow`,
   `maxOutputTokens`, `supportsTemperature`, `structuredOutput`, `tokenizer`, or
   wire-parameter fields; Bedrock's closed `config` carries its own `maxOutputTokens`.
+  Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
+  23 October 2026 (not yet implemented), each provider's closed `config` also requires a
+  positive `requestTimeoutMs`, the provider-operation deadline.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
   No slot, binding or request carries an output allowance below the model's own maximum; a Bedrock catalogue entry records that documented maximum ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
@@ -377,7 +384,8 @@ LLMProviderDispatch = union(enum) {
 
 - The neutral contract carries count/inference support, an exact-count mechanism
   (`unavailable | provider_input_token_count`), response support and temperature
-  support.
+  support. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026 (not yet implemented), count
+  support and the exact-count mechanism are removed.
 - These are compiler-supplied capability facts, not configuration fields or
   provider-size policy.
 - Canonical/wire capacity fields are absent.
@@ -551,6 +559,8 @@ Resources and outcomes remain in the existing concise workflow structure.
 - Unavailable usage blocks further model calls with `ProviderTokenUsageUnavailable`,
   never a fabricated zero or estimate.
 - The count operation supplies evidence and is not charged again as inference usage.
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not yet implemented) removes the count
+  operation; this accounting is otherwise unchanged.
 - Ordinary non-model cleanup is not prohibited by an exhausted budget.
 
 **Transport and response integrity**
