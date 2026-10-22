@@ -23,6 +23,10 @@
   Converse for model switching. This replaces the previous chat wire mapping only.
 - **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
   F0001, F0005–F0007; and their samples and diagrams
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+  yet implemented). A request's protocol correction runs inside its `request-model`
+  step under that step's `retry-limit`, not as an explicit YAML transition. The runner
+  still accounts every attempt's actual usage against the one workflow budget.
 
 ## Decision
 

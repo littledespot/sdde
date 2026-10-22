@@ -260,6 +260,10 @@ After graph validation, the engine topologically assigns `T001...`, calculates s
   authority.
 - Protocol-format retries retain the same logical request ID and advance its attempt count only
   through that retry operation instance's explicit limit.
+- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+  `request-model` step is the originating step: preparation and protocol correction run inside
+  it, and its `retry-limit` is the explicit limit. ADR 0030's "What stays in YAML" list names
+  the steps that remain separate, including consumers and release.
 - A new repair, semantic review, clarification resolution, or context follow-up receives a
   distinct purpose-bound request ID.
 - It cannot reset either an operation instance's local retry counter or the workflow execution's

@@ -85,13 +85,13 @@ pub fn inspect(io: std.Io, a: std.mem.Allocator, environment: *const std.process
     const description = captured.call.description.?;
     const request_digest = try verifyWire(probe.request_sha256, captured.call.request.?);
     result.request_sha256 = try a.dupe(u8, &request_digest);
-    try @import("../model_cost_policy.zig").require(.{ .bytes = description.provider }, .{ .bytes = description.model });
+    try @import("../model_cost_policy.zig").require(.generation, .{ .bytes = description.provider }, .{ .bytes = description.model });
     const binding = @import("../diagnostic_binding.zig");
     // Validate unchanged controls against the retained catalogue and compiled registry.
     _ = try binding.rebind(a, description, captured.provider_catalogue, description.model, description.reasoning_effort);
     var authority: binding.Authorization = .{ .binding = description };
     var clock: @import("../../../src/adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
-    var transport: @import("../../../src/adapters/provider/bedrock_http.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
+    var transport: @import("../../../src/adapters/provider/model_http_exchange.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
     var parser: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
     var provider: @import("../../../src/adapters/provider/request_replay.zig").Adapter = .{
         .authorization = .{ .context = @ptrCast(&authority), .authorize_fn = binding.Authorization.authorize },
@@ -102,7 +102,7 @@ pub fn inspect(io: std.Io, a: std.mem.Allocator, environment: *const std.process
     };
     const prepared = try provider.provider().prepare(a, description);
     if (!std.mem.eql(u8, prepared, captured.call.request.?)) return error.CaptureMismatch;
-    result.request_identity = .{ .run = try a.dupe(u8, captured.call.run), .call = try a.dupe(u8, captured.call.id), .origin = captured.context.origin };
+    result.request_identity = .{ .run = try a.dupe(u8, captured.call.run), .call = try a.dupe(u8, captured.call.id), .origin = captured.context.common().origin };
     result.description = try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, description, .{}));
     result.request_file = try @import("../evidence.zig").Store.path(a, .generation, 1, .request);
     const run = try @import("../../../src/adapters/filesystem/directory_access.zig").open(io, repository, run_path);
@@ -162,7 +162,7 @@ pub fn inspect(io: std.Io, a: std.mem.Allocator, environment: *const std.process
             const total = std.math.add(u64, input, output) catch return error.CaptureMismatch;
             const usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(input, output, total) orelse return error.CaptureMismatch;
             const accounted = report.last_model_usage orelse return error.CaptureMismatch;
-            if (!std.meta.eql(usage, accounted) or report.last_model_origin == null or !std.meta.eql(report.last_model_origin.?, captured.context.origin)) return error.CaptureMismatch;
+            if (!std.meta.eql(usage, accounted) or report.last_model_origin == null or !std.meta.eql(report.last_model_origin.?, captured.context.common().origin)) return error.CaptureMismatch;
             result.usage = usage;
         };
     }

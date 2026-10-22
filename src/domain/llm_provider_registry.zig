@@ -49,7 +49,8 @@ pub const Entry = struct {
     json: bool,
     capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8,
-    bedrock_request_profile: contracts.BedrockRequestProfile = .none,
+    /// Compiled facts of the entry's provider family, from its registered contract.
+    facts: contracts.ProviderFacts,
 
     pub fn responseMode(self: Entry) @import("model_controls.zig").ResponseGuidanceMode {
         return if (self.json) .native_schema else .prompt_only;
@@ -115,7 +116,7 @@ pub fn createValidated(
         return error.InvalidLLMProviderRegistry;
     };
     for (entries, candidate.entries, 0..) |*destination, source, index| {
-        const registered = registered_contracts.resolve(source.provider, source.model) orelse return error.InvalidLLMProviderRegistry;
+        const registered = registered_contracts.resolve(source.provider, source.model, source.config) orelse return error.InvalidLLMProviderRegistry;
         destination.* = .{
             .id = .{ .ordinal = @intCast(index + 1) },
             .provider = .{ .bytes = owner.arena.allocator().dupe(u8, source.provider.bytes) catch {
@@ -132,7 +133,7 @@ pub fn createValidated(
                 owner.arena.allocator(),
                 source.supported_reasoning_efforts,
             ) catch return error.InvalidLLMProviderRegistry,
-            .bedrock_request_profile = registered.bedrock_request_profile,
+            .facts = registered.facts,
         };
     }
     owner.registry = .{ .entries = entries };
@@ -170,12 +171,11 @@ fn validateCandidate(
         {
             return error.InvalidLLMProviderRegistry;
         }
-        const registered = registered_contracts.resolve(entry.provider, entry.model) orelse {
+        const registered = registered_contracts.resolve(entry.provider, entry.model, entry.config) orelse {
             return error.InvalidLLMProviderRegistry;
         };
         if (!entry.implementation_id.eql(registered.implementation_id) or
             !std.meta.eql(entry.capabilities, registered.capabilities) or
-            !registered.acceptsConfig(entry.config) or
             !sameStrings(entry.supported_reasoning_efforts, registered.supported_reasoning_efforts))
         {
             return error.InvalidLLMProviderRegistry;

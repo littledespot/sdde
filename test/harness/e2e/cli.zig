@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for human adjudication. No model grades the output. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for human adjudication. No model grades the output. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 or au.anthropic.claude-haiku-5-5 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {
@@ -96,14 +96,14 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
         report.diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED";
         return;
     }
-    const generation_key = try @import("../environment.zig").credential(environment, .bedrock_converse);
+    const generation_keys = try @import("../environment.zig").generationKeys(environment, &generation_config.value().models);
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
-    const secrets = [_][]const u8{generation_key};
-    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };
+    const secrets = try @import("../environment.zig").secrets(allocator, generation_keys);
+    const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = secrets };
     const reconstruction = try @import("build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
     report.build.?.reconstruction = reconstruction;
-    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, store, report, .{ .purpose = .whole_workflow });
+    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_keys, store, report, .{ .purpose = .whole_workflow });
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;
     if (selected.expected_outcome != .publication) return;

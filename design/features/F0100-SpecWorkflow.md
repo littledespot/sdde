@@ -473,7 +473,18 @@ Both paths use the same native owners and produce identical model-visible conten
 The request body also uses pure `admit-model-response`, retaining detailed decoder
 and schema-validator operations. Pre-generation source, post-generation source and
 principle review each have distinct request/repair call sites; shared bodies do not
-share their retry counters. Extraction parts derive from one complete extraction schema; reconciliation parts derive from
+share their retry counters.
+
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+`model-request-body` subgraph and its wrappers (`model-request`,
+`model-request-with-context`, `support-request`, `composition-request` and
+`composition-request-body`) are removed. Each of the 16 call sites becomes one
+`request-model` step, followed by its consumers, any `retain-json-part` and its release
+step. Advisory `more` and `blocked` routing stays at each call site, directly or through a
+thin wrapper, and each call site keeps its own retry counter. The 159-line request region
+goes; the ADR estimates the net saving and the implementation measures it.
+
+Extraction parts derive from one complete extraction schema; reconciliation parts derive from
 existing named definitions in one reconciliation schema. Signals and conflicts
 receive the exact retained dispositions as prerequisites. Part schemas validate
 before retention; these candidate dispositions are context, not native acceptance.
@@ -850,6 +861,9 @@ validators:
   lifecycle and accounting.
 - The accounting step's configured limit and total token budget own exhaustion; the
   correction builder has no separate counter or limit (Design §22.6).
+- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
+  the phase check, accounting and correction are stages of the `request-model` step, and
+  that step's `retry-limit` owns exhaustion.
 
 - Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR 0006's
   closed `kind` alternatives, including nested typed values.
@@ -1356,6 +1370,14 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   claims. Cycle and permutation regressions exercise the complete publication path.
 - JSON/schema protocol retry remains separate from semantic repair.
 - YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
+- Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+  the 29 per-owner repair operations of the Spec definition become four generic ones:
+  `authorize-repair`, `build-repair-input`, `parse-repair` and `merge-repair`.
+  - Each takes the route's closed `owner`, and the owner rules stay in their domain
+    modules.
+  - Each route keeps its own steps, retry counter and ceiling.
+  - The advisory repair stops stay native stop steps.
+  - This converts after ADR 0030 and ADR 0031's first conversion.
 - Only the workflow's cumulative actual token budget limits model tokens.
 - No missing knowledge is replaced with a default or treated as deterministic proof.
 

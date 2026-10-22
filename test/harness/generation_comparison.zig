@@ -60,6 +60,8 @@ pub const Protocol = struct {
     model: []const u8,
     generation_slot: []const u8,
     region: []const u8,
+    /// The compiled Bedrock family the frozen catalogue entry names (ADR 0029).
+    family: @import("../../src/domain/llm_provider_contracts.zig").BedrockFamily,
     reasoning_effort: enum { low },
     response_mode: enum { native_schema },
     temperature: f64,
@@ -434,8 +436,14 @@ pub fn validateProtocol(protocol: Protocol) Error!void {
     const provider = identity.ProviderId.parse(protocol.provider) orelse return error.InvalidComparisonContract;
     const model = identity.ModelId.parse(protocol.model) orelse return error.InvalidComparisonContract;
     _ = identity.ModelSlotId.parse(protocol.generation_slot) orelse return error.InvalidComparisonContract;
-    cost_policy.require(provider, model) catch return error.InvalidComparisonContract;
-    if (protocol.schema != 2 or !std.mem.eql(u8, protocol.region, "ap-southeast-2") or
+    cost_policy.require(.generation, provider, model) catch return error.InvalidComparisonContract;
+    // The frozen family must compile the protocol's own temperature and effort.
+    const family = for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
+        if (entry.facts.bedrockFamily() == protocol.family) break entry;
+    } else return error.InvalidComparisonContract;
+    if (family.capabilities.inferenceControls().temperature == null or
+        !@import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(family.supported_reasoning_efforts, @tagName(protocol.reasoning_effort))) return error.InvalidComparisonContract;
+    if (protocol.schema != 3 or !std.mem.eql(u8, protocol.region, "ap-southeast-2") or
         protocol.live_authorized or protocol.temperature != Temperature.fixed.wireValue() or
         protocol.repetitions < 3 or protocol.development_features == 0 or protocol.arms.len != 2 or
         protocol.arms[0] != .A or protocol.arms[1] != .C or protocol.limits.maximum_sends == 0 or
@@ -1097,7 +1105,7 @@ fn exampleCase() Case {
     return .{ .id = "example-base", .feature_id = "example", .partition = .development, .variant = .base, .domain = "loans", .size = .small, .risk_tags = &.{"condition"}, .sources = &.{.{ .id = "source", .path = "reference/loan.md", .text = "Return loans within 30 days unless extended." }}, .duties = &.{.{ .id = "return", .description = "Retain loan deadline and extension exception.", .source_refs = &.{.{ .source_id = "source", .quote = "Return loans within 30 days unless extended." }}, .exact_values = &.{"30 days"} }}, .expected_terminal = .completed, .expected_questions = &.{}, .permissible_alternatives = &.{"The deadline can be expressed as thirty days."}, .forbidden_additions = &.{"Charge a late fee."} };
 }
 fn exampleProtocol() Protocol {
-    return .{ .schema = 2, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .max_output_tokens = .{ .tokens = 16384 }, .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
+    return .{ .schema = 3, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .family = .@"gpt-oss", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .max_output_tokens = .{ .tokens = 16384 }, .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
 }
 fn miniatureInventory(a: std.mem.Allocator) Error!Inventory {
     const cases = try a.alloc(Case, 6);
@@ -1146,7 +1154,7 @@ test "comparison contracts reject malformed closed data and unfrozen controls" {
     const protocol = exampleProtocol();
     const bytes = try std.json.Stringify.valueAlloc(a, protocol, .{});
     _ = try parseProtocol(a, bytes);
-    const unknown = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":2", "\"schema\":2,\"extra\":true");
+    const unknown = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":3", "\"schema\":3,\"extra\":true");
     try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, unknown));
     var bad = protocol;
     bad.live_authorized = true;
@@ -1203,16 +1211,27 @@ test "comparison protocol freezes the selected GPT-OSS binding and rejects super
         .{ .old = "\"response_mode\":\"native_schema\"", .replacement = "\"response_mode\":\"prompt_only\"" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":null" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":0.2" },
-        .{ .old = "\"schema\":2", .replacement = "\"schema\":1" },
+        .{ .old = "\"schema\":3", .replacement = "\"schema\":2" },
         .{ .old = "\"max_output_tokens\":16384", .replacement = "\"max_output_tokens\":0" },
         .{ .old = "\"max_output_tokens\":16384", .replacement = "\"max_output_tokens\":\"16384\"" },
-        .{ .old = "\"schema\":2", .replacement = "\"schema\":2,\"native_json_strict\":true" },
-        .{ .old = "\"schema\":2", .replacement = "\"schema\":2,\"reasoning_mode\":\"provider_default\"" },
-        .{ .old = "\"schema\":2", .replacement = "\"schema\":2,\"documented_default_effort\":\"medium\"" },
+        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"native_json_strict\":true" },
+        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"reasoning_mode\":\"provider_default\"" },
+        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"documented_default_effort\":\"medium\"" },
     }) |mutation| {
         const rejected = try std.mem.replaceOwned(u8, a, bytes, mutation.old, mutation.replacement);
         try std.testing.expect(!std.mem.eql(u8, bytes, rejected));
         try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, rejected));
+    }
+    // Another family is accepted only if it compiles the frozen temperature and effort.
+    const frozen_family = try std.fmt.allocPrint(a, "\"family\":\"{s}\"", .{@tagName(protocol.family)});
+    try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, try std.mem.replaceOwned(u8, a, bytes, frozen_family, "\"family\":\"unknown\"")));
+    for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
+        const family = entry.facts.bedrockFamily() orelse continue;
+        var changed = protocol;
+        changed.family = family;
+        const compiles = entry.capabilities.inferenceControls().temperature != null and
+            @import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(entry.supported_reasoning_efforts, @tagName(protocol.reasoning_effort));
+        if (compiles) try validateProtocol(changed) else try std.testing.expectError(error.InvalidComparisonContract, validateProtocol(changed));
     }
 }
 test "source projection excludes evaluation labels and rejects unsupported labels" {

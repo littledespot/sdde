@@ -4,6 +4,12 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
+Under [ADR 0030](../../decisions/0030-engine-owned-model-request.md) (not yet implemented),
+the request-lifecycle actions below keep their responsibilities but are no longer selected by
+YAML. A capability-free kernel orchestrator runs them as the stages ADR 0030 lists for one
+`request-model` step, through runner-owned child bindings. Where an entry says a later attempt
+follows "an explicit YAML retry transition", read the step's own bounded protocol correction.
+
 
 ## `SelectContextAction`
 
@@ -284,6 +290,12 @@ bounded fragment; no tail truncation is permitted.
 - **Input:** scope-valid request and immutable fact/content registries
 - **Output:** bounded context result
 - **Responsibility:** Resolve one authorized context request only.
+
+> **ADR 0033 (not yet implemented).** The repair entries below describe the domain
+> functions inside the four generic repair operations of
+> [ADR 0033](../../decisions/0033-generic-repair-operations.md): `authorize-repair`,
+> `build-repair-input`, `parse-repair` and `merge-repair`. Each owner contributes its own
+> rules, and the operations select them by a closed `owner`. These entries keep their rules.
 
 ## `OrderRepairDiagnosticsAction`
 

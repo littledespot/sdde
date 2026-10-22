@@ -648,6 +648,17 @@ pub const Runner = struct {
         }
     }
 
+    /// Provider families the selected workflow's model steps bind, so
+    /// composition reads no credential for an unused catalogue entry.
+    pub fn selectedProviderFamilies(self: *Runner) resolve_provider_binding.Error!std.EnumSet(@import("../domain/llm_provider_contracts.zig").ProviderConfigSchema) {
+        var families: std.EnumSet(@import("../domain/llm_provider_contracts.zig").ProviderConfigSchema) = .initEmpty();
+        for (self.selected.graph.authority.steps) |step| {
+            const resolved = (try self.resolveModelBinding(step)) orelse continue;
+            families.insert(std.meta.activeTag(resolved.registry_entry.config));
+        }
+        return families;
+    }
+
     fn resolveModelBinding(
         self: *Runner,
         step: compilation.CompiledStep,

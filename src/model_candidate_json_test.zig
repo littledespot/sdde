@@ -459,7 +459,7 @@ test "focused review evidence shapes follow native minima without excluding sour
     try candidateSchemaCase("support", "finding", "{\"kind\":\"supported\",\"source_ids\":[7],\"detail\":\"\",\"provenance\":{\"claim_ids\":[7]}}", .unknown_property, "/provenance");
     // Provider projections also exclude the forbidden bookkeeping field.
     const projection = @import("domain/model_schema_projection.zig");
-    const native = try projection.value(a, schema.select(.{ .bytes = "applicability_finding" }).?.root(), .bedrock);
+    const native = try projection.value(a, schema.select(.{ .bytes = "applicability_finding" }).?.root(), .native);
     for (native.object.get("anyOf").?.array.items) |variant| {
         const properties = variant.object.get("properties").?.object;
         try std.testing.expect(!properties.contains("provenance"));

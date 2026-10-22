@@ -10,7 +10,7 @@ const schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"stri
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "generation",
     .workflow_id = "spec",
     .workflow_version = 1,
@@ -24,7 +24,7 @@ const description: debug.Description = .{
     .operation_kind = .inference,
 };
 const Fixture = struct {
-    wire: @import("bedrock_transport_test_fixture.zig").Wire = .{},
+    wire: @import("model_transport_test_fixture.zig").Wire = .{},
     environment: std.process.Environ.Map,
     compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{},
     provider: adapter.Adapter = undefined,
@@ -34,16 +34,16 @@ const Fixture = struct {
     fail_request: bool = false,
     fail_response: bool = false,
     saved: ?debug.RequestRecord = null,
-    request_profile: @import("domain/llm_provider_contracts.zig").BedrockRequestProfile = .openai_oss,
+    family: @import("domain/llm_provider_contracts.zig").BedrockFamily = .@"gpt-oss",
     fn init(self: *Fixture, a: std.mem.Allocator) !void {
         self.* = .{ .environment = .init(a) };
         try self.environment.put("AWS_BEARER_TOKEN_BEDROCK", "test-secret-never-log");
         self.provider = .{ .authorization = .{ .context = @ptrCast(self), .authorize_fn = authorize }, .environment = &self.environment, .transport = self.wire.port(), .clock = .{ .context = @ptrCast(self), .now_fn = now }, .compiler = self.compiler.compiler() };
     }
-    fn authorize(ctx: *port.Context, value: debug.Description) port.Error!@import("domain/llm_provider_contracts.zig").BedrockRequestProfile {
+    fn authorize(ctx: *port.Context, value: debug.Description) port.Error!@import("domain/llm_provider_contracts.zig").ProviderFacts {
         const self: *Fixture = @ptrCast(@alignCast(ctx));
         if (self.denied or !std.mem.eql(u8, value.model, description.model)) return error.ReplayUnauthorized;
-        return self.request_profile;
+        return .{ .aws_bedrock = self.family };
     }
     fn now(_: *@import("ports/provider_authorization_lease.zig").Context) error{ClockUnavailable}!u64 {
         return 100;
@@ -116,7 +116,7 @@ test "replay sends the description's recorded model maximum unchanged" {
     defer fixture.environment.deinit();
     for ([_]u32{ 8192, 16000 }) |maximum| {
         var selected = description;
-        selected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = maximum } } };
+        selected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = maximum } } };
         const body = try fixture.provider.provider().prepare(a, selected);
         const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
         try std.testing.expectEqual(@as(i64, maximum), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
@@ -145,7 +145,7 @@ test "captured descriptions round-trip controls and reject a retired output allo
     try std.testing.expect(!std.mem.eql(u8, bytes, retired));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, retired));
     // The superseded v8 label, which recorded no model maximum output, cannot be read as current.
-    const superseded = try std.mem.replaceOwned(u8, a, bytes, "model-request-debug/v9", "model-request-debug/v8");
+    const superseded = try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v9");
     try std.testing.expect(!std.mem.eql(u8, bytes, superseded));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, superseded));
 }
@@ -393,7 +393,11 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
-    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v9", "model-request-debug/v3");
+    // Archive rows record each content length, so the older version keeps the
+    // current member's length with JSON whitespace.
+    const current_member = "\"version\":\"" ++ @import("domain/model_request_description.zig").current_version ++ "\"";
+    const obsolete_member = "\"version\":" ++ " " ** (current_member.len - "\"version\":\"model-request-debug/v3\"".len) ++ "\"model-request-debug/v3\"";
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, current_member, obsolete_member);
     try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
     var unsupported: archive.Archive = .{ .allocator = a };
     try unsupported.ingest(obsolete);
@@ -617,8 +621,8 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.provider.bytes = description.provider;
     production.registry_entry.model.bytes = description.model;
     production.registry_entry.config = description.provider_config;
-    production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
-    production.registry_entry.bedrock_request_profile = .openai_oss;
+    production.registry_entry.capabilities.structured_response = .native_json_schema;
+    production.registry_entry.facts = .{ .aws_bedrock = .@"gpt-oss" };
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
     for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         production.request.controls = production.provider_binding.controls;
@@ -626,7 +630,7 @@ test "captured production request reconstructs exactly in both schema modes" {
         production.request.response_guidance_mode = mode;
         production.registry_entry.json = mode == .native_schema;
         try std.testing.expect(production.request.matchesBinding(production.provider_binding));
-        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.bedrock_request_profile, production.registry_entry.config.aws_bedrock.max_output_tokens);
+        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
         const restored = try debug.Description.decode(a, serialized);
@@ -954,8 +958,8 @@ test "selected request schemas survive capture and graph release without whole-s
             production.registry_entry.provider.bytes = description.provider;
             production.registry_entry.model.bytes = description.model;
             production.registry_entry.config = description.provider_config;
-            production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
-            production.registry_entry.bedrock_request_profile = .openai_oss;
+            production.registry_entry.capabilities.structured_response = .native_json_schema;
+            production.registry_entry.facts = .{ .aws_bedrock = .@"gpt-oss" };
             const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
             defer if (selected.restriction) |restriction| restriction.release();
             production.request.response_schema = selected.schema;
@@ -973,7 +977,7 @@ test "selected request schemas survive capture and graph release without whole-s
             try std.testing.expectEqualStrings(selected.schema.modelBytes(), projection.schema);
             logger.begin(.{ .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"), .workflow_id = .{ .bytes = projection.workflow_id }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = projection.request_step }, .model_slot = .{ .bytes = projection.model_slot }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .description = projection });
             defer logger.end();
-            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.bedrock_request_profile, production.registry_entry.config.aws_bedrock.max_output_tokens);
+            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
             try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
             const response = try debugResponse(source, selected.response);
             try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = response }, &.{}));
@@ -1001,7 +1005,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v9", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), @import("domain/model_request_description.zig").current_version, "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }
@@ -1021,7 +1025,8 @@ test "replay serializes only the trusted model request profile and rejects legac
     selected.reasoning_effort = null;
     selected.controls.temperature = null;
     selected.response_mode = .native_schema;
-    fixture.request_profile = .openai_luna;
+    fixture.family = .luna;
+    selected.provider_config.aws_bedrock.family = .luna;
     const body = try fixture.provider.provider().prepare(a, selected);
     const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
     const fields = parsed.value.object.get("additionalModelRequestFields").?.object;
@@ -1220,4 +1225,25 @@ test "debugger exposes provider reasoning separately including stopped and missi
     inline for (comptime std.meta.tags(@import("domain/model_envelope.zig").Normalization)) |rule| {
         if (rule != .none) try std.testing.expect(std.mem.indexOf(u8, ui, @tagName(rule) ++ ":") != null);
     }
+}
+
+test "replay re-encodes only with the family the authorized binding compiles" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const families = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockFamily);
+    for (families) |authorized| for (families) |captured| {
+        var fixture: Fixture = undefined;
+        try fixture.init(a);
+        defer fixture.environment.deinit();
+        fixture.family = authorized;
+        var selected = description;
+        selected.reasoning_effort = null;
+        selected.controls.temperature = null;
+        selected.provider_config.aws_bedrock.family = captured;
+        if (authorized == captured) {
+            _ = try fixture.provider.provider().prepare(a, selected);
+        } else try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, selected));
+        try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+    };
 }

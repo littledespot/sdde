@@ -269,6 +269,12 @@ The steps remain separate action responsibilities. Their orchestrator receives
 runner-owned child bindings and no filesystem, clock, serializer, redaction,
 or sink capability.
 
+Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), these steps
+become the typed steps of a feature-logging engine routine, in its second conversion. It
+converts only once the ADR's logging preconditions hold, including baseline tests for
+cancellation under a lock and for the emergency-line count. The outcomes, failure path and
+non-recursion here are unchanged.
+
 Filtering occurs before event identity, sequence, segment, or lock allocation.
 Logging-internal nodes are not recursively observed.
 

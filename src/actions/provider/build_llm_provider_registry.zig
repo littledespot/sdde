@@ -62,7 +62,12 @@ pub const Action = struct {
                         return error.LLMProviderRegistryInvalid;
                     }
                 }
-                const registered = self.contracts.resolve(provider_id, model_id) orelse {
+                // The provider's family decodes the configuration, which then selects
+                // the contract: an exact model, or a Bedrock entry's named family.
+                const config = config_schema.decode(self.contracts.configSchema(provider_id).?, model.config) orelse {
+                    return error.LLMProviderRegistryInvalid;
+                };
+                const registered = self.contracts.resolve(provider_id, model_id, config) orelse {
                     return error.LLMProviderRegistryInvalid;
                 };
                 candidate.entries[entry_index] = .{
@@ -70,9 +75,7 @@ pub const Action = struct {
                     .json = model.json,
                     .model = model_id,
                     .implementation_id = registered.implementation_id,
-                    .config = config_schema.decode(registered.config_schema, model.config) orelse {
-                        return error.LLMProviderRegistryInvalid;
-                    },
+                    .config = config,
                     .supported_reasoning_efforts = registered.supported_reasoning_efforts,
                     .capabilities = registered.capabilities,
                 };

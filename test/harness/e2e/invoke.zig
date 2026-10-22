@@ -17,10 +17,10 @@ pub const Options = struct {
     experiment: ?*@import("../baseline/dispatch.zig").Gate = null,
     capture: ?*trace_module.CaptureLog = null,
     /// Only offline tests may replace the transport; the live CLI never supplies it.
-    transport: ?@import("../../../src/adapters/provider/bedrock_transport.zig").Port = null,
+    transport: ?@import("../../../src/adapters/provider/model_http_transport.zig").Port = null,
 };
 
-pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, key: ?[]const u8, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
+pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, selected: c.Case, captured: fixture.Capture, generation_keys: @import("../environment.zig").GenerationKeys, store: @import("../evidence.zig").Store, report: *c.Report, options: Options) !?[]const u8 {
     if (!@import("builtin").is_test and options.transport != null) return error.TestTransportForbidden;
     var runtime: root.Runtime = undefined;
     runtime.init(io, allocator, project, .{});
@@ -46,8 +46,13 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     const resolved = try @import("../../../src/domain/workflow_artifact_registry.zig").resolveFeaturePaths(allocator, configured, directory);
     report.status = .harness_error;
     // The isolated credential uses the same authorization and provider bindings.
-    const snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(allocator, key);
-    var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshot = snapshot });
+    const keys = @import("../../../src/adapters/provider/provider_api_key.zig");
+    // Each family's isolated test key uses the same authorization and bindings.
+    var supplied: keys.Supplied = .initFill(null);
+    for (std.enums.values(keys.Family)) |family| {
+        if (generation_keys.get(family)) |key| supplied.set(family, try keys.Snapshot.capture(allocator, key));
+    }
+    var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshots = supplied });
     defer invocation.deinit();
     var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
     defer expected_config.deinit();

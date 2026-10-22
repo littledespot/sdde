@@ -3,6 +3,21 @@
 Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
+> **ADR 0030 amendment (22 October 2026, not yet implemented).** Under
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop being
+> YAML-selectable. Each becomes a fixed stage of one `request-model` step (or, for counting,
+> one `count-model-tokens` step). A capability-free kernel orchestrator runs them in the order
+> ADR 0030 lists, through runner-owned child bindings. That list also includes the
+> request-phase check, which decides whether the request lifecycle advances (initial attempt
+> only).
+>
+> Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
+> cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
+> that stage within the one step. `timeout-ms` and `retry-limit` are parameters of the
+> `request-model` step. Retry authority names that step instead of the accounting step;
+> ordinary, atomic-repair and dependent counting scopes are unchanged. Correction and closure
+> stay distinct stages. Retirement (release) stays an explicit YAML step.
+
 ## Accounting integration
 
 - The explicitly selected `advance-model-attempt-accounting` step consumes the prepared

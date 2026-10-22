@@ -102,7 +102,7 @@ pub fn acquire(io: std.Io, a: std.mem.Allocator, transient: std.mem.Allocator, f
 
 /// The replacement transport is only reachable from offline tests. Production
 /// execution enforces its existing TestTransportForbidden check independently.
-pub fn execute(io: std.Io, a: std.mem.Allocator, frozen: frozen_inputs.Freeze, parent: std.Io.Dir, key: []const u8, gate: *dispatch.Gate, facts: *Facts, transport: ?@import("../../../src/adapters/provider/bedrock_transport.zig").Port) !void {
+pub fn execute(io: std.Io, a: std.mem.Allocator, frozen: frozen_inputs.Freeze, parent: std.Io.Dir, key: []const u8, gate: *dispatch.Gate, facts: *Facts, transport: ?@import("../../../src/adapters/provider/model_http_transport.zig").Port) !void {
     if (!@import("builtin").is_test) try frozen_inputs.requireExecutable(a, frozen);
     const project = try frozen_inputs.project(a, frozen, facts.trial);
     const trial_path = try std.fmt.allocPrint(a, "trials/{d:0>4}", .{facts.trial.ordinal});
@@ -125,7 +125,7 @@ pub fn execute(io: std.Io, a: std.mem.Allocator, frozen: frozen_inputs.Freeze, p
     defer captured.deinit();
     var report: native.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = try a.dupe(u8, &run.started_at_utc), .execution_id = try a.dupe(u8, &run.name), .case_id = project.selected.id, .workflow_id = project.selected.workflow_id, .status = .input_invalid };
     const started: std.Io.Clock.Timestamp = .now(io, .awake);
-    const published = @import("../e2e/invoke.zig").run(io, a, run.project, project.selected, project.captured, key, store, &report, .{ .purpose = .whole_workflow, .transport = transport, .experiment = gate, .capture = &captured }) catch |err| failed: {
+    const published = @import("../e2e/invoke.zig").run(io, a, run.project, project.selected, project.captured, @import("../environment.zig").bedrockOnly(key), store, &report, .{ .purpose = .whole_workflow, .transport = transport, .experiment = gate, .capture = &captured }) catch |err| failed: {
         report.status = .harness_error;
         report.diagnostic = @errorName(err);
         gate.stop(.evidence_failure);

@@ -1,97 +1,56 @@
+//! Bedrock Converse and CountTokens response contract: closed envelope, usage
+//! counters, stop mapping and AWS error table. Shared readers and assembly
+//! own everything provider-neutral.
 const std = @import("std");
 const operation = @import("../../domain/llm_provider_operation.zig");
 const binding = @import("../../domain/llm_provider_binding.zig");
-const strict = @import("../../domain/strict_json.zig");
-const transport = @import("bedrock_transport.zig");
+const transport = @import("model_http_transport.zig");
 const provider_reasoning = @import("../../domain/provider_reasoning.zig");
-const json_pointer = @import("../../domain/json_pointer.zig");
-const Invalid = error{InvalidResponse};
-
-/// Diagnostic paths are owned; release before reusing the output slot.
-pub const DecodeDiagnostic = struct {
-    reason: enum { invalid_response, expected_object, unknown_field },
-    path: []const u8,
-
-    pub fn deinit(self: DecodeDiagnostic, allocator: std.mem.Allocator) void {
-        allocator.free(self.path);
-    }
-
-    pub fn explanation(self: DecodeDiagnostic) []const u8 {
-        return switch (self.reason) {
-            .invalid_response => "Invalid provider response",
-            .expected_object => "Expected provider response object",
-            .unknown_field => "Unknown provider response field",
-        };
-    }
-};
-
-pub fn failure(id: operation.ProviderOperationId, cause: operation.ProviderFailureCause, delivery: operation.ProviderDeliveryDisposition) operation.ProviderFailure {
-    const value = transportFailure(cause, delivery);
-    return .{ .operation_id = id, .cause = value.cause, .delivery = value.delivery, .retry_class = value.retry_class };
-}
-
-fn transportFailure(cause: operation.ProviderFailureCause, delivery: operation.ProviderDeliveryDisposition) transport.Failure {
-    return .{ .cause = cause, .delivery = delivery, .retry_class = switch (cause) {
-        .throttled, .timeout, .service_unavailable, .transport_failed => .policy_eligible,
-        .authentication_failed, .authorization_denied, .request_rejected, .model_unavailable, .response_invalid, .exact_token_count_unavailable => .never,
-    } };
-}
+const support = @import("provider_response_support.zig");
+const assembly = @import("provider_response_assembly.zig");
+const Invalid = support.Invalid;
+const fields = support.fields;
+const diagnosedFields = support.diagnosedFields;
+const field = support.field;
+const string = support.string;
+const integer = support.integer;
+const enumeration = support.enumeration;
 
 pub fn count(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderTokenCountObservation {
-    if (try errorResponse(allocator, response, id)) |rejected| return .{ .failed = rejected };
-    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return switch (err) {
+    if (try classifyResponse(allocator, response)) |rejected| return .{ .failed = assembly.rejected(id, rejected) };
+    var parsed = support.parse(allocator, response.received.body) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        else => .{ .failed = failure(id, .exact_token_count_unavailable, .response_received) },
+        else => .{ .failed = assembly.failure(id, .exact_token_count_unavailable, .response_received) },
     };
     defer parsed.deinit();
-    const tokens = decodeCount(parsed.value) catch return .{ .failed = failure(id, .exact_token_count_unavailable, .response_received) };
+    const tokens = decodeCount(parsed.value) catch return .{ .failed = assembly.failure(id, .exact_token_count_unavailable, .response_received) };
     return .{ .counted = .{ .operation_id = id, .binding_id = selected.bindingId(), .model_visible_input_id = request.model_visible_input_id, .input_tokens = tokens } };
 }
 
 fn decodeCount(value: std.json.Value) Invalid!u64 {
-    try fields(value, &.{"inputTokens"}, null);
+    try fields(value, &.{"inputTokens"});
     return integer(try field(value, "inputTokens"));
 }
 
 pub fn inference(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderInvocationObservation {
-    if (try errorResponse(allocator, response, id)) |rejected| return .{ .failed = rejected };
-    var parsed = strict.parse(allocator, response.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => .{ .failed = failure(id, .response_invalid, .response_received) },
-    };
-    defer parsed.deinit();
-    return decodeInference(allocator, parsed.value, selected, request, id) catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => .{ .failed = failure(id, .response_invalid, .response_received) },
-    };
+    return assembly.inference(allocator, response, selected, request, id, classifyResponse, decode);
 }
 
-pub const Inference = struct {
-    usage: operation.ProviderUsage,
-    latency_ms: ?u32,
-    output: union(enum) { text: []const u8, stopped: operation.ProviderNonCandidateStopReason, invalid: operation.ProviderContentDiagnostic },
-    reasoning: []const provider_reasoning.Block,
-
-    pub fn deinit(self: *Inference, allocator: std.mem.Allocator) void {
-        if (self.output == .text) allocator.free(self.output.text);
-        provider_reasoning.deinit(allocator, self.reasoning);
-        self.* = undefined;
-    }
-};
+fn decode(allocator: std.mem.Allocator, raw: std.json.Value, _: *const binding.ValidatedProviderModelBinding, diagnostic: ?*?support.DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!assembly.Inference {
+    return decodeConverse(allocator, raw, diagnostic);
+}
 
 // Converse wire facts. Usage survives a rejected candidate; provider reasoning
 // never becomes authored content or workflow authority. Text owns its exact join.
-pub fn decodeConverse(allocator: std.mem.Allocator, raw: std.json.Value, diagnostic: ?*?DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!Inference {
+pub fn decodeConverse(allocator: std.mem.Allocator, raw: std.json.Value, diagnostic: ?*?support.DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!assembly.Inference {
     if (diagnostic) |out| out.* = null;
     return decodeConverseValue(allocator, raw, diagnostic) catch |err| {
-        if (err == error.InvalidResponse) if (diagnostic) |out| {
-            if (out.* == null) out.* = .{ .reason = .invalid_response, .path = try allocator.dupe(u8, "") };
-        };
+        if (err == error.InvalidResponse) try support.DecodeDiagnostic.fallback(allocator, diagnostic);
         return err;
     };
 }
 
-fn decodeConverseValue(allocator: std.mem.Allocator, raw: std.json.Value, diagnostic: ?*?DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!Inference {
+fn decodeConverseValue(allocator: std.mem.Allocator, raw: std.json.Value, diagnostic: ?*?support.DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!assembly.Inference {
     try diagnosedFields(allocator, raw, &.{ "output", "stopReason", "usage", "metrics", "serviceTier", "performanceConfig", "additionalModelResponseFields" }, &.{}, diagnostic);
     var latency_ms: ?u32 = null;
     if (raw.object.get("metrics")) |metrics| {
@@ -140,23 +99,21 @@ fn decodeConverseValue(allocator: std.mem.Allocator, raw: std.json.Value, diagno
         try integer(try field(usage, "outputTokens")),
         try integer(try field(usage, "totalTokens")),
     ) orelse return error.InvalidResponse;
-    var reasoning_blocks: std.ArrayList(provider_reasoning.Block) = .empty;
-    defer reasoning_blocks.deinit(allocator);
-    errdefer for (reasoning_blocks.items) |block| block.deinit(allocator);
-    const output: @FieldType(Inference, "output") = decodeOutput(allocator, raw, &reasoning_blocks) catch |err| switch (err) {
+    var accumulated: assembly.Accumulator = .init(allocator);
+    defer accumulated.deinit();
+    const output: assembly.Output = decodeOutput(raw, &accumulated) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.InvalidResponse => .{ .invalid = .invalid_content },
     };
     errdefer if (output == .text) allocator.free(output.text);
-    return .{ .usage = reported, .latency_ms = latency_ms, .output = output, .reasoning = try reasoning_blocks.toOwnedSlice(allocator) };
+    return .{ .usage = reported, .latency_ms = latency_ms, .output = output, .reasoning = try accumulated.takeReasoning() };
 }
 
-fn decodeOutput(allocator: std.mem.Allocator, raw: std.json.Value, reasoning_blocks: *std.ArrayList(provider_reasoning.Block)) (Invalid || std.mem.Allocator.Error)!@FieldType(Inference, "output") {
-    const decoded = decodeMessage(allocator, raw, reasoning_blocks) catch |err| switch (err) {
+fn decodeOutput(raw: std.json.Value, accumulated: *assembly.Accumulator) (Invalid || std.mem.Allocator.Error)!assembly.Output {
+    const message = decodeMessage(raw, accumulated) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
-        error.InvalidResponse => @as(@FieldType(Inference, "output"), .{ .invalid = .invalid_content }),
+        error.InvalidResponse => @as(?assembly.Output, .{ .invalid = .invalid_content }),
     };
-    errdefer if (decoded == .text) allocator.free(decoded.text);
     const stop = try string(try field(raw, "stopReason"));
     const Stop = enum { end_turn, tool_use, max_tokens, stop_sequence, guardrail_intervened, content_filtered, malformed_model_output, malformed_tool_use, model_context_window_exceeded };
     const selected = std.meta.stringToEnum(Stop, stop) orelse return error.InvalidResponse;
@@ -168,61 +125,54 @@ fn decodeOutput(allocator: std.mem.Allocator, raw: std.json.Value, reasoning_blo
         .malformed_model_output, .stop_sequence => .malformed_output,
         .model_context_window_exceeded => .context_limit,
     };
-    if (stopped) |reason| {
-        if (decoded == .text) allocator.free(decoded.text);
-        return .{ .stopped = reason };
-    }
-    return decoded;
+    if (stopped) |reason| return .{ .stopped = reason };
+    if (message) |value| return value;
+    return accumulated.output(null);
 }
 
-fn decodeMessage(allocator: std.mem.Allocator, raw: std.json.Value, reasoning_blocks: *std.ArrayList(provider_reasoning.Block)) (Invalid || std.mem.Allocator.Error)!@FieldType(Inference, "output") {
+/// Accumulates the message's text and reasoning, or names why it has none.
+fn decodeMessage(raw: std.json.Value, accumulated: *assembly.Accumulator) (Invalid || std.mem.Allocator.Error)!?assembly.Output {
     const output = raw.object.get("output") orelse return .{ .invalid = .missing_final_text };
-    try fields(output, &.{"message"}, null);
+    try fields(output, &.{"message"});
     const message = try field(output, "message");
-    try fields(message, &.{ "role", "content" }, null);
+    try fields(message, &.{ "role", "content" });
     if (!std.mem.eql(u8, try string(try field(message, "role")), "assistant")) return error.InvalidResponse;
     const content = message.object.get("content") orelse return .{ .invalid = .missing_final_text };
     if (content != .array) return error.InvalidResponse;
-    var text: std.Io.Writer.Allocating = .init(allocator);
-    defer text.deinit();
-    var invalid_content = false;
     for (content.array.items) |block| {
-        fields(block, &.{ "text", "reasoningContent" }, null) catch {
-            invalid_content = true;
+        fields(block, &.{ "text", "reasoningContent" }) catch {
+            accumulated.invalid_content = true;
             continue;
         };
         if (block.object.count() != 1) {
-            invalid_content = true;
+            accumulated.invalid_content = true;
             continue;
         }
         if (block.object.get("text")) |part| {
             const value = string(part) catch {
-                invalid_content = true;
+                accumulated.invalid_content = true;
                 continue;
             };
-            text.writer.writeAll(value) catch return error.OutOfMemory;
+            try accumulated.appendText(value);
         } else {
-            const owned = reasoning(allocator, try field(block, "reasoningContent")) catch |err| switch (err) {
+            const owned = reasoning(accumulated.allocator, try field(block, "reasoningContent")) catch |err| switch (err) {
                 error.OutOfMemory => return error.OutOfMemory,
                 error.InvalidResponse => {
-                    invalid_content = true;
+                    accumulated.invalid_content = true;
                     continue;
                 },
             };
-            errdefer owned.deinit(allocator);
-            try reasoning_blocks.append(allocator, owned);
+            try accumulated.appendReasoning(owned);
         }
     }
-    if (invalid_content) return .{ .invalid = .invalid_content };
-    if (std.mem.trim(u8, text.written(), " \r\n\t").len == 0) return .{ .invalid = .missing_final_text };
-    return .{ .text = try text.toOwnedSlice() };
+    return null;
 }
 
 fn reasoning(allocator: std.mem.Allocator, raw: std.json.Value) (Invalid || std.mem.Allocator.Error)!provider_reasoning.Block {
-    try fields(raw, &.{ "reasoningText", "redactedContent" }, null);
+    try fields(raw, &.{ "reasoningText", "redactedContent" });
     if (raw.object.count() != 1) return error.InvalidResponse;
     if (raw.object.get("reasoningText")) |text| {
-        try fields(text, &.{ "text", "signature" }, null);
+        try fields(text, &.{ "text", "signature" });
         return (provider_reasoning.Block{ .text = .{
             .text = try string(try field(text, "text")),
             .signature = if (text.object.get("signature")) |signature| try string(signature) else null,
@@ -237,64 +187,19 @@ fn reasoning(allocator: std.mem.Allocator, raw: std.json.Value) (Invalid || std.
     }
 }
 
-fn enumeration(raw: std.json.Value, allowed: []const []const u8) Invalid!void {
-    const value = try string(raw);
-    for (allowed) |name| if (std.mem.eql(u8, value, name)) return;
-    return error.InvalidResponse;
-}
-
-fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) (Invalid || std.mem.Allocator.Error)!operation.ProviderInvocationObservation {
-    var decoded = try decodeConverse(allocator, raw, null);
-    defer decoded.deinit(allocator);
-    var result: operation.RawProviderModelResult = switch (decoded.output) {
-        .invalid => |reason| .{ .rejected = .{
-            .request_id = request.model_request_id,
-            .binding_id = selected.bindingId(),
-            .reason = reason,
-            .usage = decoded.usage,
-            .provider_latency_ms = decoded.latency_ms,
-        } },
-        .text => |text| .{ .complete = .{
-            .request_id = request.model_request_id,
-            .binding_id = selected.bindingId(),
-            .content = operation.CompleteOwnedUtf8.init(allocator, text) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidResponse,
-            .usage = decoded.usage,
-            .provider_latency_ms = decoded.latency_ms,
-        } },
-        .stopped => |reason| .{ .stopped = .{
-            .request_id = request.model_request_id,
-            .binding_id = selected.bindingId(),
-            .reason = reason,
-            .usage = decoded.usage,
-            .provider_latency_ms = decoded.latency_ms,
-        } },
-    };
-    if (decoded.reasoning.len != 0) switch (result) {
-        inline .complete, .stopped, .rejected => |*value| value.reasoning = provider_reasoning.Owned.take(allocator, &decoded.reasoning),
-    };
-    return .{ .completed = .{ .operation_id = id, .raw_result = result } };
-}
-
-fn errorResponse(allocator: std.mem.Allocator, response: transport.Response, id: operation.ProviderOperationId) std.mem.Allocator.Error!?operation.ProviderFailure {
-    const rejected = try classifyResponse(allocator, response) orelse return null;
-    return .{ .operation_id = id, .cause = rejected.cause, .retry_class = rejected.retry_class, .delivery = rejected.delivery, .transport = rejected.diagnostic };
-}
-
 pub fn classifyResponse(allocator: std.mem.Allocator, response: transport.Response) std.mem.Allocator.Error!?transport.Failure {
     const received = switch (response) {
         .failed => |value| return value,
         .received => |value| value,
     };
     if (received.status == 200 and received.exception == null) return null;
-    const invalid = transportFailure(.response_invalid, .response_received);
-    var parsed = strict.parse(allocator, received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else invalid;
-    defer parsed.deinit();
-    const cause = decodeError(parsed.value, received.status, received.exception) catch return invalid;
-    return transportFailure(cause, .response_received);
+    return try assembly.classifyErrorBody(allocator, received, decodeError);
 }
 
-fn decodeError(raw: std.json.Value, status: u16, header: ?[]const u8) Invalid!operation.ProviderFailureCause {
-    try fields(raw, &.{ "message", "Message", "__type", "code", "originalStatusCode", "resourceName" }, null);
+fn decodeError(raw: std.json.Value, received: assembly.Received) Invalid!operation.ProviderFailureCause {
+    const status = received.status;
+    const header = received.exception;
+    try fields(raw, &.{ "message", "Message", "__type", "code", "originalStatusCode", "resourceName" });
     if (raw.object.contains("message") and raw.object.contains("Message")) return error.InvalidResponse;
     if (raw.object.get("message")) |message| _ = try string(message);
     if (raw.object.get("Message")) |message| _ = try string(message);
@@ -337,60 +242,9 @@ fn decodeError(raw: std.json.Value, status: u16, header: ?[]const u8) Invalid!op
     return error.InvalidResponse;
 }
 
-const FieldRejection = union(enum) { expected_object, unknown_field: []const u8 };
-
-fn fields(raw: std.json.Value, allowed: []const []const u8, diagnostic: ?*?FieldRejection) Invalid!void {
-    if (diagnostic) |out| out.* = null;
-    if (raw != .object) {
-        if (diagnostic) |out| out.* = .expected_object;
-        return error.InvalidResponse;
-    }
-    for (raw.object.keys()) |key| {
-        for (allowed) |name| if (std.mem.eql(u8, key, name)) break else {} else {
-            if (diagnostic) |out| out.* = .{ .unknown_field = key };
-            return error.InvalidResponse;
-        }
-    }
-}
-
-fn diagnosedFields(allocator: std.mem.Allocator, raw: std.json.Value, allowed: []const []const u8, path: []const json_pointer.Segment, diagnostic: ?*?DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!void {
-    var rejection: ?FieldRejection = null;
-    fields(raw, allowed, &rejection) catch {
-        if (diagnostic) |out| {
-            var segments: std.ArrayList(json_pointer.Segment) = .empty;
-            defer segments.deinit(allocator);
-            try segments.appendSlice(allocator, path);
-            switch (rejection.?) {
-                .expected_object => {},
-                .unknown_field => |key| try segments.append(allocator, .{ .property = key }),
-            }
-            out.* = .{
-                .reason = switch (rejection.?) {
-                    .expected_object => .expected_object,
-                    .unknown_field => .unknown_field,
-                },
-                .path = try json_pointer.render(allocator, segments.items),
-            };
-        }
-        return error.InvalidResponse;
-    };
-}
-
 // AWS restJson1 defines these decorations as part of error serialization.
 // Only the resulting recognized shape name and matching status classify it.
 fn exceptionName(raw: []const u8) []const u8 {
     const value = raw[0 .. std.mem.indexOfScalar(u8, raw, ':') orelse raw.len];
     return if (std.mem.indexOfScalar(u8, value, '#')) |index| value[index + 1 ..] else value;
-}
-fn field(raw: std.json.Value, name: []const u8) Invalid!std.json.Value {
-    if (raw != .object) return error.InvalidResponse;
-    return raw.object.get(name) orelse error.InvalidResponse;
-}
-fn string(raw: std.json.Value) Invalid![]const u8 {
-    return if (raw == .string) raw.string else error.InvalidResponse;
-}
-fn integer(raw: std.json.Value) Invalid!u64 {
-    if (raw != .number_string or raw.number_string.len == 0) return error.InvalidResponse;
-    for (raw.number_string) |byte| if (byte < '0' or byte > '9') return error.InvalidResponse;
-    return std.fmt.parseInt(u64, raw.number_string, 10) catch error.InvalidResponse;
 }

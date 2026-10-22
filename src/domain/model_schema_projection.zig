@@ -3,7 +3,10 @@ const std = @import("std");
 const schema = @import("model_result_schema.zig");
 
 /// Provider grammar is generation guidance; only the complete schema accepts data.
-pub const Profile = enum { complete, bedrock };
+/// `native` is the one grammar subset every native-schema provider receives:
+/// closed objects, `anyOf` alternatives, and no length, numeric or item bounds
+/// beyond a minimum of one item.
+pub const Profile = enum { complete, native };
 
 pub fn render(allocator: std.mem.Allocator, selected: *const schema.Schema, profile: Profile) std.mem.Allocator.Error![]const u8 {
     var arena: std.heap.ArenaAllocator = .init(allocator);

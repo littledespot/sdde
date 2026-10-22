@@ -442,7 +442,7 @@ fn verifyRecord(io: std.Io, a: std.mem.Allocator, parent: std.Io.Dir, frozen: fr
         const ordinal = std.math.cast(u32, receipt.call) orelse return error.AcquisitionMismatch;
         var captured = try @import("../call/capture.zig").load(io, a, parent, run_path, project.selected.workflow_id, ordinal);
         defer captured.deinit();
-        if (!std.meta.eql(receipt.origin, captured.context.origin) or !std.mem.eql(u8, receipt.request_step, captured.context.request_step)) return error.CaptureMismatch;
+        if (!std.meta.eql(receipt.origin, captured.context.common().origin) or !std.mem.eql(u8, receipt.request_step, captured.context.common().request_step)) return error.CaptureMismatch;
         try verifyBytes(receipt.context_sha256, try files.read(io, a, parent, captured.context_path));
         try verifyBytes(receipt.request_sha256, captured.call.request.?);
         const expected_usage = try @import("../e2e/observation.zig").usageFor(workflow.attempts, receipt.origin);
@@ -476,7 +476,7 @@ fn invocationUnstarted(facts: acquisition.Facts) !bool {
 
 const Offline = struct {
     marker: u8 = 0,
-    fn exchange(_: *@import("../../../src/adapters/provider/bedrock_transport.zig").Context, _: std.mem.Allocator, _: @import("../../../src/adapters/provider/bedrock_transport.zig").Request) @import("../../../src/adapters/provider/bedrock_transport.zig").Error!@import("../../../src/adapters/provider/bedrock_transport.zig").Response {
+    fn exchange(_: *@import("../../../src/adapters/provider/model_http_transport.zig").Context, _: std.mem.Allocator, _: @import("../../../src/adapters/provider/model_http_transport.zig").Request) @import("../../../src/adapters/provider/model_http_transport.zig").Error!@import("../../../src/adapters/provider/model_http_transport.zig").Response {
         return error.Cancelled;
     }
     fn now(_: *@import("../../../src/ports/provider_authorization_lease.zig").Context) error{ClockUnavailable}!u64 {

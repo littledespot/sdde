@@ -6,7 +6,7 @@ const directories = @import("../../../src/adapters/filesystem/directory_access.z
 const files = @import("../files.zig");
 const paths = @import("../contracts.zig");
 const workflow_ids = @import("../../../src/domain/workflow.zig");
-const CallContext = @import("../e2e/call_context.zig").CallContext;
+const evidence_context = @import("../e2e/call_context.zig");
 
 pub const Captured = struct {
     arena: std.heap.ArenaAllocator,
@@ -14,7 +14,7 @@ pub const Captured = struct {
     call: debug.Call,
     config: engine_config.SDDToolKitConfig,
     provider_catalogue: []const u8,
-    context: CallContext,
+    context: evidence_context.Captured,
     run_path: []const u8,
     feature_path: []const u8,
     context_path: []const u8,
@@ -56,7 +56,7 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
     const context_bytes = try files.read(io, a, run, context_relative);
     const request_bytes = try files.read(io, a, run, request_relative);
     if (redacted(context_bytes) or redacted(request_bytes)) return error.CaptureRedacted;
-    const context = try CallContext.decode(a, context_bytes);
+    const context = try evidence_context.Captured.decode(a, context_bytes);
     var store: @import("../../../src/adapters/filesystem/request_debugger_store.zig").Store = .{ .io = io, .feature = feature };
     const call = try select(try store.load(a), context, workflow, ordinal, request_bytes);
     const owned_run_path = try a.dupe(u8, run_path);
@@ -78,7 +78,8 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
 
 /// Origins are execution-local. Multiple archive runs with the same workflow
 /// and identity are ambiguous even when one happens to have matching bytes.
-pub fn select(calls: []const debug.Call, context: CallContext, workflow: []const u8, ordinal: u32, wire: []const u8) !debug.Call {
+pub fn select(calls: []const debug.Call, captured: evidence_context.Captured, workflow: []const u8, ordinal: u32, wire: []const u8) !debug.Call {
+    const context = captured.common();
     if (ordinal == 0 or context.call != ordinal) return error.CaptureMismatch;
     if (context.kind != .inference or context.origin.kind != .inference) return error.CaptureNotInference;
     var id_buffer: [128]u8 = undefined;
@@ -102,7 +103,7 @@ pub fn select(calls: []const debug.Call, context: CallContext, workflow: []const
         !std.mem.eql(u8, description.model, context.model) or !debug.sameOptional(description.reasoning_effort, context.reasoning_effort) or
         description.response_mode != context.response_mode or !std.mem.eql(u8, description.schema, context.response_schema) or
         description.content.len != context.content.len or context.attempt != context.origin.attempt.value) return error.CaptureMismatch;
-    if (description.provider_config != .aws_bedrock or description.provider_config.aws_bedrock.region != context.region) return error.CaptureMismatch;
+    if (!captured.recordsConfig(description.provider, description.provider_config)) return error.CaptureMismatch;
     for (description.content, context.content) |expected, actual| {
         if (std.meta.activeTag(expected) != std.meta.activeTag(actual) or !std.mem.eql(u8, expected.bytes(), actual.bytes())) return error.CaptureMismatch;
     }

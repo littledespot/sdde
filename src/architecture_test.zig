@@ -86,22 +86,38 @@ test "production provider wiring retains fact-only authority and no-I/O lease pr
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(runtime, "source.read("));
     try expectAbsent(runtime, "Table.init");
     try expectAbsent(runtime, "countInputTokens(");
-    const source = @embedFile("adapters/system/bedrock_api_key_source.zig");
+    const source = @embedFile("adapters/system/provider_api_key_source.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "environment.get("));
-    inline for (.{ "std.http", "std.Io", "metadata", "getenv", "AWS_ACCESS_KEY_ID" }) |forbidden| try expectAbsent(source, forbidden);
-    const authorization = @embedFile("adapters/provider/bedrock_authorization.zig");
-    inline for (.{ "std.http", "std.Io", "std.process", "bedrock_api_key_source", "environment", "logger", "/application/" }) |forbidden| try expectAbsent(authorization, forbidden);
-    const provider_source = @embedFile("adapters/provider/aws_bedrock.zig");
-    inline for (.{ "/actions/", "/application/", "std.process", "std.Io", "workflow_token_accounting", "journal", "maxTokens" }) |forbidden| try expectAbsent(provider_source, forbidden);
+    inline for (.{ "std.http", "std.Io", "metadata", "getenv", "AWS_ACCESS_KEY_ID", "TEST_" }) |forbidden| try expectAbsent(source, forbidden);
+    const authorization = @embedFile("adapters/provider/api_key_authorization.zig");
+    inline for (.{ "std.http", "std.Io", "std.process", "provider_api_key_source", "environment", "logger", "/application/" }) |forbidden| try expectAbsent(authorization, forbidden);
+    const provider_source = @embedFile("adapters/provider/model_provider.zig");
+    inline for (.{ "/actions/", "/application/", "std.process", "std.Io", "workflow_token_accounting", "journal", "maxTokens", "max_tokens" }) |forbidden| try expectAbsent(provider_source, forbidden);
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(provider_source, "self.transport.exchange("));
-    const http = @embedFile("adapters/provider/bedrock_http.zig");
+    const http = @embedFile("adapters/provider/model_http_exchange.zig");
     inline for (.{ "Environ", "initDefaultProxies", "ssl_key_log", "getenv", "@constCast" }) |forbidden| try expectAbsent(http, forbidden);
     try std.testing.expect(std.mem.indexOf(u8, http, "pub const Adapter = HttpAdapter(native.request);") != null);
     try std.testing.expect(std.mem.indexOf(u8, http, "@import(\"native_model_http.zig\")") != null);
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(http, "try open_request("));
-    const dispatch = @embedFile("adapters/provider/provider_dispatch.zig");
-    try expectAbsent(dispatch, "anyopaque");
-    try expectAbsent(dispatch, "else =>");
+}
+
+test "provider projections hold only their wire contract and never import a sibling provider" {
+    const bedrock = .{ @embedFile("adapters/provider/bedrock_request.zig"), @embedFile("adapters/provider/bedrock_response.zig"), @embedFile("adapters/provider/bedrock_endpoint.zig") };
+    const anthropic = .{ @embedFile("adapters/provider/anthropic_request.zig"), @embedFile("adapters/provider/anthropic_response.zig"), @embedFile("adapters/provider/anthropic_endpoint.zig") };
+    // Projections never consume leases, read credentials, capture, connect or
+    // reach workflow policy; the shared owners do.
+    inline for (.{ "consume(", ".capture(", "provider_api_key", "api_key_authorization", "std.process", "native_model_http", "open_request", "model_http_exchange", "/application/", "/actions/" }) |forbidden| {
+        inline for (bedrock) |projection| try expectAbsent(projection, forbidden);
+        inline for (anthropic) |projection| try expectAbsent(projection, forbidden);
+    }
+    inline for (bedrock) |projection| try expectAbsent(projection, "anthropic_");
+    inline for (anthropic) |projection| try expectAbsent(projection, "bedrock_");
+    // Shared owners hold no provider wire spelling.
+    inline for (.{ @embedFile("adapters/provider/model_text_request.zig"), @embedFile("adapters/provider/provider_response_support.zig"), @embedFile("adapters/provider/provider_response_assembly.zig"), @embedFile("domain/provider_failure.zig") }) |shared| {
+        inline for (.{ "bedrock_", "anthropic_", "Converse", "x-api-key", "stopReason", "stop_reason" }) |wire| try expectAbsent(shared, wire);
+    }
+    // The domain retry classifier reads only neutral facts.
+    inline for (.{ "/adapters/", "std.http", "status" }) |forbidden| try expectAbsent(@embedFile("domain/provider_failure.zig"), forbidden);
 }
 test "all native model HTTP adapters use the test-disabled connection owner" {
     const native = @embedFile("adapters/provider/native_model_http.zig");
@@ -109,7 +125,7 @@ test "all native model HTTP adapters use the test-disabled connection owner" {
     const guard = std.mem.indexOf(u8, native, "if (!enabled) return error.LiveModelCallsDisabled;").?;
     const connect = std.mem.indexOf(u8, native, "return client.request(").?;
     try std.testing.expect(guard < connect);
-    try expectAbsent(@embedFile("adapters/provider/bedrock_http.zig"), "client.request(");
+    try expectAbsent(@embedFile("adapters/provider/model_http_exchange.zig"), "client.request(");
     const evaluator = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/harness/http.zig", std.testing.allocator, .limited(1024 * 1024));
     defer std.testing.allocator.free(evaluator);
     try expectAbsent(evaluator, "client.request(");

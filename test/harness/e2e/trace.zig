@@ -5,7 +5,7 @@ const execution = @import("../../../src/domain/workflow_execution.zig");
 const workflow = @import("../../../src/domain/workflow.zig");
 const compilation = @import("../../../src/domain/workflow_compilation.zig");
 const operation = @import("../../../src/domain/llm_provider_operation.zig");
-const transport = @import("../../../src/adapters/provider/bedrock_transport.zig");
+const transport = @import("../../../src/adapters/provider/model_http_transport.zig");
 const values = @import("../../../src/application/pipeline_values.zig");
 const requests = @import("../../../src/application/model_request_workflow.zig");
 const evidence = @import("../evidence.zig");
@@ -243,8 +243,8 @@ pub const Trace = struct {
         const result = self.invocation.bindings().invokePrepareWorkflow();
         if (result == .ok) if (self.invocation.provider_runtime) |runtime| {
             if (runtime.provider) |*provider| {
-                self.inner_transport = self.transport_override orelse provider.aws_bedrock.transport;
-                provider.aws_bedrock.transport = .{ .context = @ptrCast(self), .exchange_fn = exchange };
+                self.inner_transport = self.transport_override orelse provider.transport;
+                provider.transport = .{ .context = @ptrCast(self), .exchange_fn = exchange };
             }
         };
         return result;
@@ -477,7 +477,7 @@ pub const Trace = struct {
         self.request_repair_origin = if (packet) |value| value.repairOrigin() else null;
         self.request_result_definition = handoff.selectedResultDefinition();
         if (self.purpose == .single_exchange or self.experiment != null) {
-            const description = @import("../../../src/domain/model_request_description.zig").Description.from(request, handoff.binding(), wire.kind);
+            const description = @import("../../../src/domain/model_request_description.zig").Description.from(request, handoff.binding(), wire.kind());
             try frozen_binding.validateDescription(self.store.allocator, description, wire, self.expected_models orelse return error.MissingFrozenModels);
         }
         const accounting = @import("../../../src/application/workflow_model_accounting.zig");
@@ -489,16 +489,18 @@ pub const Trace = struct {
             errdefer self.store.allocator.free(request_step);
             try self.call_records.append(self.store.allocator, .{ .origin = origin, .step = request_step });
         }
+        const selected = handoff.binding().registry_entry;
         const context = try std.json.Stringify.valueAlloc(self.store.allocator, @import("call_context.zig").CallContext{
-            .schema = .@"model-call-evidence/v1",
+            .schema = .@"model-call-evidence/v2",
             .call = self.calls,
             .origin = origin,
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,
             .slot = request.binding_id.slot_id.bytes,
             .attempt = self.current.?.model_attempt_ordinal.value,
-            .model = wire.model.bytes,
-            .region = wire.region,
-            .kind = wire.kind,
+            .provider = selected.provider.bytes,
+            .model = selected.model.bytes,
+            .provider_config = selected.config,
+            .kind = wire.kind(),
             .reasoning_effort = request.binding_id.reasoning_effort,
             .content = request.content,
             .response_schema = request.response_schema.modelBytes(),
@@ -512,7 +514,7 @@ pub const Trace = struct {
 
     fn permitDispatch(a: std.mem.Allocator, purpose: Purpose, boundary: *Boundary, physical_sends: usize, wire: transport.Request) transport.Error!void {
         if (purpose == .whole_workflow) return;
-        if (wire.kind != .inference) {
+        if (wire.kind() != .inference) {
             boundary.* = .unsupported_operation;
             return error.Cancelled;
         }
@@ -698,7 +700,7 @@ const ProbeWire = struct {
 };
 
 fn probeWireRequest() transport.Request {
-    return .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = .inference, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "unit-credential", .deadline_monotonic_ms = 1 };
+    return .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = .inference } }, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "unit-credential", .deadline_monotonic_ms = 1 };
 }
 
 test "single-exchange guard consumes its only send before transport and never retries any delivery" {
@@ -729,10 +731,10 @@ test "single-exchange guard refuses counts foreign tuples and failed capture wit
         var wire: ProbeWire = .{ .physical_sends = &sends, .boundary = &boundary };
         var request = probeWireRequest();
         switch (fault) {
-            0 => request.kind = .input_token_count,
-            1 => request.model = .{ .bytes = "global.openai.gpt-6-luna" },
-            2 => request.model = .{ .bytes = "us.openai.gpt-6-luna" },
-            3 => request.region = .@"us-west-2",
+            0 => request.target.aws_bedrock.kind = .input_token_count,
+            1 => request.target.aws_bedrock.model = .{ .bytes = "global.openai.gpt-6-luna" },
+            2 => request.target.aws_bedrock.model = .{ .bytes = "us.openai.gpt-6-luna" },
+            3 => request.target.aws_bedrock.region = .@"us-west-2",
             4 => {},
             else => unreachable,
         }
@@ -749,7 +751,7 @@ test "single-exchange capture requires the frozen native response settings and e
     const description: Description = .{
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
-        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16384 } } },
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } },
         .model_slot = "spec_generation",
         .workflow_id = "unit-workflow",
         .workflow_version = 1,
@@ -826,7 +828,7 @@ test "whole-workflow trace leaves native outcomes and multiple inference or coun
     var wire: ProbeWire = .{ .physical_sends = &sends, .boundary = &boundary };
     var request = probeWireRequest();
     _ = try Trace.forwardCaptured(std.testing.allocator, .whole_workflow, &boundary, &sends, wire.port(), request);
-    request.kind = .input_token_count;
+    request.target.aws_bedrock.kind = .input_token_count;
     _ = try Trace.forwardCaptured(std.testing.allocator, .whole_workflow, &boundary, &sends, wire.port(), request);
     try std.testing.expectEqual(@as(usize, 2), sends);
     try std.testing.expectEqual(@as(usize, 2), wire.calls);

@@ -210,7 +210,6 @@ test "shipped workflow conforms to native registrations and rejects contract dri
 
 test "shared production runtime preserves deferred environment capture and isolated snapshots" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
-    const key = @import("../../../src/adapters/provider/bedrock_api_key.zig");
     const io = std.testing.io;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -220,15 +219,17 @@ test "shared production runtime preserves deferred environment capture and isola
     var project = std.testing.tmpDir(.{});
     defer project.cleanup();
     try fixture.materialize(io, project.dir, captured);
+    const target = try configured(a, captured);
+    const variable = @import("../../../src/adapters/system/provider_api_key_source.zig").variable(target.family);
     for ([_]?[]const u8{ null, "", "invalid key", "isolated-credential" }) |raw| {
         inline for (.{ false, true }) |from_environment| {
             var environment: std.process.Environ.Map = .init(std.testing.allocator);
             defer environment.deinit();
             if (from_environment) {
-                if (raw) |bytes| try environment.put("AWS_BEARER_TOKEN_BEDROCK", bytes);
+                if (raw) |bytes| try environment.put(variable, bytes);
             } else {
                 // A direct missing/invalid credential cannot use an ambient key.
-                try environment.put("AWS_BEARER_TOKEN_BEDROCK", "ambient-credential");
+                try environment.put(variable, "ambient-credential");
             }
             var runtime: Runtime = undefined;
             runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -237,20 +238,20 @@ test "shared production runtime preserves deferred environment capture and isola
             var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, if (from_environment)
                 .{ .environment = &environment }
             else
-                .{ .snapshot = try key.Snapshot.capture(std.testing.allocator, raw) });
+                .{ .snapshots = try familySnapshots(target.family, raw) });
             defer invocation.deinit();
-            if (from_environment) try std.testing.expect(runtime.provider_runtime.authorization.material == .unavailable);
+            if (from_environment) try std.testing.expect(runtime.provider_runtime.authorization.materials.get(target.family).* == .unavailable);
             const bindings = invocation.bindings();
             try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
             try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
             try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
             try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
             try std.testing.expect(runtime.provider_runtime.provider != null);
-            const material = runtime.provider_runtime.authorization.material;
+            const material = runtime.provider_runtime.authorization.materials.get(target.family).*;
             const valid = if (raw) |bytes| std.mem.eql(u8, bytes, "isolated-credential") else false;
             try std.testing.expectEqual(valid, material == .ready);
             if (valid) {
-                try environment.put("AWS_BEARER_TOKEN_BEDROCK", "changed-credential");
+                try environment.put(variable, "changed-credential");
                 try std.testing.expectEqualStrings(raw.?, material.ready.bytes);
             }
             // Preparation exercises production binding without invoking HTTP.
@@ -260,7 +261,20 @@ test "shared production runtime preserves deferred environment capture and isola
 
 test "production E2E binding honors configured models and cannot succeed without real credentials" {
     const io = std.testing.io;
-    for (0..2) |example| {
+    var catalogue_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer catalogue_arena.deinit();
+    const shipped = try fixture.capture(io, catalogue_arena.allocator(), .cwd(), try c.parse(catalogue_arena.allocator(), @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json")));
+    const catalogue_bytes = for (shipped.files) |file| {
+        if (std.mem.endsWith(u8, file.mapping.destination, ".sddproviders.json")) break file.bytes;
+    } else return error.MissingProviderCatalogue;
+    const catalogue = try std.json.parseFromSliceLeaky(std.json.Value, catalogue_arena.allocator(), catalogue_bytes, .{});
+    // Every entry the shipped catalogue offers is honored as configured, and
+    // none can succeed without its family's real credential.
+    var entries: usize = 0;
+    for (catalogue.object.get("providers").?.array.items) |provider_entry| for (provider_entry.object.get("models").?.array.items) |model_entry| {
+        entries += 1;
+        const provider = provider_entry.object.get("provider").?.string;
+        const model = model_entry.object.get("model").?.string;
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -269,28 +283,19 @@ test "production E2E binding honors configured models and cannot succeed without
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try fixture.materialize(io, project.dir, captured);
-        const model = if (example == 0) "openai.gpt-oss-20b-1:0" else "anthropic.claude-3-5-haiku-20241022-v1:0";
-        if (example == 1) {
-            var model_config = try std.json.parseFromSlice(std.json.Value, a, captured.config, .{});
-            defer model_config.deinit();
-            for (model_config.value.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
-                try slot.object.put(a, "model", .{ .string = model });
-                // This registered model does not support reasoning effort.
-                _ = slot.object.swapRemove("reasoningEffort");
-            }
-            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config.value, .{}) });
-            const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
-            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
-            // This registered model only supports prompt guidance.
-            const replaced = try std.mem.replaceOwned(u8, a, model_catalogue, "\"json\": true", "\"json\": false");
-            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
-            try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A library user renews a loan and sees its new due date.\n" });
+        var model_config = try std.json.parseFromSliceLeaky(std.json.Value, a, captured.config, .{});
+        for (model_config.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
+            try slot.object.put(a, "provider", .{ .string = provider });
+            try slot.object.put(a, "model", .{ .string = model });
+            // Omitted effort is valid for every registered model.
+            _ = slot.object.swapRemove("reasoningEffort");
         }
+        try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config, .{}) });
         var report: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
-        const output = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report, .{ .purpose = .whole_workflow });
+        const output = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, .initFill(null), store, &report, .{ .purpose = .whole_workflow });
         try std.testing.expect(output == null);
         try std.testing.expectEqual(.live, report.origin);
         try std.testing.expectEqual(.workflow_failed, report.status);
@@ -299,14 +304,15 @@ test "production E2E binding honors configured models and cannot succeed without
         try std.testing.expectEqualStrings("authentication_failed", report.provider_diagnostic.?);
         try std.testing.expectEqual(@as(usize, 0), report.model_calls);
         try std.testing.expectEqualStrings(model, report.models[0].model);
-        try std.testing.expectEqualStrings("aws-bedrock", report.models[0].provider);
+        try std.testing.expectEqualStrings(provider, report.models[0].provider);
         const events = try @import("../files.zig").read(io, a, evidence_run.dir, report.events_file.?);
         try std.testing.expect(std.mem.indexOf(u8, events, "authentication_failed") != null);
         try std.testing.expect(report.last_model_call == null);
         try std.testing.expect(report.evaluation_inputs == null);
         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
         try fixture.verifySources(io, a, .cwd(), captured);
-    }
+    };
+    try std.testing.expect(entries != 0);
 }
 
 test "evaluation source capture accounts every selected reference and remains immutable" {
@@ -938,8 +944,9 @@ test "unrepairable responses preserve complete production logs and forbid public
             runtime.init(io, std.testing.allocator, project.dir, .{});
             defer runtime.deinit();
             try std.testing.expect(runtime.boot == .ready);
+            const target = try configured(a, captured);
             var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{
-                .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "isolated-credential"),
+                .snapshots = try familySnapshots(target.family, "isolated-credential"),
             });
             defer invocation.deinit();
             const bindings = invocation.bindings();
@@ -947,13 +954,14 @@ test "unrepairable responses preserve complete production logs and forbid public
             try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
             try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
             try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
-            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
-            if (mode != 0) wire.inference_body = try std.json.Stringify.valueAlloc(a, .{
-                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = if (mode == 1) "{" else "{}" }} } },
-                .stopReason = "end_turn",
-                .usage = .{ .inputTokens = 884, .outputTokens = 48, .totalTokens = 932 },
-            }, .{});
-            runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
+            // Reasoning alone, malformed JSON, then schema-invalid JSON, in the
+            // configured provider's own wire shape.
+            var wire: ProviderWire = .{ .allocator = a, .model = target.model, .text = switch (mode) {
+                0 => null,
+                1 => "{",
+                else => "{}",
+            } };
+            runtime.provider_runtime.provider.?.transport = wire.port();
             const Prepared = struct {
                 fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
                     return .ok;
@@ -981,7 +989,7 @@ test "unrepairable responses preserve complete production logs and forbid public
             const prompt_bytes = try project.dir.readFileAlloc(io, prompt_path, a, .limited(8 * 1024 * 1024));
             try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-request-provider_body-utf8-00000000000000000000"));
             try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-response-provider_body-utf8-00000000000000000000"));
-            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, wire.inference_body));
+            try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, wire.last_body));
             try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "segment_trailer|") != null);
             try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "isolated-credential") == null);
             const event_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.event_binding_path });
@@ -1601,7 +1609,9 @@ const AdviceProductionRun = struct {
                 std.testing.expectEqual(if (projection == .source) @as(std.meta.Tag(owned.Payload), .support_repair) else .principle_support_repair, std.meta.activeTag(owned.payload(repair_state).*)) catch unreachable;
             }
             required_source = projection == null and request.id().purpose == .semantic_review;
-            std.testing.expectEqual(@as(?@import("../../../src/domain/model_controls.zig").Temperature, .fixed), request.prepared().?.controls.temperature) catch unreachable;
+            // Every request carries the configured model's registered controls,
+            // whichever provider the shipped case selects.
+            std.testing.expectEqual(request.binding().registry_entry.capabilities.inferenceControls(), request.prepared().?.controls) catch unreachable;
             if (projection == .principles) self.principle_attempts += 1;
             var body = if (repair_request) "{}" else @import("../../../src/test_fixtures/spec_generation_responses.zig").build(arena.allocator(), view, .{ .attempt = attempt.value, .entities_required = self.mode == .global_budget }) catch |err| std.debug.panic("offline production candidate: {s}", .{@errorName(err)});
             if (self.injected_findings == 0 and !repair_request and
@@ -1723,7 +1733,7 @@ test "production workflow retains typed advice stops and enforces one global tok
         runtime.init(io, std.testing.allocator, project.dir, .{});
         defer runtime.deinit();
         try std.testing.expect(runtime.boot == .ready);
-        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "offline-advisory-credential") });
+        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .snapshots = try familySnapshots((try configured(a, captured)).family, "offline-advisory-credential") });
         defer invocation.deinit();
         const bindings = invocation.bindings();
         try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
@@ -1881,4 +1891,243 @@ test "production workflow retains typed advice stops and enforces one global tok
         try project.dir.access(io, paths.get(.reference_context).project_relative, .{});
         try std.testing.expectEqual(fake.invocation_call_count, scripted.exchanges.items.len);
     }
+}
+
+const provider_keys = @import("../../../src/adapters/provider/provider_api_key.zig");
+const provider_transport = @import("../../../src/adapters/provider/model_http_transport.zig");
+
+/// The provider and model the shipped case's generation slot configures, so
+/// these tests follow the case instead of naming a provider.
+const Configured = struct { family: provider_keys.Family, provider: []const u8, model: []const u8 };
+
+fn configured(a: std.mem.Allocator, captured: fixture.Capture) !Configured {
+    const config = try std.json.parseFromSliceLeaky(std.json.Value, a, captured.config, .{});
+    const slot = config.object.get("models").?.object.get("slots").?.object.get("spec_generation").?;
+    const provider = slot.object.get("provider").?.string;
+    for (std.enums.values(provider_keys.Family)) |family| {
+        if (std.mem.eql(u8, family.configSchema().providerId().?, provider)) return .{ .family = family, .provider = provider, .model = slot.object.get("model").?.string };
+    }
+    return error.UnknownConfiguredProvider;
+}
+
+/// A harness-supplied key for one family and none for any other.
+fn familySnapshots(family: provider_keys.Family, raw: ?[]const u8) !provider_keys.Supplied {
+    var supplied: provider_keys.Supplied = .initFill(null);
+    supplied.set(family, try provider_keys.Snapshot.capture(std.testing.allocator, raw));
+    return supplied;
+}
+
+/// Answers each request in its own family's wire shape: one fixed text, or
+/// reasoning alone when `text` is null, with usage of 884 input and 48 output.
+const ProviderWire = struct {
+    allocator: std.mem.Allocator,
+    model: []const u8,
+    text: ?[]const u8,
+    calls: usize = 0,
+    last_body: []const u8 = "",
+
+    fn port(self: *ProviderWire) provider_transport.Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn exchange(context: *provider_transport.Context, _: std.mem.Allocator, request: provider_transport.Request) provider_transport.Error!provider_transport.Response {
+        const self: *ProviderWire = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        self.last_body = switch (request.target) {
+            .aws_bedrock => if (self.text) |text| try std.json.Stringify.valueAlloc(self.allocator, .{
+                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = text }} } },
+                .stopReason = "end_turn",
+                .usage = .{ .inputTokens = 884, .outputTokens = 48, .totalTokens = 932 },
+            }, .{}) else "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}",
+            .anthropic => try messagesBody(self.allocator, self.model, self.text),
+        };
+        return .{ .received = .{ .status = 200, .body = self.last_body } };
+    }
+
+    fn messagesBody(allocator: std.mem.Allocator, model: []const u8, text: ?[]const u8) std.mem.Allocator.Error![]const u8 {
+        const Usage = struct { input_tokens: u64 = 884, output_tokens: u64 = 48, cache_creation_input_tokens: ?u64 = null, cache_read_input_tokens: ?u64 = null, cache_creation: ?u8 = null, output_tokens_details: ?u8 = null, server_tool_use: ?u8 = null, service_tier: []const u8 = "standard", inference_geo: ?[]const u8 = null, speed: ?[]const u8 = null };
+        const Envelope = struct { id: []const u8 = "msg_offline", type: []const u8 = "message", role: []const u8 = "assistant", model: []const u8, content: []const u8, stop_reason: []const u8 = "end_turn", stop_sequence: ?u8 = null, stop_details: ?u8 = null, usage: Usage = .{}, container: ?u8 = null, diagnostics: ?u8 = null };
+        const content = if (text) |value| try std.json.Stringify.valueAlloc(allocator, .{.{ .type = "text", .text = value, .citations = null }}, .{}) else "[{\"type\":\"thinking\",\"thinking\":\"metadata\",\"signature\":\"offline\"}]";
+        const placeholder = "@@CONTENT@@";
+        const shell = try std.json.Stringify.valueAlloc(allocator, Envelope{ .model = model, .content = placeholder }, .{});
+        return std.mem.replaceOwned(u8, allocator, shell, "\"" ++ placeholder ++ "\"", content);
+    }
+};
+
+/// A two-provider catalogue: both Claude models the slots below may select,
+/// and the case's Bedrock model.
+const two_provider_catalogue =
+    \\{"providers":[
+    \\{"provider":"anthropic","models":[
+    \\{"model":"claude-haiku-5-5","json":false,"config":{"maxOutputTokens":128000}},
+    \\{"model":"claude-opus-5-5","json":true,"config":{"maxOutputTokens":128000}}]},
+    \\{"provider":"aws-bedrock","models":[
+    \\{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384}}]}]}
+;
+
+const claude_slot = "{\"provider\":\"anthropic\",\"model\":\"claude-haiku-5-5\",\"reasoningEffort\":\"low\"}";
+const bedrock_slot = "{\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\",\"reasoningEffort\":\"low\"}";
+
+/// Materialize the hello-world case with the two-provider catalogue, binding
+/// the Spec workflow's generation and repair slots as given. The other slots,
+/// which the Spec workflow never calls, stay on Bedrock.
+fn twoProviderProject(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, captured: fixture.Capture, generation: []const u8, repair: []const u8) !void {
+    try fixture.materialize(io, project, captured);
+    var config = try std.json.parseFromSliceLeaky(std.json.Value, a, captured.config, .{});
+    const slots = config.object.getPtr("models").?.object.getPtr("slots").?;
+    for (slots.object.keys(), slots.object.values()) |name, *value| {
+        const binding = if (std.mem.eql(u8, name, "spec_generation")) generation else if (std.mem.eql(u8, name, "repair")) repair else bedrock_slot;
+        value.* = try std.json.parseFromSliceLeaky(std.json.Value, a, binding, .{});
+    }
+    try project.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, config, .{}) });
+    try project.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = two_provider_catalogue });
+}
+
+test "configuration alone selects Claude, Bedrock or both per slot and reads only their keys" {
+    const Runtime = @import("../../../src/composition/root.zig").Runtime;
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    const Layout = struct { generation: []const u8, repair: []const u8, anthropic: bool, bedrock: bool };
+    for ([_]Layout{
+        // Claude only: no Bedrock key is read even though unused slots name Bedrock.
+        .{ .generation = claude_slot, .repair = claude_slot, .anthropic = true, .bedrock = false },
+        // Mixed: each family's key is read once.
+        .{ .generation = claude_slot, .repair = bedrock_slot, .anthropic = true, .bedrock = true },
+        // An unused Claude catalogue entry reads no Anthropic key.
+        .{ .generation = bedrock_slot, .repair = bedrock_slot, .anthropic = false, .bedrock = true },
+    }) |layout| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try twoProviderProject(io, a, project.dir, captured, layout.generation, layout.repair);
+        var environment: std.process.Environ.Map = .init(std.testing.allocator);
+        defer environment.deinit();
+        try environment.put("AWS_BEARER_TOKEN_BEDROCK", "bedrock-credential");
+        try environment.put("ANTHROPIC_API_KEY", "anthropic-credential");
+        var runtime: Runtime = undefined;
+        runtime.init(io, std.testing.allocator, project.dir, .{});
+        defer runtime.deinit();
+        try std.testing.expect(runtime.boot == .ready);
+        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .environment = &environment });
+        defer invocation.deinit();
+        const bindings = invocation.bindings();
+        try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+        try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+        try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+        try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+        try std.testing.expect(runtime.provider_runtime.provider != null);
+        const materials = &runtime.provider_runtime.authorization.materials;
+        try std.testing.expectEqual(layout.anthropic, materials.get(.anthropic).* == .ready);
+        try std.testing.expectEqual(layout.bedrock, materials.get(.aws_bedrock).* == .ready);
+        if (layout.anthropic) try std.testing.expectEqualStrings("anthropic-credential", materials.get(.anthropic).ready.bytes);
+        if (layout.bedrock) try std.testing.expectEqualStrings("bedrock-credential", materials.get(.aws_bedrock).ready.bytes);
+    }
+}
+
+/// Answers every Messages request with one valid envelope and records targets.
+const MessagesWire = struct {
+    calls: usize = 0,
+    foreign_targets: usize = 0,
+    bodies: std.ArrayList([]u8) = .empty,
+    text: []const u8,
+
+    fn port(self: *MessagesWire) @import("../../../src/adapters/provider/model_http_transport.zig").Port {
+        return .{ .context = @ptrCast(self), .exchange_fn = exchange };
+    }
+
+    fn deinit(self: *MessagesWire) void {
+        for (self.bodies.items) |body| std.testing.allocator.free(body);
+        self.bodies.deinit(std.testing.allocator);
+    }
+
+    fn exchange(context: *@import("../../../src/adapters/provider/model_http_transport.zig").Context, allocator: std.mem.Allocator, request: @import("../../../src/adapters/provider/model_http_transport.zig").Request) @import("../../../src/adapters/provider/model_http_transport.zig").Error!@import("../../../src/adapters/provider/model_http_transport.zig").Response {
+        const self: *MessagesWire = @ptrCast(@alignCast(context));
+        self.calls += 1;
+        if (request.target != .anthropic) self.foreign_targets += 1;
+        try self.bodies.append(std.testing.allocator, try std.testing.allocator.dupe(u8, request.body));
+        const body = try std.json.Stringify.valueAlloc(allocator, .{
+            .id = "msg_offline",
+            .type = "message",
+            .role = "assistant",
+            .model = "claude-haiku-5-5",
+            .content = .{.{ .type = "text", .text = self.text, .citations = null }},
+            .stop_reason = "end_turn",
+            .stop_sequence = null,
+            .stop_details = null,
+            .usage = .{ .input_tokens = 884, .output_tokens = 48, .cache_creation_input_tokens = null, .cache_read_input_tokens = null, .cache_creation = null, .output_tokens_details = null, .server_tool_use = null, .service_tier = "standard", .inference_geo = null, .speed = null },
+            .container = null,
+            .diagnostics = null,
+        }, .{});
+        return .{ .received = .{ .status = 200, .request_id = "req_offline", .body = body } };
+    }
+};
+
+test "a Claude-only Spec run sends every call through the shared adapter to the Messages endpoint" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    const captured = try fixture.capture(io, a, .cwd(), choice);
+    var project = std.testing.tmpDir(.{});
+    defer project.cleanup();
+    try twoProviderProject(io, a, project.dir, captured, claude_slot, claude_slot);
+    var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
+    runtime.init(io, std.testing.allocator, project.dir, .{});
+    defer runtime.deinit();
+    try std.testing.expect(runtime.boot == .ready);
+    const keys = @import("../../../src/adapters/provider/provider_api_key.zig");
+    var supplied: keys.Supplied = .initFill(null);
+    supplied.set(.anthropic, try keys.Snapshot.capture(std.testing.allocator, "offline-anthropic-credential"));
+    var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .snapshots = supplied });
+    defer invocation.deinit();
+    const bindings = invocation.bindings();
+    try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+    try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+    try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+    try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+    // Every candidate is malformed JSON, so the first request exhausts its retries.
+    var wire: MessagesWire = .{ .text = "{" };
+    defer wire.deinit();
+    runtime.provider_runtime.provider.?.transport = wire.port();
+    const Prepared = struct {
+        fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
+            return .ok;
+        }
+        fn ready(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").PreparationOutcome {
+            return .ok;
+        }
+    };
+    var prepared = bindings.vtable.*;
+    prepared.validate_operation_registry = Prepared.selected;
+    prepared.parse_invocation = Prepared.selected;
+    prepared.select_workflow = Prepared.selected;
+    prepared.prepare_workflow = Prepared.ready;
+    const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = bindings.context, .vtable = &prepared });
+    try std.testing.expectEqual(.failed, outcome.executionStatus().?);
+    try std.testing.expectEqual(@as(usize, 3), wire.calls);
+    try std.testing.expectEqual(@as(usize, 0), wire.foreign_targets);
+    for (wire.bodies.items) |body| {
+        var sent = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, body, .{});
+        defer sent.deinit();
+        try std.testing.expectEqualStrings("claude-haiku-5-5", sent.value.object.get("model").?.string);
+        try std.testing.expectEqual(@as(i64, 128000), sent.value.object.get("max_tokens").?.integer);
+        try std.testing.expectEqualStrings("low", sent.value.object.get("output_config").?.object.get("effort").?.string);
+        // The catalogue selects prompt-only for this model: no native format.
+        try std.testing.expect(sent.value.object.get("output_config").?.object.get("format") == null);
+        try std.testing.expect(std.mem.indexOf(u8, body, "offline-anthropic-credential") == null);
+    }
+    try std.testing.expectEqual(@as(u64, 3), outcome.execution_rejected.retry_limit.completed_executions);
+    // Captured prompt logs never hold the key.
+    const log_runtime = &runtime.logging.?;
+    const log_artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
+    const log_paths = log_artifacts.bindFeatureLogSinkAdapter(log_artifacts.registry(log_runtime.artifact_owner.?), @import("../../../src/domain/feature_log_binding.zig").binding(log_runtime.binding_owner.?)).?;
+    const prompt_path = try std.fmt.allocPrint(a, "{s}/{s}/0001.log", .{ log_paths.specs_root_path, log_paths.prompt_binding_path });
+    const prompt_bytes = try project.dir.readFileAlloc(io, prompt_path, a, .limited(8 * 1024 * 1024));
+    try std.testing.expectEqual(@as(usize, 3), std.mem.count(u8, prompt_bytes, "inference-request-provider_body-utf8-00000000000000000000"));
+    try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "offline-anthropic-credential") == null);
+    try std.testing.expect(std.mem.indexOf(u8, prompt_bytes, "\"model\":\"claude-haiku-5-5\"") != null);
 }

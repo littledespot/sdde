@@ -42,13 +42,13 @@ fn digest(bytes: []const u8) [32]u8 {
 }
 
 const PrefixCancellation = struct {
-    wire: *@import("../../src/bedrock_transport_test_fixture.zig").Wire,
+    wire: *@import("../../src/model_transport_test_fixture.zig").Wire,
 
-    fn port(self: *PrefixCancellation) @import("../../src/adapters/provider/bedrock_transport.zig").Port {
+    fn port(self: *PrefixCancellation) @import("../../src/adapters/provider/model_http_transport.zig").Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
     }
 
-    fn exchange(context: *@import("../../src/adapters/provider/bedrock_transport.zig").Context, a: std.mem.Allocator, request: @import("../../src/adapters/provider/bedrock_transport.zig").Request) @import("../../src/adapters/provider/bedrock_transport.zig").Error!@import("../../src/adapters/provider/bedrock_transport.zig").Response {
+    fn exchange(context: *@import("../../src/adapters/provider/model_http_transport.zig").Context, a: std.mem.Allocator, request: @import("../../src/adapters/provider/model_http_transport.zig").Request) @import("../../src/adapters/provider/model_http_transport.zig").Error!@import("../../src/adapters/provider/model_http_transport.zig").Response {
         const self: *PrefixCancellation = @ptrCast(@alignCast(context));
         std.debug.assert(request.response_body_on_error != null);
         request.response_body_on_error.?.* = .{ .bytes = response_prefix, .complete = false };
@@ -111,7 +111,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     const captured = try fixture.capture(io, a, .cwd(), selected);
     try @import("../harness/output.zig").write(io, run, "case.json", case_bytes);
     try fixture.materialize(io, project, captured);
-    var wire: @import("../../src/bedrock_transport_test_fixture.zig").Wire = .{
+    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{
         .expected_json = true,
         .cancelled = scenario == .cancelled or scenario == .partial_cancelled,
         .inference_body = try body(a, scenario),
@@ -139,7 +139,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
         // failure before transport forwarding, without replacing production IO.
         try run.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     }
-    const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
+    const published = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
         .purpose = .{ .single_exchange = &probe },
         .transport = if (scenario == .partial_cancelled) prefix_cancellation.port() else wire.port(),
     }) catch |err| {
@@ -222,10 +222,11 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
 
     var readback = try @import("../harness/call/capture.zig").load(io, a, temporary.dir, "run", selected.workflow_id, 1);
     defer readback.deinit();
-    try std.testing.expectEqualStrings("openai.gpt-oss-20b-1:0", readback.context.model);
-    try std.testing.expectEqual(.@"ap-southeast-2", readback.context.region);
-    try std.testing.expectEqual(.inference, readback.context.kind);
-    try std.testing.expectEqual(.native_schema, readback.context.response_mode);
+    try std.testing.expectEqualStrings("openai.gpt-oss-20b-1:0", readback.context.common().model);
+    try std.testing.expectEqualStrings("aws-bedrock", readback.context.current.provider);
+    try std.testing.expectEqual(.@"ap-southeast-2", readback.context.current.provider_config.aws_bedrock.region);
+    try std.testing.expectEqual(.inference, readback.context.common().kind);
+    try std.testing.expectEqual(.native_schema, readback.context.common().response_mode);
     try std.testing.expect(readback.call.replay == null);
     try std.testing.expect(readback.call.request_complete);
     try std.testing.expect(readback.call.source_snapshot != null);
@@ -263,7 +264,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     };
     try std.testing.expectEqual(expected_status, assessed.status);
     try std.testing.expect(assessed.request_identity != null);
-    try std.testing.expectEqualDeep(readback.context.origin, assessed.request_identity.?.origin);
+    try std.testing.expectEqualDeep(readback.context.common().origin, assessed.request_identity.?.origin);
     try std.testing.expectEqualStrings(readback.call.id, assessed.request_identity.?.call);
     try std.testing.expectEqualStrings(readback.call.description.?.model, assessed.description.?.model);
     const request_hex = std.fmt.bytesToHex(probe.request_sha256.?, .lower);
@@ -533,7 +534,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         try std.mem.replaceOwned(u8, a, normal_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":1,\"totalTokens\":100001")
     else
         normal_body;
-    var wire: @import("../../src/bedrock_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response };
+    var wire: @import("../../src/model_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response };
     wire.result = if (scenario == .uncertain_delivery) .{ .failed = .{
         .cause = .transport_failed,
         .retry_class = .policy_eligible,
@@ -542,7 +543,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
     var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
-    const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
+    const published = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
         .purpose = .whole_workflow,
         .experiment = &gate,
         .capture = &log,

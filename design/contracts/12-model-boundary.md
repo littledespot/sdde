@@ -19,6 +19,11 @@ LLM interaction is deliberately split across actions:
 
 No one action both invokes and interprets the model. No model action reads or writes the workspace directly.
 
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+request-lifecycle actions run as fixed stages of one `request-model` step. A capability-free
+kernel orchestrator coordinates them through runner-owned child bindings. The split above is
+unchanged: each stage is still a separate action with its own narrow ports.
+
 Independently valid usage survives invalid answer content through the shared
 provider observation contract, including missing final text. Only complete content
 reaches decoding. The envelope retains declared observation history for reporting;
@@ -355,6 +360,16 @@ JSON-composition parts have no review-retention contract. This is assessment
 reuse, not provider caching or deterministic semantic proof.
 
 ### 12.7 Workflow-defined model operations
+
+> **ADR 0030 amendment (22 October 2026, not yet implemented).** One
+> [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
+> preparation step and every explicit lifecycle step below, and token counting gets one
+> `count-model-tokens` step. A fixed kernel orchestrator runs them as the stages ADR 0030
+> lists, through runner-owned child bindings. Where a bullet below says a step is
+> "explicit", "separate YAML work" or "YAML-selected", read it as that stage of the one step.
+> Each stage's rules are otherwise unchanged. `timeout-ms` and `retry-limit` move to the
+> `request-model` step. Retry counting keeps its scopes, with the compiled operation now
+> being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model

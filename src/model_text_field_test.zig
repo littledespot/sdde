@@ -40,7 +40,7 @@ test "every declared field schema offers exactly its permitted insertion alterna
             try std.testing.expectEqual(policy.permitsModel(field, kind), try accepted(a, selected.selected(), bytes));
         }
         // Both provider grammar views serialize the already restricted owner.
-        const bedrock = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), .bedrock);
+        const bedrock = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), .native);
         const full = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), .complete);
         for (std.meta.tags(policy.Insertion)) |kind| {
             const marker = try std.fmt.allocPrint(a, "\"const\":\"{s}\"", .{@tagName(kind)});

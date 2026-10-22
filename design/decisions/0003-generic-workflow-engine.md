@@ -11,6 +11,14 @@
   and [ADR 0009 — atomic workflow execution](0009-atomic-workflow-execution.md).
   One whole execution is atomic; there are no feature/task transactions,
   provider-effect journals, checkpoints or saved-step recovery.
+  [ADR 0031 — stage actions](0031-stage-actions.md) (22 October 2026, not yet
+  implemented): the internal steps of a stage action are functions, not workflow
+  operations, so they are not addressable from YAML; the stage action itself is.
+  [ADR 0032 — engine routines](0032-engine-routines.md) (22 October 2026, not yet
+  implemented): the engine-startup graph becomes a typed engine routine run by the
+  composition root. It is still compiler-locked, nonselectable and lock-free. The
+  workflow-engine orchestrator still receives only runner-owned child bindings, one of
+  which may reach a routine.
 - **Supersedes:** The fixed four-role workflow registry and compiler-owned
   four-workflow graph described in Sections 5.2, 9.1, 9.2, 30, and 31 of the
   proposed design

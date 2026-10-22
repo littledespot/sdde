@@ -11,6 +11,14 @@
 removes capacity fields and size-ceiling prerequisites; binding/call separation
 and conditional bootstrap remain unchanged.
 
+**Routine amendment (22 October 2026, not yet implemented):**
+[ADR 0032](0032-engine-routines.md) replaces the capability-free
+`ModelProviderBootstrapOrchestrator` and its runner-owned child bindings with a typed
+engine routine. Each step is a function with only the port it uses, and values pass as
+typed arguments. The composition root or a runner-owned binding reaches it. The routine
+still branches only on the typed requirement, stays fixed and nonselectable, keeps the
+same outcomes and public codes, and gains no credential read.
+
 ## Context
 
 The fixed startup graph must load and compile workflow definitions before a

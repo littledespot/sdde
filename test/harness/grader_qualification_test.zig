@@ -16,6 +16,7 @@ const config: configuration.Config = .{
     .api = .bedrock_converse,
     .model = "openai.gpt-oss-20b-1:0",
     .region = .@"ap-southeast-2",
+    .family = .@"gpt-oss",
     .reasoning_effort = .low,
     .temperature = 0.1,
     .timeout_ms = 1000,

@@ -1,5 +1,11 @@
+//! The one HTTPS exchange for every provider family: deadline and cancellation,
+//! one content-length send, redirect and encoding rejection, retained headers
+//! and framed body retention. Each family supplies only its endpoint projection.
 const std = @import("std");
-const transport = @import("bedrock_transport.zig");
+const transport = @import("model_http_transport.zig");
+const bedrock = @import("bedrock_endpoint.zig");
+const anthropic = @import("anthropic_endpoint.zig");
+const classifier = @import("../../domain/provider_failure.zig");
 const lease = @import("../../ports/provider_authorization_lease.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
@@ -87,22 +93,25 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
         }
 
         fn send(self: *Self, allocator: std.mem.Allocator, input: transport.Request, state: *Exchange) !void {
-            const url = try endpoint(allocator, input);
-            const authorization = try std.fmt.allocPrint(allocator, "Bearer {s}", .{input.api_key});
-            defer std.crypto.secureZero(u8, authorization);
+            const projection: transport.Projection = switch (input.target) {
+                .aws_bedrock => |target| try bedrock.project(allocator, target, input.api_key),
+                .anthropic => try anthropic.project(allocator, input.api_key),
+            };
+            defer if (projection.authorization) |value| std.crypto.secureZero(u8, value);
             var client: std.http.Client = .{ .allocator = allocator, .io = self.io };
             defer client.deinit();
             // No environment initialization, proxy, endpoint override, redirect,
             // connection reuse, credential chain, or retry mechanism is installed.
             state.phase = .connecting;
-            var request = try open_request(&client, .POST, try std.Uri.parse(url), .{
+            var request = try open_request(&client, .POST, try std.Uri.parse(projection.url), .{
                 .redirect_behavior = .unhandled,
                 .keep_alive = false,
                 .headers = .{
-                    .authorization = .{ .override = authorization },
+                    .authorization = if (projection.authorization) |value| .{ .override = value } else .omit,
                     .content_type = .{ .override = "application/json" },
                     .accept_encoding = .{ .override = "identity" },
                 },
+                .extra_headers = projection.extra_headers,
             });
             defer request.deinit();
             request.transfer_encoding = .{ .content_length = input.body.len };
@@ -111,7 +120,7 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
             sendBody(&request, input.body) catch return request.connection.?.stream_writer.err orelse error.WriteFailed;
             state.phase = .response_headers;
             var response: std.http.Client.Response = while (true) {
-                const bytes = @import("bedrock_http_head.zig").receive(allocator, request.reader.in) catch |err| return switch (err) {
+                const bytes = @import("model_http_head.zig").receive(allocator, request.reader.in) catch |err| return switch (err) {
                     error.ReadFailed => request.connection.?.getReadError().?,
                     else => err,
                 };
@@ -124,19 +133,17 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 break .{ .request = &request, .head = head };
             };
             if (response.head.status.class() == .redirect) {
-                state.header_failure = .{ .cause = .response_invalid, .retry_class = .never, .delivery = .response_received, .diagnostic = .{ .phase = .response_headers, .cause = .malformed_response } };
+                state.header_failure = .{ .cause = .response_invalid, .retry_class = classifier.retryClass(.exchange, .response_invalid), .delivery = .response_received, .diagnostic = .{ .phase = .response_headers, .cause = .malformed_response } };
             }
             if (response.head.content_encoding != .identity) state.rejectHead();
-            var exception: ?[]const u8 = null;
-            var request_id: ?[]const u8 = null;
+            var retained: std.EnumArray(transport.RetainedHeader, ?[]const u8) = .initFill(null);
             var headers = response.head.iterateHeaders();
             while (headers.next()) |header| {
-                if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-errortype")) {
-                    if (exception != null) state.rejectHead() else exception = try allocator.dupe(u8, header.value);
-                }
-                if (std.ascii.eqlIgnoreCase(header.name, "x-amzn-requestid")) {
-                    if (request_id != null) state.rejectHead() else request_id = try allocator.dupe(u8, header.value);
-                }
+                const name = switch (input.target) {
+                    .aws_bedrock => bedrock.retained(header.name),
+                    .anthropic => anthropic.retained(header.name),
+                } orelse continue;
+                if (retained.get(name) != null) state.rejectHead() else retained.set(name, try allocator.dupe(u8, header.value));
             }
             state.phase = .response_body;
             state.body_started = true;
@@ -158,7 +165,13 @@ pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method,
                 else => return error.EndOfStream,
             }
             state.body_complete = true;
-            state.response = if (state.header_failure) |failure| .{ .failed = failure } else .{ .received = .{ .status = @intFromEnum(response.head.status), .exception = exception, .request_id = request_id, .body = "" } };
+            state.response = if (state.header_failure) |failure| .{ .failed = failure } else .{ .received = .{
+                .status = @intFromEnum(response.head.status),
+                .exception = retained.get(.exception),
+                .request_id = retained.get(.request_id),
+                .retry_after = retained.get(.retry_after),
+                .body = "",
+            } };
         }
     };
 }
@@ -178,7 +191,7 @@ const Exchange = struct {
     body_started: bool = false,
     body_complete: bool = false,
     header_failure: ?transport.Failure = null,
-    response: transport.Response = .{ .failed = .{ .cause = .transport_failed, .retry_class = .policy_eligible, .delivery = .not_sent } },
+    response: transport.Response = .{ .failed = .{ .cause = .transport_failed, .retry_class = classifier.retryClass(.exchange, .transport_failed), .delivery = .not_sent } },
 
     fn rejectHead(self: *Exchange) void {
         if (self.header_failure == null) self.header_failure = failed(.response_invalid, self.sent, .response_headers, .malformed_response).failed;
@@ -186,23 +199,7 @@ const Exchange = struct {
 };
 
 fn failed(cause: @import("../../domain/llm_provider_operation.zig").ProviderFailureCause, sent: bool, phase: @FieldType(Diagnostic, "phase"), cause_detail: @FieldType(Diagnostic, "cause")) transport.Response {
-    return .{ .failed = .{ .cause = cause, .retry_class = if (cause == .response_invalid) .never else .policy_eligible, .delivery = if (sent) .accepted_or_unknown else .not_sent, .diagnostic = .{ .phase = phase, .cause = cause_detail } } };
-}
-
-pub fn endpoint(allocator: std.mem.Allocator, request: transport.Request) std.mem.Allocator.Error![]const u8 {
-    var encoded: std.Io.Writer.Allocating = .init(allocator);
-    defer encoded.deinit();
-    for (request.model.bytes) |byte| {
-        if (std.ascii.isAlphanumeric(byte) or byte == '-' or byte == '_' or byte == '.' or byte == '~') {
-            encoded.writer.writeByte(byte) catch return error.OutOfMemory;
-        } else {
-            encoded.writer.print("%{X:0>2}", .{byte}) catch return error.OutOfMemory;
-        }
-    }
-    // Region is a closed enum, not a user-supplied host or URL string.
-    return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/{s}", .{
-        @tagName(request.region), encoded.written(), if (request.kind == .inference) "converse" else "count-tokens",
-    });
+    return .{ .failed = .{ .cause = cause, .retry_class = classifier.retryClass(.exchange, cause), .delivery = if (sent) .accepted_or_unknown else .not_sent, .diagnostic = .{ .phase = phase, .cause = cause_detail } } };
 }
 
 // Classify only errors actually reported by the transport; unknown failures

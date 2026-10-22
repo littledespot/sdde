@@ -1,6 +1,6 @@
 const std = @import("std");
-const fixture_module = @import("bedrock_http_test_fixture.zig");
-const transport = @import("adapters/provider/bedrock_transport.zig");
+const fixture_module = @import("model_http_test_fixture.zig");
+const transport = @import("adapters/provider/model_http_transport.zig");
 const good = "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
 
 test "concrete HTTP captures request identity and rejects duplicate identity headers" {
@@ -25,9 +25,10 @@ test "concrete HTTP captures request identity and rejects duplicate identity hea
     }
 }
 
-test "concrete HTTP routes every registered model region through Converse or token counting once" {
-    for (@import("composition/provider_model_contracts.zig").registry.entries) |model| {
-        for (model.bedrock_regions) |region| {
+test "concrete HTTP routes every compiled region and catalogue model through Converse or token counting once" {
+    for (@import("model_contract_test_fixture.zig").bedrock_model_ids) |raw_model| {
+        const model: @import("domain/llm_provider_identity.zig").ModelId = .{ .bytes = raw_model };
+        for (std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)) |region| {
             for (std.enums.values(@import("domain/llm_provider_operation.zig").ProviderOperationKind)) |kind| {
                 var fixture: fixture_module.Fixture = undefined;
                 fixture.init(good);
@@ -36,8 +37,7 @@ test "concrete HTTP routes every registered model region through Converse or tok
                 var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
                 defer arena.deinit();
                 var request = fixture.request(kind);
-                request.model = model.model;
-                request.region = region;
+                request.target = .{ .aws_bedrock = .{ .region = region, .model = model, .kind = kind } };
                 fixture.expected_host = try std.fmt.allocPrint(arena.allocator(), "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
                 const result = try adapter.port().exchange(arena.allocator(), request);
                 try std.testing.expectEqualStrings("hello", result.received.body);
@@ -46,7 +46,7 @@ test "concrete HTTP routes every registered model region through Converse or tok
                 try std.testing.expectEqual(@as(usize, 1), fixture.opens);
                 try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
                 const request_line = try std.fmt.allocPrint(arena.allocator(), "POST /model/{f}/{s} HTTP/1.1\r\n", .{
-                    std.fmt.alt(std.Uri.Component{ .raw = model.model.bytes }, .formatEscaped),
+                    std.fmt.alt(std.Uri.Component{ .raw = model.bytes }, .formatEscaped),
                     if (kind == .inference) "converse" else "count-tokens",
                 });
                 try std.testing.expect(std.mem.startsWith(u8, fixture.wire.items, request_line));
@@ -392,5 +392,41 @@ test "concrete HTTP scheduler failure joins an already active request without re
         try std.testing.expectEqual(spawn - 1, fixture.connects);
         try std.testing.expectEqual(spawn - 1, fixture.socket_cancellations.load(.acquire));
         try fixture.expectCleaned();
+    }
+}
+
+test "the shared exchange sends Anthropic Messages with its own key header and retains its own identity headers" {
+    for ([_]bool{ false, true }) |duplicate| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const bytes = try std.fmt.allocPrint(arena.allocator(), "HTTP/1.1 200 OK\r\nRequest-Id: req_one\r\nRetry-After: 7\r\nX-Amzn-RequestId: foreign\r\n{s}Content-Length: 5\r\n\r\nhello", .{if (duplicate) "request-id: req_two\r\n" else ""});
+        var fixture: fixture_module.Fixture = undefined;
+        fixture.init(bytes);
+        defer fixture.deinit();
+        fixture.expected_host = "api.anthropic.com";
+        var adapter = fixture.adapter();
+        var request = fixture.request(.inference);
+        request.target = .anthropic;
+        const result = try adapter.port().exchange(arena.allocator(), request);
+        try fixture.expectJoined();
+        try std.testing.expect(std.mem.startsWith(u8, fixture.wire.items, "POST /v1/messages HTTP/1.1\r\n"));
+        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, "host: api.anthropic.com\r\n") != null);
+        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, "anthropic-version: 2023-06-01\r\n") != null);
+        // The key travels once, only in its own header; no bearer authorization.
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, &fixture.canary));
+        const header = try std.fmt.allocPrint(arena.allocator(), "x-api-key: {s}\r\n", .{&fixture.canary});
+        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, header) != null);
+        try std.testing.expect(std.ascii.indexOfIgnoreCase(fixture.wire.items, "authorization:") == null);
+        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, "anthropic-beta") == null);
+        if (duplicate) {
+            try std.testing.expectEqual(.response_invalid, result.failed.cause);
+            try std.testing.expectEqual(.never, result.failed.retry_class);
+        } else {
+            try std.testing.expectEqualStrings("req_one", result.received.request_id.?);
+            try std.testing.expectEqualStrings("7", result.received.retry_after.?);
+            // Another family's identity header is never retained.
+            try std.testing.expect(result.received.exception == null);
+            try std.testing.expectEqualStrings("hello", result.received.body);
+        }
     }
 }

@@ -236,12 +236,18 @@ fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, 
     var captured = try @import("../call/capture.zig").load(io, a, repository, path, workflow_id, std.math.cast(u32, ordinal) orelse return error.InvalidBudgetEvidence);
     defer captured.deinit();
     const description = captured.call.description.?;
-    const wire: @import("../../../src/adapters/provider/bedrock_transport.zig").Request = .{ .region = captured.context.region, .model = .{ .bytes = captured.context.model }, .kind = captured.context.kind, .body = captured.call.request.?, .api_key = "", .deadline_monotonic_ms = 1 };
+    const context = captured.context.common();
+    // The loader matched the capture to this configuration; the frozen cohort is Bedrock.
+    const region = switch (description.provider_config) {
+        .aws_bedrock => |config| config.region,
+        .empty_object, .anthropic => return error.InvalidBudgetEvidence,
+    };
+    const wire: @import("../../../src/adapters/provider/model_http_transport.zig").Request = .{ .target = .{ .aws_bedrock = .{ .region = region, .model = .{ .bytes = context.model }, .kind = context.kind } }, .body = captured.call.request.?, .api_key = "", .deadline_monotonic_ms = 1 };
     try @import("../frozen_binding.zig").validateDescription(a, description, wire, expected_models);
-    if (!std.mem.eql(u8, description.provider, protocol.provider) or !std.mem.eql(u8, description.model, protocol.model) or !std.mem.eql(u8, @tagName(captured.context.region), protocol.region)) return error.InvalidBudgetEvidence;
+    if (!std.mem.eql(u8, description.provider, protocol.provider) or !std.mem.eql(u8, description.model, protocol.model) or !std.mem.eql(u8, @tagName(region), protocol.region)) return error.InvalidBudgetEvidence;
     _ = try @import("../diagnostic_binding.zig").rebind(a, description, captured.provider_catalogue, description.model, description.reasoning_effort);
     if (!std.mem.eql(u8, try preparedWire(a, description), captured.call.request.?)) return error.InvalidBudgetEvidence;
-    if (!std.meta.eql(attempt.origin, captured.context.origin) or !std.mem.eql(u8, attempt.step, captured.context.request_step)) return error.InvalidBudgetEvidence;
+    if (!std.meta.eql(attempt.origin, context.origin) or !std.mem.eql(u8, attempt.step, context.request_step)) return error.InvalidBudgetEvidence;
     const outcome_path = try @import("../evidence.zig").Store.path(a, .generation, ordinal, .outcome);
     const outcome = try contracts.decode(@import("../e2e/trace.zig").TransportOutcome, a, try files.read(io, a, run, outcome_path));
     const status: ?u16 = if (outcome == .received) outcome.received.status else null;
@@ -275,7 +281,7 @@ fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, 
 }
 
 const Offline = struct {
-    fn exchange(_: *@import("../../../src/adapters/provider/bedrock_transport.zig").Context, _: std.mem.Allocator, _: @import("../../../src/adapters/provider/bedrock_transport.zig").Request) @import("../../../src/adapters/provider/bedrock_transport.zig").Error!@import("../../../src/adapters/provider/bedrock_transport.zig").Response {
+    fn exchange(_: *@import("../../../src/adapters/provider/model_http_transport.zig").Context, _: std.mem.Allocator, _: @import("../../../src/adapters/provider/model_http_transport.zig").Request) @import("../../../src/adapters/provider/model_http_transport.zig").Error!@import("../../../src/adapters/provider/model_http_transport.zig").Response {
         return error.Cancelled;
     }
     fn now(_: *@import("../../../src/ports/provider_authorization_lease.zig").Context) error{ClockUnavailable}!u64 {
@@ -550,7 +556,7 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
     const description: @import("../../../src/domain/model_request_description.zig").Description = .{
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
-        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
         .model_slot = "generation",
         .workflow_id = "budget-example",
         .workflow_version = 1,

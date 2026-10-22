@@ -13,7 +13,11 @@ and origins. Native defect validators retain their repair or
 blocked outcomes; valid citations or model-assisted comparisons do not establish
 semantic corroboration. A genuine native authority gap remains typed, never an
 automatic upstream rebuild after generation. Pre-generation source repair and
-native generation/protocol repair remain distinct authorized operations.
+native generation/protocol repair remain distinct authorized operations. Under
+[ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+"distinct" means distinct authorization categories and owners, each with its own rules
+and phase witness. Both run through the four generic repair operations, with distinct
+`owner` values, not distinct operation IDs.
 
 An atomic repair changes the smallest independently valid IR unit associated with one diagnostic. It is not necessarily one character. The unit may be:
 
@@ -604,6 +608,10 @@ child-object descriptors only.
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
   compiler-validated local limit owns further attempts of that assignment (§22.7).
+- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+  builder and accounting are engine-run stages of one `request-model` step. The correction
+  returns to its accounting stage, and the step's `retry-limit` owns further attempts. The
+  correction content and its rules here are unchanged.
 - The execution's total-token budget continues across all requests and corrections.
   Under ADR 0023, exhausted malformed-response correction of bound optional
   advice closes the logical request failed without another provider operation
@@ -725,8 +733,14 @@ Successful repair progress is independent of another target's retry allowance:
 
 - Each retry-capable operation instance still declares `retry-limit` in YAML.
   Atomic repair requests and repair merges count visits by compiled operation and
-  native defect key. Ordinary model requests count visits by compiled operation
-  and immutable assignment; other operations retain invocation-wide counts.
+  native defect key. "Compiled operation" means the expanded compiled step instance
+  ([ADR 0033](../decisions/0033-generic-repair-operations.md)). Two steps that use the same
+  generic repair operation therefore keep separate counts. Ordinary model requests count visits by compiled operation
+  and immutable assignment; other operations retain invocation-wide counts. Under
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+  compiled operation for every model request, ordinary, atomic repair or dependent, is its
+  `request-model` step. Each keeps its counting scope: assignment, native defect key, or the
+  pending native parent key.
 - An assignment is identified by execution, immutable unit, model operation and purpose, excluding request ordinal. Context followups
   retain their parent's assignment and native followup ordinal. Equal payload
   bytes do not merge unrelated units. Reassignment cannot reset history.

@@ -8,13 +8,29 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 - Actions call `workflowLog.log(&delta, fact)` to append attributed telemetry without performing
   I/O; runner lifecycle facts use the same active binding.
 - The resulting `NodeDelta.telemetryFactsAdded` values pass through the discrete logging actions
-  described in Section 13.9.
+  described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet
+  implemented), those actions become the steps of a feature-logging engine routine, once its
+  logging preconditions hold.
+  - The event outcomes, emergency diagnostic and finalization rules here are unchanged.
+  - Cancellation under a lock is still reported as a logging failure until the separate known
+    work changes the sink contract.
 
 [View the Observability events sample](../code.md#observability-events).
 
 [View the feature logging pipeline](../diagrams/06-feature-logging.md).
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
+
+Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
+stages of one `request-model` or `count-model-tokens` step are no longer YAML nodes. The runner
+still emits one event for each stage it runs, attributed to the originating step with a stable
+stage name, so a report can name the exact stage where a request stopped.
+
+Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), a stage action's
+internal steps are functions, not nodes, so they emit no events of their own. The stage action's
+event records its outcome, and a failure records the failing internal step from the action's
+closed internal-step enum, together with its reason. For a Zig error, the step comes from a
+stage-owned diagnostic slot and the error itself propagates unchanged.
 
 [ADR 0018](../decisions/0018-debug-model-exchange-logging.md) requires `debug` and
 `trace` to capture every production model attempt's complete assembled request and

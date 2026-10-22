@@ -1,19 +1,26 @@
-//! Diagnostic Bedrock projection using the production encoder, decoder and transport.
+//! The one diagnostic replay projection for every provider family, using the
+//! production encoders, decoders, credential source and shared transport. It
+//! dispatches only the family's codec and endpoint target.
 const std = @import("std");
 const debug = @import("../../domain/request_debugger.zig");
 const port = @import("../../ports/request_replay.zig");
-const request = @import("bedrock_request.zig");
+const text = @import("model_text_request.zig");
+const transport = @import("model_http_transport.zig");
+const key = @import("provider_api_key.zig");
+const source = @import("../system/provider_api_key_source.zig");
 const strict = @import("../../domain/strict_json.zig");
 const envelope = @import("../../domain/model_envelope.zig");
 const contracts = @import("../../domain/llm_provider_contracts.zig");
+const support = @import("provider_response_support.zig");
 pub const Authorization = struct {
     context: *port.Context,
-    authorize_fn: *const fn (*port.Context, debug.Description) port.Error!contracts.BedrockRequestProfile,
+    /// The compiled facts of the current binding the description names.
+    authorize_fn: *const fn (*port.Context, debug.Description) port.Error!contracts.ProviderFacts,
 };
 pub const Adapter = struct {
     authorization: Authorization,
     environment: *const std.process.Environ.Map,
-    transport: @import("bedrock_transport.zig").Port,
+    transport: transport.Port,
     clock: @import("../../ports/provider_authorization_lease.zig").Clock,
     compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
 
@@ -22,28 +29,44 @@ pub const Adapter = struct {
     }
     fn prepare(context: *port.Context, a: std.mem.Allocator, description: debug.Description) port.Error![]const u8 {
         const self: *Adapter = @ptrCast(@alignCast(context));
-        const request_profile = try self.authorization.authorize_fn(self.authorization.context, description);
-        if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
+        const facts = try self.authorization.authorize_fn(self.authorization.context, description);
+        const family = key.Family.of(description.provider_config) orelse return error.InvalidReplay;
+        if (std.meta.activeTag(facts) != family.configSchema() or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
         const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, schema, description.members) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         members.release();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
         if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
-        const body = request.encodeText(a, .{
-            .content = description.content,
-            .schema = switch (description.response_mode) {
-                .prompt_only => .{ .prompt_only = schema.modelBytes() },
-                .native_schema => .{ .native = .{ .guidance = schema.modelBytes(), .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .bedrock) catch return error.InvalidReplay } },
-            },
-            .schema_name = "sdde_model_envelope_v1",
-            .temperature = description.controls.temperature,
-            .reasoning_effort = request.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay,
-            .request_profile = request_profile,
-            .max_output_tokens = description.provider_config.aws_bedrock.max_output_tokens,
-        }, .inference) catch return error.InvalidReplay;
+        const text_schema: text.TextSchema = switch (description.response_mode) {
+            .prompt_only => .{ .prompt_only = schema.modelBytes() },
+            .native_schema => .{ .native = .{ .guidance = schema.modelBytes(), .structure = @import("../../domain/model_schema_projection.zig").render(a, schema, .native) catch return error.InvalidReplay } },
+        };
+        const effort = text.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay;
+        // The captured family must be the one the authorized binding compiles.
+        if (description.provider_config == .aws_bedrock and facts.bedrockFamily() != description.provider_config.aws_bedrock.family) return error.InvalidReplay;
+        const body = switch (description.provider_config) {
+            .aws_bedrock => |config| @import("bedrock_request.zig").encodeText(a, .{
+                .content = description.content,
+                .schema = text_schema,
+                .schema_name = "sdde_model_envelope_v1",
+                .temperature = description.controls.temperature,
+                .reasoning_effort = effort,
+                .family = config.family,
+                .max_output_tokens = config.max_output_tokens,
+            }, .inference),
+            .anthropic => |config| @import("anthropic_request.zig").encodeText(a, .{
+                .model = description.model,
+                .content = description.content,
+                .schema = text_schema,
+                .temperature = description.controls.temperature,
+                .reasoning_effort = effort,
+                .max_output_tokens = config.max_output_tokens,
+            }),
+            .empty_object => return error.InvalidReplay,
+        } catch return error.InvalidReplay;
         // A modified request must not persist an authorization secret as content.
-        var material = @import("../system/bedrock_api_key_source.zig").read(a, self.environment);
+        var material = source.read(a, self.environment, family);
         defer material.deinit();
         if (material == .allocation_failed) return error.OutOfMemory;
         if (material == .ready) {
@@ -61,20 +84,27 @@ pub const Adapter = struct {
         // Reauthorize at dispatch; records are not capabilities.
         const rebuilt = try prepare(context, a, value.description);
         if (!std.mem.eql(u8, rebuilt, value.body)) return error.InvalidReplay;
-        var material = @import("../system/bedrock_api_key_source.zig").read(a, self.environment);
+        const family = key.Family.of(value.description.provider_config) orelse return error.InvalidReplay;
+        var material = source.read(a, self.environment, family);
         defer material.deinit();
         const credential = switch (material) {
-            .ready => |key| key.bytes,
+            .ready => |snapshot| snapshot.bytes,
             .unavailable => return error.ReplayUnauthorized,
             .allocation_failed => return error.OutOfMemory,
         };
         const now = self.clock.now() catch return error.ReplayProviderFailure;
         const deadline = std.math.add(u64, now, 300_000) catch return error.ReplayProviderFailure;
-        var partial: ?@import("bedrock_transport.zig").ResponseBody = null;
+        var partial: ?transport.ResponseBody = null;
         const received = self.transport.exchange(a, .{
-            .region = value.description.provider_config.aws_bedrock.region,
-            .model = @import("../../domain/llm_provider_identity.zig").ModelId.parse(value.description.model) orelse return error.InvalidReplay,
-            .kind = .inference,
+            .target = switch (value.description.provider_config) {
+                .aws_bedrock => |config| .{ .aws_bedrock = .{
+                    .region = config.region,
+                    .model = @import("../../domain/llm_provider_identity.zig").ModelId.parse(value.description.model) orelse return error.InvalidReplay,
+                    .kind = .inference,
+                } },
+                .anthropic => .anthropic,
+                .empty_object => return error.InvalidReplay,
+            },
             .body = value.body,
             .api_key = credential,
             .deadline_monotonic_ms = deadline,
@@ -85,7 +115,7 @@ pub const Adapter = struct {
             .failed => |failure| response(a, value.id, if (failure.body != null and !failure.body.?.complete) .partial else .transport_failed, null, failure.body, @tagName(failure.cause), credential),
         };
     }
-    fn response(a: std.mem.Allocator, id: []const u8, outcome: @FieldType(debug.ResponseRecord, "outcome"), status: ?u16, body: ?@import("bedrock_transport.zig").ResponseBody, diagnostic: ?[]const u8, credential: []const u8) port.Error!debug.ResponseRecord {
+    fn response(a: std.mem.Allocator, id: []const u8, outcome: @FieldType(debug.ResponseRecord, "outcome"), status: ?u16, body: ?transport.ResponseBody, diagnostic: ?[]const u8, credential: []const u8) port.Error!debug.ResponseRecord {
         var value: debug.ResponseRecord = .{ .id = id, .outcome = outcome, .status = status, .diagnostic = diagnostic };
         if (body) |bytes| {
             const sanitized = try @import("../../domain/model_log_redaction.zig").sanitize(a, bytes.bytes, &.{credential});
@@ -112,9 +142,14 @@ pub const Adapter = struct {
             return result;
         };
         defer raw.deinit();
-        var provider_diagnostic: ?@import("bedrock_response.zig").DecodeDiagnostic = null;
+        var provider_diagnostic: ?support.DecodeDiagnostic = null;
         defer if (provider_diagnostic) |value| value.deinit(a);
-        var decoded = @import("bedrock_response.zig").decodeConverse(a, raw.value, &provider_diagnostic) catch |err| {
+        const decoded_result = switch (description.provider_config) {
+            .aws_bedrock => @import("bedrock_response.zig").decodeConverse(a, raw.value, &provider_diagnostic),
+            .anthropic => @import("anthropic_response.zig").decodeMessages(a, raw.value, description.model, &provider_diagnostic),
+            .empty_object => return error.InvalidReplay,
+        };
+        var decoded = decoded_result catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             result.extraction = .invalid;
             if (provider_diagnostic) |value| {

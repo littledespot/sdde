@@ -29,6 +29,11 @@
   listing of `logs/events` and `logs/prompts`, including the current run's and the
   debugger's. A regular file whose name is not a segment name is left alone
   instead of blocking.
+- **Amended by:** [ADR 0032](0032-engine-routines.md) (22 October 2026, not yet
+  implemented). The retention coordinator becomes a typed engine routine once
+  ADR 0032's logging preconditions are met. Its five-step order and the rule that only
+  this path prunes are unchanged. Fake-port routine tests replace the coordinator's
+  step-order spy test.
 
 ## Context
 

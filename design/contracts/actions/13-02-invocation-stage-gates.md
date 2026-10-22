@@ -20,6 +20,12 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Validate the closed workflow-ID syntax without filename inference,
   registry lookup, normalization fallback, or workflow-specific branching.
 
+> **ADR 0032 (not yet implemented).** The two `specify` invocation actions below become the
+> internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action with
+> side effect `none`: parse, then validate. Each keeps its rules. The stage action is still
+> named by the definition's `invoke:` field and run by the engine through its binding before
+> the graph starts ([ADR 0032](../../decisions/0032-engine-routines.md)).
+
 ## `ParseSpecifyInvocationAction`
 
 - **Input:** remaining workflow arguments

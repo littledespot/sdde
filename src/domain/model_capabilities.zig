@@ -1,11 +1,12 @@
 pub const ExactTokenCounter = enum { unavailable, provider_input_token_count };
 
-// Native output uses a registered projection of the compiled result schema.
-// Its structural constraints never replace the complete acceptance validator.
+// Native output uses the shared native projection of the compiled result
+// schema, whichever provider family encodes it. Its structural constraints never
+// replace the complete acceptance validator.
 pub const StructuredResponse = enum {
     unavailable,
     prompt_only,
-    bedrock_json_schema,
+    native_json_schema,
 };
 
 pub const Capabilities = struct {
@@ -31,7 +32,7 @@ pub const Capabilities = struct {
         if (selected.temperature != self.inferenceControls().temperature) return false;
         return switch (mode) {
             .prompt_only => self.structured_response != .unavailable,
-            .native_schema => self.structured_response == .bedrock_json_schema,
+            .native_schema => self.structured_response == .native_json_schema,
         };
     }
 };

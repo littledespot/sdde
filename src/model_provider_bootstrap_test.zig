@@ -418,7 +418,7 @@ const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{
     .provider = provider_id,
     .model = identity.ModelId.parse("model-a").?,
     .implementation_id = contracts.RegisteredProviderImplementationId.init(1).?,
-    .config_schema = .empty_object,
+    .facts = .empty_object,
     .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     .supported_reasoning_efforts = &.{"low"},
 }} };

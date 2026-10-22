@@ -19,6 +19,7 @@ test "native model connections are denied before I/O for every provider endpoint
     for ([_][]const u8{
         "https://bedrock-runtime.ap-southeast-2.amazonaws.com/model/example/converse",
         "https://bedrock-runtime.us-east-1.amazonaws.com/model/example/count-tokens",
+        "https://api.anthropic.com/v1/messages",
         "https://api.openai.com/v1/responses",
         "https://unrelated.invalid/model",
     }) |endpoint| {

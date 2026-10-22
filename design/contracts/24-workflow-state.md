@@ -164,7 +164,10 @@ inputs to a new beginning-to-end execution, not a saved-step continuation.
 No transaction collection, WAL, checkpoint, provider-effect scan or recovery
 lock precedes execution. Provider lifecycle, leases and total token usage are
 fresh for each execution. A full rerun may repeat API calls; within-run retries
-still require explicit YAML transitions and operation-local retry authority.
+still require explicit YAML transitions and operation-local retry authority. Under
+[ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), a model
+request's protocol correction runs inside its `request-model` step, under that step's
+`retry-limit`.
 
 ### 24.5 Upstream rework and invalidation
 

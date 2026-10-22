@@ -44,7 +44,10 @@ immutable post-composition safety-valid toolchain object to declared consumers.
   not a wrapper around raw YAML or another projection of the same authority.
 - Captured bytes, decoded values, schema-valid layers, registry candidates, and merged
   pre-safety candidates remain runner-owned workflow intermediates exposed only to
-  operations declaring their typed input keys.
+  operations declaring their typed input keys. Under
+  [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), they become
+  function-local values inside the `prepare-toolchain` stage action. They stay private,
+  distinctly typed and unable to construct `ToolChainService`.
 - None can construct `ToolChainService`.
 
 - After the safety gate succeeds, the runner's envelope owns the original sealed
@@ -73,6 +76,20 @@ The single operation registry exposes the existing action IDs below. Each has
 `ok` and `failed` transitions, no parameters, and one action responsibility.
 The YAML graph owns ordering; no combined setup operation hides this sequence.
 
+> **ADR 0031 amendment (22 October 2026, not yet implemented).** The nine operations below
+> become the internal steps, in this order, of one registered `prepare-toolchain`
+> [stage action](../decisions/0031-stage-actions.md):
+>
+> - it has `ok` and `failed` outcomes and side effect `filesystem_read`;
+> - its ports are the existing `toolchain-read` and `toolchain-parser` ports, so no workflow
+>   policy that runs these steps today needs a new capability;
+> - it outputs `valid_toolchain`.
+>
+> Every step only passes `ok` on and `failed` to the end, so the sequence hides no routed
+> choice. Each internal step keeps the rules below, and only the safety step can construct
+> `ValidToolchain`. The nine operation IDs and their intermediate keys are removed when it
+> lands. This is the first stage-action conversion and is measured before any other.
+
 | Operation | Output key |
 | --- | --- |
 | `capture-project-toolchain` | `project_toolchain_capture` |
@@ -92,7 +109,9 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 - The source ports derive `toolchain-read`; the parser port derives `toolchain-parser`.
 - The registered `core.toolchain@1` profile allows those two capabilities only.
 - Unreferenced setup operations perform no reads.
-- Cancellation and cleanup remain runner-owned.
+- Cancellation and cleanup remain runner-owned. Under ADR 0031 (not yet implemented),
+  the `prepare-toolchain` stage action also checks for cancellation between its internal
+  steps and cleans up what it owns.
 
 ## 2. Path authority and the requested upstream service
 
@@ -316,7 +335,9 @@ separate approved F0002 contract.
 
 1. `ToolChainService` has exactly one responsibility: expose one immutable
    `ValidToolchain` through its concrete read-only `toolchain()` accessor. The
-   bounded loading actions remain separate and expose no consumer query.
+   bounded loading actions remain separate and expose no consumer query. Under ADR 0031
+   (not yet implemented), they are separate internal functions of the `prepare-toolchain`
+   stage action, each with its own tests.
 2. F0001 remains the only `.sddtoolkit.json` reader, and the path-policy owner
    remains the only owner that turns its raw path strings into capabilities.
    F0003 receives those capabilities only through F0004's
@@ -333,7 +354,8 @@ separate approved F0002 contract.
    - The two JSON Schema files document those same closed YAML shapes but are not
      runtime inputs.
    - Raw and schema-valid results are runner-private intermediates and cannot construct
-     `ToolChainService`.
+     `ToolChainService`. Under ADR 0031 they are function-local values of the stage
+     action instead, with the same restriction.
 5. Every inherited preset identity/version resolves exactly once; missing,
    duplicate, conflicting-version, ranged/latest, and cyclic closures
    fail closed.
@@ -373,7 +395,8 @@ Implementation tests cover the owning boundaries:
   malformed YAML, duplicate/unknown/missing/wrong-kind fields, unresolved
   placeholders, `_structure.yaml`, and unrelated representative legacy
   documents; raw/schema-valid candidates pass only through their exact
-  runner-owned bindings and cannot construct or enter a public service API;
+  runner-owned bindings and cannot construct or enter a public service API
+  (under ADR 0031: only between the stage action's internal functions);
 - preset-registry work: accepted packages, unsupported versions,
   unresolved assets, legacy documents, and an invalid unselected package;
 - inheritance: multiple unrelated valid compositions and rejected missing,

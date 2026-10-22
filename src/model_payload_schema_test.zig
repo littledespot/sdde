@@ -124,7 +124,7 @@ test "loss protocol correction preserves the complete selected contract in both 
             request.response_guidance_mode = mode;
             // This synthetic request probes the registered OpenAI Bedrock wire
             // policy; its fake provider identity remains test-only lineage.
-            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss, .{ .tokens = 16000 }), .{});
+            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .@"gpt-oss", .{ .tokens = 16000 }), .{});
             var occurrences: usize = 0;
             for (wire.value.object.get("system").?.array.items) |part|
                 occurrences += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, selected.modelBytes()));
@@ -188,7 +188,7 @@ test "child requirements stay inside selected definitions parts and repair schem
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = retry.request.*;
             request.response_guidance_mode = mode;
-            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss, .{ .tokens = 16000 });
+            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .@"gpt-oss", .{ .tokens = 16000 });
             const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
             var count: usize = 0;
             for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
@@ -206,7 +206,7 @@ test "native generation projection preserves variants while full schema retains 
     try fixture.initWithSchema(contract);
     defer fixture.deinit();
     const source = fixture.resource.content.result_schema;
-    const projection = try @import("domain/model_schema_projection.zig").render(std.testing.allocator, source, .bedrock);
+    const projection = try @import("domain/model_schema_projection.zig").render(std.testing.allocator, source, .native);
     defer std.testing.allocator.free(projection);
     var projected = try @import("domain/strict_json.zig").parse(std.testing.allocator, projection, .{ .maximum_depth = 32 }, true, null);
     defer projected.deinit();
@@ -433,9 +433,9 @@ test "unrelated schemas retain one universal framing instruction across initial 
             // Retry-owned content retains task guidance only; serialization adds framing.
             for (request.content) |part| try std.testing.expect(std.mem.indexOf(u8, part.bytes(), framing) == null);
             for ([_]provider.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
-                const bytes = try encoding.encode(std.testing.allocator, request, kind, .openai_oss, .{ .tokens = 16000 });
+                const bytes = try encoding.encode(std.testing.allocator, request, kind, .@"gpt-oss", .{ .tokens = 16000 });
                 defer std.testing.allocator.free(bytes);
-                const decoded_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
+                const decoded_body = try @import("model_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
                 defer std.testing.allocator.free(decoded_body);
                 try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, decoded_body, framing));
                 var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, decoded_body, .{ .maximum_depth = 64 }, false, null);
@@ -804,7 +804,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const projected = try projection.value(a, result.invalid.expected, .complete);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, located, .{}));
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, try projection.outline(a, result.invalid.expected), .{}), try std.json.Stringify.valueAlloc(a, expected.get("shape").?, .{}));
-            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .openai_oss, .{ .tokens = 16000 });
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .@"gpt-oss", .{ .tokens = 16000 });
             const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             var occurrences: usize = 0;
             for (request.value.object.get("system").?.array.items) |part|
@@ -866,7 +866,7 @@ test "type-disjoint nested alternatives retain bounds tags diagnostics and provi
     var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const contract = try std.mem.concat(a, u8, &.{ "{\"type\":\"object\",\"properties\":{\"value\":", selected, "},\"required\":[\"value\"],\"additionalProperties\":false}" });
     const compiled = try compiler.compiler().compile(a, contract);
-    const projected = try @import("domain/model_schema_projection.zig").render(a, compiled, .bedrock);
+    const projected = try @import("domain/model_schema_projection.zig").render(a, compiled, .native);
     const tree = try std.json.parseFromSlice(std.json.Value, a, projected, .{});
     const choices = tree.value.object.get("properties").?.object.get("value").?.object.get("anyOf").?.array.items;
     for (choices, [_][]const u8{ "string", "array", "object" }) |choice, expected| try std.testing.expectEqualStrings(expected, choice.object.get("type").?.string);

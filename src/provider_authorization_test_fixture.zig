@@ -66,6 +66,7 @@ pub const Fixture = struct {
             .json = false,
             .capabilities = @import("model_contract_test_fixture.zig").capabilities,
             .supported_reasoning_efforts = &.{"low"},
+            .facts = .empty_object,
         };
         self.provider_binding = .{
             .operation_id = modelOperation(),

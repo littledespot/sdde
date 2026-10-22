@@ -5,7 +5,7 @@ const c = @import("../e2e/contracts.zig");
 const description: @import("../../../src/domain/request_debugger.zig").Description = .{
     .provider = "aws-bedrock",
     .model = "global.openai.gpt-6-luna",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 1,
@@ -141,8 +141,9 @@ test "compatibility preflight rejects unpermitted slots and incomplete capture s
     const config = @embedFile("../../integration/fixtures/baseline/protocol.sddtoolkit.json");
     const preflight = @import("cli.zig").preflight;
     try preflight(a, config);
-    // The shipped cases now select the frozen protocol's exact slot controls.
-    try preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json"));
+    // The shipped cases select Claude Haiku 5.5 (ADR 0029): a permitted generation
+    // model, but not the frozen GPT-OSS protocol this probe is bound to.
+    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json")));
     try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json")));
     const disallowed = try std.mem.replaceOwned(u8, a, config, "openai.gpt-oss-20b-1:0", "unpermitted-model");
     try std.testing.expectError(error.DisallowedTestModel, preflight(a, disallowed));

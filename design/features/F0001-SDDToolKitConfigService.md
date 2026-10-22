@@ -210,7 +210,10 @@ owner's work.
 1. The invocation working directory is the project root and only its exact
    `.sddtoolkit.json` child is considered; no ancestor or descendant search is
    performed.
-2. Locate, read, and typed decode remain separate actions.
+2. Locate, read, and typed decode remain separate actions. Under
+   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), they become
+   separate typed steps of the startup engine routine, each with its own tests and public
+   codes. Their values pass as typed arguments, not runner-applied deltas.
 3. Decode goes directly from owned bytes to one closed owned
    `SDDToolKitConfig`; no generic JSON tree is retained or published.
 4. A successful invocation reads and decodes the file once.

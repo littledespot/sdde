@@ -24,7 +24,7 @@ const provider_contracts: contracts.Registry = .{ .entries = &.{.{
     .provider = provider_id,
     .model = model_id,
     .implementation_id = implementation_id,
-    .config_schema = .empty_object,
+    .facts = .empty_object,
     .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     .supported_reasoning_efforts = &.{"low"},
 }} };
@@ -442,7 +442,7 @@ const toolkit_config =
 
 test "model JSON selection owns binding mode independently of workflow identity" {
     var contract = provider_contracts.entries[0];
-    contract.capabilities.structured_response = .bedrock_json_schema;
+    contract.capabilities.structured_response = .native_json_schema;
     for ([_]bool{ false, true }) |json| {
         var fixture = try Fixture.initJSON(.{ .entries = &.{contract} }, json);
         defer fixture.deinit();

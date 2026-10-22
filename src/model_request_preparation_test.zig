@@ -341,7 +341,7 @@ test "composition source preserves exact part schema execution unit and purpose 
     defer prepared.deinit();
     try std.testing.expect(prepared.request.response_schema == part.schema);
     var native_entry = fixture.registry_entry;
-    native_entry.capabilities.structured_response = .bedrock_json_schema;
+    native_entry.capabilities.structured_response = .native_json_schema;
     native_entry.json = true;
     var native_binding = fixture.provider_binding;
     native_binding.registry_entry = &native_entry;
@@ -350,7 +350,7 @@ test "composition source preserves exact part schema execution unit and purpose 
     var native_request = try preparation.build(std.testing.allocator, native_source, fixture.request.content);
     defer native_request.deinit();
     try std.testing.expect(native_request.request.response_schema == part.schema);
-    const native_projection = try @import("domain/model_schema_projection.zig").render(a, native_request.request.response_schema, .bedrock);
+    const native_projection = try @import("domain/model_schema_projection.zig").render(a, native_request.request.response_schema, .native);
     try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"left\"") != null);
     try std.testing.expect(std.mem.indexOf(u8, native_projection, "\"right\"") == null);
     try std.testing.expect(std.mem.indexOf(u8, part.schema.modelBytes(), "\"maxLength\":10") != null);
@@ -473,7 +473,7 @@ test "request mode cannot override catalogue JSON selection" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    fixture.registry_entry.capabilities.structured_response = .bedrock_json_schema;
+    fixture.registry_entry.capabilities.structured_response = .native_json_schema;
     // Both wire modes are supported; only the captured catalogue choice is allowed.
     for ([_]bool{ false, true }) |json| {
         fixture.registry_entry.json = json;
@@ -527,7 +527,7 @@ test "native exact occurrence scope is deep owned and bound across request descr
     const encoded = try std.json.Stringify.valueAlloc(a, description.from(owned.request, &fixture.provider_binding, .inference), .{});
     const restored = try description.decode(a, encoded);
     try std.testing.expect(exact.same(scope, restored.exact_scope));
-    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v9", "model-request-debug/v5");
+    const old = try std.mem.replaceOwned(u8, a, encoded, @import("domain/model_request_description.zig").current_version, "model-request-debug/v5");
     try std.testing.expectError(error.InvalidJsonDocument, description.decode(a, old));
 }
 
@@ -580,14 +580,14 @@ test "replay authority matches a description only to its exact current binding a
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    fixture.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16384 } } };
+    fixture.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } };
     const described = Description.from(&fixture.request, &fixture.provider_binding, .inference);
     try std.testing.expect(described.matchesBinding(&fixture.provider_binding));
 
     // A catalogue whose maximum or region moved no longer authorizes the capture.
     for ([_]@import("domain/llm_provider_contracts.zig").ValidatedProviderConfig{
-        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 4096 } } },
-        .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16384 } } },
+        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
+        .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } },
         .empty_object,
     }) |drifted| {
         fixture.registry_entry.config = drifted;

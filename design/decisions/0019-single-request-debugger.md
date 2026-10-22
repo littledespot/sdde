@@ -15,6 +15,10 @@
   [ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)
   (18 October 2026): descriptions advance to `model-request-debug/v9`, whose Bedrock
   provider configuration records the model's maximum output.
+  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not yet
+  implemented): `node_id` and `route_id` both name the originating `request-model`
+  step, and the action ID records the stage. The implementation advances the
+  description version if its shape changes.
 
 ## Diagnostic execution boundary
 

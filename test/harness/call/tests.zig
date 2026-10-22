@@ -39,7 +39,7 @@ test "call selectors require an explicit run workflow physical ordinal model and
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 1,
@@ -73,7 +73,7 @@ const identity: debug.ReplayIdentity = .{ .id = "trial-1", .run = .{ .bytes = "M
 const response_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"MOCK answer\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
 const Fixture = struct {
-    wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = response_body },
+    wire: @import("../../../src/model_transport_test_fixture.zig").Wire = .{ .inference_body = response_body },
     authority: binding.Authorization = .{ .binding = description },
     environment: std.process.Environ.Map,
     parser: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{},

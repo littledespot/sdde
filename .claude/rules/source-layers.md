@@ -18,6 +18,7 @@ rules are AGENTS.md "Actions, orchestrators, and runner" and
 | `src/actions/` | Import only `std`, `builtin`, `../../domain/...` and `../../ports/...`. Each file declares exactly one `pub const Action = struct` and one `pub const contract: pipeline.NodeContract`. |
 | `src/application/*_orchestrator.zig`, `*_coordinator.zig` | Capability-free: no `/actions/`, `/adapters/` or `/ports/` imports and no `std.Io`. |
 | `src/application/*_runner.zig` | No `/adapters/` imports and no `std.Io`. |
+| `src/application/*_routine.zig` | ADR 0032 engine routines (not yet implemented). Import only domain and port modules; no adapters, `std.Io` or `anyopaque`; each step takes at most one port parameter. |
 | `src/adapters/` | The only place for filesystem, process, network/HTTP and provider-client access. Native model HTTP goes through the test-disabled connection owner. |
 | `src/composition/` | The only place that constructs concrete adapters and binds registered node implementations. |
 

@@ -28,8 +28,12 @@ expectations". In particular:
   failure class, or is it hidden behind a caller-, workflow-, fixture-, filename- or
   model-specific branch?
 - **Capability leak**: does an orchestrator or runner gain I/O, or an action gain
-  child execution or extra ports? The mechanical import rules are in
-  `src/architecture_test.zig`.
+  child execution or extra ports? An ADR 0031 stage action may hold its stage's
+  ports, but each internal function must receive only the port it uses, and the
+  stage must not call models or route outcomes internally; ADR 0031 lists its
+  other limits. An ADR 0032 engine routine may also hold ports under the same
+  one-port-per-step rule, and only the callers ADR 0032 names may reach it. The
+  mechanical import rules are in `src/architecture_test.zig`.
 - **Policy weakening**: has a schema, validator, path rule, gate, repair boundary,
   test or architecture rule been loosened to admit one case? Look for skipped or
   focused tests and weakened assertions.

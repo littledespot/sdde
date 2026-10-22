@@ -32,7 +32,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .provider = provider_id,
         .model = identity.ModelId.parse("model-a").?,
         .implementation_id = implementation_id,
-        .config_schema = .empty_object,
+        .facts = .empty_object,
         .capabilities = @import("model_contract_test_fixture.zig").capabilities,
         .supported_reasoning_efforts = &.{ "low", "high" },
     },
@@ -40,7 +40,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .provider = provider_id,
         .model = identity.ModelId.parse("model-b").?,
         .implementation_id = implementation_id,
-        .config_schema = .empty_object,
+        .facts = .empty_object,
         .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     },
 } };
@@ -289,7 +289,7 @@ fn toolkitSuffix() []const u8 {
 test "catalogue JSON selection retains per-model choices and rejects unsupported siblings" {
     const a = std.testing.allocator;
     var registered_entries = compiled_contracts.entries[0..2].*;
-    registered_entries[0].capabilities.structured_response = .bedrock_json_schema;
+    registered_entries[0].capabilities.structured_response = .native_json_schema;
     const registered: contracts.Registry = .{ .entries = &registered_entries };
     const bytes =
         \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{}},{"model":"model-b","json":false,"config":{}}]}]}
@@ -312,39 +312,66 @@ test "catalogue JSON selection retains per-model choices and rejects unsupported
     try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
 }
 
-test "current Bedrock model policy comes only from registered contracts" {
-    const a = std.testing.allocator;
+test "Bedrock catalogue entries take every compiled control from the family they name" {
     const registered = @import("composition/provider_model_contracts.zig").registry;
-    const bytes =
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"global.openai.gpt-6-luna","json":true,"config":{"region":"ap-southeast-2","maxOutputTokens":16000}}]}]}
-    ;
-    var raw = try (decode_provider.Action{}).execute(a, bytes);
-    defer raw.deinit();
-    var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, raw.value());
-    defer candidate.deinit();
-    try std.testing.expect(!@hasField(registry_contract.CandidateEntry, "bedrock_request_profile"));
-    const owner = try registry_contract.createValidated(a, candidate, registered);
-    defer registry_contract.deinitOwner(owner);
-    const captured = registry_contract.registry(owner);
-    for ([_][]const u8{"global.openai.gpt-6-luna"}) |model| {
-        const entry = captured.resolve(identity.ProviderId.parse("aws-bedrock").?, identity.ModelId.parse(model).?).?;
-        try std.testing.expectEqual(contracts.BedrockRequestProfile.openai_luna, entry.bedrock_request_profile);
-        try std.testing.expectEqual(.native_schema, entry.responseMode());
-        try std.testing.expectEqual(contracts.BedrockRegion.@"ap-southeast-2", entry.config.aws_bedrock.region);
-        try std.testing.expect(!entry.capabilities.temperature and !entry.capabilities.input_token_count);
-        try std.testing.expect(contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, null));
-        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "medium"));
-        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "low"));
-        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "high"));
+    const model_ids = @import("model_contract_test_fixture.zig").bedrock_model_ids;
+    const Entry = struct { model: []const u8, json: bool, config: struct { region: []const u8, family: []const u8, maxOutputTokens: u32 } };
+    const Provider = struct { provider: []const u8, models: []const Entry };
+    for (std.enums.values(contracts.BedrockFamily)) |family| {
+        const contract = for (registered.entries) |*entry| {
+            if (entry.facts.bedrockFamily() == family) break entry;
+        } else return error.TestUnexpectedResult;
+        for (std.enums.values(contracts.BedrockRegion)) |region| for ([_]bool{ false, true }) |json| {
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            const a = arena.allocator();
+            var models: [model_ids.len]Entry = undefined;
+            for (&models, model_ids) |*model, id| model.* = .{ .model = id, .json = json, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000 } };
+            const bytes = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &models }} }, .{});
+            var raw = try (decode_provider.Action{}).execute(a, bytes);
+            defer raw.deinit();
+            var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, raw.value());
+            defer candidate.deinit();
+            const owner = try registry_contract.createValidated(a, candidate, registered);
+            defer registry_contract.deinitOwner(owner);
+            for (model_ids) |id| {
+                const entry = registry_contract.registry(owner).resolve(identity.ProviderId.parse("aws-bedrock").?, identity.ModelId.parse(id).?).?;
+                try std.testing.expectEqual(family, entry.facts.bedrockFamily().?);
+                try std.testing.expectEqualDeep(contracts.ValidatedProviderConfig{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 16000 } } }, entry.config);
+                try std.testing.expectEqualDeep(contract.capabilities, entry.capabilities);
+                try std.testing.expectEqual(contract.supported_reasoning_efforts.len, entry.supported_reasoning_efforts.len);
+                for (contract.supported_reasoning_efforts, entry.supported_reasoning_efforts) |expected, actual| try std.testing.expectEqualStrings(expected, actual);
+                try std.testing.expectEqual(@as(@TypeOf(entry.responseMode()), if (json) .native_schema else .prompt_only), entry.responseMode());
+            }
+        };
     }
-    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .max_output_tokens = .{ .tokens = 16000 } } };
-    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
-    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .max_output_tokens = .{ .tokens = 16000 } } };
-    candidate.entries[0].model = identity.ModelId.parse("us.openai.gpt-6-luna").?;
-    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
-    candidate.entries[0].model = identity.ModelId.parse("openai.gpt-6-luna").?;
-    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
-    const injected = try std.mem.replaceOwned(u8, a, bytes, "\"json\":true", "\"json\":true,\"bedrock_request_profile\":\"openai_oss\"");
+    // The catalogue names a compiled family exactly; it never supplies an encoding.
+    const a = std.testing.allocator;
+    const valid = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &.{Entry{ .model = model_ids[0], .json = true, .config = .{
+        .region = @tagName(std.enums.values(contracts.BedrockRegion)[0]),
+        .family = @tagName(std.enums.values(contracts.BedrockFamily)[0]),
+        .maxOutputTokens = 16000,
+    } }} }} }, .{});
+    defer a.free(valid);
+    const family_field = try std.fmt.allocPrint(a, "\"family\":\"{s}\",", .{@tagName(std.enums.values(contracts.BedrockFamily)[0])});
+    defer a.free(family_field);
+    for ([_][2][]const u8{
+        .{ family_field, "" },
+        .{ family_field, "\"family\":\"unknown\"," },
+        .{ family_field, "\"family\":null," },
+        .{ family_field, "\"family\":\"CONVERSE\"," },
+        .{ family_field, "\"family\":[\"converse\"]," },
+        .{ "\"config\":{", "\"config\":{\"profile\":\"converse\"," },
+    }) |replacement| {
+        const changed = try std.mem.replaceOwned(u8, a, valid, replacement[0], replacement[1]);
+        defer a.free(changed);
+        try std.testing.expect(!std.mem.eql(u8, valid, changed));
+        var raw = try (decode_provider.Action{}).execute(a, changed);
+        defer raw.deinit();
+        try std.testing.expectError(error.LLMProviderRegistryInvalid, (build_registry.Action{ .contracts = &registered }).execute(a, raw.value()));
+    }
+    try std.testing.expect(!@hasField(registry_contract.CandidateEntry, "bedrock_request_profile"));
+    const injected = try std.mem.replaceOwned(u8, a, valid, "\"json\":true", "\"json\":true,\"family\":\"converse\"");
     defer a.free(injected);
     try std.testing.expectError(error.LLMProviderConfigParseError, (decode_provider.Action{}).execute(a, injected));
 }

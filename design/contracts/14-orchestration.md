@@ -19,6 +19,10 @@ An orchestrator “contains” children through composition. It does not contain
   they would duplicate and hide the compiled workflow graph.
 - Only the engine kernel identified by ADR 0005, including the sections explicitly marked
   startup, cleanup, or instrumentation-internal, is not callable from YAML.
+- [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) adds the
+  stage sequence of one model request or token count to that kernel. The `request-model` and
+  `count-model-tokens` steps are selected by `use` and their successors by `on`; their stages
+  are not.
 
 ### 14.0 `WorkflowEngineOrchestrator`
 
@@ -28,7 +32,12 @@ workflow without branching on workflow names:
 1. invoke the preselection portion of `BootstrapOrchestrator` through its
    runner-owned binding so configuration roots, the complete workflow
    inventory, compiled graphs, and registry validate before workflow-specific
-   work; this portion acquires no workflow execution capability;
+   work; this portion acquires no workflow execution capability. Under
+   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), that portion
+   is the startup engine routine, which the composition root runs before the engine
+   starts, as the current code already does. The engine receives its validated result
+   and invokes no binding for it. Provider bootstrap, after selection, still runs through
+   a runner-owned binding;
 2. invoke `ParseWorkflowSelectionAction` and `ValidateWorkflowIdAction` through
    runner-owned bindings to obtain one explicit `WorkflowId` and the unchanged
    workflow-specific arguments;
@@ -61,6 +70,11 @@ workflow without branching on workflow names:
 - For `specify`, those children are `ParseSpecifyInvocationAction` and
   `ValidateSpecifyArgumentsAction`; neither action receives the invocation contract itself or
   invokes the other.
+- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the `specify`
+  invocation operation becomes an [ADR 0031](../decisions/0031-stage-actions.md) stage action
+  with side effect `none`. Parse and validate become its two internal functions, in that order.
+  It is still named by the definition's `invoke:` field, not a graph step. The engine still runs
+  it through its binding before the graph starts and reads its `ok` or `failed` outcome.
 
 ### 14.1 Model-operation composition
 
@@ -70,7 +84,9 @@ workflow without branching on workflow names:
   workflow.
 - Each step returns only its registered typed outcomes.
 - The YAML graph declares every branch, including clarification, retry, repair, failure, and
-  cancellation.
+  cancellation. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet
+  implemented), model invocation is one `request-model` step, and its protocol correction runs
+  inside that step under its declared `retry-limit`.
 - Every retry-capable operation instance declares its own bounded limit, which the compiler
   binds to monotonic accounting and which no transition cycle can bypass.
 - The selected policy contributes only the workflow execution's total-token budget.
@@ -92,7 +108,8 @@ The compiler proves declared part dependencies; the composition resource schedul
 nothing. Generic assembly is a pure child action with no model port or prompt.
 The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
 independent retry identities; there is no hidden dispatcher. Extraction uses this
-shared implementation.
+shared implementation. Under ADR 0030 (not yet implemented), each part call site is one
+`request-model` step with its `composition-part`; its retry identity stays independent.
 
 ### 14.2 `StageGateOrchestrator`
 
@@ -139,6 +156,12 @@ The persisted stage status is advisory until these current artifacts pass. This 
 - It performs one authorized repair attempt and returns its typed result.
 - A further attempt, candidate validation, clarification, or terminal outcome is a YAML
   transition, not an internal successor choice.
+- Under ADRs [0030](../decisions/0030-engine-owned-model-request.md) and
+  [0033](../decisions/0033-generic-repair-operations.md) (not yet implemented), this repair
+  operation is a sequence of YAML steps: `authorize-repair`, `build-repair-input`,
+  `request-model`, `parse-repair` and `merge-repair`, each with the route's `owner`. The
+  ordering, selection, classification and no-invention branch above run inside
+  `authorize-repair`. It is still one authorized attempt.
 
 ### 14.5 User-review operation
 
@@ -168,6 +191,10 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
   commit-marker protocol is introduced.
 
 ### 14.6 Protocol-retry operation
+
+> Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
+> protocol correction is an engine-run stage of the `request-model` step, not a YAML-selected
+> operation. The rules below apply to that stage, and the step's `retry-limit` bounds it.
 
 - This YAML-selected operation handles decoding/schema rejection and the approved
   missing-final-answer case under [§22.6](22-repair.md#226-unparseable-output).
@@ -231,6 +258,8 @@ compiled workflow at `start`, not at a recovered node.
 ### 14.9 `FeatureLoggingFailureOrchestrator`
 
 This instrumentation-internal orchestrator is entered once for a feature-sink failure. It coordinates transient-handle cleanup, one bounded emergency diagnostic and fail-closed execution abandonment. It performs no transaction stabilization or recovery, has no sink/filesystem capability itself, and is excluded from logging observation.
+
+Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
 
 ### 14.10 `FeatureLogPolicyTransitionOrchestrator`
 

@@ -507,11 +507,11 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
     const content = try @import("../domain/strict_json.zig").decode([]const @import("../domain/llm_provider_operation.zig").ModelVisibleContent, a, try std.json.Stringify.valueAlloc(a, edit.object.get("content").?, .{}), .{ .maximum_depth = 64 });
     return @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
         .content = content,
-        .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
+        .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = .fixed,
         .reasoning_effort = .low,
-        .request_profile = .openai_oss,
+        .family = .@"gpt-oss",
         .max_output_tokens = try catalogueMaximum(a),
     }, .inference);
 }
@@ -530,7 +530,7 @@ fn catalogueMaximum(a: std.mem.Allocator) !@import("../domain/llm_provider_contr
     const entry = registry.registry(owner).resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "openai.gpt-oss-20b-1:0" }) orelse return error.InvalidCalibrationCatalogue;
     return switch (entry.config) {
         .aws_bedrock => |config| config.max_output_tokens,
-        .empty_object => error.InvalidCalibrationCatalogue,
+        .empty_object, .anthropic => error.InvalidCalibrationCatalogue,
     };
 }
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {

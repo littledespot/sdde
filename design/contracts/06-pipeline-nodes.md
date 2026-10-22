@@ -3,7 +3,9 @@
 Part of the [proposed design](../design.md#6-common-action-and-orchestrator-contract), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-- Every action **and** every orchestrator conforms to the same runtime contract.
+- Every action **and** every orchestrator conforms to the same runtime contract. An
+  [ADR 0032](../decisions/0032-engine-routines.md) engine routine (not yet implemented) is not
+  a node and does not.
 - There is one envelope, one result vocabulary, and one dependency declaration mechanism across
   the engine.
 - Zig has no built-in interface construct, so the implementation must encode this contract with
@@ -21,7 +23,7 @@ Part of the [proposed design](../design.md#6-common-action-and-orchestrator-cont
 
 [View the Capability-free node runtime sample](../code.md#node-runtime).
 
-It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
+It exposes no filesystem, model, parser, renderer, validator, state, clock, logger, command, node-runner, or service-locator capability. Narrow operational ports are constructor dependencies of actions only; an ADR 0032 engine routine (not yet implemented) receives them as typed parameters, one port per step function. The outer pipeline runner records timing and telemetry around `execute`; nodes do not receive a telemetry adapter.
 
 The common contract makes data dependencies explicit:
 
@@ -77,9 +79,14 @@ Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec
   derived by the runner using the same binding, so orchestrators still perform no logging work.
 - After contract/delta validation, the runner's `PipelineTelemetryObserver` starts a separate
   logging-internal `PipelineEnvelope` and passes those attributed facts plus trusted run/node
-  context through `FeatureLoggingOrchestrator`.
+  context through `FeatureLoggingOrchestrator`. Under
+  [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), feature logging
+  becomes a typed engine routine once its preconditions are met. Only that change replaces the
+  logging-internal envelope and logging-only `DataKey`s below with function-local values.
 - Both business and logging nodes still use `PipelineNode` and return all intermediate values
-  through validated `NodeDelta`s.
+  through validated `NodeDelta`s. Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet
+  implemented), values passed between a stage action's internal functions are function-local;
+  only its stage-edge outputs are node values.
 - Logging-only `DataKey`s are compiler-locked, transient, non-model-visible, excluded from
   business-envelope composition and self-observation, and destroyed by the runner on every
   terminal logging branch.
@@ -218,6 +225,22 @@ Every action must:
 - An action that publishes output does not decide whether validation passed; it consumes the
   complete validated output set through its declared publication port.
 
+[ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented) adds the **stage action**:
+one registered action whose verb-object responsibility is a deterministic sequence of internal
+steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or `filesystem_read`,
+repair role and runner accounting `none`, outcome association `independent`, no retry
+authority and no model binding.
+
+- Its internal steps are typed functions. Each has one responsibility and takes at most one
+  port parameter. `execute` takes the capability-free `NodeRuntime`, only calls them in order
+  with a cancellation check between them, and calls no port itself. No internal function takes the `Action` value or a multi-port
+  struct.
+- Read versus parse applies to those functions: a function that reads does not parse.
+- The other three splits above are unaffected, because a stage action never invokes a model,
+  writes or publishes.
+- A stage action absorbs only steps whose non-success outcomes all end the stage. Every routed
+  outcome stays a YAML transition.
+
 ### 6.2 Orchestrator rules
 
 Every orchestrator must:
@@ -239,7 +262,17 @@ Every orchestrator must:
   named by ADR 0005.
 - An operation's private child graph may implement that operation's one atomic contract; it
   cannot conceal workflow transitions, retry/repair policy, model-slot or resource selection, or
-  a domain stage.
+  a domain stage. An [ADR 0031](../decisions/0031-stage-actions.md) stage action is not a child
+  graph: its stage is its declared responsibility, and its internal steps are functions with no
+  routed outcomes.
+- [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) names the
+  stage sequence of one model request or token count as an ADR 0005 kernel responsibility. A
+  fixed, capability-free kernel orchestrator implements the registered `request-model` and
+  `count-model-tokens` operations, with the stage actions as its runner-owned child bindings.
+  ADR 0030 narrowly amends the previous rule for it: its child graph may contain exactly one
+  retry, the request's protocol correction, bounded by the step's declared `retry-limit`. It
+  still cannot conceal workflow transitions, repair policy, slot or resource selection, or a
+  domain stage. Each stage keeps its own narrow ports.
 
 - Architecture tests fail the build if an action field or constructor parameter is a
   `PipelineNode`, `Action`, `Orchestrator`, dispatcher, executor callback, node runner, or
@@ -248,8 +281,16 @@ Every orchestrator must:
   outside an allowlist of contracts, outcomes, envelopes, loop controls, and child-node
   bindings.
 - Orchestrator modules cannot import infrastructure or domain-operation adapters.
+- For [ADR 0032](../decisions/0032-engine-routines.md) engine routines (not yet implemented),
+  the tests also check:
+  - a `*_routine.zig` imports only domain and port modules, never adapters or `std.Io`;
+  - no step takes two ports, the port set, a capability bag, `anytype` or `anyopaque`;
+  - the entry function calls no port method;
+  - no `*anyopaque` child-binding context remains for a converted sequence.
 
 ### 6.3 Reordering and composition rules
+
+The internal steps of an [ADR 0031](../decisions/0031-stage-actions.md) stage action (not yet implemented) can't be reorganized from YAML; changing them changes the stage action.
 
 Actions and orchestrators can be reorganized without changing their implementation when their contracts remain satisfiable:
 

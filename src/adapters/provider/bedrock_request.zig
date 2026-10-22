@@ -1,82 +1,61 @@
+//! Bedrock Converse and CountTokens wire encoding from the shared text layout.
 const std = @import("std");
 const operation = @import("../../domain/llm_provider_operation.zig");
+const text = @import("model_text_request.zig");
 
-pub const Error = std.mem.Allocator.Error || error{InvalidRequest};
-
-pub const ReasoningEffort = enum { low, medium, high, xhigh, max };
-pub const RequestProfile = @import("../../domain/llm_provider_contracts.zig").BedrockRequestProfile;
+pub const Error = text.Error;
+pub const Family = @import("../../domain/llm_provider_contracts.zig").BedrockFamily;
 const ModelMaximumOutput = @import("../../domain/llm_provider_contracts.zig").ModelMaximumOutput;
 
-pub fn reasoningEffort(value: ?[]const u8) error{InvalidRequest}!?ReasoningEffort {
-    const selected = value orelse return null;
-    return std.meta.stringToEnum(ReasoningEffort, selected) orelse error.InvalidRequest;
-}
-
-pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, profile: RequestProfile, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
-    const schema: TextSchema = switch (request.response_guidance_mode) {
-        .prompt_only => .{ .prompt_only = request.response_schema.modelBytes() },
-        .native_schema => .{ .native = .{
-            .guidance = request.response_schema.modelBytes(),
-            .structure = try @import("../../domain/model_schema_projection.zig").render(allocator, request.response_schema, .bedrock),
-        } },
-    };
-    defer if (schema == .native) allocator.free(schema.native.structure);
+pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, family: Family, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
+    const schema = try text.schemaFor(allocator, request);
+    defer text.freeSchema(allocator, schema);
     return encodeText(allocator, .{
         .content = request.content,
         .schema = schema,
         .schema_name = "sdde_model_envelope_v1",
         .temperature = request.controls.temperature,
-        .reasoning_effort = try reasoningEffort(request.binding_id.reasoning_effort),
-        .request_profile = profile,
+        .reasoning_effort = try text.reasoningEffort(request.binding_id.reasoning_effort),
+        .family = family,
         .max_output_tokens = max_output_tokens,
     }, kind);
 }
 
-pub const TextSchema = union(enum) {
-    prompt_only: []const u8,
-    native: struct { guidance: []const u8, structure: []const u8 },
-
-    pub fn guidance(self: TextSchema) []const u8 {
-        return switch (self) {
-            .prompt_only => |bytes| bytes,
-            .native => |native| native.guidance,
-        };
-    }
-};
-
 pub const TextRequest = struct {
     content: []const operation.ModelVisibleContent,
-    schema: TextSchema,
+    schema: text.TextSchema,
+    /// Converse's required JSON-schema name.
     schema_name: []const u8,
     temperature: ?@import("../../domain/model_controls.zig").Temperature,
-    reasoning_effort: ?ReasoningEffort,
-    request_profile: RequestProfile = .none,
+    reasoning_effort: ?text.ReasoningEffort,
+    /// The compiled family that fixes every model-specific request field (ADR 0029).
+    family: Family,
     /// The model's documented maximum output (ADR 0011); never a smaller allowance.
     max_output_tokens: ModelMaximumOutput,
 };
 
-// Shared text serialization; callers supply validated settings and schema.
+// Callers supply validated settings and schema.
 pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
-    if (request.schema == .native) {
-        var projected = @import("../../domain/strict_json.zig").parse(allocator, request.schema.native.structure, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequest;
-        defer projected.deinit();
-        if (projected.value != .object) return error.InvalidRequest;
-    }
-    switch (request.request_profile) {
-        .none => if (request.reasoning_effort != null) return error.InvalidRequest,
-        .openai_oss => if (request.reasoning_effort) |effort| switch (effort) {
+    try text.validateStructure(allocator, request.schema);
+    switch (request.family) {
+        .converse => if (request.reasoning_effort != null) return error.InvalidRequest,
+        .@"gpt-oss" => if (request.reasoning_effort) |effort| switch (effort) {
             .low, .medium, .high => {},
             .xhigh, .max => return error.InvalidRequest,
         },
-        .openai_luna => if (request.reasoning_effort != null or request.temperature != null) return error.InvalidRequest,
+        .luna => if (request.reasoning_effort != null or request.temperature != null) return error.InvalidRequest,
+        // Claude rejects non-default sampling; every documented effort level is valid.
+        .claude => if (request.temperature != null) return error.InvalidRequest,
     }
+    const parts = try text.layout(allocator, request.content, request.schema);
+    defer parts.deinit(allocator);
     var output: std.Io.Writer.Allocating = .init(allocator);
     defer output.deinit();
-    writeConverse(&output.writer, request, kind) catch |err| return if (err == error.InvalidRequest) error.InvalidRequest else error.OutOfMemory;
+    writeConverse(&output.writer, request, parts, kind) catch return error.OutOfMemory;
     return output.toOwnedSlice();
 }
 
-fn writeConverse(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderOperationKind) (std.Io.Writer.Error || error{InvalidRequest})!void {
+fn writeConverse(writer: *std.Io.Writer, request: TextRequest, parts: text.Layout, kind: operation.ProviderOperationKind) std.Io.Writer.Error!void {
     var json: std.json.Stringify = .{ .writer = writer, .options = .{} };
     try json.beginObject();
     if (kind == .input_token_count) {
@@ -85,7 +64,7 @@ fn writeConverse(writer: *std.Io.Writer, request: TextRequest, kind: operation.P
         try json.objectField("converse");
         try json.beginObject();
     }
-    try writeInput(&json, request);
+    try writeInput(&json, parts);
     try writeModelFields(&json, request, kind);
     if (kind == .inference) {
         // The model's documented maximum is sent, because Bedrock otherwise
@@ -110,17 +89,12 @@ fn writeConverse(writer: *std.Io.Writer, request: TextRequest, kind: operation.P
     try json.endObject();
 }
 
-// Converse shares its model-visible input with CountTokens. Provider-specific
-// fields use the registered typed profile, never model-name text.
-fn writeInput(json: *std.json.Stringify, request: TextRequest) (std.Io.Writer.Error || error{InvalidRequest})!void {
+// Converse shares its model-visible input with CountTokens. Model-specific
+// fields use the catalogue-selected compiled family, never model-name text.
+fn writeInput(json: *std.json.Stringify, parts: text.Layout) std.Io.Writer.Error!void {
     try json.objectField("system");
     try json.beginArray();
-    for (request.content) |part| switch (part) {
-        .system, .guidance => |text| try json.write(.{ .text = text }),
-        .user, .evidence => {},
-    };
-    try json.write(.{ .text = @import("../../domain/model_controls.zig").response_format_guidance });
-    try json.write(.{ .text = request.schema.guidance() });
+    for (parts.system) |value| try json.write(.{ .text = value });
     try json.endArray();
     try json.objectField("messages");
     try json.beginArray();
@@ -129,29 +103,28 @@ fn writeInput(json: *std.json.Stringify, request: TextRequest) (std.Io.Writer.Er
     try json.write("user");
     try json.objectField("content");
     try json.beginArray();
-    var count: usize = 0;
-    for (request.content) |part| switch (part) {
-        .user, .evidence => |text| {
-            try json.write(.{ .text = text });
-            count += 1;
-        },
-        .system, .guidance => {},
-    };
-    if (count == 0) return error.InvalidRequest;
+    for (parts.user) |value| try json.write(.{ .text = value });
     try json.endArray();
     try json.endObject();
     try json.endArray();
 }
 
 fn writeModelFields(json: *std.json.Stringify, request: TextRequest, kind: operation.ProviderOperationKind) std.Io.Writer.Error!void {
-    const reasoning = request.request_profile == .openai_oss and request.reasoning_effort != null;
-    const strict_json = request.request_profile == .openai_luna and request.schema == .native and kind == .inference;
-    if (reasoning or strict_json) {
+    const reasoning = request.family == .@"gpt-oss" and request.reasoning_effort != null;
+    // Claude takes effort in its own `output_config` object; adaptive thinking is
+    // the model's default, so no `thinking` field is sent.
+    const effort = request.family == .claude and request.reasoning_effort != null;
+    const strict_json = request.family == .luna and request.schema == .native and kind == .inference;
+    if (reasoning or effort or strict_json) {
         try json.objectField("additionalModelRequestFields");
         try json.beginObject();
         if (reasoning) {
             try json.objectField("reasoning_effort");
             try json.write(request.reasoning_effort.?);
+        }
+        if (effort) {
+            try json.objectField("output_config");
+            try json.write(.{ .effort = request.reasoning_effort.? });
         }
         if (strict_json) {
             try json.objectField("text");
