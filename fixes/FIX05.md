@@ -154,7 +154,7 @@ with" the resulting table. ADR 0030's "Choices settled on 23 October 2026" recor
 | 2. Token counting | Rebuild as `count-model-tokens` | **Removed**: no workflow, fixture or registered model uses it |
 | 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as a required `requestTimeoutMs` |
 | 4a. Release | Explicit YAML step | **Kept** |
-| 4b. Advisory routing | Every step maps all six outcomes | **Only `role: advisory` steps map `more` and `blocked`** |
+| 4b. Advisory routing | Every step maps all six outcomes | **Only steps marked `advisory: allowed` map `more` and `blocked`**; they may carry both kinds of request |
 
 The global token count is unchanged: the workflow budget, report totals and per-call
 usage come from actual inference usage, never from counting. The amendment points ADRs
@@ -164,7 +164,8 @@ workflow YAML or catalogue changed.
 
 Open:
 
-- implementation, with ADR 0030's offline acceptance;
+- implementation, with ADR 0030's offline acceptance, including the shared
+  contract-variant mechanism (confirmed 23 October 2026) that ADR 0033 reuses;
 - the measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`;
 - whether the engine should also take over release, which needs the compiler to derive
   each request's lifetime.
@@ -632,10 +633,12 @@ Open:
 
 - conversion, after ADR 0030 is implemented and ADR 0031's first conversion is measured,
   with all Specify owners in one change on offline equivalence evidence;
-- the derived choices awaiting confirmation: owner-specialized contracts, the 13-owner
-  list, the `owner` check, "compiled operation" meaning the step instance, the §22.1
-  reading, advisory stops outside the four operations, one Specify-only conversion, and
-  offline evidence.
+- the derived choices awaiting confirmation: the 13-owner list, the `owner` check,
+  "compiled operation" meaning the step instance, the §22.1 reading, advisory stops
+  outside the four operations, one Specify-only conversion, and offline evidence.
+
+Owner-specialized contracts (derived choice 1) were confirmed on 23 October 2026: the 29
+variants use the shared contract-variant mechanism that ADR 0030 builds first.
 
 ### W4. Reconciliation always makes four calls
 
@@ -1018,6 +1021,30 @@ bounded approval, and each E2E run needs its own explicit approval
 - **23 October 2026, ADR 0030 choices settled:** the user directed the best option for
   each derived choice (A1). ADR 0030 now keeps the kernel orchestrator and YAML release,
   removes provider token counting, moves the request deadline to each catalogue entry as
-  `requestTimeoutMs`, and lets only `role: advisory` steps map `more` and `blocked`.
-  Updated A1, A2, B9 and §6, the affected ADRs, design.md, contracts, features,
-  diagram 16, the README and known-work. No code, workflow YAML or catalogue changed.
+  `requestTimeoutMs`, and lets only `role: advisory` steps map `more` and `blocked`
+  (renamed and made one-directional later the same day; see the next entry). Updated A1,
+  A2, B9 and §6, the affected ADRs, design.md, contracts, features, diagram 16, the
+  README and known-work. No code, workflow YAML or catalogue changed.
+- **23 October 2026, ADR 0030 review fixes:** a contract review of the amendment found
+  factual, pointer and wording defects. Fixed: Claude Haiku 5.5's interim 180,000 ms
+  deadline, the count-path claim, unconditional retained-evidence breakage, ADR 0012's
+  note, contract §9 in the amends list, ADR 0028's named clauses, the catalogue's count
+  operations, the replay deadline, an oversized-deadline rejection and line wrapping.
+- **23 October 2026, one-directional advisory check:** the review found that
+  `assess-support` serves both the required pre-generation review and post-generation
+  advice, so a two-directional `role: advisory` check would fail every run. The user
+  directed "update documentations" with the one-directional form: a step marked
+  `advisory: allowed` maps `more` and `blocked` and may carry both kinds of request, and
+  only an advisory request at an unmarked step is rejected, at preparation, before any
+  attempt. A second review confirmed it safe against the code. Its framing as two
+  `request-model` contract variants was then confirmed (next entry). Updated ADR 0030,
+  ADRs 0005 and 0023, design.md, contracts §§12, 28 and the operation catalogue, F0005,
+  F0006, F0100, A1 and known-work. No code, workflow YAML or catalogue changed.
+- **23 October 2026, shared contract-variant mechanism:** after comparing a shared
+  variant mechanism, separate operations, a compiler special case and a union contract,
+  the user directed "update the documentation around option 1". ADR 0030 builds one
+  mechanism (complete closed variants, one closed selector parameter at compile time,
+  per-variant admission, compiler and runner checks against the compiled variant), and
+  ADR 0033 reuses it; this confirms ADR 0033's derived choice 1. Updated ADRs 0030, 0033
+  and 0005, design.md, F0005, A1, W3 and known-work. No code, workflow YAML or catalogue
+  changed.

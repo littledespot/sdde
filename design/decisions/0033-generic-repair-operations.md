@@ -12,7 +12,10 @@
   - sequenced after ADR 0030 is implemented and ADR 0031's first conversion is measured.
 
   The choices under "Derived under existing rules" follow from existing authority and
-  await the user's confirmation.
+  await the user's confirmation, except choice 1, which the user confirmed on
+  23 October 2026 ("update the documentation around option 1"): per-owner variants use
+  one shared contract-variant mechanism, which
+  [ADR 0030](0030-engine-owned-model-request.md) builds first and this ADR reuses.
 - **Amends:**
   - [ADR 0005](0005-workflow-defined-operations.md): "Each operation has one current
     contract", which becomes one contract with closed owner variants for the four repair
@@ -135,7 +138,9 @@ The YAML `owner` value is a typed selector, not a policy choice:
 ### Owner-specialized contracts
 
 Each generic operation has one registered contract made of **closed variants, one per
-owner it serves**. Each variant is a complete contract:
+owner it serves**. The variants use the shared contract-variant mechanism that
+[ADR 0030](0030-engine-owned-model-request.md) builds ("Contract variants"), with `owner`
+as the selector; this ADR adds no second mechanism. Each variant is a complete contract:
 
 - its outcome set;
 - `requires`, `optional`, `produces`, `replaces` and `invalidates`;
@@ -261,7 +266,8 @@ from the user's words, and await the user's confirmation:
 
 1. **Owner-specialized contracts.** Each generic operation's contract consists of
    complete per-owner variants, validated independently. The alternative was distinct
-   contracts for owners whose shapes differ.
+   contracts for owners whose shapes differ. **Confirmed on 23 October 2026,** through
+   ADR 0030's shared contract-variant mechanism, which ADR 0030 builds first.
 2. **The owner list.** The 13 owners above, including the split of source omission's
    merges into two owners.
 3. **`owner` is checked against native facts,** and a mismatch is terminal. It selects no
@@ -290,8 +296,9 @@ Expected benefits, pending the measure:
 
 Costs:
 
-- **A compiler extension.** The compiler and registry gain owner-specialized contract
-  variants.
+- **No new compiler extension here.** The compiler, registry and runner gain contract
+  variants with ADR 0030, which is implemented first; this ADR adds its 13 owners'
+  variants to that mechanism.
 - **The largest refactor of the four.** It touches every repair route, and repair is
   safety-critical. The freeze-and-reproduce evidence and the sequencing bound the risk.
 - **Repair is less visible from the operation ID.** It now comes from the `owner` value.

@@ -184,8 +184,10 @@ facts remain local to the abandoned or completed execution.
 
     - One `request-model` step makes one inference request.
     - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes.
-      Only a step declared `role: advisory` maps `more` and `blocked`; the runner rejects
-      a declared role that doesn't match the request's native advisory classification.
+      Only a step marked `advisory: allowed` maps `more` and `blocked`, and it may carry
+      both advisory and ordinary requests. An advisory request at an unmarked step fails
+      preparation's binding validation: a terminal runner rejection with a closed
+      diagnostic, not a YAML outcome, before any attempt.
     - The provider-operation deadline is the bound catalogue entry's required
       `requestTimeoutMs`, beside `maxOutputTokens`; YAML declares no `timeout-ms`.
     - Provider token counting is removed. Read every count operation, count capability

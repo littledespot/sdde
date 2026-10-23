@@ -380,7 +380,9 @@ reuse, not provider caching or deterministic semantic proof.
 >   inference usage still feeds the one workflow token budget;
 > - takes the provider-operation deadline from the bound catalogue entry's required
 >   `requestTimeoutMs`, not a YAML `timeout-ms`;
-> - lets only a step declared `role: advisory` map `more` and `blocked`.
+> - lets only a step marked `advisory: allowed` map `more` and `blocked`; such a step may
+>   carry ordinary requests too, and an advisory request at an unmarked step fails
+>   preparation as a terminal runner rejection, not a YAML outcome, before any attempt.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model

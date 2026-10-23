@@ -293,6 +293,13 @@ required inputs and define the `parse` successor, as in the
     required or forbidden, with its maximum and native key population.
   - Registry admission validates each variant independently. This rule, the rules below
     and the runner all check the step's own variant, never a union.
+  - Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
+    23 October 2026 (not yet implemented), `request-model` has two variants the same way,
+    through the one contract-variant mechanism ADR 0030 builds and ADR 0033 reuses:
+    the ordinary variant (`ok`, `invalid`, `failed`, `cancelled`) and the advisory variant,
+    selected by `advisory: allowed`, which adds `more` and `blocked` with their
+    deferred-carrier descriptors. The marker selects no policy; advisory classification
+    stays native (ADR 0023).
 - The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   and `cancelled`; the compiler converts them to the corresponding internal tagged-union
   variants.
@@ -489,13 +496,15 @@ service is published.
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
 > `request-model` step per model request instead of the request-lifecycle bindings described
 > below, and no count operation. A `request-model` step declares the slot, resources and
-> `retry-limit`, and maps `ok`, `invalid`, `failed` and `cancelled`. Only a step declared
-> `role: advisory` also maps `more` and `blocked`, and only such a step may; the compiler
-> rejects any `timeout-ms`, because the deadline comes from the catalogue entry's
-> `requestTimeoutMs`. A fixed kernel orchestrator runs the bindings'
-> rules as the stages ADR 0030 lists, and YAML can no longer name them. The step's capability
-> set is the exact union of its stage bindings' derived capabilities, and the selected policy
-> must permit each. ADR 0030's "What stays in YAML" list says which steps remain.
+> `retry-limit`, and maps `ok`, `invalid`, `failed` and `cancelled`. Only a step marked
+> `advisory: allowed` also maps `more` and `blocked`, and only such a step may; that marker
+> selects `request-model`'s advisory contract variant (see the variant rule in §3's
+> outcome-mapping bullet). The compiler rejects any `timeout-ms`, because the deadline
+> comes from the catalogue entry's `requestTimeoutMs`. A fixed kernel orchestrator runs the
+> bindings' rules as the stages ADR 0030 lists, and YAML can no longer name them. The
+> step's capability set is the exact union of its stage bindings' derived capabilities, and
+> the selected policy must permit each. ADR 0030's "What stays in YAML" list says which
+> steps remain.
 
 - Request-origin contracts selecting a model binding declare their typed slot.
   The selected catalogue model owns response mode through its required `json` boolean

@@ -34,9 +34,12 @@
   step occurrence. Per-site routing and the native completion wrapper are unchanged.
   The compiler's deferred-carrier proof keeps its rules, but its descriptor becomes
   per-outcome, because one step now carries ordinary closure and both advisory
-  carriers. Its 23 October 2026 amendment applies the proof only to steps declared
-  `role: advisory`: only they map `more` and `blocked`, and the runner rejects a
-  declared role that doesn't match the request's native advisory classification.
+  carriers. Its 23 October 2026 amendment applies the proof only to steps marked
+  `advisory: allowed`: only they map `more` and `blocked`, and they may carry both
+  advisory and ordinary requests. Classification stays native, from the prepared
+  packet's advisory-assessment binding; an advisory request at an unmarked step is a
+  terminal runner rejection with a closed diagnostic, not a YAML outcome, before any
+  attempt.
 
 ## Decision
 

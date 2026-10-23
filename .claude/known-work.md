@@ -101,9 +101,11 @@ already made.
     engine-owned `request-model` step per model request replaces the 16-step subgraph and
     its wrappers. *Choices settled 23 October 2026:* kernel orchestrator and YAML release
     kept; provider token counting removed (the global token count, from actual usage,
-    stays); the deadline moves to each catalogue entry as `requestTimeoutMs`; only
-    `role: advisory` steps map `more` and `blocked`. Documentation is updated;
-    implementation hasn't started;
+    stays); the deadline moves to each catalogue entry as `requestTimeoutMs`; only steps
+    marked `advisory: allowed` map `more` and `blocked` (they may carry both kinds of
+    request; only an advisory request at an unmarked step is rejected). It builds the
+    shared contract-variant mechanism that ADR 0033 reuses (confirmed 23 October 2026).
+    Documentation is updated; implementation hasn't started;
   - each concept costs about six coordinated edits. *Approved 22 October 2026 (ADR 0031,
     option (b)):* one stage action whose internal steps are typed functions and route no
     outcome; its read-only limit awaits confirmation.

@@ -24,8 +24,8 @@ the engine-kernel list below. A workflow makes each request with one `request-mo
 and still declares its slot, resources, retry limit and outcome transitions. The stage
 order and the request's own protocol correction are no longer YAML steps. ADR 0030's
 23 October 2026 amendment removes provider token counting, takes the request deadline
-from the model's catalogue entry instead of YAML, and lets only a step declared
-`role: advisory` map the advisory outcomes.
+from the model's catalogue entry instead of YAML, and lets only a step marked
+`advisory: allowed` map the advisory outcomes.
 
 **Stage-action amendment (22 October 2026, not yet implemented):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
@@ -83,7 +83,12 @@ workflow behavior without duplicating large resources at every node.
   `invoke-model`. Under [ADR 0033](0033-generic-repair-operations.md) (not yet
   implemented), the four generic repair operations each keep one contract and one ID.
   That contract has a closed variant per repair owner, and the compiler selects it from
-  the step's `owner` at compile time.
+  the step's `owner` at compile time. Under [ADR 0030](0030-engine-owned-model-request.md)
+  as amended on 23 October 2026 (not yet implemented), `request-model` keeps one contract
+  and one ID with an ordinary and an advisory variant, selected at compile time by the
+  step's optional `advisory: allowed`. Both use the one contract-variant mechanism that
+  ADR 0030 builds ("Contract variants"); a variant is a complete contract, and one closed
+  step parameter selects it.
 - Both `invoke` and `steps.*.use` name that ID directly.
 - No operation-version field, version suffix, range, compatibility alias or parallel
   legacy contract is retained.

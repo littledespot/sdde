@@ -19,7 +19,7 @@ Detailed contracts for the explicit YAML model-request operations governed by
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
 > that stage within the one step. `retry-limit` is a parameter of the `request-model` step;
 > the deadline is no longer YAML `timeout-ms` but the bound catalogue entry's required
-> `requestTimeoutMs`. Only a step declared `role: advisory` maps `more` and `blocked`.
+> `requestTimeoutMs`. Only a step marked `advisory: allowed` maps `more` and `blocked`.
 > Retry authority names that step instead of the accounting step; ordinary, atomic-repair
 > and dependent counting scopes are unchanged. Correction and closure stay distinct stages.
 > Retirement (release) stays an explicit YAML step.

@@ -483,9 +483,11 @@ Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet imple
 step. Advisory `more` and `blocked` routing stays at each advisory call site, directly or
 through a thin wrapper, and each call site keeps its own retry counter. The 159-line request
 region goes; the ADR estimates the net saving and the implementation measures it. Under the
-ADR's 23 October 2026 amendment, only call sites whose requests ADR 0023 classifies as
-advisory declare `role: advisory` and map `more` and `blocked`; ordinary sites such as
-extraction, reconciliation and generation map neither. No call site declares a deadline:
+ADR's 23 October 2026 amendment, only call sites that may carry a request ADR 0023
+classifies as advisory are marked `advisory: allowed` and map `more` and `blocked`;
+ordinary sites such as extraction, reconciliation and generation map neither.
+`assess-support`'s model and repair requests are marked and keep serving both the
+pre-generation required review and post-generation advice. No call site declares a deadline:
 each model's catalogue entry carries `requestTimeoutMs`.
 
 Extraction parts derive from one complete extraction schema; reconciliation parts derive from
