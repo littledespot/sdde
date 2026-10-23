@@ -6,9 +6,9 @@ record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is
 evidence rules for contract changes are in CLAUDE.md.
 
 All live evidence so far comes from one model, GPT-OSS-20B on Bedrock. The live-test
-policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029), but every E2E
-slot still selects GPT-OSS-20B, so which classes below are model limitations is
-unmeasured.
+policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029). Since
+23 October every E2E slot selects Claude Haiku 5.5 on Bedrock, but no live run has used
+it yet, so which classes below are model limitations is unmeasured.
 
 The labels *Proposed*, *Approved* and "needs a decision" record user decisions. Only
 the user changes them; change a label here only to record a decision the user has
@@ -90,9 +90,7 @@ already made.
   acquire action collapses an insecure or unopenable lock file into a timeout, for
   the current run and for retention.
 - **Provider records.** ADR 0028 names an F0009 feature document and a contract
-  §12.3.2, and neither exists. ADR 0029 says the shipped E2E cases select Claude
-  Haiku 5.5, but their configuration selects GPT-OSS-20B; either the configuration or
-  the ADR text needs to change. No live Claude call has been made.
+  §12.3.2, and neither exists. No live Claude call has been made.
 - **Group-level provenance precision.** A record binds a whole accepted group, so
   membership doesn't mean each record expresses every linked claim. This follows
   ADR 0020 and is not a defect. Decide it before promising stronger provenance.

@@ -1173,6 +1173,67 @@ test "configured acceptance criterion batch retains separate advice and repairs 
     try testSpecificationWorkflows(.record_reviews);
 }
 
+const step_trace = @import("../../src/test_fixtures/workflow_step_trace.zig");
+
+/// Records one scenario's step trace and totals beneath `.zig-cache` as
+/// structural-equivalence evidence (ADR 0030 "Freeze first"); nothing asserts it.
+fn writeStepTrace(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, case: []const u8, scenario: usize, trace: *step_trace.Trace, driver: *const @import("../../src/test_fixtures/spec_generation_driver.zig").Driver, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, result: @import("../../src/domain/run_outcome.zig").Outcome) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ledger = runner.tokenLedger();
+    var rejection: std.Io.Writer.Allocating = .init(a);
+    const rejected: ?[]const u8 = if (result == .execution_rejected) written: {
+        step_trace.writeRejection(&rejection.writer, result.execution_rejected) catch return error.OutOfMemory;
+        break :written rejection.written();
+    } else null;
+    const requests = try a.alloc(step_trace.RequestAttempt, ledger.accounted_operations.items.len);
+    for (requests, ledger.accounted_operations.items) |*request, accounted| {
+        const id = accounted.id.model_request_id;
+        var site: std.Io.Writer.Allocating = .init(a);
+        for (runner.selected.graph.authority.steps) |*step| if (std.mem.eql(u8, step.id.bytes, id.model_operation_id.workflow_step_id.bytes)) {
+            step_trace.writeCallSite(&site.writer, step) catch |err| return switch (err) {
+                error.WriteFailed => error.OutOfMemory,
+                error.UnwrappedRequestLifecycle => error.UnwrappedRequestLifecycle,
+            };
+            break;
+        };
+        request.* = .{
+            .call_site = site.written(),
+            .purpose = @tagName(id.purpose),
+            .request = id.request_ordinal.value,
+            .attempt = accounted.id.model_attempt_ordinal.value,
+            .reconciliation = @tagName(accounted.reconciliation),
+        };
+    }
+    const identity = try stateId(runner);
+    var observed: std.ArrayList(step_trace.File) = .empty;
+    for ([_][]const u8{ "requirements", "engine/workflows/features" }) |root| try observed.appendSlice(a, try step_trace.files(io, a, project, root, identity));
+    try step_trace.write(io, a, trace, .{
+        .workflow = "spec-generation",
+        .case = case,
+        .scenario = scenario,
+        .outcome = if (result.executionStatus()) |status| @tagName(status) else @tagName(result),
+        .rejection = rejected,
+        .steps = trace.steps,
+        .trace_sha256 = try step_trace.hash(a, trace.written()),
+        .model_invocations = driver.fake.invocation_call_count,
+        .driver_calls = driver.calls,
+        .accounted_operations = ledger.accounted_operations.items.len,
+        .committed_tokens = ledger.committed(),
+        .requests = requests,
+        .files = try step_trace.hashed(a, observed.items),
+    }, observed.items);
+}
+
+/// The run's random reference state ID, which rendered views cite.
+fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner) !?[]const u8 {
+    const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    if (!view.contains(.citable_reference_inputs)) return null;
+    const inputs = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/reference_evidence_workflow.zig").inputs_schema, @import("../../src/domain/reference_evidence.zig").Inputs);
+    return inputs.corpus.state_id.bytes;
+}
+
 fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, reuse_regeneration, story_missing, story_false_positive, story_multiple, finding_controls, record_reviews }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -1591,8 +1652,13 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             driver.failed_repair = scenario >= membership_start + 4;
             driver.entities_required = (scenario - membership_start) % 2 == 1;
         }
+        var trace: step_trace.Trace = .init(allocator);
+        defer trace.deinit();
+        driver.trace = &trace;
         const result = driver.run();
         cost.enter(.assertions);
+        assertion_context = "step-trace";
+        try writeStepTrace(io, allocator, project.dir, @tagName(workflow_cases), scenario, &trace, &driver, &runner, result);
         assertion_context = "workflow-outcome";
         if (workflow_cases == .reuse_regeneration) {
             try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);

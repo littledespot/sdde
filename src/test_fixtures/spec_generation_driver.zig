@@ -50,6 +50,8 @@ pub const Driver = struct {
     references_at_review: ?@import("../domain/atomic_repair.zig").Snapshot = null,
     carried_summaries: usize = 0,
     measurement_prefix: ?[]const u8 = null,
+    /// Records every executed step for structural-equivalence evidence.
+    trace: ?*@import("workflow_step_trace.zig").Trace = null,
     source_gaps: bool = false,
     source_loss: ?@import("spec_generation_responses.zig").SourceLoss = null,
     source_repair_calls: usize = 0,
@@ -535,6 +537,10 @@ pub const Driver = struct {
         };
         const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
+        if (self.trace) |trace| for (self.runner.selected.graph.authority.steps) |*entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
+            trace.record(entry, result) catch |err| std.debug.panic("step trace: {s}", .{@errorName(err)});
+            break;
+        };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "complete-advisory-protocol-request") and result == .outcome and result.outcome == .blocked) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const receipt = @import("../application/workflow_model_accounting.zig").readAdvisoryStop(&view) catch unreachable;

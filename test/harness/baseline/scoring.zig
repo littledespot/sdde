@@ -490,9 +490,11 @@ fn verifyExchange(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, receipt: tr
     _ = try binding.rebind(a, description, captured.provider_catalogue, description.model, description.reasoning_effort);
     if (description.provider_config != .aws_bedrock) return error.FrozenBindingRejected;
     try @import("../frozen_binding.zig").validateDescription(a, description, .{
-        .region = description.provider_config.aws_bedrock.region,
-        .model = @import("../../../src/domain/llm_provider_identity.zig").ModelId.parse(description.model) orelse return error.FrozenBindingRejected,
-        .kind = .inference,
+        .target = .{ .aws_bedrock = .{
+            .region = description.provider_config.aws_bedrock.region,
+            .model = @import("../../../src/domain/llm_provider_identity.zig").ModelId.parse(description.model) orelse return error.FrozenBindingRejected,
+            .kind = .inference,
+        } },
         .body = captured.call.request.?,
         .api_key = "",
         .deadline_monotonic_ms = 0,

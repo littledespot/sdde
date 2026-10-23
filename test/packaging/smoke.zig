@@ -645,7 +645,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const configured = std.mem.replaceOwned(u8, b.allocator, slots, "\"providers\": \".sddproviders.json\"", "\"providers\": \"config/.sddproviders.json\"") catch @panic("allocate configured provider path");
         _ = directory.add(".sddtoolkit.json", configured);
         const provider_bytes = @embedFile("../../design/examples/.sddproviders.json");
-        const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "us-west-2") catch @panic("allocate invalid deployment") else provider_bytes;
+        const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "xx-invalid-1") catch @panic("allocate invalid deployment") else provider_bytes;
         _ = directory.add("config/.sddproviders.json", catalogue);
         _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
         _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));

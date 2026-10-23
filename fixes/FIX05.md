@@ -106,10 +106,11 @@ and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
 (21 October) added the Anthropic Messages API provider on shared provider owners.
 [ADR 0029](../design/decisions/0029-bedrock-model-families.md) (22 October) lets a Bedrock
 catalogue entry name any model with a compiled family. The E2E catalogue lists Claude
-Haiku 5.5 through both, and the live-test policy permits it for generation. Every E2E slot
-still selects GPT-OSS-20B, and no live Claude call has been made. All live evidence in
-this record therefore comes from one model, and which failure classes are model
-limitations is unmeasured (R7).
+Haiku 5.5 through both, and the live-test policy permits it for generation. On 23 October
+the user chose Claude Haiku 5.5 on Bedrock (`au.anthropic.claude-haiku-5-5`, low effort)
+for every E2E slot, as ADR 0029 describes; no live Claude call has been made yet. All
+live evidence in this record so far comes from GPT-OSS-20B, and which failure classes
+are model limitations is unmeasured (R7).
 
 ## 2. Why the engine is hard to implement
 
@@ -804,8 +805,8 @@ Score first-pass and recovered outcomes separately. Use repeated paired trials, 
 labels kept outside prompts and separate development and held-out families. Since
 22 October the live-test policy also permits Claude Haiku 5.5 for generation, through the
 Anthropic API (ADR 0028) and Bedrock (ADR 0029), so cross-model generation evidence no
-longer needs a scope change. Every E2E slot still selects GPT-OSS-20B, and each run still
-needs its own approval.
+longer needs a scope change. Since 23 October every E2E slot selects Claude Haiku 5.5 on
+Bedrock, and each run still needs its own approval.
 
 ### R8. Development acceptance policy
 
@@ -891,10 +892,12 @@ repair workload.
   [claude_connector.md](claude_connector.md) is now a historical source document. Open:
   - ADR 0028 names a new F0009 feature document and a contract §12.3.2, and neither
     exists yet.
-  - ADR 0029 ("Live-test cost policy") says the shipped E2E cases select Claude Haiku 5.5
-    with low effort in every slot. The configuration both cases use,
-    [.sddtoolkit.json](../test/e2e/wf-001-hello-world/.sddtoolkit.json), selects
-    GPT-OSS-20B in every slot. Either the configuration or the ADR text needs to change.
+  - *Resolved 23 October 2026:* ADR 0029 says the shipped E2E cases select Claude
+    Haiku 5.5 with low effort in every slot, but the configuration both cases use,
+    [.sddtoolkit.json](../test/e2e/wf-001-hello-world/.sddtoolkit.json), still selected
+    GPT-OSS-20B, which also failed the compatibility preflight test. The user chose Haiku
+    via Bedrock, and the configuration now matches the ADR. Its deadline is the interim
+    180,000 ms until measured (B9).
   - ADR 0028's "Live use" still says the policy permits only GPT-OSS-20B; since
     22 October it also names `anthropic` / `claude-haiku-5-5` for generation.
   - ADR 0028 leaves Claude's response mode (native schema or prompt-only) open until
@@ -1057,3 +1060,11 @@ bounded approval, and each E2E run needs its own explicit approval
   ADRs 0005 and 0033, contract 28, F0005, known-work and a stale Z_FIX05 link. ADR 0033's
   derived choices 2–8 still await confirmation. No code, workflow YAML or catalogue
   changed.
+- **23 October 2026, `zig build verify` restored after ADR 0029:** verify failed on `main`
+  with 17 failing steps, all from the ADR 0029 change: the baseline harness still built a
+  Region-only transport request, the rubric-evaluator smoke expected the error text from
+  before `TEST_EVALUATION_FAMILY`, the example catalogue had no `family`, the packaging
+  smoke's invalid-Region case used a Region ADR 0029 made valid, a capture test's legacy
+  version edit changed the archive row length, and the compatibility test expected the
+  E2E configuration to select Claude Haiku 5.5. The user chose Haiku via Bedrock for
+  every E2E slot; the other fixes are test and fixture corrections.

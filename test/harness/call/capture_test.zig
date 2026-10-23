@@ -349,6 +349,10 @@ test "capture rejects evidence redaction and legacy descriptions instead of reco
     try write(root.dir, run_path ++ "/evidence/generation/call-000009/request.json", body);
     const path = run_path ++ "/project/documents/nested/feature/logs/prompts/MOCK-run/binding/0001.log";
     const bytes = try @import("../files.zig").read(io, a, root.dir, path);
-    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, @import("../../../src/domain/model_request_description.zig").current_version, "model-request-debug/v2"));
+    // A legacy version of a different length would break the archive's
+    // retained-byte column first; trailing JSON whitespace keeps the row length.
+    const current_quoted = @import("../../../src/domain/model_request_description.zig").current_version ++ "\"";
+    const legacy = "model-request-debug/v9\"" ++ " " ** (current_quoted.len - "model-request-debug/v9\"".len);
+    try write(root.dir, path, try std.mem.replaceOwned(u8, a, bytes, current_quoted, legacy));
     try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, capture.load(io, std.testing.allocator, root.dir, run_path, description.workflow_id, 9));
 }
