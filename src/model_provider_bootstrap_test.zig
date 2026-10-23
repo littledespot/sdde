@@ -418,13 +418,13 @@ const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{
     .provider = provider_id,
     .model = identity.ModelId.parse("model-a").?,
     .implementation_id = contracts.RegisteredProviderImplementationId.init(1).?,
-    .facts = .empty_object,
+    .facts = .deadline_only,
     .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     .supported_reasoning_efforts = &.{"low"},
 }} };
 
 const provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
 ;
 
 const unsupported_provider_document =

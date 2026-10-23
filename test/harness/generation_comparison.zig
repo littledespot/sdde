@@ -67,6 +67,8 @@ pub const Protocol = struct {
     temperature: f64,
     /// The model's documented maximum output that every frozen request sends.
     max_output_tokens: @import("../../src/domain/llm_provider_contracts.zig").ModelMaximumOutput,
+    /// The frozen catalogue entry's provider-operation deadline (ADR 0030).
+    request_timeout_ms: @import("../../src/domain/llm_provider_contracts.zig").RequestTimeout,
     repetitions: u32,
     arms: []const Arm,
     development_features: u32,
@@ -443,7 +445,7 @@ pub fn validateProtocol(protocol: Protocol) Error!void {
     } else return error.InvalidComparisonContract;
     if (family.capabilities.inferenceControls().temperature == null or
         !@import("../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(family.supported_reasoning_efforts, @tagName(protocol.reasoning_effort))) return error.InvalidComparisonContract;
-    if (protocol.schema != 3 or !std.mem.eql(u8, protocol.region, "ap-southeast-2") or
+    if (protocol.schema != 4 or !std.mem.eql(u8, protocol.region, "ap-southeast-2") or
         protocol.live_authorized or protocol.temperature != Temperature.fixed.wireValue() or
         protocol.repetitions < 3 or protocol.development_features == 0 or protocol.arms.len != 2 or
         protocol.arms[0] != .A or protocol.arms[1] != .C or protocol.limits.maximum_sends == 0 or
@@ -1105,7 +1107,7 @@ fn exampleCase() Case {
     return .{ .id = "example-base", .feature_id = "example", .partition = .development, .variant = .base, .domain = "loans", .size = .small, .risk_tags = &.{"condition"}, .sources = &.{.{ .id = "source", .path = "reference/loan.md", .text = "Return loans within 30 days unless extended." }}, .duties = &.{.{ .id = "return", .description = "Retain loan deadline and extension exception.", .source_refs = &.{.{ .source_id = "source", .quote = "Return loans within 30 days unless extended." }}, .exact_values = &.{"30 days"} }}, .expected_terminal = .completed, .expected_questions = &.{}, .permissible_alternatives = &.{"The deadline can be expressed as thirty days."}, .forbidden_additions = &.{"Charge a late fee."} };
 }
 fn exampleProtocol() Protocol {
-    return .{ .schema = 3, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .family = .@"gpt-oss", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .max_output_tokens = .{ .tokens = 16384 }, .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
+    return .{ .schema = 4, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .family = .@"gpt-oss", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .max_output_tokens = .{ .tokens = 16384 }, .request_timeout_ms = .{ .milliseconds = 180000 }, .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
 }
 fn miniatureInventory(a: std.mem.Allocator) Error!Inventory {
     const cases = try a.alloc(Case, 6);
@@ -1154,7 +1156,7 @@ test "comparison contracts reject malformed closed data and unfrozen controls" {
     const protocol = exampleProtocol();
     const bytes = try std.json.Stringify.valueAlloc(a, protocol, .{});
     _ = try parseProtocol(a, bytes);
-    const unknown = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":3", "\"schema\":3,\"extra\":true");
+    const unknown = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":4", "\"schema\":4,\"extra\":true");
     try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, unknown));
     var bad = protocol;
     bad.live_authorized = true;
@@ -1174,6 +1176,10 @@ test "comparison contracts reject malformed closed data and unfrozen controls" {
     const missing_maximum = try std.mem.replaceOwned(u8, a, bytes, "\"max_output_tokens\":16384,", "");
     try std.testing.expect(!std.mem.eql(u8, bytes, missing_maximum));
     try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, missing_maximum));
+    // So is the frozen entry's deadline, through the shared deadline type.
+    const missing_deadline = try std.mem.replaceOwned(u8, a, bytes, "\"request_timeout_ms\":180000,", "");
+    try std.testing.expect(!std.mem.eql(u8, bytes, missing_deadline));
+    try std.testing.expectError(error.InvalidComparisonContract, parseProtocol(a, missing_deadline));
     bad = protocol;
     bad.generation_slot = "";
     try std.testing.expectError(error.InvalidComparisonContract, validateProtocol(bad));
@@ -1198,6 +1204,7 @@ test "comparison protocol freezes the selected GPT-OSS binding and rejects super
     try std.testing.expectEqual(.low, accepted.reasoning_effort);
     try std.testing.expectEqual(Temperature.fixed.wireValue(), accepted.temperature);
     try std.testing.expectEqual(@as(u32, 16384), accepted.max_output_tokens.tokens);
+    try std.testing.expectEqual(@as(u32, 180000), accepted.request_timeout_ms.milliseconds);
     const Mutation = struct { old: []const u8, replacement: []const u8 };
     for ([_]Mutation{
         .{ .old = "\"provider\":\"aws-bedrock\"", .replacement = "\"provider\":\"openai\"" },
@@ -1211,12 +1218,15 @@ test "comparison protocol freezes the selected GPT-OSS binding and rejects super
         .{ .old = "\"response_mode\":\"native_schema\"", .replacement = "\"response_mode\":\"prompt_only\"" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":null" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":0.2" },
-        .{ .old = "\"schema\":3", .replacement = "\"schema\":2" },
+        .{ .old = "\"schema\":4", .replacement = "\"schema\":3" },
         .{ .old = "\"max_output_tokens\":16384", .replacement = "\"max_output_tokens\":0" },
         .{ .old = "\"max_output_tokens\":16384", .replacement = "\"max_output_tokens\":\"16384\"" },
-        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"native_json_strict\":true" },
-        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"reasoning_mode\":\"provider_default\"" },
-        .{ .old = "\"schema\":3", .replacement = "\"schema\":3,\"documented_default_effort\":\"medium\"" },
+        .{ .old = "\"request_timeout_ms\":180000", .replacement = "\"request_timeout_ms\":0" },
+        .{ .old = "\"request_timeout_ms\":180000", .replacement = "\"request_timeout_ms\":\"180000\"" },
+        .{ .old = "\"request_timeout_ms\":180000", .replacement = "\"request_timeout_ms\":1.8e5" },
+        .{ .old = "\"schema\":4", .replacement = "\"schema\":4,\"native_json_strict\":true" },
+        .{ .old = "\"schema\":4", .replacement = "\"schema\":4,\"reasoning_mode\":\"provider_default\"" },
+        .{ .old = "\"schema\":4", .replacement = "\"schema\":4,\"documented_default_effort\":\"medium\"" },
     }) |mutation| {
         const rejected = try std.mem.replaceOwned(u8, a, bytes, mutation.old, mutation.replacement);
         try std.testing.expect(!std.mem.eql(u8, bytes, rejected));

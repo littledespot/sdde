@@ -10,7 +10,7 @@ const schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"stri
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
     .model_slot = "generation",
     .workflow_id = "spec",
     .workflow_version = 1,
@@ -116,7 +116,7 @@ test "replay sends the description's recorded model maximum unchanged" {
     defer fixture.environment.deinit();
     for ([_]u32{ 8192, 16000 }) |maximum| {
         var selected = description;
-        selected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = maximum } } };
+        selected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = maximum }, .request_timeout = .{ .milliseconds = 180000 } } };
         const body = try fixture.provider.provider().prepare(a, selected);
         const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
         try std.testing.expectEqual(@as(i64, maximum), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
@@ -133,6 +133,36 @@ test "replay sends the description's recorded model maximum unchanged" {
     }
 }
 
+test "replay dispatches with the captured catalogue entry's deadline, not a replay deadline" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    for ([_]u32{ 60000, 180000, std.math.maxInt(u32) }, [_][]const u8{ "a" ** 32, "b" ** 32, "c" ** 32 }, 1..) |milliseconds, id, sequence| {
+        var selected = description;
+        selected.provider_config.aws_bedrock.request_timeout = .{ .milliseconds = milliseconds };
+        var parent = try fixture.parent(a);
+        parent.description = selected;
+        parent.request = try fixture.provider.provider().prepare(a, selected);
+        _ = try fixture.replay().replay(a, replayIdentity(id, sequence), parent, .{ .call = 0, .mode = .exact });
+        // The fixture clock reads 100.
+        try std.testing.expectEqual(@as(u64, 100) + milliseconds, fixture.wire.deadline_monotonic_ms.?);
+        // A persisted description round-trips the deadline.
+        try std.testing.expectEqual(milliseconds, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).provider_config.requestTimeout().milliseconds);
+    }
+    try std.testing.expectEqual(@as(usize, 3), fixture.wire.calls);
+    // A recorded deadline is one positive u32 integer.
+    const bytes = try std.json.Stringify.valueAlloc(a, description, .{});
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bytes, "\"request_timeout\":180000"));
+    for ([_][]const u8{ "0", "-1", "4294967296", "\"180000\"", "180000.5", "1.8e5", "null", "{\"milliseconds\":180000}" }) |value| {
+        const rejected = try std.mem.replaceOwned(u8, a, bytes, "\"request_timeout\":180000", try std.fmt.allocPrint(a, "\"request_timeout\":{s}", .{value}));
+        try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, rejected));
+    }
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"request_timeout\":180000", "")));
+}
+
 test "captured descriptions round-trip controls and reject a retired output allowance" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -144,8 +174,8 @@ test "captured descriptions round-trip controls and reject a retired output allo
     const retired = try std.mem.replaceOwned(u8, a, bytes, "\"temperature\":\"fixed\"", "\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}");
     try std.testing.expect(!std.mem.eql(u8, bytes, retired));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, retired));
-    // The superseded v8 label, which recorded no model maximum output, cannot be read as current.
-    const superseded = try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v9");
+    // The superseded v10 label, which recorded no request deadline, cannot be read as current.
+    const superseded = try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v10");
     try std.testing.expect(!std.mem.eql(u8, bytes, superseded));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, superseded));
 }

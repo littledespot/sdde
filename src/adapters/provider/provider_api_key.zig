@@ -11,7 +11,7 @@ pub const Family = enum {
         return switch (config) {
             .aws_bedrock => .aws_bedrock,
             .anthropic => .anthropic,
-            .empty_object => null,
+            .deadline_only => null,
         };
     }
 

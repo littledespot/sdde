@@ -490,7 +490,7 @@ pub const Trace = struct {
         }
         const selected = handoff.binding().registry_entry;
         const context = try std.json.Stringify.valueAlloc(self.store.allocator, @import("call_context.zig").CallContext{
-            .schema = .@"model-call-evidence/v2",
+            .schema = .@"model-call-evidence/v3",
             .call = self.calls,
             .origin = origin,
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,
@@ -745,7 +745,7 @@ test "single-exchange capture requires the frozen native response settings and e
     const description: Description = .{
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
-        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } },
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 }, .request_timeout = .{ .milliseconds = 180000 } } },
         .model_slot = "spec_generation",
         .workflow_id = "unit-workflow",
         .workflow_version = 1,

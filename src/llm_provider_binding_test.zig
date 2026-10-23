@@ -24,7 +24,7 @@ const provider_contracts: contracts.Registry = .{ .entries = &.{.{
     .provider = provider_id,
     .model = model_id,
     .implementation_id = implementation_id,
-    .facts = .empty_object,
+    .facts = .deadline_only,
     .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     .supported_reasoning_efforts = &.{"low"},
 }} };
@@ -300,7 +300,7 @@ const Fixture = struct {
             .provider = provider_id,
             .model = model_id,
             .implementation_id = implementation_id,
-            .config = .empty_object,
+            .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
             .json = json,
             .capabilities = registered.entries[0].capabilities,
             .supported_reasoning_efforts = &.{"low"},

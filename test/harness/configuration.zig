@@ -82,11 +82,15 @@ pub fn validate(value: Config) c.Error!void {
 /// The compiled family contract that covers the selected judge model, Region and family.
 pub fn bedrockContract(value: Config) c.Error!*const contracts.ProviderModelContract {
     const model = c.ModelId.parse(value.model) orelse return error.InvalidEvaluationContract;
-    const config: contracts.ValidatedProviderConfig = .{ .aws_bedrock = .{
-        .region = value.region orelse return error.InvalidEvaluationContract,
-        .family = value.family orelse return error.InvalidEvaluationContract,
-        .max_output_tokens = value.max_output_tokens,
-    } };
+    const config: contracts.ValidatedProviderConfig = .{
+        .aws_bedrock = .{
+            .region = value.region orelse return error.InvalidEvaluationContract,
+            .family = value.family orelse return error.InvalidEvaluationContract,
+            .max_output_tokens = value.max_output_tokens,
+            // The evaluator's own judge deadline; it never reads a catalogue.
+            .request_timeout = contracts.RequestTimeout.parse(value.timeout_ms) orelse return error.InvalidEvaluationContract,
+        },
+    };
     return registry.resolve(.{ .bytes = "aws-bedrock" }, model, config) orelse error.InvalidEvaluationContract;
 }
 

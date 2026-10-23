@@ -63,7 +63,7 @@ pub const Adapter = struct {
                 .reasoning_effort = effort,
                 .max_output_tokens = config.max_output_tokens,
             }),
-            .empty_object => return error.InvalidReplay,
+            .deadline_only => return error.InvalidReplay,
         } catch return error.InvalidReplay;
         // A modified request must not persist an authorization secret as content.
         var material = source.read(a, self.environment, family);
@@ -92,8 +92,10 @@ pub const Adapter = struct {
             .unavailable => return error.ReplayUnauthorized,
             .allocation_failed => return error.OutOfMemory,
         };
+        // The captured catalogue entry owns the deadline (ADR 0030); replay
+        // has no deadline of its own.
         const now = self.clock.now() catch return error.ReplayProviderFailure;
-        const deadline = std.math.add(u64, now, 300_000) catch return error.ReplayProviderFailure;
+        const deadline = std.math.add(u64, now, value.description.provider_config.requestTimeout().milliseconds) catch return error.ReplayProviderFailure;
         var partial: ?transport.ResponseBody = null;
         const received = self.transport.exchange(a, .{
             .target = switch (value.description.provider_config) {
@@ -102,7 +104,7 @@ pub const Adapter = struct {
                     .model = @import("../../domain/llm_provider_identity.zig").ModelId.parse(value.description.model) orelse return error.InvalidReplay,
                 } },
                 .anthropic => .anthropic,
-                .empty_object => return error.InvalidReplay,
+                .deadline_only => return error.InvalidReplay,
             },
             .body = value.body,
             .api_key = credential,
@@ -144,7 +146,7 @@ pub const Adapter = struct {
         const decoded_result = switch (description.provider_config) {
             .aws_bedrock => @import("bedrock_response.zig").decodeConverse(a, raw.value, &provider_diagnostic),
             .anthropic => @import("anthropic_response.zig").decodeMessages(a, raw.value, description.model, &provider_diagnostic),
-            .empty_object => return error.InvalidReplay,
+            .deadline_only => return error.InvalidReplay,
         };
         var decoded = decoded_result catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;

@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v10" };
+pub const Version = enum { @"model-request-debug/v11" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v10");
+pub const current_version = @tagName(Version.@"model-request-debug/v11");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v10",
+    version: Version = .@"model-request-debug/v11",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -54,8 +54,9 @@ pub const Description = struct {
     }
 
     /// Replay authority: the description names exactly the current binding,
-    /// including the catalogue's provider configuration and recorded maximum
-    /// output, so a drifted catalogue cannot replay a stale capture.
+    /// including the catalogue's provider configuration, recorded maximum
+    /// output and request deadline, so a drifted catalogue cannot replay a
+    /// stale capture.
     pub fn matchesBinding(self: Description, selected: *const binding.ValidatedProviderModelBinding) bool {
         const debug = @import("request_debugger.zig");
         return std.mem.eql(u8, selected.slot_id.bytes, self.model_slot) and

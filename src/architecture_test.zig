@@ -966,6 +966,12 @@ test "provider authorization exposes only non-operational references and narrow 
     const yaml_binding = @embedFile("application/provider_authorization_workflow.zig");
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(yaml_binding, "action.execute("));
     inline for (.{ "Table", "countInputTokens", "InvokeModel", "retry-limit", "/adapters/" }) |forbidden| try expectAbsent(yaml_binding, forbidden);
+    // The deadline is the bound catalogue entry's, never a YAML parameter or a
+    // fixed replay value (ADR 0030).
+    try std.testing.expectEqual(@as(usize, 0), @import("application/provider_authorization_workflow.zig").Prepare.contract.parameters.len);
+    inline for (.{ "application/provider_authorization_workflow.zig", "domain/workflow_provider_authorization.zig", "application/workflow_provider_authorization.zig", "application/workflow_pipeline_runner.zig" }) |path| try expectAbsent(@embedFile(path), "timeout-ms");
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("application/workflow_provider_authorization.zig"), "registry_entry.config.requestTimeout()") != null);
+    try expectAbsent(@embedFile("adapters/provider/request_replay.zig"), "300_000");
     const runner = @embedFile("application/workflow_pipeline_runner.zig");
     try std.testing.expect(std.mem.indexOf(u8, runner, "Binding.allocate(").? < std.mem.indexOf(u8, runner, "var candidate = entry.invoke(.{ .step").?);
     try std.testing.expect(std.mem.indexOf(u8, runner, "bound.validate(result, candidate.outcome)").? < std.mem.indexOf(u8, runner, "const applied = self.applyCandidate(").?);

@@ -11,6 +11,8 @@ pub const Wire = struct {
     inference_body: []const u8 = complete,
     /// When set, every request must send exactly this maximum.
     expected_max_tokens: ?u32 = null,
+    /// The monotonic deadline of the latest exchange.
+    deadline_monotonic_ms: ?u64 = null,
 
     pub fn port(self: *Wire) transport.Port {
         return .{ .context = @ptrCast(self), .exchange_fn = exchange };
@@ -18,6 +20,7 @@ pub const Wire = struct {
     fn exchange(context: *transport.Context, allocator: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {
         const self: *Wire = @ptrCast(@alignCast(context));
         self.calls += 1;
+        self.deadline_monotonic_ms = request.deadline_monotonic_ms;
         if (self.expected_json) |enabled| {
             var parsed = std.json.parseFromSlice(std.json.Value, allocator, request.body, .{}) catch |err| return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,

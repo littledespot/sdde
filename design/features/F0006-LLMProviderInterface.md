@@ -179,7 +179,8 @@ facts remain local to the abandoned or completed execution.
       §6](#6-providermodel-binding-and-workflow-token-accounting).
 13. Run each model request as one engine-owned step
     ([ADR 0030](../decisions/0030-engine-owned-model-request.md), 22 October 2026, amended
-    23 October 2026; not yet implemented except the token-counting removal below).
+    23 October 2026; not yet implemented except the token-counting removal and the
+    catalogue deadline below).
 
     - One `request-model` step makes one inference request.
     - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes.
@@ -187,8 +188,10 @@ facts remain local to the abandoned or completed execution.
       both advisory and ordinary requests. An advisory request at an unmarked step fails
       preparation's binding validation: a terminal runner rejection with a closed
       diagnostic, not a YAML outcome, before any attempt.
-    - The provider-operation deadline is the bound catalogue entry's required
-      `requestTimeoutMs`, beside `maxOutputTokens`; YAML declares no `timeout-ms`.
+    - The provider-operation deadline moved to the bound catalogue entry's required
+      `requestTimeoutMs`, beside `maxOutputTokens`, on 24 October 2026 (implemented).
+      Authorization preparation takes no parameter, and compilation rejects a YAML
+      `timeout-ms`.
     - Provider token counting was removed on 24 October 2026 (implemented), so this
       document defines no count operation, capability or outcome. Actual-usage
       accounting (§6) is unchanged and remains the only source of the workflow token
@@ -278,11 +281,14 @@ ProviderModelDefinition {
   not an automatic runtime configuration or fallback.
 
 - There are no common (provider-independent) catalogue `endpoint`, `contextWindow`,
-  `maxOutputTokens`, `supportsTemperature`, `structuredOutput`, `tokenizer`, or
-  wire-parameter fields; Bedrock's closed `config` carries its own `maxOutputTokens`.
-  Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
-  23 October 2026 (not yet implemented), each provider's closed `config` also requires a
-  positive `requestTimeoutMs`, the provider-operation deadline.
+  `maxOutputTokens`, `requestTimeoutMs`, `supportsTemperature`, `structuredOutput`,
+  `tokenizer`, or wire-parameter fields. Each production provider's closed `config`
+  carries its own `maxOutputTokens`, and every provider's closed `config` requires an
+  integer `requestTimeoutMs` from 1 to 4,294,967,295: the provider-operation deadline in
+  milliseconds
+  ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)). The
+  runner binds it to every provider operation of a request that selects the entry,
+  including protocol corrections.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
   No slot, binding or request carries an output allowance below the model's own maximum; a Bedrock catalogue entry records that documented maximum ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 - The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
@@ -291,7 +297,8 @@ ProviderModelDefinition {
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
 validated enclosing provider. For example, `provider: "aws-bedrock"` requires
-the exact F0007 configuration `{ "region": <validated-region>, "maxOutputTokens": <documented-model-maximum> }`.
+the exact F0007 configuration `{ "region": <validated-region>, "family": <compiled-family>,
+"maxOutputTokens": <documented-model-maximum>, "requestTimeoutMs": <deadline-ms> }`.
 
 - Every root, provider, model, and resolved provider-specific configuration object is
   closed at its owning boundary.

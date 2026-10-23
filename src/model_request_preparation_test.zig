@@ -576,15 +576,16 @@ test "replay authority matches a description only to its exact current binding a
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    fixture.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } };
+    fixture.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 }, .request_timeout = .{ .milliseconds = 180000 } } };
     const described = Description.from(&fixture.request, &fixture.provider_binding, .inference);
     try std.testing.expect(described.matchesBinding(&fixture.provider_binding));
 
-    // A catalogue whose maximum or region moved no longer authorizes the capture.
+    // A catalogue whose maximum, deadline or region moved no longer authorizes the capture.
     for ([_]@import("domain/llm_provider_contracts.zig").ValidatedProviderConfig{
-        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
-        .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 } } },
-        .empty_object,
+        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } },
+        .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 }, .request_timeout = .{ .milliseconds = 60000 } } },
+        .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16384 }, .request_timeout = .{ .milliseconds = 180000 } } },
+        .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
     }) |drifted| {
         fixture.registry_entry.config = drifted;
         try std.testing.expect(!described.matchesBinding(&fixture.provider_binding));

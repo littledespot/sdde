@@ -62,11 +62,11 @@ pub const Fixture = struct {
             .provider = .{ .bytes = "fake-provider" },
             .model = .{ .bytes = "fake-model" },
             .implementation_id = .{ .ordinal = 1 },
-            .config = .empty_object,
+            .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
             .json = false,
             .capabilities = @import("model_contract_test_fixture.zig").capabilities,
             .supported_reasoning_efforts = &.{"low"},
-            .facts = .empty_object,
+            .facts = .deadline_only,
         };
         self.provider_binding = .{
             .operation_id = modelOperation(),

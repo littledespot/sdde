@@ -7,7 +7,8 @@
           "model": "claude-haiku-5-5",
           "json": false,
           "config": {
-            "maxOutputTokens": 128000
+            "maxOutputTokens": 128000,
+            "requestTimeoutMs": 180000
           }
         }
       ]
@@ -21,7 +22,8 @@
           "config": {
             "region": "ap-southeast-2",
             "family": "gpt-oss",
-            "maxOutputTokens": 16384
+            "maxOutputTokens": 16384,
+            "requestTimeoutMs": 180000
           }
         },
         {
@@ -30,7 +32,8 @@
           "config": {
             "region": "ap-southeast-2",
             "family": "claude",
-            "maxOutputTokens": 128000
+            "maxOutputTokens": 128000,
+            "requestTimeoutMs": 180000
           }
         }
       ]

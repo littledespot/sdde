@@ -41,7 +41,7 @@ pub const Provider = struct {
                 .target = .anthropic,
                 .body = try anthropic_request.encode(allocator, request, entry.model.bytes, config.max_output_tokens),
             },
-            .empty_object => error.InvalidRequest,
+            .deadline_only => error.InvalidRequest,
         };
     }
 
@@ -121,7 +121,7 @@ pub const Provider = struct {
             .aws_bedrock => bedrock_response.inference(self.allocator, response, selected, request, invoked.id),
             .anthropic => anthropic_response.inference(self.allocator, response, selected, request, invoked.id),
             // No codec exists, so the exchange rejected the call before send.
-            .empty_object => switch (response) {
+            .deadline_only => switch (response) {
                 .failed => |failure| .{ .failed = @import("provider_response_assembly.zig").rejected(invoked.id, failure) },
                 .received => unreachable,
             },

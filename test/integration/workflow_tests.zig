@@ -3827,11 +3827,11 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
     .provider = test_provider_id,
     .model = llm_provider_identity.ModelId.parse("model-a").?,
     .implementation_id = llm_provider_contracts.RegisteredProviderImplementationId.init(1).?,
-    .facts = .empty_object,
+    .facts = .deadline_only,
     .capabilities = @import("../../src/model_contract_test_fixture.zig").capabilities,
 }} };
 const test_provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
 ;
 const test_model_step: workflow_compilation.CompiledStep = .{
     .id = workflow.WorkflowStepId.parse("run").?,

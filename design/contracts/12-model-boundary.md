@@ -338,7 +338,8 @@ reuse, not provider caching or deterministic semantic proof.
 ### 12.7 Workflow-defined model operations
 
 > **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
-> except the token-counting removal, implemented 24 October 2026).**
+> except the token-counting removal and the catalogue deadline, both implemented
+> 24 October 2026).**
 > One [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
 > preparation step and every explicit lifecycle step below. A fixed kernel orchestrator runs
 > them as the stages ADR 0030 lists, through runner-owned child bindings. Where a bullet below
@@ -349,8 +350,8 @@ reuse, not provider caching or deterministic semantic proof.
 > The 23 October amendment also:
 > - removed provider token counting (implemented): no count operation remains, and actual
 >   inference usage still feeds the one workflow token budget;
-> - takes the provider-operation deadline from the bound catalogue entry's required
->   `requestTimeoutMs`, not a YAML `timeout-ms`;
+> - moved the provider-operation deadline to the bound catalogue entry's required
+>   `requestTimeoutMs` (implemented): authorization preparation takes no parameter;
 > - lets only a step marked `advisory: allowed` map `more` and `blocked`; such a step may
 >   carry ordinary requests too, and an advisory request at an unmarked step fails
 >   preparation as a terminal runner rejection, not a YAML outcome, before any attempt.
@@ -463,11 +464,12 @@ findings. Only complete native collection validation permits authority advanceme
   persists records.
 - Those operations remain explicit separate YAML work.
 
-- Native `prepare-provider-operation-authorization` consumes that same request, attempt and
-  assignment through a separate YAML step with required positive `timeout-ms`. Under
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
-  (not yet implemented), the deadline is the bound catalogue entry's required
-  `requestTimeoutMs` instead.
+- Native parameter-free `prepare-provider-operation-authorization` consumes that same
+  request, attempt and assignment through a separate YAML step. The provider-operation
+  deadline is the bound catalogue entry's required `requestTimeoutMs` (§9;
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) "Request deadline"), which
+  the runner binds to every provider operation of the request, including protocol
+  corrections. Compilation rejects a YAML `timeout-ms`.
 - The runner derives one absolute monotonic deadline, allocates the existing private lease slot
   and validates exact result correlation before publication.
 - The action holds only the policy-permitted preloaded `provider-authorization` port: no I/O,
@@ -1110,6 +1112,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v9` retains native scope for diagnostic replay; request logs
+`model-request-debug/v11` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

@@ -1,5 +1,5 @@
 {
-  "schema": 3,
+  "schema": 4,
   "cohort": "small",
   "provider": "aws-bedrock",
   "model": "openai.gpt-oss-20b-1:0",
@@ -10,6 +10,7 @@
   "response_mode": "native_schema",
   "temperature": 0.1,
   "max_output_tokens": 16384,
+  "request_timeout_ms": 180000,
   "repetitions": 3,
   "arms": [
     "A",

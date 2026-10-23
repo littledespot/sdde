@@ -352,9 +352,11 @@ RepairAccountingTransition =
 // Publishing this view and its ledger successor is one runner application.
 // Its value retains operation/request owners; no lease or provider call occurs.
 
-// prepare-provider-operation-authorization requires that same request,
-// attempt and assignment plus explicit positive timeout-ms. The runner binds
-// one deadline and private slot; the action uses only its preloaded no-I/O port.
+// Parameter-free prepare-provider-operation-authorization requires that same
+// request, attempt and assignment. The runner binds the bound catalogue entry's
+// requestTimeoutMs as the one deadline, for every provider operation of the
+// request, and allocates one private slot; the action uses only its preloaded
+// no-I/O port.
 ProviderAuthorizationResult = opaque {
   outcome: prepared(ValidatedProviderAuthorizationLeaseRef)
          | failed(ProviderFailure)

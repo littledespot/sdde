@@ -22,15 +22,16 @@ pub const RegisteredProviderImplementationId = struct {
 
 /// Closed provider families. Each tag names its catalogue configuration schema.
 pub const ProviderConfigSchema = enum {
-    empty_object,
+    /// Test-only family whose configuration records nothing but the deadline.
+    deadline_only,
     aws_bedrock,
     anthropic,
 
     /// The provider ID a family's compiled entries must carry. The test-only
-    /// empty family may not borrow a production family's identity.
+    /// deadline-only family may not borrow a production family's identity.
     pub fn providerId(self: ProviderConfigSchema) ?[]const u8 {
         return switch (self) {
-            .empty_object => null,
+            .deadline_only => null,
             .aws_bedrock => "aws-bedrock",
             .anthropic => "anthropic",
         };
@@ -81,6 +82,27 @@ pub const BedrockRegion = enum {
 // (ADR 0029).
 pub const BedrockFamily = enum { converse, @"gpt-oss", luna, claude };
 
+/// The one rule for a catalogue's integer limits: a positive value in the u32
+/// range. No limit is zero, and every value fits the transport's u32 fields.
+fn positiveU32(value: i64) ?u32 {
+    const narrowed = std.math.cast(u32, value) orelse return null;
+    return if (narrowed == 0) null else narrowed;
+}
+
+/// A catalogue limit on the wire: one integer-written JSON number admitted by
+/// `positiveU32`. No quoted, fractional or exponent form names a limit,
+/// whichever JSON decoder runs.
+fn jsonPositiveU32(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!u32 {
+    const token = try source.nextAllocMax(a, .alloc_if_needed, options.max_value_len orelse std.json.default_max_value_len);
+    const written = switch (token) {
+        .number => |bytes| bytes,
+        .allocated_number => |bytes| bytes,
+        else => return error.UnexpectedToken,
+    };
+    if (!std.json.isNumberFormattedLikeAnInteger(written)) return error.InvalidNumber;
+    return positiveU32(try std.fmt.parseInt(i64, written, 10)) orelse error.InvalidNumber;
+}
+
 /// A model's documented maximum output, recorded in the catalogue and sent as
 /// every inference request's ceiling, so no provider default or required field
 /// can cut output short (ADR 0011, ADR 0028). It is never zero.
@@ -93,21 +115,11 @@ pub const ModelMaximumOutput = struct {
     pub const ClosedJsonWire = u32;
 
     pub fn parse(tokens: i64) ?ModelMaximumOutput {
-        const value = std.math.cast(u32, tokens) orelse return null;
-        return if (value == 0) null else .{ .tokens = value };
+        return .{ .tokens = positiveU32(tokens) orelse return null };
     }
 
-    /// No quoted, fractional or exponent form names a maximum, whichever JSON
-    /// decoder runs.
     pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!ModelMaximumOutput {
-        const token = try source.nextAllocMax(a, .alloc_if_needed, options.max_value_len orelse std.json.default_max_value_len);
-        const written = switch (token) {
-            .number => |bytes| bytes,
-            .allocated_number => |bytes| bytes,
-            else => return error.UnexpectedToken,
-        };
-        if (!std.json.isNumberFormattedLikeAnInteger(written)) return error.InvalidNumber;
-        return parse(try std.fmt.parseInt(i64, written, 10)) orelse error.InvalidNumber;
+        return .{ .tokens = try jsonPositiveU32(a, source, options) };
     }
 
     pub fn jsonStringify(self: ModelMaximumOutput, writer: *std.json.Stringify) std.json.Stringify.Error!void {
@@ -115,16 +127,49 @@ pub const ModelMaximumOutput = struct {
     }
 };
 
+/// A model's provider-operation deadline, recorded in its catalogue entry and
+/// bound to every provider operation of a request that selects the entry,
+/// including protocol corrections (ADR 0030). It is never zero, and it fits
+/// the u32 range so a monotonic deadline can always be formed from it; the
+/// catalogue is its one owner.
+/// Every decoder admits it through `parse`; on the wire it is one integer-written
+/// JSON number, as the catalogue decoder requires.
+pub const RequestTimeout = struct {
+    milliseconds: u32,
+
+    /// The closed wire kind `strict_json` checks before `jsonParse` runs.
+    pub const ClosedJsonWire = u32;
+
+    pub fn parse(milliseconds: i64) ?RequestTimeout {
+        return .{ .milliseconds = positiveU32(milliseconds) orelse return null };
+    }
+
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!RequestTimeout {
+        return .{ .milliseconds = try jsonPositiveU32(a, source, options) };
+    }
+
+    pub fn jsonStringify(self: RequestTimeout, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.write(self.milliseconds);
+    }
+};
+
 pub const ValidatedProviderConfig = union(ProviderConfigSchema) {
-    empty_object,
-    aws_bedrock: struct { region: BedrockRegion, family: BedrockFamily, max_output_tokens: ModelMaximumOutput },
-    anthropic: struct { max_output_tokens: ModelMaximumOutput },
+    deadline_only: struct { request_timeout: RequestTimeout },
+    aws_bedrock: struct { region: BedrockRegion, family: BedrockFamily, max_output_tokens: ModelMaximumOutput, request_timeout: RequestTimeout },
+    anthropic: struct { max_output_tokens: ModelMaximumOutput, request_timeout: RequestTimeout },
+
+    /// The entry's provider-operation deadline, which every family records.
+    pub fn requestTimeout(self: ValidatedProviderConfig) RequestTimeout {
+        return switch (self) {
+            inline else => |config| config.request_timeout,
+        };
+    }
 };
 
 /// Compiled facts of one provider family; the tag is its configuration schema,
 /// so a family's facts cannot accompany another family's catalogue entry.
 pub const ProviderFacts = union(ProviderConfigSchema) {
-    empty_object,
+    deadline_only,
     /// The Bedrock family the contract encodes.
     aws_bedrock: BedrockFamily,
     anthropic,
@@ -133,7 +178,7 @@ pub const ProviderFacts = union(ProviderConfigSchema) {
     pub fn bedrockFamily(self: ProviderFacts) ?BedrockFamily {
         return switch (self) {
             .aws_bedrock => |family| family,
-            .empty_object, .anthropic => null,
+            .deadline_only, .anthropic => null,
         };
     }
 };
@@ -157,7 +202,7 @@ pub const ProviderModelContract = struct {
         if (!@import("llm_provider_config_schema.zig").matches(self.configSchema(), config)) return false;
         return switch (self.facts) {
             .aws_bedrock => |family| config.aws_bedrock.family == family,
-            .empty_object, .anthropic => if (self.model) |registered| registered.eql(model) else false,
+            .deadline_only, .anthropic => if (self.model) |registered| registered.eql(model) else false,
         };
     }
 };
@@ -266,7 +311,7 @@ test "contract registry is exact unique and provider consistent" {
         .provider = provider,
         .model = identity.ModelId.parse("model-a").?,
         .implementation_id = RegisteredProviderImplementationId.init(1).?,
-        .facts = .empty_object,
+        .facts = .deadline_only,
         .capabilities = capabilities,
         .supported_reasoning_efforts = &.{ "low", "high" },
     };
@@ -274,13 +319,14 @@ test "contract registry is exact unique and provider consistent" {
         .provider = provider,
         .model = identity.ModelId.parse("model-b").?,
         .implementation_id = RegisteredProviderImplementationId.init(1).?,
-        .facts = .empty_object,
+        .facts = .deadline_only,
         .capabilities = capabilities,
     };
     const registry: Registry = .{ .entries = &.{ first, second } };
     try registry.validate();
-    try std.testing.expect(registry.resolve(provider, first.model.?, .empty_object) != null);
-    try std.testing.expect(registry.resolve(provider, identity.ModelId.parse("model-c").?, .empty_object) == null);
+    const deadline_only: ValidatedProviderConfig = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } };
+    try std.testing.expect(registry.resolve(provider, first.model.?, deadline_only) != null);
+    try std.testing.expect(registry.resolve(provider, identity.ModelId.parse("model-c").?, deadline_only) == null);
     try std.testing.expect(supportsReasoningEffort(first.supported_reasoning_efforts, "low"));
     try std.testing.expect(!supportsReasoningEffort(first.supported_reasoning_efforts, "medium"));
 
@@ -314,12 +360,12 @@ test "Bedrock family contracts cover every model and Region that names their fam
         for (std.enums.values(BedrockRegion)) |region| {
             for ([_][]const u8{ "MOCK-model", "MOCK.vendor.model-v1:0", "arn:aws:bedrock:MOCK:application-inference-profile/x" }) |raw| {
                 const model = identity.ModelId.parse(raw).?;
-                const config: ValidatedProviderConfig = .{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 1 } } };
+                const config: ValidatedProviderConfig = .{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 1 }, .request_timeout = .{ .milliseconds = 1 } } };
                 const resolved = registry.resolve(provider, model, config).?;
                 try std.testing.expectEqual(family, resolved.facts.bedrockFamily().?);
                 // No other family covers it, and no other provider's configuration does.
                 for (contracts) |other| if (other.facts.aws_bedrock != family) try std.testing.expect(!other.covers(model, config));
-                try std.testing.expect(registry.resolve(provider, model, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 1 } } }) == null);
+                try std.testing.expect(registry.resolve(provider, model, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 1 }, .request_timeout = .{ .milliseconds = 1 } } }) == null);
             }
         }
     }
@@ -348,9 +394,9 @@ test "contract registry binds each provider family to its identity and implement
         .capabilities = capabilities,
     };
     try (Registry{ .entries = &.{ bedrock, anthropic } }).validate();
-    try std.testing.expect(anthropic.covers(anthropic.model.?, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 } } }));
-    try std.testing.expect(!anthropic.covers(anthropic.model.?, .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .converse, .max_output_tokens = .{ .tokens = 128000 } } }));
-    try std.testing.expect(!bedrock.covers(anthropic.model.?, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 } } }));
+    try std.testing.expect(anthropic.covers(anthropic.model.?, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!anthropic.covers(anthropic.model.?, .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .converse, .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!bedrock.covers(anthropic.model.?, .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
 
     // Two families never share an implementation ID.
     var aliased = anthropic;
@@ -361,7 +407,7 @@ test "contract registry binds each provider family to its identity and implement
     foreign_identity.provider = bedrock.provider;
     try std.testing.expectError(error.InvalidProviderModelContracts, (Registry{ .entries = &.{foreign_identity} }).validate());
     var borrowed_identity = anthropic;
-    borrowed_identity.facts = .empty_object;
+    borrowed_identity.facts = .deadline_only;
     try std.testing.expectError(error.InvalidProviderModelContracts, (Registry{ .entries = &.{borrowed_identity} }).validate());
     try std.testing.expect(anthropic.facts.bedrockFamily() == null);
 }

@@ -1958,10 +1958,10 @@ const ProviderWire = struct {
 const two_provider_catalogue =
     \\{"providers":[
     \\{"provider":"anthropic","models":[
-    \\{"model":"claude-haiku-5-5","json":false,"config":{"maxOutputTokens":128000}},
-    \\{"model":"claude-opus-5-5","json":true,"config":{"maxOutputTokens":128000}}]},
+    \\{"model":"claude-haiku-5-5","json":false,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}},
+    \\{"model":"claude-opus-5-5","json":true,"config":{"maxOutputTokens":128000,"requestTimeoutMs":180000}}]},
     \\{"provider":"aws-bedrock","models":[
-    \\{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384}}]}]}
+    \\{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16384,"requestTimeoutMs":180000}}]}]}
 ;
 
 const claude_slot = "{\"provider\":\"anthropic\",\"model\":\"claude-haiku-5-5\",\"reasoningEffort\":\"low\"}";

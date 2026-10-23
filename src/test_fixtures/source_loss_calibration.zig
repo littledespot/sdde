@@ -530,7 +530,7 @@ fn catalogueMaximum(a: std.mem.Allocator) !@import("../domain/llm_provider_contr
     const entry = registry.registry(owner).resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "openai.gpt-oss-20b-1:0" }) orelse return error.InvalidCalibrationCatalogue;
     return switch (entry.config) {
         .aws_bedrock => |config| config.max_output_tokens,
-        .empty_object, .anthropic => error.InvalidCalibrationCatalogue,
+        .deadline_only, .anthropic => error.InvalidCalibrationCatalogue,
     };
 }
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {

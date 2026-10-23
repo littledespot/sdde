@@ -34,18 +34,20 @@
   unaccepted source document. Its normative content moves here and into
   [F0009](../features/F0009-AnthropicProvider.md).
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026;
-  not yet implemented except the token-counting removal, implemented 24 October 2026).
-  It changes:
+  these changes were implemented on 24 October 2026). It changes:
   - "Configuration" (`{"maxOutputTokens": N}` "with no other field"): `config` also
-    requires a positive `requestTimeoutMs`, the provider-operation deadline;
+    requires a positive `requestTimeoutMs`, the provider-operation deadline, so it
+    accepts exactly these two fields;
   - "One token budget, deadline …": the budget stays shared, but each catalogue entry
     now carries its own deadline;
   - the shared-owners row for `domain/llm_provider_config_schema.zig`, which gains the
     required `requestTimeoutMs`;
   - "Deadline" under "Not decided here", now settled per model. Claude's entries start at
     the shared 180,000 ms until a measured maximum-output time replaces it;
-  - "Token counting": provider token counting is removed for every provider
-    (implemented 24 October 2026).
+  - "Token counting": provider token counting is removed for every provider;
+  - "Versions": recording the deadline advanced the harness call evidence to
+    `model-call-evidence/v3`; v2 and v1 captures stay readable as historical
+    evidence.
 
 ## Context
 

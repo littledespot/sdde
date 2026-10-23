@@ -1124,21 +1124,40 @@ test "authorization failure facts and cancellation stay distinct and follow decl
     }
 }
 
-test "authorization rejects missing timeout invalid timeout dependencies and capability permission" {
+test "authorization takes its deadline from the catalogue and rejects any YAML deadline parameter dependencies and capability permission" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const source = try authorizationYaml(&fixture);
+    // Accepted: the step declares no parameter at all.
+    const graph = try fixture.compile(source);
+    for (graph.authority.steps) |step| if (std.mem.eql(u8, step.operation_id.bytes, authorization_workflow.Prepare.contract.id)) {
+        try std.testing.expectEqual(@as(usize, 0), step.parameters.len);
+    };
+    const declared = "use: prepare-provider-operation-authorization, on:";
+    // Rejected: any `timeout-ms`, whatever its value, and any other parameter;
+    // the deadline is the bound catalogue entry's `requestTimeoutMs` (ADR 0030).
+    for ([_][]const u8{
+        "timeout-ms: 1000",
+        "timeout-ms: 180000",
+        "timeout-ms: 0",
+        "timeout-ms: -1",
+        "timeout-ms: true",
+        "timeout-ms: 9223372036854775808",
+        "requestTimeoutMs: 1000",
+        "retry-limit: 1",
+        "slot: selected",
+        "kind: inference",
+        "api-key: forbidden",
+    }) |parameter| {
+        const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, declared, try std.fmt.allocPrint(fixture.arena.allocator(), "use: prepare-provider-operation-authorization, with: {{{s}}}, on:", .{parameter}));
+        try std.testing.expect(!std.mem.eql(u8, invalid, source));
+        if (fixture.compile(invalid)) |_| return error.ExpectedRejection else |err| switch (err) {
+            error.WorkflowGraphCompileInvalid, error.WorkflowDefinitionSchemaInvalid, error.WorkflowDefinitionParseError => {},
+            else => return err,
+        }
+    }
     for ([_][2][]const u8{
-        .{ "with: {timeout-ms: 1000}, ", "" },
-        .{ "timeout-ms: 1000", "timeout-ms: 0" },
-        .{ "timeout-ms: 1000", "timeout-ms: -1" },
-        .{ "timeout-ms: 1000", "timeout-ms: true" },
-        .{ "timeout-ms: 1000", "timeout-ms: 9223372036854775808" },
-        .{ "timeout-ms: 1000", "timeout-ms: 1000, retry-limit: 1" },
-        .{ "timeout-ms: 1000", "timeout-ms: 1000, slot: selected" },
-        .{ "timeout-ms: 1000", "timeout-ms: 1000, kind: inference" },
-        .{ "timeout-ms: 1000", "timeout-ms: 1000, api-key: forbidden" },
         .{ "policy: core.model-authorization@1", "policy: core.capability-free@1" },
         .{ "use: assign-provider-operation, on: {ok: authorize, failed: end.failed}", "use: core.noop, on: {ok: authorize}" },
     }) |change| {
@@ -1199,6 +1218,132 @@ test "authorization guards expiration overflow unavailable clocks and absent ada
             try std.testing.expectEqual(.deadline_exhausted, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
             try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
         } else try std.testing.expectEqual(@as(usize, 0), fixture.authorization.prepare_count);
+    }
+}
+
+/// Records the facts of every authorization the runner allocates, then
+/// delegates to the fixture's preloaded authorization.
+const DeadlineRecorder = struct {
+    inner: authorization_port.Port,
+    deadlines: [8]u64 = undefined,
+    nows: [8]u64 = undefined,
+    operations: [8]provider.ProviderOperationId = undefined,
+    clock: *const @import("provider_authorization_test_fixture.zig").TestClock,
+    count: usize = 0,
+    fn port(self: *DeadlineRecorder) authorization_port.Port {
+        return .{ .context = @ptrCast(self), .prepare_fn = prepare };
+    }
+    fn prepare(context: *authorization_port.Context, facts: authorization_port.Facts, slot: authorization_port.Slot) authorization_port.Error!authorization_port.Observation {
+        const self: *DeadlineRecorder = @ptrCast(@alignCast(context));
+        self.deadlines[self.count] = facts.deadline_monotonic_ms;
+        self.nows[self.count] = self.clock.now_ms;
+        self.operations[self.count] = facts.operation_id;
+        self.count += 1;
+        return self.inner.prepare(facts, slot);
+    }
+};
+
+const DeadlineSelection = struct { slot: []const u8, model: []const u8, milliseconds: u32 };
+/// Two test entries with different deadlines: the fixture's `selected` slot
+/// binds the 1000 ms entry and `other` the 2500 ms one.
+const two_deadlines = [_]DeadlineSelection{ .{ .slot = "selected", .model = "model-a", .milliseconds = 1000 }, .{ .slot = "other", .model = "model-b", .milliseconds = 2500 } };
+
+/// Catalogue services whose test entries each record their own deadline.
+fn deadlineServices(allocator: std.mem.Allocator, selections: []const DeadlineSelection) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+    const capabilities = @import("model_contract_test_fixture.zig").capabilities;
+    var compiled: [two_deadlines.len]contracts.ProviderModelContract = undefined;
+    var candidate = try registry.Candidate.init(allocator, selections.len);
+    defer candidate.deinit();
+    for (selections, compiled[0..selections.len], candidate.entries) |selection, *contract, *entry| {
+        contract.* = .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = selection.model }, .implementation_id = .{ .ordinal = 1 }, .facts = .deadline_only, .capabilities = capabilities };
+        entry.* = .{ .provider = contract.provider, .model = contract.model.?, .implementation_id = contract.implementation_id, .json = false, .config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = selection.milliseconds } } }, .capabilities = capabilities, .supported_reasoning_efforts = &.{} };
+    }
+    const owner = try registry.createValidated(allocator, candidate, .{ .entries = compiled[0..selections.len] });
+    errdefer registry.deinitOwner(owner);
+    var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
+    defer models.slots.deinit(allocator);
+    for (selections) |selection| try models.slots.map.put(allocator, selection.slot, .{ .provider = "test-provider", .model = selection.model });
+    const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
+    return .init(.init(owner), allowlist);
+}
+
+test "authorization binds each slot's catalogue entry deadline so two entries get different deadlines" {
+    for ([_]struct { slot: []const u8, milliseconds: u64 }{ .{ .slot = "selected", .milliseconds = 1000 }, .{ .slot = "other", .milliseconds = 2500 } }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        fixture.services.deinit();
+        fixture.services = try deadlineServices(std.testing.allocator, &two_deadlines);
+        var recorder: DeadlineRecorder = .{ .inner = fixture.authorization.port(), .clock = &fixture.clock };
+        fixture.native.prepare_authorization.action = .{ .authorization = recorder.port() };
+        const source = try authorizationYaml(&fixture);
+        const bound = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "slot: selected", try std.fmt.allocPrint(fixture.arena.allocator(), "slot: {s}", .{case.slot}));
+        const graph = try fixture.compile(bound);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        fixture.clock.now_ms = 40;
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expectEqual(@as(usize, 1), recorder.count);
+        try std.testing.expectEqual(40 + case.milliseconds, recorder.deadlines[0]);
+        try std.testing.expectEqual(case.milliseconds, (try currentRequest(&runner)).binding().registry_entry.config.requestTimeout().milliseconds);
+        // The selected entry's deadline, not another's, bounds the lease.
+        fixture.clock.now_ms = 40 + case.milliseconds - 1;
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
+        fixture.clock.now_ms = 40 + case.milliseconds;
+        try std.testing.expectEqual(.deadline_exhausted, runner.bindings().invokeStep(.{ .bytes = "observe" }).rejected);
+    }
+}
+
+test "authorization fails closed on a zero catalogue deadline the decoder could never admit" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.services.deinit();
+    fixture.services = try deadlineServices(std.testing.allocator, &.{.{ .slot = "selected", .model = "model-a", .milliseconds = 0 }});
+    const graph = try fixture.compile(try authorizationYaml(&fixture));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var harness: Harness = .{ .runner = &runner };
+    try std.testing.expectEqual(.failed, harness.run());
+    try std.testing.expectEqual(@as(usize, 0), fixture.authorization.prepare_count);
+    try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+}
+
+test "authorization binds the selected entry deadline to every provider operation including protocol corrections" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.services.deinit();
+    fixture.services = try deadlineServices(std.testing.allocator, &two_deadlines);
+    var recorder: DeadlineRecorder = .{ .inner = fixture.authorization.port(), .clock = &fixture.clock };
+    fixture.native.prepare_authorization.action = .{ .authorization = recorder.port() };
+    const source = try protocolRetryYaml(&fixture);
+    const bound = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "slot: selected", "slot: other");
+    try std.testing.expect(!std.mem.eql(u8, source, bound));
+    const graph = try fixture.compile(bound);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan.complete.content = "{\"foreign\":true}";
+    // The initial operation and both protocol corrections each bind the
+    // entry's 2500 ms from their own authorization time.
+    for (0..3) |index| {
+        fixture.clock.now_ms = 10 + 100 * index;
+        try prepareProtocolAttempt(&runner, index != 0);
+        try std.testing.expectEqual(index != 0, (try currentRequest(&runner)).protocolCorrection() != null);
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+        if (index < 2) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    }
+    try std.testing.expectEqual(@as(usize, 3), recorder.count);
+    for (0..3) |index| {
+        try std.testing.expectEqual(recorder.nows[index] + 2500, recorder.deadlines[index]);
+        try std.testing.expectEqual(@as(u32, @intCast(index + 1)), recorder.operations[index].model_attempt_ordinal.value);
+        try std.testing.expectEqual(.inference, recorder.operations[index].kind);
+        try std.testing.expect(recorder.operations[index].model_request_id == recorder.operations[0].model_request_id);
     }
 }
 
@@ -1265,7 +1410,7 @@ test "forged authorization results and rejected deltas publish no lease and dest
     }
 }
 
-test "authorization compiler and registry reject hidden producers and tampered timeout authority" {
+test "authorization compiler and registry reject hidden producers and a forged deadline parameter" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
@@ -1276,7 +1421,8 @@ test "authorization compiler and registry reject hidden producers and tampered t
         for (steps) |*step| if (std.mem.eql(u8, step.operation_id.bytes, authorization_workflow.Prepare.contract.id)) {
             switch (variant) {
                 0 => step.capabilities = &.{},
-                1 => step.parameters = &.{},
+                // The retired YAML deadline cannot be forged into a compiled step.
+                1 => step.parameters = &.{.{ .id = workflow.WorkflowParameterId.parse("timeout-ms").?, .value = .{ .integer = 1000 } }},
                 2 => step.produces = &.{ .provider_authorization_result, .raw_engine_config },
                 else => unreachable,
             }
@@ -1291,7 +1437,8 @@ test "authorization compiler and registry reject hidden producers and tampered t
     }
     for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, authorization_workflow.Prepare.contract.id)) {
         const original = entry.*;
-        entry.contract.parameters = &.{};
+        // No registered authorization contract may declare a deadline parameter.
+        entry.contract.parameters = &.{.{ .id = "timeout-ms", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 1 }};
         try std.testing.expect(!fixture.registry.validate());
         entry.* = original;
         entry.contract.requires = &.{ .model_request_identity_ledger, .prepared_model_request };
@@ -1400,7 +1547,7 @@ fn authorizationYaml(fixture: *Fixture) ![]const u8 {
     var replaced = try std.mem.replaceOwned(u8, allocator, source, "ok: observe", "ok: authorize");
     replaced = try std.mem.replaceOwned(u8, allocator, replaced, "policy: core.capability-free@1", "policy: core.model-authorization@1");
     replaced = try std.mem.replaceOwned(u8, allocator, replaced, "on: { ok: end.ok }", "on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled }");
-    return std.fmt.allocPrint(allocator, "{s}\n  authorize: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 1000}}, on: {{ok: observe, failed: observe, cancelled: end.cancelled}} }}\n", .{replaced});
+    return std.fmt.allocPrint(allocator, "{s}\n  authorize: {{ use: prepare-provider-operation-authorization, on: {{ok: observe, failed: observe, cancelled: end.cancelled}} }}\n", .{replaced});
 }
 
 fn authorizationResult(runner: *const runner_module.Runner) !*const authorization_result.Result {
@@ -1545,7 +1692,7 @@ test "YAML pre-call request closure after inference preserves its response and s
                 "  account-next-stop: {{use: complete-advisory-protocol-request, on: {{blocked: fail-next-protocol}}}}\n" ++
                 "  fail-next-protocol: {{use: propagate-advisory-request-failure, on: {{failed: end.failed}}}}\n" ++
                 "  assign-next: {{ use: assign-provider-operation, on: {{ok: authorize-next, failed: end.failed}} }}\n" ++
-                "  authorize-next: {{ use: prepare-provider-operation-authorization, with: {{timeout-ms: 1000}}, on: {{ok: end.ok, failed: terminate-next, cancelled: terminate-next}} }}\n" ++
+                "  authorize-next: {{ use: prepare-provider-operation-authorization, on: {{ok: end.ok, failed: terminate-next, cancelled: terminate-next}} }}\n" ++
                 "  terminate-next: {{ use: terminate-provider-operation, on: {{failed: close-request, cancelled: close-request}} }}\n" ++
                 "  close-request: {{ use: terminate-model-request, on: {{failed: end.failed, cancelled: end.cancelled}} }}\n",
             .{routed},
@@ -1814,7 +1961,7 @@ test "pre-call request closure rejects YAML assertions missing prerequisites and
         .{ "use: terminate-model-request,", "use: terminate-model-request, with: {timeout-ms: 100}," },
         .{ "use: terminate-model-request,", "use: terminate-model-request, with: {slot: selected}," },
         .{ "use: terminate-provider-operation, on: {failed: close-request, cancelled: close-request}", "use: core.noop, on: {ok: close-request}" },
-        .{ "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: end.ok, failed: terminate, cancelled: terminate}", "use: core.noop, on: {ok: terminate}" },
+        .{ "use: prepare-provider-operation-authorization, on: {ok: end.ok, failed: terminate, cancelled: terminate}", "use: core.noop, on: {ok: terminate}" },
         .{ "failed: end.failed", "failed: end.ok" },
         .{ "cancelled: end.cancelled", "cancelled: end.ok" },
         .{ "use: terminate-model-request, on: {failed: observe, cancelled: observe}", "use: terminate-model-request, on: {failed: observe}" },
@@ -2182,7 +2329,7 @@ test "pre-call termination rejects YAML assertions missing prerequisites and for
         .{ "use: terminate-provider-operation,", "use: terminate-provider-operation, with: {slot: selected}," },
         .{ "on: {failed: observe, cancelled: observe}", "on: {failed: end.ok, cancelled: end.cancelled}" },
         .{ "on: {failed: observe, cancelled: observe}", "on: {failed: end.failed}" },
-        .{ "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: end.ok, failed: terminate, cancelled: terminate}", "use: core.noop, on: {ok: terminate}" },
+        .{ "use: prepare-provider-operation-authorization, on: {ok: end.ok, failed: terminate, cancelled: terminate}", "use: core.noop, on: {ok: terminate}" },
         .{ "use: assign-provider-operation, on: {ok: authorize, failed: end.failed}", "use: core.noop, on: {ok: authorize}" },
     }) |change| {
         const changed = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
@@ -2264,7 +2411,7 @@ test "request lifecycle YAML rejects hidden transitions retry rebinding and abse
         .{ "transition: invoked", "transition: invoked, timeout-ms: 1000" },
         .{ "transition: invoked", "transition: invoked, slot: selected" },
         .{ "transition: invoked", "transition: invoked, input: data" },
-        .{ "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: advance-request, failed: end.failed, cancelled: end.cancelled}", "use: core.noop, on: {ok: advance-request}" },
+        .{ "use: prepare-provider-operation-authorization, on: {ok: advance-request, failed: end.failed, cancelled: end.cancelled}", "use: core.noop, on: {ok: advance-request}" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, change[0], change[1]);
         try std.testing.expect(!std.mem.eql(u8, source, invalid));
@@ -2565,7 +2712,7 @@ test "provider invocation YAML rejects missing unknown hidden and replacement pa
             else => return err,
         }
     }
-    const missing = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}", "use: core.noop");
+    const missing = try std.mem.replaceOwned(u8, fixture.arena.allocator(), source, "use: prepare-provider-operation-authorization", "use: core.noop");
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(missing));
 }
 
@@ -6445,7 +6592,7 @@ const composition_yaml =
     \\      fail-protocol: {use: propagate-advisory-request-failure, on: {failed: end.failed}}
     \\      fail-advice: {use: propagate-advisory-request-failure, on: {failed: end.failed}}
     \\      operation: {use: assign-provider-operation, on: {ok: authorize, failed: end.failed}}
-    \\      authorize: {use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: phase, failed: end.failed, cancelled: end.cancelled}}
+    \\      authorize: {use: prepare-provider-operation-authorization, on: {ok: phase, failed: end.failed, cancelled: end.cancelled}}
     \\      phase: {use: check-model-request-phase, on: {ok: advance-request, more: advance-operation, failed: end.failed}}
     \\      advance-request: {use: advance-model-request-lifecycle, with: {transition: invoked}, on: {ok: advance-operation, failed: end.failed}}
     \\      advance-operation: {use: advance-provider-operation-lifecycle, with: {transition: invoked}, on: {ok: call, failed: end.failed}}
@@ -6940,13 +7087,13 @@ fn compiledBedrockContract(family: contracts.BedrockFamily) contracts.ProviderMo
 pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoice, slots: []const []const u8, json: bool) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
     const selected: contracts.ProviderModelContract = if (production) |choice| switch (choice) {
         .bedrock => |family| compiledBedrockContract(family),
-    } else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .facts = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
+    } else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .facts = .deadline_only, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
     const registered: contracts.Registry = .{ .entries = &.{selected} };
     var candidate = try registry.Candidate.init(allocator, 1);
     defer candidate.deinit();
     const contract = registered.entries[0];
     const model = contract.model orelse @import("domain/llm_provider_identity.zig").ModelId{ .bytes = @import("model_contract_test_fixture.zig").bedrock_model_ids[0] };
-    const config: contracts.ValidatedProviderConfig = if (contract.facts.bedrockFamily()) |family| .{ .aws_bedrock = .{ .region = std.enums.values(contracts.BedrockRegion)[0], .family = family, .max_output_tokens = .{ .tokens = 16000 } } } else .empty_object;
+    const config: contracts.ValidatedProviderConfig = if (contract.facts.bedrockFamily()) |family| .{ .aws_bedrock = .{ .region = std.enums.values(contracts.BedrockRegion)[0], .family = family, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 1000 } } } else .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } };
     candidate.entries[0] = .{ .provider = contract.provider, .model = model, .implementation_id = contract.implementation_id, .json = json, .config = config, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);

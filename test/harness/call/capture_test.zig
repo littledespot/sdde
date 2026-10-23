@@ -8,7 +8,7 @@ const body = "{\"MOCK\":\"captured wire body\"}";
 const description: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "MOCK-model",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
     .model_slot = "sample-slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 3,
@@ -22,7 +22,7 @@ const description: debug.Description = .{
     .operation_kind = .inference,
 };
 const current: Context = .{
-    .schema = .@"model-call-evidence/v2",
+    .schema = .@"model-call-evidence/v3",
     .call = 9,
     .origin = .{ .request = .{ .value = 72 }, .attempt = .{ .value = 3 } },
     .request_step = description.request_step,
@@ -115,14 +115,14 @@ test "capture selection compares all recorded context fields and exact request b
     mismatch.content = &.{ .{ .user = "MOCK guidance" }, .{ .user = "MOCK request" } };
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     mismatch = current;
-    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } };
+    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     mismatch = current;
-    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } };
+    mismatch.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } };
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     mismatch = current;
     mismatch.provider = "anthropic";
-    mismatch.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } };
+    mismatch.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, .{ .current = mismatch }, description.workflow_id, 9, body));
     mismatch = current;
     mismatch.response_mode = .native_schema;
@@ -154,15 +154,21 @@ test "capture preserves source evidence and rejects foreign node or redacted sou
     try std.testing.expectError(error.CaptureRedacted, capture.select(&.{source}, context, description.workflow_id, 9, body));
 }
 
-test "shared context retains v2 wire shape and rejects unknown version fields and inconsistent origin" {
+test "shared context retains v3 wire shape and rejects unknown version fields and inconsistent origin" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const bytes = try std.json.Stringify.valueAlloc(a, current, .{});
     try std.testing.expectEqualDeep(current, try Context.decode(a, bytes));
-    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v2\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"schema\":\"model-call-evidence/v3\"") != null);
+    // The current shape records the catalogue entry's deadline.
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "\"request_timeout\":180000") != null);
     for ([_][2][]const u8{
-        .{ "model-call-evidence/v2", "model-call-evidence/v3" },
+        .{ "model-call-evidence/v3", "model-call-evidence/v2" },
+        .{ "model-call-evidence/v3", "model-call-evidence/v4" },
+        .{ ",\"request_timeout\":180000", "" },
+        .{ "\"request_timeout\":180000", "\"request_timeout\":0" },
+        .{ "\"request_timeout\":180000", "\"request_timeout\":\"180000\"" },
         .{ "\"call\":9", "\"call\":9,\"extra\":true" },
         .{ "\"call\":9", "\"call\":9,\"call\":10" },
     }) |change| {
@@ -179,7 +185,7 @@ test "shared context retains v2 wire shape and rejects unknown version fields an
     }
 }
 
-test "captured contexts dispatch on their exact schema and keep v1 as historical Bedrock evidence" {
+test "captured contexts dispatch on their exact schema and keep v2 and v1 as historical evidence" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -187,7 +193,63 @@ test "captured contexts dispatch on their exact schema and keep v1 as historical
     const decoded = try context_contract.Captured.decode(a, current_bytes);
     try std.testing.expect(decoded == .current);
     try std.testing.expect(decoded.recordsConfig(description.provider, description.provider_config));
-    try std.testing.expect(!decoded.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } }));
+    try std.testing.expect(!decoded.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    // A current capture records the deadline too.
+    try std.testing.expect(!decoded.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 60000 } } }));
+
+    // A v2 capture keeps its own closed configuration, recorded before the deadline.
+    const v2: context_contract.HistoricalCallContextV2 = .{
+        .schema = .@"model-call-evidence/v2",
+        .call = current.call,
+        .origin = current.origin,
+        .request_step = current.request_step,
+        .slot = current.slot,
+        .attempt = current.attempt,
+        .provider = current.provider,
+        .model = current.model,
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+        .kind = current.kind,
+        .reasoning_effort = current.reasoning_effort,
+        .content = current.content,
+        .response_schema = current.response_schema,
+        .response_mode = current.response_mode,
+    };
+    const v2_bytes = try std.json.Stringify.valueAlloc(a, v2, .{});
+    try std.testing.expect(std.mem.indexOf(u8, v2_bytes, "request_timeout") == null);
+    const previous = try context_contract.Captured.decode(a, v2_bytes);
+    try std.testing.expect(previous == .historical_v2);
+    try std.testing.expectEqualDeep(decoded.common(), previous.common());
+    // It records every configuration value except the deadline it predates.
+    try std.testing.expect(previous.recordsConfig(description.provider, description.provider_config));
+    try std.testing.expect(previous.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 60000 } } }));
+    try std.testing.expect(!previous.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!previous.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!previous.recordsConfig(description.provider, .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .converse, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!previous.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    // An Anthropic v2 capture records its maximum and names its own provider.
+    var anthropic_v2 = v2;
+    anthropic_v2.provider = "anthropic";
+    anthropic_v2.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 } } };
+    const anthropic_v2_bytes = try std.json.Stringify.valueAlloc(a, anthropic_v2, .{});
+    const anthropic_previous = try context_contract.Captured.decode(a, anthropic_v2_bytes);
+    try std.testing.expect(anthropic_previous.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!anthropic_previous.recordsConfig("aws-bedrock", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    for ([_][2][]const u8{
+        // The v2 shape is closed: it never carries the deadline it predates,
+        // nor the test-only family, nor another provider's identity.
+        .{ "\"max_output_tokens\":16000}", "\"max_output_tokens\":16000,\"request_timeout\":180000}" },
+        .{ "\"call\":9", "\"call\":9,\"extra\":true" },
+    }) |change| {
+        const rejected = try std.mem.replaceOwned(u8, a, v2_bytes, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, rejected, v2_bytes));
+        try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, rejected));
+    }
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "{\"aws_bedrock\":{\"region\":\"ap-southeast-2\",\"family\":\"gpt-oss\",\"max_output_tokens\":16000}}", "{\"deadline_only\":{}}")));
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "\"provider\":\"aws-bedrock\"", "\"provider\":\"anthropic\"")));
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "\"call\":9", "\"call\":0")));
+    // A v2 body labelled v3, and a v3 body labelled v2, reject.
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, v2_bytes, "model-call-evidence/v2", "model-call-evidence/v3")));
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v3", "model-call-evidence/v2")));
     const historical: context_contract.HistoricalCallContextV1 = .{
         .schema = .@"model-call-evidence/v1",
         .call = current.call,
@@ -209,11 +271,12 @@ test "captured contexts dispatch on their exact schema and keep v1 as historical
     try std.testing.expectEqualDeep(decoded.common(), old.common());
     // A v1 capture records only a Bedrock region.
     try std.testing.expect(old.recordsConfig("aws-bedrock", description.provider_config));
-    try std.testing.expect(!old.recordsConfig("aws-bedrock", .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } }));
-    try std.testing.expect(!old.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } }));
-    // Unknown versions and a v1 body labelled v2 reject.
-    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v2", "model-call-evidence/v9")));
+    try std.testing.expect(!old.recordsConfig("aws-bedrock", .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    try std.testing.expect(!old.recordsConfig("anthropic", .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }));
+    // Unknown versions and a v1 body labelled v2 or v3 reject.
+    try std.testing.expectError(error.InvalidCallContext, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, current_bytes, "model-call-evidence/v3", "model-call-evidence/v9")));
     try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v2")));
+    try std.testing.expectError(error.InvalidJsonDocument, context_contract.Captured.decode(a, try std.mem.replaceOwned(u8, a, historical_bytes, "model-call-evidence/v1", "model-call-evidence/v3")));
 }
 
 const config_bytes =

@@ -262,7 +262,7 @@ const AdapterFixture = struct {
     fn init(self: *AdapterFixture, allocator: std.mem.Allocator, result: transport.Response) !void {
         try self.base.init(allocator);
         errdefer self.base.deinit();
-        const config: @import("domain/llm_provider_contracts.zig").ValidatedProviderConfig = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 } } };
+        const config: @import("domain/llm_provider_contracts.zig").ValidatedProviderConfig = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 128000 }, .request_timeout = .{ .milliseconds = 180000 } } };
         const contract = contracts.registry.resolve(.{ .bytes = "anthropic" }, .{ .bytes = model }, config).?.*;
         self.base.registry_entry.provider = contract.provider;
         self.base.registry_entry.model = contract.model.?;

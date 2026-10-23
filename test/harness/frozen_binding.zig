@@ -64,7 +64,7 @@ pub fn validateDescription(a: std.mem.Allocator, description: Description, wire:
         !@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
         !std.mem.eql(u8, description.provider, expected.provider) or !std.mem.eql(u8, description.model, expected.model) or
         !std.meta.eql(temperature, @as(?f64, frozen.temperature)) or
-        !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = target.region, .family = frozen.family, .max_output_tokens = frozen.max_output_tokens } }) or
+        !std.meta.eql(description.provider_config, @import("../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig{ .aws_bedrock = .{ .region = target.region, .family = frozen.family, .max_output_tokens = frozen.max_output_tokens, .request_timeout = frozen.request_timeout_ms } }) or
         !std.mem.eql(u8, description.model, target.model.bytes)) return error.FrozenBindingRejected;
     if (std.mem.eql(u8, description.model_slot, frozen.generation_slot) and
         (description.reasoning_effort == null or !std.mem.eql(u8, description.reasoning_effort.?, @tagName(frozen.reasoning_effort)))) return error.FrozenBindingRejected;
@@ -86,7 +86,7 @@ test "frozen slot controls retain each role's effort without substituting genera
         const description: Description = .{
             .provider = frozen.provider,
             .model = frozen.model,
-            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = frozen.family, .max_output_tokens = frozen.max_output_tokens } },
+            .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = frozen.family, .max_output_tokens = frozen.max_output_tokens, .request_timeout = frozen.request_timeout_ms } },
             .model_slot = example.slot,
             .workflow_id = "current-native-workflow",
             .workflow_version = 1,
@@ -113,6 +113,10 @@ test "frozen slot controls retain each role's effort without substituting genera
         // A drifted maximum, recorded or sent, is rejected before transport.
         changed = description;
         changed.provider_config.aws_bedrock.max_output_tokens = .{ .tokens = 4096 };
+        try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
+        // So is a catalogue deadline other than the frozen entry's.
+        changed = description;
+        changed.provider_config.aws_bedrock.request_timeout = .{ .milliseconds = 60000 };
         try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
         for ([_][]const u8{ "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":4096}}", "{\"inferenceConfig\":{\"temperature\":0.1}}", "{}" }) |body| {
             var drifted = wire;

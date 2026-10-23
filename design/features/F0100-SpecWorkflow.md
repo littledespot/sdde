@@ -487,8 +487,11 @@ ADR's 23 October 2026 amendment, only call sites that may carry a request ADR 00
 classifies as advisory are marked `advisory: allowed` and map `more` and `blocked`;
 ordinary sites such as extraction, reconciliation and generation map neither.
 `assess-support`'s model and repair requests are marked and keep serving both the
-pre-generation required review and post-generation advice. No call site declares a deadline:
-each model's catalogue entry carries `requestTimeoutMs`.
+pre-generation required review and post-generation advice.
+
+No call site declares a deadline. Since 24 October 2026 the body's authorization step takes
+no parameter, and each model's catalogue entry carries `requestTimeoutMs`
+([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
 
 Extraction parts derive from one complete extraction schema; reconciliation parts derive from
 existing named definitions in one reconciliation schema. Signals and conflicts

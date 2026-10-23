@@ -137,8 +137,9 @@ with 213 decision tokens, and the "generic" runner mentions `model` 130 times an
 `provider` 82 times. A wiring error surfaces as a runtime rejection, not a compile
 error. Any lifecycle change touches YAML, runner checks and tests together.
 
-**Decided 22 October 2026; implementation not started.**
-[ADR 0030](../design/decisions/0030-engine-owned-model-request.md) replaces the request
+**Decided 22 October 2026; partly implemented (slices 1–3; see "Implementation
+progress").** [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) replaces
+the request
 subgraph with one `request-model` step per model request (its 22 October text also gave
 counting a `count-model-tokens` step, removed on 23 October; see below). A fixed,
 capability-free kernel orchestrator runs the lifecycle through
@@ -225,9 +226,23 @@ Open:
   - a pre-existing conformance case (`provider_conformance_test.zig`, forged operation)
     is rejected for being a copy before its foreign attempt is checked; it needs its own
     fix.
-- **Slice 3** (catalogue `requestTimeoutMs`, including the frozen calibration protocol,
-  approved 23 October 2026) follows; it reruns the freeze and confirms only the deadline
-  changed.
+- **Slice 3, deadline in the catalogue — done 24 October 2026.** Every `.sddproviders.json`
+  entry's `config` requires `requestTimeoutMs` (a `RequestTimeout` of 1 to 2^32-1 ms, so a
+  monotonic deadline can always be formed), read through one `requestTimeout()` accessor;
+  the test-only config schema `empty_object` is now `deadline_only`. Authorization
+  preparation takes no parameters: the runner binds the request's catalogue deadline to
+  every provider operation of the request, including protocol corrections, and a YAML
+  `timeout-ms` is rejected at compilation. Replay uses the captured deadline instead of a
+  fixed 300,000 ms. Shipped values: 180,000 ms for GPT-OSS-20B and an interim 180,000 ms for
+  both Claude Haiku 5.5 entries (B9), 60,000 ms in the packaging fixture's catalogue; the
+  frozen calibration protocol records 180,000 ms and advances to schema 4, so an older
+  protocol is rejected as a version mismatch (both user-approved). `model-request-debug`
+  advanced to v11 and `model-call-evidence` to v3, with v2 and v1 kept readable as
+  historical evidence. Retained runs captured before this change can no longer be read by
+  `e2e-call`, the compatibility inspection, the baseline or the frozen binding. **Freeze
+  recheck:** the Specify step traces and summaries are identical to the slice 1 baseline
+  (all 545 entries), and the production-admission report is unchanged; the deadline
+  changed nothing observable in the matrix.
 
 A1 is not expected to change model calls, tokens or reliability. The 22 October estimate
 of a 35–90-line (3–8%) net YAML saving grows, because ordinary sites no longer route
@@ -593,8 +608,8 @@ Evidence of runaways under schema-constrained decoding at temperature 0.1 (GPT-O
   generation ends, and a 16,384-token response takes about 37–74 s, so the deadline hid
   the cause.
 - **21 October, 180 s deadline.** The user raised the request deadline to 180 s
-  (`timeout-ms: 180000` in [spec.workflow.yaml](../design/workflows/spec.workflow.yaml#L1046),
-  committed in `9719dc7`). In the 19:13 loan-renewal run, call 24 wrote a valid `supported`
+  (`timeout-ms: 180000` in the Specify workflow, committed in `9719dc7`; since ADR 0030
+  slice 3 the value lives in each catalogue entry's `requestTimeoutMs`). In the 19:13 loan-renewal run, call 24 wrote a valid `supported`
   finding for `Renewal refused.`, then about 40,000 newline and space characters until the
   16,384-token limit, in 74.1 s. The engine recorded `output_limit`, closed that advice as
   incomplete and published. The call cost 19,402 tokens (21% of the budget). The same
@@ -609,11 +624,10 @@ changes or extra retries (§7).
 - **Deadline and maximum output.** The 180 s deadline covers GPT-OSS-20B's 16,384-token
   maximum. The catalogue's Claude Haiku 5.5 entries declare 128,000. If a slot selects
   that model, a runaway could again end as an unexplained `timeout`, and one completed
-  runaway would exceed the 100,000-token budget. *Settled in design on 23 October 2026*
-  (ADR 0030 amendment, not yet implemented): each catalogue entry declares its own
-  required `requestTimeoutMs`, so a deadline follows its model. Claude Haiku 5.5 starts at
-  the shared 180,000 ms until its measured maximum-output time replaces it, and the
-  budget point stands.
+  runaway would exceed the 100,000-token budget. *Implemented 24 October 2026* (ADR 0030
+  slice 3): each catalogue entry declares its own required `requestTimeoutMs`, so a
+  deadline follows its model. Claude Haiku 5.5 starts at the shared 180,000 ms until its
+  measured maximum-output time replaces it, and the budget point stands.
 - **Lower output allowance.** ADR 0011 permits an optional per-slot `maxOutputTokens`. On
   18 October the user directed that there be no output token limits (§11), so this needs a
   new decision.
@@ -713,10 +727,11 @@ single-source inputs, whether separate dispositions, signals and conflicts calls
 change the claims, groups or conflicts compared with one combined call. Follow the §7
 rules, and count extraction's requirement merging (B7) as its own class.
 
-**Sequencing.** [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) adds a
-required `requestTimeoutMs` to every catalogue entry, so tools that revalidate a retained
-catalogue, including the `e2e-call` replay, can't read captures made before it. Measure
-W4 before A1 lands, or from raw response bytes.
+**Sequencing.** Since ADR 0030 slice 3 (24 October 2026) every catalogue entry requires
+`requestTimeoutMs`, so tools that revalidate a retained catalogue, including the
+`e2e-call` replay, can't read captures made before it. The user accepted landing slice 3
+before W4 was measured. Measure W4 from raw response bytes or from captures made after
+slice 3.
 
 ### W5. Identical sibling steps
 
@@ -1002,9 +1017,10 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
 4. **Then decide the open Spec failure classes:** B7's obligation weakening, B9's open
    choices, B2's review cost and finding-type accuracy, and B4's budget and scope.
 5. **Architecture, in ADR order and independent of 1–4.** Implement ADR 0030 (A1), as
-   amended on 23 October, before adding operations for another workflow. Its catalogue
-   change makes retained runs unreadable to replay tools, so measure W4 first, and
-   adjudicate the existing v9 runs first if it also advances the report contract.
+   amended on 23 October, before adding operations for another workflow. Slices 1–3 are
+   done; the catalogue deadline already made pre-24-October runs unreadable to replay
+   tools, so W4 uses raw response bytes or newer captures. Adjudicate the existing v9
+   runs before `request-model` lands if it advances the report contract.
    Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
    (ADR 0032), then convert repairs (ADR 0033). Fold A4's closed reasons and A5's rule
    style into each conversion, and check whether a conversion absorbs W5's pairs.
@@ -1135,3 +1151,6 @@ bounded approval, and each E2E run needs its own explicit approval
 - **24 October 2026, ADR 0030 slice 2:** provider token counting removed from code,
   tests, build steps and documentation; A1 records the scope, the kept persisted kind
   fields and the converted inference-then-authorization closure test.
+- **24 October 2026, ADR 0030 slice 3:** the provider-operation deadline moved to each
+  catalogue entry's `requestTimeoutMs`; A1 and B9 record the scope, versions, shipped
+  values and the freeze recheck.

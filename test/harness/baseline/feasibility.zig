@@ -240,7 +240,7 @@ fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, 
     // The loader matched the capture to this configuration; the frozen cohort is Bedrock.
     const region = switch (description.provider_config) {
         .aws_bedrock => |config| config.region,
-        .empty_object, .anthropic => return error.InvalidBudgetEvidence,
+        .deadline_only, .anthropic => return error.InvalidBudgetEvidence,
     };
     const wire: @import("../../../src/adapters/provider/model_http_transport.zig").Request = .{ .target = .{ .aws_bedrock = .{ .region = region, .model = .{ .bytes = context.model } } }, .body = captured.call.request.?, .api_key = "", .deadline_monotonic_ms = 1 };
     try @import("../frozen_binding.zig").validateDescription(a, description, wire, expected_models);
@@ -556,7 +556,7 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
     const description: @import("../../../src/domain/model_request_description.zig").Description = .{
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
-        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
         .model_slot = "generation",
         .workflow_id = "budget-example",
         .workflow_version = 1,

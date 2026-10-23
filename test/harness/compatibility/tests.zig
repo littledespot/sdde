@@ -5,7 +5,7 @@ const c = @import("../e2e/contracts.zig");
 const description: @import("../../../src/domain/request_debugger.zig").Description = .{
     .provider = "aws-bedrock",
     .model = "global.openai.gpt-6-luna",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
     .model_slot = "slot",
     .workflow_id = "sample-workflow",
     .workflow_version = 1,

@@ -18,9 +18,12 @@
   [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not yet
   implemented): `node_id` and `route_id` both name the originating `request-model`
   step, and the action ID records the stage. The implementation advances the
-  description version if its shape changes. Its 23 October 2026 amendment's removal of
-  provider token counting was implemented on 24 October 2026, so no token-count
-  observation remains to correlate.
+  description version if its shape changes. Two parts of its 23 October 2026 amendment
+  were implemented on 24 October 2026: provider token counting is removed, so no
+  token-count observation remains to correlate; and the catalogue deadline advanced
+  descriptions to `model-request-debug/v11`, whose provider configuration records the
+  entry's deadline (`request_timeout`), so replay uses the captured description's
+  deadline.
 
 ## Diagnostic execution boundary
 

@@ -32,7 +32,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .provider = provider_id,
         .model = identity.ModelId.parse("model-a").?,
         .implementation_id = implementation_id,
-        .facts = .empty_object,
+        .facts = .deadline_only,
         .capabilities = @import("model_contract_test_fixture.zig").capabilities,
         .supported_reasoning_efforts = &.{ "low", "high" },
     },
@@ -40,7 +40,7 @@ const compiled_contracts: contracts.Registry = .{ .entries = &.{
         .provider = provider_id,
         .model = identity.ModelId.parse("model-b").?,
         .implementation_id = implementation_id,
-        .facts = .empty_object,
+        .facts = .deadline_only,
         .capabilities = @import("model_contract_test_fixture.zig").capabilities,
     },
 } };
@@ -50,8 +50,8 @@ const valid_provider_document =
     \\  "providers": [{
     \\    "provider": "compiled-provider",
     \\    "models": [
-    \\      { "model": "model-a", "json": false, "config": {} },
-    \\      { "model": "model-b", "json": false, "config": {} }
+    \\      { "model": "model-a", "json": false, "config": { "requestTimeoutMs": 1000 } },
+    \\      { "model": "model-b", "json": false, "config": { "requestTimeoutMs": 2000 } }
     \\    ]
     \\  }]
     \\}
@@ -69,6 +69,9 @@ test "registry service owns the complete immutable sorted catalogue" {
     ).?;
     try std.testing.expectEqual(@as(u16, 1), first.id.ordinal);
     try std.testing.expect(provider_registry.resolveId(first.id) == first);
+    // Each entry keeps its own catalogue deadline.
+    try std.testing.expectEqual(@as(u32, 1000), first.config.requestTimeout().milliseconds);
+    try std.testing.expectEqual(@as(u32, 2000), provider_registry.resolve(provider_id, identity.ModelId.parse("model-b").?).?.config.requestTimeout().milliseconds);
     try std.testing.expect(provider_registry.resolve(
         provider_id,
         identity.ModelId.parse("not-configured").?,
@@ -157,13 +160,19 @@ test "unsupported duplicate invalid-config and partially valid catalogues publis
     const invalid = [_][]const u8{
         \\{"providers":[{"provider":"unknown-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"extra":true}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000,"extra":true}}]}]}
+        ,
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
+        ,
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":0}}]}]}
+        ,
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":4294967296}}]}]}
         ,
         \\{"providers":[{"provider":"compiled-provider","models":[]},{"provider":"compiled-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}},{"model":"model-a","json": false, "config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}},{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}},{"model":"not-compiled","json": false, "config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"requestTimeoutMs":1000}},{"model":"not-compiled","json": false, "config":{"requestTimeoutMs":1000}}]}]}
         ,
     };
 
@@ -292,7 +301,7 @@ test "catalogue JSON selection retains per-model choices and rejects unsupported
     registered_entries[0].capabilities.structured_response = .native_json_schema;
     const registered: contracts.Registry = .{ .entries = &registered_entries };
     const bytes =
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{}},{"model":"model-b","json":false,"config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{"requestTimeoutMs":1000}},{"model":"model-b","json":false,"config":{"requestTimeoutMs":1000}}]}]}
     ;
     var decoded = try (decode_provider.Action{}).execute(a, bytes);
     defer decoded.deinit();
@@ -315,7 +324,7 @@ test "catalogue JSON selection retains per-model choices and rejects unsupported
 test "Bedrock catalogue entries take every compiled control from the family they name" {
     const registered = @import("composition/provider_model_contracts.zig").registry;
     const model_ids = @import("model_contract_test_fixture.zig").bedrock_model_ids;
-    const Entry = struct { model: []const u8, json: bool, config: struct { region: []const u8, family: []const u8, maxOutputTokens: u32 } };
+    const Entry = struct { model: []const u8, json: bool, config: struct { region: []const u8, family: []const u8, maxOutputTokens: u32, requestTimeoutMs: u32 } };
     const Provider = struct { provider: []const u8, models: []const Entry };
     for (std.enums.values(contracts.BedrockFamily)) |family| {
         const contract = for (registered.entries) |*entry| {
@@ -326,7 +335,7 @@ test "Bedrock catalogue entries take every compiled control from the family they
             defer arena.deinit();
             const a = arena.allocator();
             var models: [model_ids.len]Entry = undefined;
-            for (&models, model_ids) |*model, id| model.* = .{ .model = id, .json = json, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000 } };
+            for (&models, model_ids) |*model, id| model.* = .{ .model = id, .json = json, .config = .{ .region = @tagName(region), .family = @tagName(family), .maxOutputTokens = 16000, .requestTimeoutMs = 180000 } };
             const bytes = try std.json.Stringify.valueAlloc(a, .{ .providers = &[_]Provider{.{ .provider = "aws-bedrock", .models = &models }} }, .{});
             var raw = try (decode_provider.Action{}).execute(a, bytes);
             defer raw.deinit();
@@ -337,7 +346,7 @@ test "Bedrock catalogue entries take every compiled control from the family they
             for (model_ids) |id| {
                 const entry = registry_contract.registry(owner).resolve(identity.ProviderId.parse("aws-bedrock").?, identity.ModelId.parse(id).?).?;
                 try std.testing.expectEqual(family, entry.facts.bedrockFamily().?);
-                try std.testing.expectEqualDeep(contracts.ValidatedProviderConfig{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 16000 } } }, entry.config);
+                try std.testing.expectEqualDeep(contracts.ValidatedProviderConfig{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }, entry.config);
                 try std.testing.expectEqualDeep(contract.capabilities, entry.capabilities);
                 try std.testing.expectEqual(contract.supported_reasoning_efforts.len, entry.supported_reasoning_efforts.len);
                 for (contract.supported_reasoning_efforts, entry.supported_reasoning_efforts) |expected, actual| try std.testing.expectEqualStrings(expected, actual);
@@ -351,6 +360,7 @@ test "Bedrock catalogue entries take every compiled control from the family they
         .region = @tagName(std.enums.values(contracts.BedrockRegion)[0]),
         .family = @tagName(std.enums.values(contracts.BedrockFamily)[0]),
         .maxOutputTokens = 16000,
+        .requestTimeoutMs = 180000,
     } }} }} }, .{});
     defer a.free(valid);
     const family_field = try std.fmt.allocPrint(a, "\"family\":\"{s}\",", .{@tagName(std.enums.values(contracts.BedrockFamily)[0])});

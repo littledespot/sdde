@@ -26,12 +26,12 @@
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
   amended 23 October 2026; partly implemented). Not yet implemented: a request's
   protocol correction runs inside its `request-model` step under that step's
-  `retry-limit`, not as an explicit YAML transition, and the 23 October amendment adds a
-  required `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry (see
-  "Model maximum output"). The runner still accounts every attempt's actual usage
-  against the one workflow budget. Implemented on 24 October 2026: the 23 October
-  amendment's removal of CountTokens and all provider token counting, so the
-  CountTokens text below no longer applies. Actual-usage accounting is unchanged.
+  `retry-limit`, not as an explicit YAML transition. The runner still accounts every
+  attempt's actual usage against the one workflow budget. Implemented on 24 October
+  2026: the 23 October amendment's removal of CountTokens and all provider token
+  counting, so the CountTokens text below no longer applies, and its required
+  `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry (see "Model
+  maximum output"). Actual-usage accounting is unchanged.
 
 ## Decision
 
@@ -86,9 +86,10 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
   retained calibration runs show Bedrock accepts and reaches a 16,384 allowance for
   this model in `ap-southeast-2`.
 - Under [ADR 0030](0030-engine-owned-model-request.md) as amended on 23 October 2026
-  (not yet implemented), every catalogue entry also declares a required positive
+  (implemented 24 October 2026), every catalogue entry also declares a required positive
   `requestTimeoutMs`: the provider-operation deadline, sized to the time the model takes
-  to return this maximum. It replaces the workflow's `timeout-ms`.
+  to return this maximum. It replaced the workflow's `timeout-ms`, and the frozen
+  semantic-simplicity protocol records it as `request_timeout_ms` (180,000).
 - The frozen semantic-simplicity protocol (schema 2) records the same maximum, and
   its binding checks reject a request or description carrying any other value.
 - Every Bedrock inference request sends that value as `inferenceConfig.maxTokens`

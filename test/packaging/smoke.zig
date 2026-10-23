@@ -198,7 +198,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\policy: core.model-authorization@1
         \\start: authorize
         \\steps:
-        \\  authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 1000 }, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
+        \\  authorize: { use: prepare-provider-operation-authorization, on: { ok: end.ok, failed: end.failed, cancelled: end.cancelled } }
     );
     const denied_authorization = std.Build.Step.Run.create(b, "reject packaged authorization without an assigned operation");
     denied_authorization.addFileArg(missing_assignment_executable);
@@ -614,14 +614,25 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.expectStdErrEqual("InvalidToolchain\n");
         missing_config_command.step.dependOn(&check.step);
     }
-    for ([_]bool{ false, true }) |invalid_region| {
+    // A catalogue entry captured before ADR 0030 records no deadline and is
+    // rejected before any request, like an invalid deployment.
+    for ([_]enum { valid, invalid_region, missing_deadline }{ .valid, .invalid_region, .missing_deadline }) |variant| {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
         const slots = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate provider smoke config");
         const configured = std.mem.replaceOwned(u8, b.allocator, slots, "\"providers\": \".sddproviders.json\"", "\"providers\": \"config/.sddproviders.json\"") catch @panic("allocate configured provider path");
         _ = directory.add(".sddtoolkit.json", configured);
-        const provider_bytes = @embedFile("../../design/examples/.sddproviders.json");
-        const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "xx-invalid-1") catch @panic("allocate invalid deployment") else provider_bytes;
+        // The fixture's model entry carries the provider-operation deadline the
+        // fixture has always used; the catalogue, not the YAML, owns it (ADR 0030).
+        const shipped_bytes = @embedFile("../../design/examples/.sddproviders.json");
+        const provider_bytes = std.mem.replaceOwned(u8, b.allocator, shipped_bytes, "\"requestTimeoutMs\": 180000", "\"requestTimeoutMs\": 60000") catch @panic("allocate fixture deadline");
+        if (std.mem.eql(u8, provider_bytes, shipped_bytes)) @panic("provider smoke catalogue lacks the fixture deadline");
+        const catalogue = switch (variant) {
+            .valid => provider_bytes,
+            .invalid_region => std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "xx-invalid-1") catch @panic("allocate invalid deployment"),
+            .missing_deadline => std.mem.replaceOwned(u8, b.allocator, provider_bytes, ",\n            \"requestTimeoutMs\": 60000", "") catch @panic("allocate pre-deadline catalogue"),
+        };
+        if (variant != .valid and std.mem.eql(u8, catalogue, provider_bytes)) @panic("provider smoke variant left the catalogue unchanged");
         _ = directory.add("config/.sddproviders.json", catalogue);
         _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
         _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));
@@ -634,7 +645,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(1);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (invalid_region) "LLM_PROVIDER_REGISTRY_INVALID\n" else "failed\n");
+        check.expectStdErrEqual(if (variant == .valid) "failed\n" else "LLM_PROVIDER_REGISTRY_INVALID\n");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_][2][]const u8{

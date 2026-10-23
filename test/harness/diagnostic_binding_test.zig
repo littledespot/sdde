@@ -3,15 +3,15 @@ const binding = @import("diagnostic_binding.zig");
 const debug = @import("../../src/domain/request_debugger.zig");
 
 const catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}}]}]}
 ;
 const prompt_catalogue =
-    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
+    \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":false,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}},{"model":"MOCK.vendor.model-v1:0","json":false,"config":{"region":"us-west-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}}]}]}
 ;
 const captured: debug.Description = .{
     .provider = "aws-bedrock",
     .model = "openai.gpt-oss-20b-1:0",
-    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+    .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
     .model_slot = "MOCK-generation",
     .workflow_id = "MOCK-workflow",
     .workflow_version = 1,
@@ -61,7 +61,7 @@ test "diagnostic binding rejects unknown model effort and incompatible provider 
         var rejected = captured;
         switch (mode) {
             0 => rejected.provider = "unknown-provider",
-            1 => rejected.provider_config = .empty_object,
+            1 => rejected.provider_config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
             2 => rejected.controls.temperature = null,
             3 => rejected.model_slot = "",
             else => unreachable,
@@ -80,11 +80,11 @@ test "diagnostic binding rejects the entire malformed duplicate or unsupported c
         ,
         \\{"providers":[],"providers":[]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2","family":"unknown","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}},{"model":"unknown-model","json":false,"config":{"region":"us-west-2","family":"unknown","maxOutputTokens":16000,"requestTimeoutMs":180000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"unknown-1","family":"gpt-oss","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"unknown-1","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}}]}]}
         ,
-        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000}}]}]}
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}},{"model":"openai.gpt-oss-20b-1:0","json":true,"config":{"region":"ap-southeast-2","family":"gpt-oss","maxOutputTokens":16000,"requestTimeoutMs":180000}}]}]}
         ,
         "not-json",
     };
@@ -101,14 +101,15 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
     edited.content = &.{.{ .user = "MOCK changed prompt" }};
     edited.schema = "MOCK changed schema";
     try std.testing.expectEqual(.@"gpt-oss", (try binding.Authorization.authorize(context, edited)).bedrockFamily().?);
-    for (0..7) |mode| {
+    for (0..8) |mode| {
         var rejected = captured;
         switch (mode) {
-            // A description cannot replay with a maximum other than the catalogue's.
-            6 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
+            // A description cannot replay with a maximum or deadline other than the catalogue's.
+            6 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 }, .request_timeout = .{ .milliseconds = 180000 } } },
+            7 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 60000 } } },
             0 => rejected.provider = "unknown-provider",
             1 => rejected.model = "MOCK.vendor.model-v1:0",
-            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
+            2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
             3 => rejected.reasoning_effort = "high",
             4 => rejected.controls.temperature = null,
             5 => rejected.response_mode = .prompt_only,
@@ -127,7 +128,7 @@ test "diagnostic authorization derives the family from each validated registered
             var selected = captured;
             selected.provider = entry.provider.bytes;
             selected.model = model;
-            selected.provider_config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = entry.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 } } };
+            selected.provider_config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = entry.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
             selected.controls = entry.capabilities.inferenceControls();
             selected.response_mode = if (entry.capabilities.structured_response == .native_json_schema) .native_schema else .prompt_only;
             selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];
@@ -135,7 +136,7 @@ test "diagnostic authorization derives the family from each validated registered
             const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
             try std.testing.expectEqualDeep(entry.facts, try binding.Authorization.authorize(context, selected));
             // Another provider family's configuration never authorizes a Bedrock replay.
-            authority.binding.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 } } };
+            authority.binding.provider_config = .{ .anthropic = .{ .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
             try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, authority.binding));
         }
     }

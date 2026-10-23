@@ -1,6 +1,6 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 23 October 2026. It mirrors the repository's active fix
+Dated snapshot, last updated 24 October 2026. It mirrors the repository's active fix
 record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
 [Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
@@ -56,12 +56,10 @@ already made.
   runs on 21 October). The user raised the deadline to 180 s (`9719dc7`); the runaway
   then ended `output_limit`, its advice closed incomplete and the run published. The
   catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
-  cover that model. *Settled in design on 23 October 2026 (ADR 0030 amendment, not yet
-  implemented):* each catalogue entry declares its own `requestTimeoutMs`; Haiku starts at
-  the shared 180,000 ms until its measured maximum-output time replaces it. Lower
-  allowances, bounded
-  correction and cardinality bounds each need a decision; don't tune sampling or add
-  retries.
+  cover that model. *Implemented 24 October 2026 (ADR 0030 slice 3):* each catalogue
+  entry declares its own `requestTimeoutMs`; Haiku starts at the shared 180,000 ms until
+  its measured maximum-output time replaces it. Lower allowances, bounded correction and
+  cardinality bounds each need a decision; don't tune sampling or add retries.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
   (most recently 22 October, at 100,763 tokens) and published at 76,501–97,475 tokens.
   Raising the budget doesn't fix reliability.
@@ -103,8 +101,10 @@ already made.
     marked `advisory: allowed` map `more` and `blocked` (they may carry both kinds of
     request; only an advisory request at an unmarked step is rejected). It builds the
     shared contract-variant mechanism that ADR 0033 reuses (confirmed 23 October 2026).
-    Implemented so far: the step-trace freeze (slice 1) and the token-counting removal
-    (slice 2, 24 October 2026); the deadline move and `request-model` itself remain;
+    Implemented so far: the step-trace freeze (slice 1, 23 October 2026), the
+    token-counting removal (slice 2) and the catalogue deadline (slice 3), both
+    24 October 2026; `request-model` itself, the advisory marker and contract variants
+    remain;
   - each concept costs about six coordinated edits. *Approved 22 October 2026 (ADR 0031,
     option (b)):* one stage action whose internal steps are typed functions and route no
     outcome; its read-only limit awaits confirmation.

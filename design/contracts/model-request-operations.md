@@ -4,9 +4,14 @@ Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
 > **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
-> except the token-counting removal).** The 23 October amendment's removal of provider
-> token counting was implemented on 24 October 2026: no count operation remains, and
-> `assign-provider-operation` takes no parameter and always assigns inference.
+> except the token-counting removal and the catalogue deadline).** Two parts of the
+> 23 October amendment were implemented on 24 October 2026:
+>
+> - provider token counting is removed: no count operation remains, and
+>   `assign-provider-operation` takes no parameter and always assigns inference;
+> - the provider-operation deadline is the bound catalogue entry's required
+>   `requestTimeoutMs`, and `prepare-provider-operation-authorization` takes no
+>   parameter (see "Authorization preparation integration").
 >
 > The rest is not yet implemented. Under
 > [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
@@ -18,12 +23,11 @@ Detailed contracts for the explicit YAML model-request operations governed by
 >
 > Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
-> that stage within the one step. `retry-limit` is a parameter of the `request-model` step;
-> the deadline is no longer YAML `timeout-ms` but the bound catalogue entry's required
-> `requestTimeoutMs`. Only a step marked `advisory: allowed` maps `more` and `blocked`.
-> Retry authority names that step instead of the accounting step; ordinary, atomic-repair
-> and dependent counting scopes are unchanged. Correction and closure stay distinct stages.
-> Retirement (release) stays an explicit YAML step.
+> that stage within the one step. `retry-limit` is a parameter of the `request-model` step,
+> which declares no deadline. Only a step marked `advisory: allowed` maps `more` and
+> `blocked`. Retry authority names that step instead of the accounting step; ordinary,
+> atomic-repair and dependent counting scopes are unchanged. Correction and closure stay
+> distinct stages. Retirement (release) stays an explicit YAML step.
 
 ## Accounting integration
 
@@ -74,8 +78,11 @@ Detailed contracts for the explicit YAML model-request operations governed by
 
 - Authorization preparation is also integrated through the existing
   `prepare-provider-operation-authorization` action and runner-private lease table.
-- YAML supplies only explicit positive `timeout-ms`; the runner binds the deadline to
-  the exact retained request, attempt, assignment, model and input.
+- The step takes no parameters, and compilation rejects a YAML `timeout-ms`. The
+  deadline is the bound catalogue entry's required `requestTimeoutMs`
+  ([§9](09-configuration.md)); the runner binds it to the exact retained request,
+  attempt, assignment, model and input, and to every provider operation of that
+  request, including protocol corrections.
 - The separately policy-permitted `provider-authorization` port can prepare only from
   preloaded state, without I/O, refresh or a model call.
 - Its sealed result retains only an opaque lease reference or closed

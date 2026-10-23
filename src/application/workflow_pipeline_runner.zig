@@ -172,7 +172,8 @@ pub const Runner = struct {
         const step = &self.selected.graph.authority.steps[index];
         if (!@import("../domain/workflow_model_invocation.zig").validProjection(step.*) or
             !operation_selection.validProjection(step.*) or
-            !request_lifecycle_selection.validProjection(step.*)) return .{ .rejected = .authority };
+            !request_lifecycle_selection.validProjection(step.*) or
+            !authorization_selection.validProjection(step.*)) return .{ .rejected = .authority };
         const entry = self.operation_registry.resolveOperation(step.operation_id) orelse return .{ .rejected = .authority };
         if (!contractMatchesStep(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
@@ -390,7 +391,7 @@ pub const Runner = struct {
         if (authorization_selection.prepares(step.produces)) {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const evidence = values.read(&input_data, model_accounting.operation_schema, lifecycle.AssignedOperation) catch return .{ .rejected = .authority };
-            authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .authority }, evidence.record().id, authorization_selection.timeout(step.parameters) orelse return .{ .rejected = .authority }, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return switch (err) {
+            authorization = authorization_binding.Binding.allocate(&state.authorization_leases, retained_request orelse return .{ .rejected = .authority }, evidence.record().id, self.provider_clock orelse return .{ .rejected = .authority }, self.runtime) catch |err| return switch (err) {
                 error.OutOfMemory => .{ .rejected = .{ .operation_failed = error.OutOfMemory } },
                 else => |failure| authorizationRejected(failure),
             };

@@ -71,9 +71,12 @@ On 16 October 2026 the user switched the selected test model back to
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, using Converse, native JSON
 Schema, explicit low reasoning and the engine's fixed temperature `0.1` on the
 protocol's explicit `generation_slot` (`spec_generation`). No role requests an
-allowance below the model maximum: since 18 October 2026 the protocol (schema 2)
-records `max_output_tokens` 16,384, every request sends it, and the frozen binding
-rejects any other value (ADR 0011 "Model maximum output"). Every other role retains the
+allowance below the model maximum: since 18 October 2026 the protocol records
+`max_output_tokens` 16,384, every request sends it, and the frozen binding rejects any
+other value (ADR 0011 "Model maximum output"). Since 24 October 2026 (schema 4) it also
+records the catalogue deadline `request_timeout_ms` 180,000 (ADR 0030 "Request
+deadline"), which the frozen binding checks against every request description (the
+deadline is never sent on the wire); schema 3 added the Bedrock `family` (ADR 0029). Every other role retains the
 exact model and effort in the frozen `.sddtoolkit.json`; the current `repair` role
 selects low effort. Capture, budget-evidence import and scoring validate each request
 against its own configured slot, while retaining the selected cohort's model,
@@ -280,7 +283,7 @@ show consumed and unspent resources. Declared later phases remain reserved and
 unexecuted; their dispatch must consume shared accounting when implemented.
 
 Scoring never dispatches. Supply a closed assessment document, initially
-`{"schema":2,"entries":[]}`, to export evaluator-only assessment packets:
+`{"schema":3,"entries":[]}`, to export evaluator-only assessment packets:
 
 ```sh
 ./scripts/baseline.sh score \

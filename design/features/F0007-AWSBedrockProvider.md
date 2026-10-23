@@ -51,20 +51,28 @@ entries, never an absent entry. No model or region is a runtime default.
     "models": [{
       "model": "openai.gpt-oss-20b-1:0",
       "json": true,
-      "config": {"region": "ap-southeast-2", "maxOutputTokens": 16384}
+      "config": {
+        "region": "ap-southeast-2",
+        "family": "gpt-oss",
+        "maxOutputTokens": 16384,
+        "requestTimeoutMs": 180000
+      }
     }]
   }]
 }
 ```
 
-`maxOutputTokens` is the model's documented maximum output (AWS documents "16K" for
-GPT-OSS-20B, and retained runs show Bedrock accepts and reaches 16,384). It is
-required, positive and
-sent unchanged; there is no default. Under
-[ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
-(not yet implemented), `config` also requires a positive `requestTimeoutMs`, the
-provider-operation deadline (180,000 for GPT-OSS-20B), in place of the workflow's
-`timeout-ms`.
+`config` accepts exactly these four fields. `family` names the compiled Bedrock family
+([ADR 0029](../decisions/0029-bedrock-model-families.md)). `maxOutputTokens` is the
+model's documented maximum output (AWS documents "16K" for GPT-OSS-20B, and retained
+runs show Bedrock accepts and reaches 16,384). It is required, positive and sent
+unchanged; there is no default. `requestTimeoutMs` is the provider-operation deadline in
+milliseconds ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)),
+sized to the time the model takes to return that maximum output. It is required, from 1
+to 4,294,967,295, and has no default; the runner binds it to every provider operation of
+a request that selects the entry, including protocol corrections. GPT-OSS-20B uses
+180,000 ms; its slowest observed call, a 16,384-token runaway, took 74.1 s. Workflow YAML
+declares no deadline.
 
 `json: true` uses Converse with `outputConfig.textFormat.type: "json_schema"`
 and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string

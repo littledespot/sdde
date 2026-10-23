@@ -17,7 +17,6 @@ pub const Prepare = struct {
         .produces = &.{.provider_authorization_result},
         .outcomes = &.{ .ok, .failed, .cancelled },
         .side_effect = .none,
-        .parameters = &.{selection.parameter},
         .outcome_association = .{ .observe = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_authorization_result } },
     };
     allocator: std.mem.Allocator,

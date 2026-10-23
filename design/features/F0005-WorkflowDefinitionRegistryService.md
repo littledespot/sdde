@@ -504,12 +504,12 @@ service is published.
 > `ok`, `invalid`, `failed` and `cancelled`. Only a step marked
 > `advisory: allowed` also maps `more` and `blocked`, and only such a step may; that marker
 > selects `request-model`'s advisory contract variant (see the variant rule in §3's
-> outcome-mapping bullet). The compiler rejects any `timeout-ms`, because the deadline
-> comes from the catalogue entry's `requestTimeoutMs`. A fixed kernel orchestrator runs the
-> bindings' rules as the stages ADR 0030 lists, and YAML can no longer name them. The
-> step's capability set is the exact union of its stage bindings' derived capabilities, and
-> the selected policy must permit each. ADR 0030's "What stays in YAML" list says which
-> steps remain.
+> outcome-mapping bullet). The step declares no deadline; as for today's
+> authorization-preparation binding, the compiler rejects a `timeout-ms`. A fixed kernel
+> orchestrator runs the bindings' rules as the stages ADR 0030 lists, and YAML can no
+> longer name them. The step's capability set is the exact union of its stage bindings'
+> derived capabilities, and the selected policy must permit each. ADR 0030's "What stays
+> in YAML" list says which steps remain.
 
 - Request-origin contracts selecting a model binding declare their typed slot.
   The selected catalogue model owns response mode through its required `json` boolean
@@ -544,17 +544,20 @@ service is published.
   attempt evidence.
 - Its next visit requires the previous evidence to have been consumed/invalidated
   through declared data effects.
-- The native provider-assignment binding additionally requires applied attempt evidence
-  and one closed `kind` selection.
+- The native provider-assignment binding additionally requires applied attempt evidence;
+  it takes no parameters and assigns inference (ADR 0030 removed provider token counting
+  and the `kind` selection on 24 October 2026).
 - Only runner application creates its sealed assigned-operation value.
-- Missing dependencies, hidden accounting permissions, undeclared kind parameters and
+- Missing dependencies, hidden accounting permissions, any assignment parameter and
   forged/stale handoffs reject; no new YAML fields, resource overrides or provider
   capability are introduced.
 
 - The native authorization-preparation binding requires those same retained inputs and
-  explicit positive `timeout-ms`. Under
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on 23 October 2026
-  (not yet implemented), the deadline is the bound catalogue entry's `requestTimeoutMs`.
+  takes no parameters; the compiler rejects a `timeout-ms`. The deadline is the bound
+  catalogue entry's required `requestTimeoutMs`
+  ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)), which
+  the runner binds to every provider operation of the request, including protocol
+  corrections.
 - It derives the separate `provider-authorization` capability from its narrow preloaded
   preparation port, not a `model-provider` capability.
 - The runner supplies only the exact facts and one allocated deposit/publication slot

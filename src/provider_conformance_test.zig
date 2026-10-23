@@ -104,7 +104,7 @@ const Fixture = struct {
         try self.base.init(allocator);
         errdefer self.base.deinit();
         const model: @import("domain/llm_provider_identity.zig").ModelId = .{ .bytes = test_contracts.bedrock_model_ids[0] };
-        const config: @import("domain/llm_provider_contracts.zig").ValidatedProviderConfig = .{ .aws_bedrock = .{ .region = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = .converse, .max_output_tokens = .{ .tokens = 16000 } } };
+        const config: @import("domain/llm_provider_contracts.zig").ValidatedProviderConfig = .{ .aws_bedrock = .{ .region = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = .converse, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
         const contract = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, model, config).?.*;
         self.base.registry_entry.provider = contract.provider;
         self.base.registry_entry.model = model;
@@ -135,7 +135,7 @@ const Fixture = struct {
         self.base.registry_entry.model = .{ .bytes = test_contracts.bedrock_model_ids[0] };
         self.base.registry_entry.capabilities = contract.capabilities;
         self.base.registry_entry.facts = contract.facts;
-        self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = contract.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 } } };
+        self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = contract.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
         self.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
         self.base.provider_binding.reasoning_effort = effort;
         self.base.provider_binding.controls = contract.capabilities.inferenceControls();
@@ -176,7 +176,7 @@ test "Bedrock sends the selected catalogue entry's maximum, not a fixed value" {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator, .bedrock);
         defer fixture.deinit();
-        fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = fixture.base.registry_entry.config.aws_bedrock.region, .family = .converse, .max_output_tokens = .{ .tokens = maximum } } };
+        fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = fixture.base.registry_entry.config.aws_bedrock.region, .family = .converse, .max_output_tokens = .{ .tokens = maximum }, .request_timeout = .{ .milliseconds = 180000 } } };
         fixture.wire.expected_max_tokens = maximum;
         const authorized = try fixture.start();
         var observed = try fixture.call(authorized);
@@ -509,9 +509,9 @@ test "production Bedrock contracts are one per family and admit every compiled R
         for (std.enums.values(domain.BedrockRegion)) |region| {
             // The catalogue records the model's documented maximum output: required,
             // positive and exact, with no default, lookup or clamp.
-            const accepted = try std.json.parseFromSlice(std.json.Value, a, try std.fmt.allocPrint(a, "{{\"region\":\"{s}\",\"family\":\"{s}\",\"maxOutputTokens\":16000}}", .{ @tagName(region), @tagName(family) }), .{});
+            const accepted = try std.json.parseFromSlice(std.json.Value, a, try std.fmt.allocPrint(a, "{{\"region\":\"{s}\",\"family\":\"{s}\",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000}}", .{ @tagName(region), @tagName(family) }), .{});
             const decoded = config.decode(.aws_bedrock, accepted.value).?;
-            try std.testing.expectEqualDeep(domain.ValidatedProviderConfig{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 16000 } } }, decoded);
+            try std.testing.expectEqualDeep(domain.ValidatedProviderConfig{ .aws_bedrock = .{ .region = region, .family = family, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } }, decoded);
             for (test_contracts.bedrock_model_ids) |model| {
                 try std.testing.expectEqual(family, contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = model }, decoded).?.facts.bedrockFamily().?);
             }
@@ -521,19 +521,28 @@ test "production Bedrock contracts are one per family and admit every compiled R
     const region = @tagName(std.enums.values(domain.BedrockRegion)[0]);
     const family = @tagName(std.enums.values(domain.BedrockFamily)[0]);
     for ([_]struct { region: []const u8, family: []const u8, rest: []const u8 }{
-        .{ .region = "null", .family = family, .rest = ",\"maxOutputTokens\":16000" },
-        .{ .region = "\"unknown\"", .family = family, .rest = ",\"maxOutputTokens\":16000" },
-        .{ .region = region, .family = "null", .rest = ",\"maxOutputTokens\":16000" },
-        .{ .region = region, .family = "\"unknown\"", .rest = ",\"maxOutputTokens\":16000" },
+        .{ .region = "null", .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000" },
+        .{ .region = "\"unknown\"", .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = "null", .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = "\"unknown\"", .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000" },
         .{ .region = region, .family = family, .rest = "" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":0" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":-1" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":5000000000" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":\"16000\"" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000.5" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"apiKey\":null" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"endpoint\":null" },
-        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"temperature\":0.1" },
+        .{ .region = region, .family = family, .rest = ",\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":0,\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":-1,\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":5000000000,\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":\"16000\",\"requestTimeoutMs\":180000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000.5,\"requestTimeoutMs\":180000" },
+        // The deadline is required beside the maximum, with the same closed rules.
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":0" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":-1" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":4294967296" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":\"180000\"" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000.5" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":1.8e5" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000,\"apiKey\":null" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000,\"endpoint\":null" },
+        .{ .region = region, .family = family, .rest = ",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000,\"temperature\":0.1" },
     }) |case| {
         const quote = struct {
             fn value(arena_allocator: std.mem.Allocator, raw: []const u8) ![]const u8 {
@@ -544,7 +553,7 @@ test "production Bedrock contracts are one per family and admit every compiled R
         const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
         try std.testing.expect(config.decode(.aws_bedrock, parsed.value) == null);
     }
-    for ([_][]const u8{ "{}", try std.fmt.allocPrint(a, "{{\"region\":\"{s}\",\"maxOutputTokens\":16000}}", .{region}) }) |bytes| {
+    for ([_][]const u8{ "{}", try std.fmt.allocPrint(a, "{{\"region\":\"{s}\",\"maxOutputTokens\":16000,\"requestTimeoutMs\":180000}}", .{region}) }) |bytes| {
         const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
         try std.testing.expect(config.decode(.aws_bedrock, parsed.value) == null);
     }

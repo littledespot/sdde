@@ -107,7 +107,10 @@ dispatch; no model, response mode or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read.
 A current GPT-OSS-20B capture with compatible temperature/reasoning controls is
 eligible. Retained catalogues must already authorize the requested GPT-OSS-20B
-tuple. Historical captures with incompatible response modes or temperature controls reject; the
+tuple. A catalogue captured before the 24 October 2026 deadline move has no
+`requestTimeoutMs` and rejects
+([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
+Historical captures with incompatible response modes or temperature controls reject; the
 command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.

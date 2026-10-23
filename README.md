@@ -18,9 +18,9 @@ and publication evidence control workflow authority.
   schema across explicit YAML operations. Production Bedrock inference uses the
   provider boundary. Calls account actual API token usage against the execution
   budget; providers own per-call limits. ADR 0030 (accepted) removed provider
-  token counting; its replacement of those operations with one `request-model`
-  step and its move of the request deadline to each model's catalogue entry are
-  not yet implemented.
+  token counting and moved the request deadline to each model's catalogue entry
+  (`requestTimeoutMs`); its replacement of those operations with one
+  `request-model` step is not yet implemented.
 - Specify connects Markdown ingestion, source-backed extraction, reconciliation,
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;
@@ -212,9 +212,10 @@ rejects when their bytes differ from the current canonical Converse request;
 there is no legacy wire codec or replay fallback.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
-prompt formats are rejected. Request descriptions use `model-request-debug/v3`
-and retain the exact selected response schema; older descriptions are rejected.
-Replays use `request-replay/v4` records with a saved
+prompt formats are rejected. Request descriptions use `model-request-debug/v11`
+and retain the exact selected response schema and the catalogue entry's
+`requestTimeoutMs`, which replay uses as its deadline; older descriptions are rejected.
+Replays use `request-replay/v6` records with a saved
 session and dispatch sequence; older replay records are rejected. Replay sessions
 are separate from workflow runs, each with its own execution order. Rejected replay
 requests can leave gaps in session numbering. Stop the server with Ctrl-C. See
@@ -285,7 +286,8 @@ semantic quality is not assessed. The launcher shares `.env.e2e` setup with
 require explicit approval for the selected calls and repeat count. They do not
 establish full-workflow E2E acceptance or change browser replay behavior.
 Captured catalogues and controls must already admit the GPT-OSS-20B tuple and
-selected reasoning effort.
+selected reasoning effort; a catalogue captured before the 24 October 2026 deadline
+move has no `requestTimeoutMs` and rejects.
 
 The [historical authoring-role diagnostics](test/calibration/authoring-roles/README.md)
 retain frozen experiment evidence. FIX03 Phase 5 removes that production classifier

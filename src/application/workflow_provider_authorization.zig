@@ -17,10 +17,14 @@ pub const Binding = struct {
     clock: lease.Clock,
     runtime: pipeline.NodeRuntime,
 
-    pub fn allocate(table: *table_module.Table, request: *const handoff.Request, id: provider.ProviderOperationId, timeout_ms: u64, clock: lease.Clock, runtime: pipeline.NodeRuntime) preparation.Error!Binding {
+    /// The deadline is the request's bound catalogue entry's `requestTimeoutMs`,
+    /// so every provider operation of one request, including protocol
+    /// corrections, gets the deadline of the model its slot selects (ADR 0030).
+    pub fn allocate(table: *table_module.Table, request: *const handoff.Request, id: provider.ProviderOperationId, clock: lease.Clock, runtime: pipeline.NodeRuntime) preparation.Error!Binding {
         const now = try currentTime(clock, runtime);
-        const deadline = std.math.add(u64, now, timeout_ms) catch return error.AuthorizationExpired;
-        if (timeout_ms == 0) return error.AuthorizationExpired;
+        const timeout = request.binding().registry_entry.config.requestTimeout();
+        const deadline = std.math.add(u64, now, timeout.milliseconds) catch return error.AuthorizationExpired;
+        if (timeout.milliseconds == 0) return error.AuthorizationExpired;
         const facts: preparation.Facts = .{ .provider_binding = request.binding(), .request = request.prepared() orelse return error.AuthorizationDenied, .operation_id = id, .deadline_monotonic_ms = deadline };
         return .{ .table = table, .facts = facts, .slot = try table.allocate(facts), .clock = clock, .runtime = runtime };
     }

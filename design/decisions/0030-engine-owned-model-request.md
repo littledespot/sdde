@@ -1,10 +1,11 @@
 # ADR 0030: One engine-owned step per model request
 
-- **Status:** Accepted amendment, amended 23 October 2026. **Partly implemented:**
-  provider token counting was removed on 24 October 2026 ("Token counting is removed").
-  The engine, the Specify definition and the packaging fixture still use the explicit
-  request-lifecycle steps and the per-step `timeout-ms` until the rest lands. Documents
-  that describe those steps carry a pointer to this ADR until then.
+- **Status:** Accepted amendment, amended 23 October 2026. **Partly implemented:** on
+  24 October 2026 provider token counting was removed ("Token counting is removed") and
+  the provider-operation deadline moved to each catalogue entry's required
+  `requestTimeoutMs` ("Request deadline"). The engine, the Specify definition and the
+  packaging fixture still use the explicit request-lifecycle steps until `request-model`
+  lands. Documents that describe those steps carry a pointer to this ADR until then.
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
@@ -364,6 +365,12 @@ This is the one list; other documents refer to it.
   `specification-state`'s persisted extraction contract. Persisted extraction contracts
   made before the change no longer match; that is the existing typed outcome for any
   workflow change.
+  - *Implementation note (24 October 2026, slice 3):* the deadline move advanced
+    `model-request-debug` to v11 and `model-call-evidence` to v3; their provider
+    configurations carry the entry's deadline (`request_timeout`). As ADR 0028 set out for
+    v1, `model-call-evidence` v2 and v1 stay readable only as historical evidence that
+    grants no current authority; keeping the v2 reader was user-approved. The other
+    candidates remain for the `request-model` change.
 - **Retained evidence.** Captured catalogues have no `requestTimeoutMs`, so every tool
   that revalidates a retained catalogue through the production registry rejects runs and
   captures made before the change, whether or not a version advances: the retained-call

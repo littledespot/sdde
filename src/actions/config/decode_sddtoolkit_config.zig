@@ -54,17 +54,17 @@ test "decodes the closed structure directly into the owned type" {
     try std.testing.expect(!decoded.value().validation.sourcePreservationCheck);
 }
 
-test "slots configure no output-token allowance" {
-    // ADR 0011: a slot cannot narrow the catalogue's recorded model maximum;
-    // the closed contract rejects the field.
+test "slots configure no output-token allowance or request deadline" {
+    // ADR 0011 and ADR 0030: a slot cannot narrow the catalogue's recorded model
+    // maximum or replace its deadline; the closed contract rejects both fields.
     const a = std.testing.allocator;
-    for ([_][]const u8{ "1", "2048", "16384", "null" }) |raw| {
-        const replacement = try std.fmt.allocPrint(a, "\"model\": \"gpt-5.4-mini\", \"maxOutputTokens\": {s}", .{raw});
+    for ([_][]const u8{ "maxOutputTokens", "requestTimeoutMs", "timeout-ms" }) |field| for ([_][]const u8{ "1", "2048", "16384", "null" }) |raw| {
+        const replacement = try std.fmt.allocPrint(a, "\"model\": \"gpt-5.4-mini\", \"{s}\": {s}", .{ field, raw });
         defer a.free(replacement);
         const bytes = try std.mem.replaceOwned(u8, a, valid_config, "\"model\": \"gpt-5.4-mini\"", replacement);
         defer a.free(bytes);
         try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
-    }
+    };
 }
 
 fn configurationWithValidation(allocator: std.mem.Allocator, section: []const u8) ![]u8 {

@@ -683,7 +683,7 @@ fn jsonFile(state: *State, path: []const u8) !void {
     };
     const raw = parsed.value;
     const v = version(raw) orelse "";
-    if (std.mem.eql(u8, v, "model-call-evidence/v1") or std.mem.eql(u8, v, "model-call-evidence/v2")) return contextFile(state, a, path, bytes, raw);
+    if (std.mem.eql(u8, v, "model-call-evidence/v1") or std.mem.eql(u8, v, "model-call-evidence/v2") or std.mem.eql(u8, v, "model-call-evidence/v3")) return contextFile(state, a, path, bytes, raw);
     if (std.mem.startsWith(u8, v, "request-replay/")) {
         if (!std.mem.eql(u8, v, "request-replay/v4") and !std.mem.eql(u8, v, "request-replay/v6")) {
             try appendRow(state, .{ .id = path, .family = .debugger_request, .artifact = try artifact(state, path, bytes), .disposition = .unsupported_capture_version, .diagnostic = v });
