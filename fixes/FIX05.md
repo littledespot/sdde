@@ -95,7 +95,8 @@ and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
 - **Completion.** Hello-world published in 5 of 6 attempts and loan-renewal in 2 of 6.
   All twelve reports are `spec-e2e-report/v9`, so the published ones can be adjudicated,
   but none has been. No run counts toward the [ADR 0034](../design/decisions/0034-spec-quality-gate.md)
-  gate yet, and none ran on an unmodified committed build.
+  gate yet. Only the first pair (21 October 08:16 and 08:29 AEDT, one run of each case)
+  used an unmodified committed build, `7a88804`; the rest were modified builds.
 - **Content.** Loan-renewal's published output still weakens "must be able to renew" to
   "may renew" and has no refusal acceptance criterion (B7).
 - **Budget.** Loan-renewal ran out of the 100,000-token budget in review in 2 of its 6
@@ -170,6 +171,39 @@ Open:
 - the measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`;
 - whether the engine should also take over release, which needs the compiler to derive
   each request's lifetime.
+
+**Implementation progress.**
+
+- **Slice 1, freeze — done 23 October 2026 (`5ce2af4`).** The Specify integration matrix
+  writes one step trace and summary per scenario to `.zig-cache/workflow-step-trace/`
+  (`src/test_fixtures/workflow_step_trace.zig`). A request-lifecycle step inside a request
+  wrapper is keyed by its call site plus the stage's operation ID, the form `request-model`
+  keeps; a lifecycle body reached without a wrapper fails the run. Each summary records
+  the outcome, the canonical rejection diagnostic, step and call counts, token totals,
+  every accounted inference (call site, purpose, request and attempt ordinals) and the
+  hashes of the published and state files. 195 scenarios: 147 ok, 36 failed, 6 invalid,
+  5 needs-user and 1 blocked. Two consecutive runs produced 1,018 identical files. The
+  baseline is reproducible by running `zig build test-integration` at `5ce2af4`; a copy
+  goes to `evaluations/adr0030-freeze/5ce2af4/`.
+- **Open points for slice 4,** from the slice 1 contract review:
+  - the advisory production run (`test/harness/integration/tests.zig`, budget exhaustion,
+    output limits and the advisory protocol stop) is not traced yet;
+  - the extraction content request appears as two keys, `extract/content`
+    (preparation) and `extract/content-request` (the body), which slice 4 makes one
+    `request-model` step;
+  - the deterministic evidence is the step traces and summary counts; file hashes are
+    deterministic only because the run's reference state ID and recorded filesystem
+    observations (file IDs and timestamps) are masked;
+  - pre-call termination, cancellation and authorization failure never occur in the
+    matrix. **Decided 23 October 2026 (user, option b):** their baseline is today's
+    runner-level lifecycle tests in `src/model_request_workflow_test.zig`, which compile
+    real YAML and drive the real runner against fake ports. Slice 4 ports each one for
+    one to `request-model`, with the same ports and assertions, and records a table
+    mapping every existing test to its ported test, with a reason for any assertion it
+    drops (such as tests that pin the removed operations' YAML ordering).
+- **Slices 2 and 3** (token counting removed; catalogue `requestTimeoutMs`, including the
+  frozen calibration protocol, approved 23 October 2026) follow; slice 3 reruns the freeze
+  and confirms only the deadline changed.
 
 A1 is not expected to change model calls, tokens or reliability. The 22 October estimate
 of a 35–90-line (3–8%) net YAML saving grows, because ordinary sites no longer route
@@ -314,9 +348,9 @@ on one committed build, counting every attempted run. There is no fixed run thre
 the user judges the evidence and decides when Plan is actioned. The full record is in
 [Z_FIX05](Z_FIX05.md#a6-decision-record).
 
-**Status on 23 October.** The gate isn't met: no run has been adjudicated, no recent run
-used an unmodified committed build, and loan-renewal published in 2 of its 6 attempts
-since 21 October (§1).
+**Status on 23 October.** The gate isn't met: no run has been adjudicated, only one pair
+(one run of each case, on `7a88804`) used an unmodified committed build, and loan-renewal
+published in 2 of its 6 attempts since 21 October (§1).
 
 ## 3. Why runs are brittle
 
@@ -934,8 +968,9 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
 1. **Adjudicate.** No run counts toward the gate until a human adjudicates a published v9
    report under R8.
 2. **Measure on a committed build.** Repeat both cases on one committed, unmodified build,
-   counting every attempt (§7). Every 21–22 October run used a modified build. Use
-   `/evaluate-e2e` for advisory defect origins.
+   counting every attempt (§7). Of the 21–22 October runs, only the first pair used an
+   unmodified committed build (`7a88804`). Use `/evaluate-e2e` for advisory defect
+   origins.
 3. **Separate model limitations from engine defects (R7).** All live evidence comes from
    GPT-OSS-20B. A paired comparison with a second permitted model would show whether B7's
    obligation weakening, B9's runaways and B6's entity invention recur. Measure Claude
@@ -1068,3 +1103,8 @@ bounded approval, and each E2E run needs its own explicit approval
   version edit changed the archive row length, and the compatibility test expected the
   E2E configuration to select Claude Haiku 5.5. The user chose Haiku via Bedrock for
   every E2E slot; the other fixes are test and fixture corrections.
+- **23 October 2026, ADR 0030 slice 1 (`5ce2af4`, committed with the verify repair):** the
+  freeze instrumentation and its baseline; A1 records it and the open points for slice 4.
+  The user chose option (b) for the pre-call termination, cancellation and authorization
+  failure baseline. Corrected §1, A6 and §6: the first 21 October pair ran on an
+  unmodified committed build (`7a88804`).

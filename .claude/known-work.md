@@ -133,5 +133,6 @@ already made.
   - Quality means R8 human adjudication; stability means repeated runs, counting every
     attempt.
   - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
-  - It isn't met: no run has been adjudicated, every 21–22 October run used a modified
-    build, and loan-renewal published in 2 of 6 attempts since 21 October.
+  - It isn't met: no run has been adjudicated, only one pair (one run of each case, on
+    `7a88804`) used an unmodified committed build, and loan-renewal published in 2 of 6
+    attempts since 21 October.
