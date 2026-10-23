@@ -561,31 +561,6 @@ test "provider observation validation exposes sealed candidate evidence without 
     try std.testing.expect(std.mem.indexOf(u8, source, "CompleteOwnedUtf8.validate(") != null);
 }
 
-test "count observation validation reuses exact evidence without capabilities allocation or accounting" {
-    const validator = @import("actions/model/validate_model_token_count_observation.zig").Action;
-    const validation = @import("domain/model_token_count_validation.zig");
-    const provider = @import("domain/llm_provider_operation.zig");
-    try std.testing.expectEqual(@as(usize, 0), @typeInfo(validator).@"struct".fields.len);
-    try std.testing.expect(validator.contract.side_effect == .none);
-    try std.testing.expect(validator.contract.runner_accounting == .none);
-    const execute = @typeInfo(@TypeOf(validator.execute)).@"fn";
-    try std.testing.expectEqual(@as(usize, 3), execute.params.len);
-    try std.testing.expect(execute.params[1].type.? == validation.Call);
-    try std.testing.expect(execute.params[2].type.? == *const provider.ProviderTokenCountObservation);
-    try std.testing.expect(execute.return_type.? == validation.Error!validation.Result);
-    try std.testing.expectEqual(@as(usize, 2), @typeInfo(validation.Result).@"union".fields.len);
-    try std.testing.expect(@FieldType(validation.Result, "counted") == provider.ExactInputTokenCountEvidence);
-    try std.testing.expect(@FieldType(validation.Result, "failed") == provider.ProviderFailure);
-    inline for (.{ @embedFile("actions/model/validate_model_token_count_observation.zig"), @embedFile("domain/model_token_count_validation.zig") }) |source| {
-        inline for (.{ "/actions/", "/ports/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.process", "std.http", "std.json", "Allocator", "countInputTokens(", "workflow_token_accounting", "logger", "authorization_leases", "retry-limit" }) |forbidden| try expectAbsent(source, forbidden);
-    }
-    const source = @embedFile("domain/model_token_count_validation.zig");
-    try std.testing.expect(std.mem.indexOf(u8, source, "requireInvoked(") != null);
-    try std.testing.expect(std.mem.indexOf(u8, source, "validateCountInvocation(") != null);
-    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "ExactInputTokenCountEvidence.fromObservation("));
-    try expectAbsent(source, "input_tokens");
-}
-
 test "model decoding consumes sealed complete evidence and exposes only immutable JSON views" {
     const decoder = @import("actions/model/decode_model_envelope.zig").Action;
     const decoded = @import("domain/model_envelope.zig");
@@ -744,7 +719,7 @@ test "workflow request handoff retains authority without introducing operations 
 
 test "YAML invocation owns one response and uses runner accounting without hidden response work" {
     const native = @import("application/model_invocation_workflow.zig");
-    try std.testing.expect(@typeInfo(@import("domain/model_invocation_result.zig").For(.inference).Result) == .@"opaque");
+    try std.testing.expect(@typeInfo(@import("domain/model_invocation_result.zig").Result) == .@"opaque");
     try std.testing.expect(native.schema.maximum_bytes == null);
     const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(native.Invoke, &.{});
     try std.testing.expect(capabilities.valid and capabilities.model_provider and !capabilities.provider_authorization);
@@ -759,29 +734,27 @@ test "YAML invocation owns one response and uses runner accounting without hidde
     inline for (.{ "/adapters/", "std.Io", "std.json", "LLMProviderInterface", "countInputTokens", "decode" }) |forbidden| try expectAbsent(accounting_source, forbidden);
 }
 
-test "count and inference actions forward one provider call without hidden work" {
-    inline for (.{ @import("actions/model/invoke_model.zig").Action, @import("actions/model/count_model_input_tokens.zig").Action }, .{ "actions/model/invoke_model.zig", "actions/model/count_model_input_tokens.zig" }, .{ "invoke", "countInputTokens" }, .{ llm_provider_operation.ProviderInvocationObservation, llm_provider_operation.ProviderTokenCountObservation }) |action, path, method, Observation| {
-        try std.testing.expectEqual(@as(usize, 1), @typeInfo(action).@"struct".fields.len);
-        try std.testing.expect(@FieldType(action, "provider") == llm_provider_interface.LLMProviderInterface);
-        try std.testing.expect(action.contract.side_effect == .model_call);
-        try std.testing.expect(action.contract.runner_accounting == .none);
-        const signature = @typeInfo(@TypeOf(action.execute)).@"fn";
-        try std.testing.expectEqual(@as(usize, 5), signature.params.len);
-        try std.testing.expect(signature.params[1].type.? == *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
-        try std.testing.expect(signature.params[2].type.? == *const llm_provider_operation.IdentifiedProviderNeutralModelRequest);
-        try std.testing.expect(signature.params[3].type.? == *const llm_provider_operation.ValidatedProviderAuthorizationLeaseRef);
-        try std.testing.expect(signature.params[4].type.? == *const llm_provider_operation.InvokedProviderOperation);
-        try std.testing.expect(signature.return_type.? == llm_provider_interface.Error!Observation);
-        const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(action, &.{});
-        try std.testing.expect(capabilities.valid and capabilities.model_provider);
-        try std.testing.expect(!capabilities.toolchain_read and !capabilities.toolchain_parser and !capabilities.reference_read);
-        const source = @embedFile(path);
-        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider."));
-        try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider." ++ method ++ "("));
-        try expectAbsent(source, if (comptime std.mem.eql(u8, method, "invoke")) "countInputTokens" else ".invoke(");
-        inline for (.{ "/actions/", "/application/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.http", "std.process", "std.json", "while (", "for (", "catch", ".deinit(", "validateInferenceInvocation", "validateCountInvocation", "requireInvoked", "schema", "workflow_token_accounting", "logger" }) |forbidden| {
-            try expectAbsent(source, forbidden);
-        }
+test "inference action forwards one provider call without hidden work" {
+    const action = @import("actions/model/invoke_model.zig").Action;
+    try std.testing.expectEqual(@as(usize, 1), @typeInfo(action).@"struct".fields.len);
+    try std.testing.expect(@FieldType(action, "provider") == llm_provider_interface.LLMProviderInterface);
+    try std.testing.expect(action.contract.side_effect == .model_call);
+    try std.testing.expect(action.contract.runner_accounting == .none);
+    const signature = @typeInfo(@TypeOf(action.execute)).@"fn";
+    try std.testing.expectEqual(@as(usize, 5), signature.params.len);
+    try std.testing.expect(signature.params[1].type.? == *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
+    try std.testing.expect(signature.params[2].type.? == *const llm_provider_operation.IdentifiedProviderNeutralModelRequest);
+    try std.testing.expect(signature.params[3].type.? == *const llm_provider_operation.ValidatedProviderAuthorizationLeaseRef);
+    try std.testing.expect(signature.params[4].type.? == *const llm_provider_operation.InvokedProviderOperation);
+    try std.testing.expect(signature.return_type.? == llm_provider_interface.Error!llm_provider_operation.ProviderInvocationObservation);
+    const capabilities = comptime @import("application/workflow_operation_binding.zig").inspect(action, &.{});
+    try std.testing.expect(capabilities.valid and capabilities.model_provider);
+    try std.testing.expect(!capabilities.toolchain_read and !capabilities.toolchain_parser and !capabilities.reference_read);
+    const source = @embedFile("actions/model/invoke_model.zig");
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider."));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.provider.invoke("));
+    inline for (.{ "/actions/", "/application/", "/adapters/", "anyopaque", "@constCast", "std.Io", "std.http", "std.process", "std.json", "while (", "for (", "catch", ".deinit(", "validateInferenceInvocation", "validateCountInvocation", "requireInvoked", "schema", "workflow_token_accounting", "logger" }) |forbidden| {
+        try expectAbsent(source, forbidden);
     }
     // This increment provides an action, not a production provider activation.
     try expectAbsent(@embedFile("composition/native_workflow_operations.zig"), "invoke_model.zig");
@@ -801,28 +774,6 @@ test "YAML observation validation reuses the pure validator and retains immutabl
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
     try std.testing.expectEqual(@as(usize, 2), countOccurrences(source, "values.retain("));
     inline for (.{ "/adapters/", "std.Io", "std.json", "countInputTokens", "reconcile", "validation.validate(", "utf8Validate", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
-}
-
-test "YAML count uses the shared call owner and capability-free validation and completion" {
-    const invocation = @import("application/model_invocation_workflow.zig");
-    const counts = @import("application/model_token_count_observation_workflow.zig");
-    try std.testing.expect(@typeInfo(@import("domain/model_invocation_result.zig").For(.input_token_count).Result) == .@"opaque");
-    try std.testing.expect(@typeInfo(counts.Result) == .@"opaque");
-    try std.testing.expect(@FieldType(counts.Outcome, "validated") == @import("domain/model_token_count_validation.zig").Result);
-    const call_ports = comptime @import("application/workflow_operation_binding.zig").inspect(invocation.Count, &.{});
-    try std.testing.expect(call_ports.valid and call_ports.model_provider and !call_ports.provider_authorization);
-    try std.testing.expect(invocation.Count.contract.side_effect == .model_call);
-    try std.testing.expectEqual(@as(usize, 0), invocation.Count.contract.parameters.len);
-    inline for (.{ counts.Validate, @import("application/provider_operation_completion_workflow.zig").CompleteCount, @import("application/model_request_completion_workflow.zig").CompleteCount }) |Native| {
-        const ports = comptime @import("application/workflow_operation_binding.zig").inspect(Native, &.{});
-        try std.testing.expect(ports.valid and !ports.model_provider and !ports.provider_authorization);
-        try std.testing.expectEqual(@as(usize, 0), Native.contract.parameters.len);
-        try std.testing.expectEqual(.none, Native.contract.side_effect);
-    }
-    const source = @embedFile("application/model_token_count_observation_workflow.zig");
-    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "self.action.execute("));
-    try std.testing.expectEqual(@as(usize, 1), countOccurrences(source, "values.retain("));
-    inline for (.{ "/adapters/", "std.Io", "std.json", "countInputTokens", "reconcile", "fromObservation(", "LLMProviderInterface", "retry_limit", "while (" }) |forbidden| try expectAbsent(source, forbidden);
 }
 
 test "YAML decoding reuses the pure decoder without schema validation or accounting" {
@@ -903,11 +854,11 @@ test "provider operation boundary has one capability-limited interface" {
         else => return error.LLMProviderContextMustBeOpaque,
     }
     try std.testing.expectEqual(
-        @as(usize, 2),
+        @as(usize, 1),
         @typeInfo(llm_provider_interface.LLMProviderInterface.VTable).@"struct".fields.len,
     );
     try std.testing.expectEqual(
-        @as(usize, 10),
+        @as(usize, 9),
         std.enums.values(llm_provider_operation.ProviderFailureCause).len,
     );
     try std.testing.expectEqual(
@@ -1039,7 +990,7 @@ test "provider authorization exposes only non-operational references and narrow 
         try expectAbsent(source, "@constCast");
     }
     const fake = @embedFile("adapters/provider/fake_llm_provider.zig");
-    try std.testing.expectEqual(@as(usize, 2), countOccurrences(fake, "authorization_leases.consume("));
+    try std.testing.expectEqual(@as(usize, 1), countOccurrences(fake, "authorization_leases.consume("));
     try expectAbsent(fake, "/application/");
     const preloader = @embedFile("adapters/provider/fake_provider_authorization.zig");
     try expectAbsent(preloader, "/application/");
@@ -1147,7 +1098,6 @@ test "workflow token accounting has one mutation authority and a read-only check
 
 test "provider lifecycle has one pure action and runner-owned immutable ledger" {
     const lifecycle = @import("domain/provider_operation_lifecycle.zig");
-    try std.testing.expect(@FieldType(lifecycle.Command, "assign_count") == lifecycle.Assignment);
     try std.testing.expect(@FieldType(lifecycle.Command, "assign_inference") == lifecycle.Assignment);
     switch (@typeInfo(lifecycle.Ledger)) {
         .@"opaque" => {},

@@ -24,21 +24,20 @@ pub const Provider = struct {
     capture: ?capture_port.Port = null,
 
     pub fn port(self: *Provider) interface.LLMProviderInterface {
-        return .{ .context = @ptrCast(self), .vtable = &.{ .count_input_tokens = count, .invoke = invoke } };
+        return .{ .context = @ptrCast(self), .vtable = &.{ .invoke = invoke } };
     }
 
     /// The validated wire request for one family, or the reason it cannot be sent.
     const Prepared = struct { target: transport.Target, body: []const u8 };
 
-    fn prepare(allocator: std.mem.Allocator, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind) (std.mem.Allocator.Error || error{InvalidRequest})!Prepared {
+    fn prepare(allocator: std.mem.Allocator, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest) (std.mem.Allocator.Error || error{InvalidRequest})!Prepared {
         const entry = selected.registry_entry;
         return switch (entry.config) {
             .aws_bedrock => |config| .{
-                .target = .{ .aws_bedrock = .{ .region = config.region, .model = entry.model, .kind = kind } },
-                .body = try bedrock_request.encode(allocator, request, kind, config.family, config.max_output_tokens),
+                .target = .{ .aws_bedrock = .{ .region = config.region, .model = entry.model } },
+                .body = try bedrock_request.encode(allocator, request, config.family, config.max_output_tokens),
             },
-            // The Messages API has no exact counter (ADR 0028).
-            .anthropic => |config| if (kind != .inference) error.InvalidRequest else .{
+            .anthropic => |config| .{
                 .target = .anthropic,
                 .body = try anthropic_request.encode(allocator, request, entry.model.bytes, config.max_output_tokens),
             },
@@ -46,7 +45,7 @@ pub const Provider = struct {
         };
     }
 
-    fn exchange(self: *Provider, allocator: std.mem.Allocator, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, reference: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation, kind: operation.ProviderOperationKind) interface.Error!transport.Response {
+    fn exchange(self: *Provider, allocator: std.mem.Allocator, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, reference: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation) interface.Error!transport.Response {
         var capability = self.authorization_leases.consume(reference, selected, request, invoked) catch |err| return switch (err) {
             error.Cancelled => cancelled: {
                 if (self.capture) |capture| _ = capture.capture(.response, .{ .transport_outcome = .{ .outcome = .cancelled, .delivery = .not_sent } }, &.{});
@@ -56,16 +55,13 @@ pub const Provider = struct {
             error.AuthorizationDenied, error.ClockUnavailable => self.rejectedBeforeSend(.authorization_denied),
         };
         defer capability.deinit();
-        const valid = switch (kind) {
-            .input_token_count => operation.validateCountInvocation(selected, request, invoked),
-            .inference => operation.validateInferenceInvocation(selected, request, invoked),
-        };
+        const valid = operation.validateInferenceInvocation(selected, request, invoked);
         const family = key.Family.of(selected.registry_entry.config) orelse return self.rejectedBeforeSend(.request_rejected);
         if (!valid or !@import("../../domain/llm_provider_contracts.zig").supportsReasoningEffort(selected.registry_entry.supported_reasoning_efforts, selected.reasoning_effort))
             return self.rejectedBeforeSend(.request_rejected);
         // A capability deposited for another family never yields a key here.
         const secret = authorization.secret(&capability, family) orelse return self.rejectedBeforeSend(.authorization_denied);
-        const prepared = prepare(allocator, selected, request, kind) catch |err| return switch (err) {
+        const prepared = prepare(allocator, selected, request) catch |err| return switch (err) {
             error.OutOfMemory => failed: {
                 if (self.capture) |capture| _ = capture.capture(.response, .{ .transport_outcome = .{ .outcome = .allocation_failed, .delivery = .not_sent } }, &.{});
                 break :failed error.OutOfMemory;
@@ -115,21 +111,11 @@ pub const Provider = struct {
         _ = capture.capture(.response, if (body.complete) .{ .provider_body = body.bytes } else .{ .partial_provider_body = body.bytes }, &.{secret});
     }
 
-    fn count(context: *interface.Context, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, reference: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation) interface.Error!operation.ProviderTokenCountObservation {
-        const self: *Provider = @ptrCast(@alignCast(context));
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const response = try self.exchange(arena.allocator(), selected, request, reference, invoked, .input_token_count);
-        // Only Bedrock registers exact counting; any other family was rejected
-        // before send, and its failure carries no counter wire to decode.
-        return bedrock_response.count(self.allocator, response, selected, request, invoked.id);
-    }
-
     fn invoke(context: *interface.Context, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, reference: *const operation.ValidatedProviderAuthorizationLeaseRef, invoked: *const operation.InvokedProviderOperation) interface.Error!operation.ProviderInvocationObservation {
         const self: *Provider = @ptrCast(@alignCast(context));
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const response = try self.exchange(arena.allocator(), selected, request, reference, invoked, .inference);
+        const response = try self.exchange(arena.allocator(), selected, request, reference, invoked);
         // Decode into a separately owned result, never the transport arena.
         return switch (selected.registry_entry.config) {
             .aws_bedrock => bedrock_response.inference(self.allocator, response, selected, request, invoked.id),

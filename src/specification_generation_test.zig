@@ -9743,7 +9743,7 @@ const RetentionCall = struct {
         self.base.request = self.request.prepared().?.*;
         _ = try self.base.attempts.reserve(self.base.attempts.current().revision(), self.base.requests.ledger().?, self.base.ledger(), self.base.requests.ledger().?.revision(), id, .initial);
         const invoked = try self.base.startInference();
-        var fake: @import("adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{ .allocator = std.testing.allocator, .authorization_leases = self.base.leasePort(), .count_plan = .{ .counted = 0 }, .invocation_plan = .{ .complete = .{ .content = response_bytes, .input_tokens = 10, .output_tokens = 10 } } };
+        var fake: @import("adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{ .allocator = std.testing.allocator, .authorization_leases = self.base.leasePort(), .invocation_plan = .{ .complete = .{ .content = response_bytes, .input_tokens = 10, .output_tokens = 10 } } };
         self.response = try (@import("actions/model/invoke_model.zig").Action{ .provider = fake.interface() }).execute(&self.base.provider_binding, self.request.prepared().?, invoked.reference, invoked.invoked);
         errdefer self.response.deinit();
         self.validated = try @import("domain/provider_invocation_validation.zig").validate(std.testing.allocator, .{ .request = self.request.prepared().?, .provider_binding = &self.base.provider_binding, .operations = self.base.ledger(), .operation_id = invoked.invoked.id }, &self.response);
@@ -10283,7 +10283,7 @@ fn checkPreparedNativeProjection(a: std.mem.Allocator, packet: *const @import("d
     base.request = actual.*;
     _ = try base.attempts.reserve(base.attempts.current().revision(), base.requests.ledger().?, base.ledger(), base.requests.ledger().?.revision(), id, .initial);
     const invoked = try base.startInference();
-    var fake: @import("adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{ .allocator = std.testing.allocator, .authorization_leases = base.leasePort(), .count_plan = .{ .counted = 0 }, .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 2 } } };
+    var fake: @import("adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{ .allocator = std.testing.allocator, .authorization_leases = base.leasePort(), .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 2 } } };
     var response = try (@import("actions/model/invoke_model.zig").Action{ .provider = fake.interface() }).execute(&base.provider_binding, actual, invoked.reference, invoked.invoked);
     defer response.deinit();
     var validated = try @import("domain/provider_invocation_validation.zig").validate(std.testing.allocator, .{ .request = actual, .provider_binding = &base.provider_binding, .operations = base.ledger(), .operation_id = invoked.invoked.id }, &response);
@@ -10867,12 +10867,11 @@ test "native advice stops retain admitted assignments and never resolve missing 
             invalid_origin.advice_stop.?.origin = if (stop_origin == null) origin else null;
             try std.testing.expectError(error.InvalidRequiredAuthority, Review.validateStored(a, invalid_origin, fixture.context.inputs));
             if (stop_origin != null) {
-                inline for (0..3) |invalid_field| {
+                inline for (0..2) |invalid_field| {
                     var forged_origin = empty;
                     switch (invalid_field) {
                         0 => forged_origin.advice_stop.?.origin.?.request.value = 0,
                         1 => forged_origin.advice_stop.?.origin.?.attempt.value = 0,
-                        2 => forged_origin.advice_stop.?.origin.?.kind = .input_token_count,
                         else => unreachable,
                     }
                     try std.testing.expectError(error.InvalidRequiredAuthority, Review.validateStored(a, forged_origin, fixture.context.inputs));

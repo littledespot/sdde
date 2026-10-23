@@ -4,9 +4,9 @@
 2026-10-15 user-directed amendment uses Bedrock Converse for inference and
 preserves provider reasoning as separate, owned diagnostic data.
 
-- The user explicitly includes production contracts, concrete authorization/count/
-  inference implementations, applicable native-schema checks and shared adapter
-  conformance in F0006 completion.
+- The user explicitly includes production contracts, concrete authorization/inference
+  implementations, applicable native-schema checks and shared adapter conformance in
+  F0006 completion.
 - The F0007 label is not a deferral or approval gate for that work.
 - No third-party production dependency is added: transport uses the already pinned Zig
   standard library.
@@ -74,11 +74,11 @@ Neither changes engine validation or permits fallback after provider rejection.
 
 The compiled registry supports these exact contracts:
 
-| Exact model | Explicit source region | Converse | CountTokens | Response modes | Registered reasoning policy | Temperature |
-| --- | --- | --- | --- | --- | --- | --- |
-| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1` |
-| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only | None | Fixed `0.1` |
-| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Omitted |
+| Exact model | Explicit source region | Converse | Response modes | Registered reasoning policy | Temperature |
+| --- | --- | --- | --- | --- | --- |
+| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1` |
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Prompt-only | None | Fixed `0.1` |
+| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Omitted |
 
 The current Luna tuple is an explicitly registered **global inference profile**
 with Sydney as its source region. It may route worldwide and provides no
@@ -86,8 +86,8 @@ Australian-residency guarantee. The base `openai.gpt-6-luna` model is not availa
 for in-region runtime invocation, and the US geographic profile is not supported
 from Sydney. These are exact registrations, not model-name pattern rules. AWS's
 [current Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html)
-confirms Converse, native JSON Schema, global-profile Sydney availability,
-Standard tier only and no CountTokens support (checked 2026-10-15).
+confirms Converse, native JSON Schema, global-profile Sydney availability and
+Standard tier only (checked 2026-10-15).
 
 AWS documents default medium reasoning and several effort options, but does not
 establish their exact Converse override fields. SDDE's evidence-backed subset
@@ -110,14 +110,6 @@ quality conclusion follows from API availability.
   catalogue policy remains independent.
 - The rubric judge retains its native-schema gate; GPT-OSS-20B satisfies the registered
   capability contract without fallback. See the [evaluator contract](../harness/evaluator.md).
-
-Separate counting is an explicit YAML operation and cannot authorize inference or
-charge usage. Actual inference input/output usage accounting is mandatory
-regardless of CountTokens support. The [CountTokens contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CountTokens.html)
-accepts the same Converse input where the selected model supports counting.
-[ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026, not
-yet implemented) removes CountTokens and every CountTokens passage in this document;
-actual-usage accounting is unchanged.
 
 ## Credentials and transport
 
@@ -158,17 +150,11 @@ actual-usage accounting is unchanged.
 
 ## Request and schema projection
 
-- Inference uses only
-  `/model/<encoded-model>/converse`; CountTokens uses
-  `/model/<encoded-model>/count-tokens`.
+- Inference uses only `/model/<encoded-model>/converse`.
 - The canonical [Converse codec](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
   emits ordered system/guidance text blocks in `system` and user/evidence blocks
   in one `user` message. Explicit user/evidence input is required; no input text
   is invented. Model ID is supplied by the authorized endpoint target.
-- CountTokens sends `input.converse` with the same `system`, `messages` and
-  `additionalModelRequestFields`. It omits inference/output controls absent from
-  the [count input contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseTokensRequest.html).
-  A model without exact-count support rejects before dispatch.
 - Supported temperature is `0.1` (§12.5), serialized under
   `inferenceConfig.temperature`; unsupported temperature is omitted.
 - The compiled `BedrockRequestProfile` selects verified model-specific request
@@ -205,9 +191,7 @@ actual-usage accounting is unchanged.
 
 - All bodies use the existing strict JSON boundary: invalid UTF-8, duplicate keys,
   trailing content, unknown fields and wrong wire types reject.
-- Count success contains exactly one nonnegative integer `inputTokens`, bound to the
-  original operation, binding and input.
-- No tokenizer approximation is used.
+- No tokenizer approximation is used; token figures come only from reported usage.
 
 - Inference validates Converse `usage.inputTokens`, `outputTokens` and
   `totalTokens`, including optional closed cache counters/details with checked
@@ -269,7 +253,6 @@ Recognized non-candidate stops retain usage and any valid reasoning diagnostics:
   timeout and service failures retain their closed F0006 causes.
 - `ModelErrorException` requires its recognized nested status.
 - Error prose never determines retryability and is never exposed.
-- Malformed successful counts return `exact_token_count_unavailable`.
 
 No request bytes sent means `not_sent`; a complete response means
 `response_received`; transport interruption after transmission begins means
@@ -287,15 +270,13 @@ with a new attempt and lease. The adapter still never retries.
 
 ## Acceptance evidence
 
-- Shared fake/Bedrock conformance covers exact association, count/inference,
-  single-use authorization, deadlines, failures, cancellation and owned cleanup.
+- Shared fake/Bedrock conformance covers exact association, inference, single-use
+  authorization, deadlines, failures, cancellation and owned cleanup.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
-  usage rejection, secret redaction, native projection, unsupported
-  counting, status/type agreement and growing HTTP headers.
-- Fixtures prove every inference request carries exactly the configured `maxTokens`,
-  that a missing, zero, negative or oversized catalogue value rejects, and that
-  CountTokens retains identical model-visible input without inference controls or
-  clamping.
+  usage rejection, secret redaction, native projection, status/type agreement and
+  growing HTTP headers.
+- Fixtures prove every inference request carries exactly the configured `maxTokens`
+  and that a missing, zero, negative or oversized catalogue value rejects.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 
@@ -307,8 +288,8 @@ with a new attempt and lease. The adapter still never retries.
     bound to Zig's HTTPS opener.
   - These tests perform no DNS, TLS handshake or AWS request.
 - YAML tests use the real production composition and adapter with a deterministic
-  transport: complete lifecycle, count then inference, missing-key termination,
-  budget overshoot and execution isolation. No test silently bypasses a ledger.
+  transport: complete lifecycle, missing-key termination, budget overshoot and
+  execution isolation. No test silently bypasses a ledger.
 - Packaged tests run externally configured provider workflows without source-
   tree fallback or development assets, and stop without network when keys are
   absent. Architecture checks enforce the same narrow boundaries.

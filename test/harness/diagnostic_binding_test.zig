@@ -101,18 +101,17 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
     edited.content = &.{.{ .user = "MOCK changed prompt" }};
     edited.schema = "MOCK changed schema";
     try std.testing.expectEqual(.@"gpt-oss", (try binding.Authorization.authorize(context, edited)).bedrockFamily().?);
-    for (0..8) |mode| {
+    for (0..7) |mode| {
         var rejected = captured;
         switch (mode) {
             // A description cannot replay with a maximum other than the catalogue's.
-            7 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
+            6 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 4096 } } },
             0 => rejected.provider = "unknown-provider",
             1 => rejected.model = "MOCK.vendor.model-v1:0",
             2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 } } },
             3 => rejected.reasoning_effort = "high",
             4 => rejected.controls.temperature = null,
             5 => rejected.response_mode = .prompt_only,
-            6 => rejected.operation_kind = .input_token_count,
             else => unreachable,
         }
         try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, rejected));

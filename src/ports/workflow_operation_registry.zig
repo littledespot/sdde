@@ -27,7 +27,6 @@ pub const StepInput = struct {
     log: pipeline.WorkflowLog,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
-    provider_token_count: ?@import("../domain/model_token_count_validation.zig").Call = null,
     /// Execution-owned allowance decision; cannot be supplied by workflow parameters.
     model_attempt_exhaustion: ?@import("../domain/workflow_retry.zig").Exhaustion = null,
     model_attempt: ?struct {

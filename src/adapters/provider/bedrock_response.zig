@@ -1,6 +1,6 @@
-//! Bedrock Converse and CountTokens response contract: closed envelope, usage
-//! counters, stop mapping and AWS error table. Shared readers and assembly
-//! own everything provider-neutral.
+//! Bedrock Converse response contract: closed envelope, usage counters, stop
+//! mapping and AWS error table. Shared readers and assembly own everything
+//! provider-neutral.
 const std = @import("std");
 const operation = @import("../../domain/llm_provider_operation.zig");
 const binding = @import("../../domain/llm_provider_binding.zig");
@@ -15,22 +15,6 @@ const field = support.field;
 const string = support.string;
 const integer = support.integer;
 const enumeration = support.enumeration;
-
-pub fn count(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderTokenCountObservation {
-    if (try classifyResponse(allocator, response)) |rejected| return .{ .failed = assembly.rejected(id, rejected) };
-    var parsed = support.parse(allocator, response.received.body) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => .{ .failed = assembly.failure(id, .exact_token_count_unavailable, .response_received) },
-    };
-    defer parsed.deinit();
-    const tokens = decodeCount(parsed.value) catch return .{ .failed = assembly.failure(id, .exact_token_count_unavailable, .response_received) };
-    return .{ .counted = .{ .operation_id = id, .binding_id = selected.bindingId(), .model_visible_input_id = request.model_visible_input_id, .input_tokens = tokens } };
-}
-
-fn decodeCount(value: std.json.Value) Invalid!u64 {
-    try fields(value, &.{"inputTokens"});
-    return integer(try field(value, "inputTokens"));
-}
 
 pub fn inference(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderInvocationObservation {
     return assembly.inference(allocator, response, selected, request, id, classifyResponse, decode);

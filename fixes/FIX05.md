@@ -201,9 +201,33 @@ Open:
     one to `request-model`, with the same ports and assertions, and records a table
     mapping every existing test to its ported test, with a reason for any assertion it
     drops (such as tests that pin the removed operations' YAML ordering).
-- **Slices 2 and 3** (token counting removed; catalogue `requestTimeoutMs`, including the
-  frozen calibration protocol, approved 23 October 2026) follow; slice 3 reruns the freeze
-  and confirms only the deadline changed.
+- **Slice 2, token counting removed — done 24 October 2026.** The four count
+  operations, the `input_token_count` operation kind (`ProviderOperationKind` is now
+  `{ inference }`; every persisted kind field stays), the `assign-provider-operation`
+  `kind` parameter (assignment takes no parameters and assigns inference), the count
+  capability, the `exact_token_count_unavailable` failure cause, the two count data keys,
+  Bedrock CountTokens encoding, decoding and endpoint, the provider port's
+  `countInputTokens`, every fake and spy count path, the two count test files and their
+  build steps, and the packaging smoke's count cases are deleted. Actual-usage accounting
+  is unchanged. Tests that looped over both kinds keep their inference case; forged-kind
+  rejections became forged-attempt rejections. The inference-then-authorization closure
+  test, the option (b) baseline for that case, was converted to a second attempt whose
+  authorization fails or is cancelled, rather than deleted. Superseded count text was
+  removed from contracts §12, the operation catalogue, F0006, F0007, `code.md`, diagram 16
+  and the README; the ADR notes and design.md mark the removal implemented. The Specify
+  step traces are identical to the slice 1 freeze, and the production-admission report is
+  unchanged. Left for later:
+  - ADRs 0006 and 0013 mention optional counting in their historical text; each now
+    carries an ADR 0030 pointer (user-approved 24 October 2026);
+  - F0007's model table predates ADR 0029's families;
+  - trivially true `.inference` guards in files slice 2 did not edit, including the
+    harness's now-unreachable `CaptureNotInference`, go with `request-model` (slice 4);
+  - a pre-existing conformance case (`provider_conformance_test.zig`, forged operation)
+    is rejected for being a copy before its foreign attempt is checked; it needs its own
+    fix.
+- **Slice 3** (catalogue `requestTimeoutMs`, including the frozen calibration protocol,
+  approved 23 October 2026) follows; it reruns the freeze and confirms only the deadline
+  changed.
 
 A1 is not expected to change model calls, tokens or reliability. The 22 October estimate
 of a 35–90-line (3–8%) net YAML saving grows, because ordinary sites no longer route
@@ -1108,3 +1132,6 @@ bounded approval, and each E2E run needs its own explicit approval
   The user chose option (b) for the pre-call termination, cancellation and authorization
   failure baseline. Corrected §1, A6 and §6: the first 21 October pair ran on an
   unmodified committed build (`7a88804`).
+- **24 October 2026, ADR 0030 slice 2:** provider token counting removed from code,
+  tests, build steps and documentation; A1 records the scope, the kept persisted kind
+  fields and the converted inference-then-authorization closure test.

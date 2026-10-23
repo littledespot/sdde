@@ -15,12 +15,12 @@ and publication evidence control workflow authority.
 - Configuration and root validation, workflow discovery/compilation, generic
   execution, toolchain composition and conditional provider bootstrap are implemented.
 - Workflow-owned model requests retain their identity, binding, resources and
-  schema across explicit YAML operations. Production Bedrock inference and
-  optional token counting use the same provider boundary. Calls account actual
-  API token usage against the execution budget; providers own per-call limits.
-  ADR 0030 (accepted, not yet implemented) replaces those operations with one
-  `request-model` step, removes token counting and moves the request deadline to
-  each model's catalogue entry.
+  schema across explicit YAML operations. Production Bedrock inference uses the
+  provider boundary. Calls account actual API token usage against the execution
+  budget; providers own per-call limits. ADR 0030 (accepted) removed provider
+  token counting; its replacement of those operations with one `request-model`
+  step and its move of the request deadline to each model's catalogue entry are
+  not yet implemented.
 - Specify connects Markdown ingestion, source-backed extraction, reconciliation,
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;

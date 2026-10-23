@@ -85,7 +85,7 @@ test "unknown usage blocks without inventing a charge and not-sent adds none" {
     try std.testing.expectError(error.ProviderTokenUsageUnavailable, runner.check());
 }
 
-test "usage validation rejects malformed totals count operations stale and duplicate reports" {
+test "usage validation rejects malformed totals attemptless operations stale and duplicate reports" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
     var runner = token_runner.Runner.init(std.testing.allocator, .{ .value = 100 });
@@ -100,9 +100,6 @@ test "usage validation rejects malformed totals count operations stale and dupli
     }
     try std.testing.expect(operation.ProviderUsage.init(std.math.maxInt(u64), 1, std.math.maxInt(u64)) == null);
     var invalid = id;
-    invalid.kind = .input_token_count;
-    try std.testing.expectError(error.InvalidTokenAccountingOperation, runner.reconcile(.initial, invalid, usage(0, 0)));
-    invalid = id;
     invalid.model_attempt_ordinal.value = 0;
     try std.testing.expectError(error.InvalidTokenAccountingOperation, runner.reconcile(.initial, invalid, .not_sent));
     try runner.reconcile(.initial, id, usage(20, 10));

@@ -80,7 +80,6 @@ test "fake response validation retains exact call authority without copying cont
     try std.testing.expectEqualDeep(original, response);
     try std.testing.expect(ledger == fixture.base.ledger());
     try std.testing.expect(attempts == fixture.base.attempts.current());
-    try std.testing.expectEqual(@as(usize, 0), fixture.fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
 }
@@ -211,7 +210,7 @@ test "malformed usage rejects both complete and stopped observations without mut
     }
 }
 
-test "foreign request binding operation kind and attempt observations reject before evidence allocation" {
+test "foreign request binding and attempt observations reject before evidence allocation" {
     var fixture: Fixture = undefined;
     try fixture.init();
     defer fixture.deinit();
@@ -220,16 +219,15 @@ test "foreign request binding operation kind and attempt observations reject bef
     defer other.deinit();
     var response = try fixture.response();
     defer response.deinit();
-    inline for (0..7) |variant| {
+    inline for (0..6) |variant| {
         var wrong = response;
         switch (variant) {
             0 => wrong.completed.operation_id.model_request_id = other.base.model_request_id,
-            1 => wrong.completed.operation_id.kind = .input_token_count,
-            2 => wrong.completed.operation_id.model_attempt_ordinal.value += 1,
-            3 => wrong.completed.raw_result.complete.request_id = other.base.model_request_id,
-            4 => wrong.completed.raw_result.complete.binding_id.registry_entry_id.ordinal += 1,
-            5 => wrong.completed.raw_result.complete.binding_id.slot_id.bytes = "another-slot",
-            6 => wrong.completed.raw_result.complete.binding_id.operation_id.workflow_version += 1,
+            1 => wrong.completed.operation_id.model_attempt_ordinal.value += 1,
+            2 => wrong.completed.raw_result.complete.request_id = other.base.model_request_id,
+            3 => wrong.completed.raw_result.complete.binding_id.registry_entry_id.ordinal += 1,
+            4 => wrong.completed.raw_result.complete.binding_id.slot_id.bytes = "another-slot",
+            5 => wrong.completed.raw_result.complete.binding_id.operation_id.workflow_version += 1,
             else => unreachable,
         }
         var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });

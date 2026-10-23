@@ -50,7 +50,7 @@ pub fn apply(input: State, step: compilation.CompiledStep, resources: []const co
     } else if (parameter(step.parameters, "composition-part") != null) return invalid();
 
     if (state.request_part != null and request_lifecycle.advances(step.replaces, step.produces) and request_lifecycle.completes(step.requires)) {
-        state.request_completed = outcome == .ok and !request_lifecycle.terminates(step.requires) and !request_lifecycle.closesCount(step.requires);
+        state.request_completed = outcome == .ok and !request_lifecycle.terminates(step.requires);
     }
     if (contains(step.replaces, .json_composition)) {
         if (parameter(step.parameters, "native-composition-part")) |native| {

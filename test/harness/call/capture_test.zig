@@ -84,7 +84,7 @@ test "capture selection rejects missing and duplicate execution-local identities
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{call}, context, description.workflow_id, 201, body));
 }
 
-test "capture selection rejects incomplete redacted replay and noninference records" {
+test "capture selection rejects incomplete redacted and replay records" {
     inline for (.{ "request_complete", "request", "description" }) |field| {
         var invalid = call;
         if (comptime std.mem.eql(u8, field, "request_complete")) invalid.request_complete = false else @field(invalid, field) = null;
@@ -96,13 +96,6 @@ test "capture selection rejects incomplete redacted replay and noninference reco
     invalid = call;
     invalid.replay = .exact;
     try std.testing.expectError(error.CaptureMismatch, capture.select(&.{invalid}, context, description.workflow_id, 9, body));
-    invalid = call;
-    invalid.description.?.operation_kind = .input_token_count;
-    try std.testing.expectError(error.CaptureNotInference, capture.select(&.{invalid}, context, description.workflow_id, 9, body));
-    var count = current;
-    count.kind = .input_token_count;
-    count.origin.kind = .input_token_count;
-    try std.testing.expectError(error.CaptureNotInference, capture.select(&.{call}, .{ .current = count }, description.workflow_id, 9, body));
 }
 
 test "capture selection compares all recorded context fields and exact request bytes" {

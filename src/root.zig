@@ -48,8 +48,6 @@ test {
     _ = @import("model_envelope_test.zig");
     _ = @import("model_payload_schema_test.zig");
     _ = @import("invoke_model_test.zig");
-    _ = @import("count_model_input_tokens_test.zig");
-    _ = @import("model_token_count_validation_test.zig");
     _ = @import("model_attempt_accounting_test.zig");
     _ = @import("provider_operation_lifecycle_test.zig");
     _ = @import("provider_authorization_test.zig");

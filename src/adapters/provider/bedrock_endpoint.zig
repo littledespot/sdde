@@ -23,8 +23,8 @@ pub fn url(allocator: std.mem.Allocator, target: Target) std.mem.Allocator.Error
         }
     }
     // Region is a closed enum, not a user-supplied host or URL string.
-    return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/{s}", .{
-        @tagName(target.region), encoded.written(), if (target.kind == .inference) "converse" else "count-tokens",
+    return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/converse", .{
+        @tagName(target.region), encoded.written(),
     });
 }
 

@@ -242,7 +242,7 @@ fn callTokens(io: std.Io, allocator: std.mem.Allocator, repository: std.Io.Dir, 
         .aws_bedrock => |config| config.region,
         .empty_object, .anthropic => return error.InvalidBudgetEvidence,
     };
-    const wire: @import("../../../src/adapters/provider/model_http_transport.zig").Request = .{ .target = .{ .aws_bedrock = .{ .region = region, .model = .{ .bytes = context.model }, .kind = context.kind } }, .body = captured.call.request.?, .api_key = "", .deadline_monotonic_ms = 1 };
+    const wire: @import("../../../src/adapters/provider/model_http_transport.zig").Request = .{ .target = .{ .aws_bedrock = .{ .region = region, .model = .{ .bytes = context.model } } }, .body = captured.call.request.?, .api_key = "", .deadline_monotonic_ms = 1 };
     try @import("../frozen_binding.zig").validateDescription(a, description, wire, expected_models);
     if (!std.mem.eql(u8, description.provider, protocol.provider) or !std.mem.eql(u8, description.model, protocol.model) or !std.mem.eql(u8, @tagName(region), protocol.region)) return error.InvalidBudgetEvidence;
     _ = try @import("../diagnostic_binding.zig").rebind(a, description, captured.provider_catalogue, description.model, description.reasoning_effort);

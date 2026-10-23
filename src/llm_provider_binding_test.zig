@@ -86,32 +86,23 @@ test "binding rejects absent slot authority and non-model steps" {
     );
 }
 
-test "inference binding does not require optional count support" {
+test "binding rejects catalogue models missing inference or response support" {
+    // Inference is the only operation, so a model without it registers nowhere.
+    var unusable = provider_contracts.entries[0];
+    unusable.capabilities.inference = false;
+    unusable.capabilities.structured_response = .unavailable;
+    unusable.capabilities.temperature = false;
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, Fixture.initWith(.{ .entries = &.{unusable} }));
     var contract = provider_contracts.entries[0];
-    contract.capabilities.input_token_count = false;
-    contract.capabilities.exact_token_counter = .unavailable;
+    contract.capabilities.structured_response = .unavailable;
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
-    _ = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
-}
-
-test "binding rejects catalogue models missing inference or response support" {
-    for (0..2) |variant| {
-        var contract = provider_contracts.entries[0];
-        if (variant == 0) {
-            contract.capabilities.inference = false;
-            contract.capabilities.structured_response = .unavailable;
-            contract.capabilities.temperature = false;
-        } else contract.capabilities.structured_response = .unavailable;
-        var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
-        defer fixture.deinit();
-        try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(
-            &model_graph,
-            model_step.id,
-            fixture.services.registry(),
-            fixture.services.allowlist(),
-        ));
-    }
+    try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(
+        &model_graph,
+        model_step.id,
+        fixture.services.registry(),
+        fixture.services.allowlist(),
+    ));
 }
 
 test "binding projection rejects missing duplicate malformed or unprojected slots" {

@@ -23,7 +23,6 @@ test "invoke action forwards exact request binding authorization and applied ope
     try std.testing.expect(received.authorization == fixture.authorized.reference);
     try std.testing.expect(received.invoked == applied);
     try std.testing.expectEqual(@as(usize, 1), spy.invoke_calls);
-    try std.testing.expectEqual(@as(usize, 0), spy.count_calls);
     const complete = response.completed.raw_result.complete;
     try std.testing.expect(complete.content.bytes.ptr == spy.returned_content.?.ptr);
     try std.testing.expectEqualStrings("not JSON", complete.content.bytes);
@@ -180,6 +179,5 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 
 fn expectCalls(fixture: *const Fixture, invocations: usize, effects: usize) !void {
     try std.testing.expectEqual(invocations, fixture.fake.invocation_call_count);
-    try std.testing.expectEqual(@as(usize, 0), fixture.fake.count_call_count);
     try std.testing.expectEqual(effects, fixture.fake.effect_count);
 }

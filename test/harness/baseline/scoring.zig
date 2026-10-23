@@ -493,7 +493,6 @@ fn verifyExchange(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir, receipt: tr
         .target = .{ .aws_bedrock = .{
             .region = description.provider_config.aws_bedrock.region,
             .model = @import("../../../src/domain/llm_provider_identity.zig").ModelId.parse(description.model) orelse return error.FrozenBindingRejected,
-            .kind = .inference,
         } },
         .body = captured.call.request.?,
         .api_key = "",

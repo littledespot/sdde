@@ -1,6 +1,6 @@
 //! Classify only sealed native evidence for an explicitly bound assessment.
 const handoff = @import("model_request_handoff.zig");
-const invocation = @import("model_invocation_result.zig").For(.inference);
+const invocation = @import("model_invocation_result.zig");
 const validation = @import("provider_invocation_validation.zig");
 const authority = @import("required_authority.zig");
 const attempts = @import("model_attempt_decision.zig");
@@ -29,7 +29,7 @@ pub fn invocationReason(request: *const handoff.Request, result: *const invocati
                 .failed => |failure| {
                     if (observed.missingFinalText() and result.accountingStop() == null) return null;
                     switch (failure.cause) {
-                        .authentication_failed, .authorization_denied, .timeout, .exact_token_count_unavailable => return null,
+                        .authentication_failed, .authorization_denied, .timeout => return null,
                         .transport_failed => if (failure.transport) |transport| switch (transport.cause) {
                             .tls, .timeout => return null,
                             else => {},

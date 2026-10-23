@@ -89,7 +89,7 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
   attempt transition, and a non-exhausted workflow-execution actual-usage ledger
 - **Output:** raw provider result
 - **Responsibility:** Make one model call only after identity, operation-local retry accounting,
-  and workflow actual-usage budget checks succeed; count evidence is not required.
+  and workflow actual-usage budget checks succeed.
 
 ## `AdmitModelResponseAction`
 

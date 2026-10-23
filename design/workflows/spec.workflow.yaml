@@ -1037,8 +1037,6 @@ subgraphs:
         on: {ok: operation, more: close-advisory-protocol, failed: end.failed}
       operation:
         use: assign-provider-operation
-        with:
-          kind: inference
         on: {ok: authorize, failed: end.failed}
       authorize:
         use: prepare-provider-operation-authorization

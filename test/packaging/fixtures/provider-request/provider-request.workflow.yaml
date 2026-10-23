@@ -15,7 +15,7 @@ steps:
   validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
   build: { use: build-model-request, on: { ok: account, failed: end.failed } }
   account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: operation, more: account-stop, failed: end.failed } }
-  operation: { use: assign-provider-operation, with: { kind: inference }, on: { ok: authorize, failed: end.failed } }
+  operation: { use: assign-provider-operation, on: { ok: authorize, failed: end.failed } }
   authorize: { use: prepare-provider-operation-authorization, with: { timeout-ms: 60000 }, on: { ok: advance-request, failed: terminate-operation, cancelled: terminate-operation } }
   advance-request: { use: advance-model-request-lifecycle, with: { transition: invoked }, on: { ok: advance-operation, failed: end.failed } }
   advance-operation: { use: advance-provider-operation-lifecycle, with: { transition: invoked }, on: { ok: call, failed: end.failed } }

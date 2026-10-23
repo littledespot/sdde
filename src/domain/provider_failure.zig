@@ -16,7 +16,7 @@ pub fn retryClass(stage: Stage, cause: operation.ProviderFailureCause) operation
         .before_send => .never,
         .exchange => switch (cause) {
             .throttled, .timeout, .service_unavailable, .transport_failed => .policy_eligible,
-            .authentication_failed, .authorization_denied, .request_rejected, .model_unavailable, .response_invalid, .exact_token_count_unavailable => .never,
+            .authentication_failed, .authorization_denied, .request_rejected, .model_unavailable, .response_invalid => .never,
         },
     };
 }
@@ -29,7 +29,7 @@ test "pre-send failures never retry and exchange failures follow their cause" {
     for ([_]operation.ProviderFailureCause{ .throttled, .timeout, .service_unavailable, .transport_failed }) |cause| {
         try std.testing.expectEqual(operation.ProviderRetryClass.policy_eligible, retryClass(.exchange, cause));
     }
-    for ([_]operation.ProviderFailureCause{ .authentication_failed, .authorization_denied, .request_rejected, .model_unavailable, .response_invalid, .exact_token_count_unavailable }) |cause| {
+    for ([_]operation.ProviderFailureCause{ .authentication_failed, .authorization_denied, .request_rejected, .model_unavailable, .response_invalid }) |cause| {
         try std.testing.expectEqual(operation.ProviderRetryClass.never, retryClass(.exchange, cause));
     }
 }

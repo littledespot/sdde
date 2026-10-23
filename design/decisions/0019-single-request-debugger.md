@@ -18,8 +18,9 @@
   [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not yet
   implemented): `node_id` and `route_id` both name the originating `request-model`
   step, and the action ID records the stage. The implementation advances the
-  description version if its shape changes. Its 23 October 2026 amendment removes
-  provider token counting, so no token-count observation remains to correlate.
+  description version if its shape changes. Its 23 October 2026 amendment's removal of
+  provider token counting was implemented on 24 October 2026, so no token-count
+  observation remains to correlate.
 
 ## Diagnostic execution boundary
 

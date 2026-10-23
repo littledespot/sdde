@@ -619,14 +619,6 @@ pub fn build(b: *std.Build) void {
     const invoke_model_step = b.step("test-invoke-model", "Test single-call provider invocation and outcome propagation");
     invoke_model_step.dependOn(&b.addRunArtifact(invoke_model_tests).step);
 
-    const count_model_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/count_model_input_tokens_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    const count_model_step = b.step("test-count-model-input-tokens", "Test optional single-call token counting and outcome propagation");
-    count_model_step.dependOn(&b.addRunArtifact(count_model_tests).step);
-
     const provider_conformance_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/provider_conformance_test.zig"),
         .target = target,
@@ -666,13 +658,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }) }));
     b.step("test-scenario-timing", "Test scenario cost reporting and incomplete-run accounting").dependOn(&timing_tests.step);
-
-    const count_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .root_source_file = b.path("src/model_token_count_validation_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    }) });
-    b.step("test-model-token-count-validation", "Test exact count observation association and outcome preservation").dependOn(&b.addRunArtifact(count_validation_tests).step);
 
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),

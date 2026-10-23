@@ -33,8 +33,9 @@
   The overall design remains **Proposed design**. The connector proposal stays an
   unaccepted source document. Its normative content moves here and into
   [F0009](../features/F0009-AnthropicProvider.md).
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, not
-  yet implemented). It changes:
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026;
+  not yet implemented except the token-counting removal, implemented 24 October 2026).
+  It changes:
   - "Configuration" (`{"maxOutputTokens": N}` "with no other field"): `config` also
     requires a positive `requestTimeoutMs`, the provider-operation deadline;
   - "One token budget, deadline …": the budget stays shared, but each catalogue entry
@@ -43,7 +44,8 @@
     required `requestTimeoutMs`;
   - "Deadline" under "Not decided here", now settled per model. Claude's entries start at
     the shared 180,000 ms until a measured maximum-output time replaces it;
-  - "Token counting": provider token counting is removed for every provider.
+  - "Token counting": provider token counting is removed for every provider
+    (implemented 24 October 2026).
 
 ## Context
 

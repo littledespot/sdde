@@ -31,7 +31,7 @@ pub const Adapter = struct {
         const self: *Adapter = @ptrCast(@alignCast(context));
         const facts = try self.authorization.authorize_fn(self.authorization.context, description);
         const family = key.Family.of(description.provider_config) orelse return error.InvalidReplay;
-        if (std.meta.activeTag(facts) != family.configSchema() or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
+        if (std.meta.activeTag(facts) != family.configSchema() or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
         const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, schema, description.members) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         members.release();
@@ -54,7 +54,7 @@ pub const Adapter = struct {
                 .reasoning_effort = effort,
                 .family = config.family,
                 .max_output_tokens = config.max_output_tokens,
-            }, .inference),
+            }),
             .anthropic => |config| @import("anthropic_request.zig").encodeText(a, .{
                 .model = description.model,
                 .content = description.content,
@@ -100,7 +100,6 @@ pub const Adapter = struct {
                 .aws_bedrock => |config| .{ .aws_bedrock = .{
                     .region = config.region,
                     .model = @import("../../domain/llm_provider_identity.zig").ModelId.parse(value.description.model) orelse return error.InvalidReplay,
-                    .kind = .inference,
                 } },
                 .anthropic => .anthropic,
                 .empty_object => return error.InvalidReplay,
@@ -128,8 +127,6 @@ pub const Adapter = struct {
     fn inspect(context: *port.Context, a: std.mem.Allocator, description: debug.Description, body: []const u8) port.Error!debug.Validation {
         const self: *Adapter = @ptrCast(@alignCast(context));
         var result: debug.Validation = .{};
-        // Token-count observations contain no generated candidate to validate.
-        if (description.operation_kind != .inference) return result;
         var syntax: ?strict.Diagnostic = null;
         defer if (syntax) |value| value.deinit(a);
         var raw = strict.parse(a, body, .{ .maximum_depth = std.math.maxInt(usize) }, false, &syntax) catch |err| {

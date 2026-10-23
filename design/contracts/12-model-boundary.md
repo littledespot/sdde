@@ -29,32 +29,6 @@ provider observation contract, including missing final text. Only complete conte
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
-23 October 2026 (not yet implemented), provider token counting is removed; the count
-actions and bindings below go with it.
-
-- Optional `CountModelInputTokensAction` forwards the exact request, binding, invoked count operation and single-use lease through
-  the existing provider port once, preserving counts, failures and cancellation.
-- The port owns call checks and cleanup; the action adds no capacity gate, inference
-  prerequisite, retry, token charge or lifecycle transition.
-- `ValidateModelTokenCountObservationAction` separately validates the current invoked count
-  operation and reuses `ExactInputTokenCountEvidence.fromObservation` for request/binding/input
-  checks.
-- It preserves failures, while cancellation remains outside observations.
-- The allocation-free result borrows the original identity owners; validation neither consumes a
-  lease nor changes accounting/lifecycle.
-- Both actions have parameter-free YAML bindings, `count-model-input-tokens` and
-  `validate-model-token-count-observation`.
-- Their typed results retain the original request/binding owners.
-- `complete-count-operation` reuses the existing lifecycle action/runner to terminalize only the
-  exact validated count, failure or cancellation.
-- `complete-count-request` closes the logical request only for count failure/cancellation after
-  all its operations are terminal.
-- Count success cannot accept a request.
-- Missing, foreign, stale or duplicate completion evidence rejects; lease cleanup and explicit
-  YAML retries use the existing owners.
-- Fake-provider YAML tests cover these paths without an inference prerequisite or token charge.
-
 - Native YAML `validate-provider-invocation-observation` implements step 5 through the existing
   validator.
 - Its parameter-free binding retains the exact request and response owners and publishes sealed
@@ -279,18 +253,14 @@ becoming candidates. Tool-use, truncation, filtering, guardrail and other
 noncandidate stops preserve their typed outcomes and independently valid usage.
 Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
-Optional CountTokens uses its `input.converse` shape, without inference-only
-configuration or an encoded legacy chat body. Models without registered count support do
-not acquire it merely because the API exists.
-[ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended 23 October 2026,
-not yet implemented) removes CountTokens and all provider token counting.
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
 repair and grading, registered temperature `0.1`, and its documented maximum of
 16,384 output tokens sent on every inference request
-([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)). The separately registered Luna profile retains its strict-output field, omitted
-temperature/reasoning controls and unavailable CountTokens capability.
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
+The separately registered Luna profile retains its strict-output field and omitted
+temperature/reasoning controls.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
 Historical captures follow the immutable inspection/replay boundary in
@@ -367,7 +337,8 @@ reuse, not provider caching or deterministic semantic proof.
 
 ### 12.7 Workflow-defined model operations
 
-> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
+> **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
+> except the token-counting removal, implemented 24 October 2026).**
 > One [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
 > preparation step and every explicit lifecycle step below. A fixed kernel orchestrator runs
 > them as the stages ADR 0030 lists, through runner-owned child bindings. Where a bullet below
@@ -376,7 +347,7 @@ reuse, not provider caching or deterministic semantic proof.
 > `request-model` step. Retry counting keeps its scopes, with the compiled operation now
 > being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
 > The 23 October amendment also:
-> - removes provider token counting: read every count operation below as removed; actual
+> - removed provider token counting (implemented): no count operation remains, and actual
 >   inference usage still feeds the one workflow token budget;
 > - takes the provider-operation deadline from the bound catalogue entry's required
 >   `requestTimeoutMs`, not a YAML `timeout-ms`;
@@ -458,9 +429,6 @@ findings. Only complete native collection validation permits authority advanceme
   incomplete-failure semantics only, survives correction and cannot be chosen by a
   workflow, slot or model response. A global budget rejection remains fatal during
   advice and required work; it cannot become incomplete advice.
-- Optional count operations provide observations only and never authorize inference or replace
-  actual-usage accounting. [ADR 0030](../decisions/0030-engine-owned-model-request.md) (amended
-  23 October 2026, not yet implemented) removes them; actual-usage accounting is unchanged.
 
 - Native `advance-model-attempt-accounting` consumes the retained prepared request through an
   explicit YAML step and requires `retry-limit` (`0` means initial execution only).
@@ -485,14 +453,14 @@ findings. Only complete native collection validation permits authority advanceme
   and charges no tokens.
 - All its owners are destroyed with execution.
 
-- Native `assign-provider-operation` consumes that prepared request and applied attempt with one
-  explicit `kind` (`inference` or `input-token-count`).
+- Native parameter-free `assign-provider-operation` consumes that prepared request and
+  applied attempt and assigns one inference provider operation.
 - The existing provider-operation lifecycle action proposes assignment; the runner validates its
   exact request/attempt/binding/input association and current revisions, then publishes the
   immutable ledger successor and sealed `assigned_provider_operation` view together.
 - Consuming evidence cannot erase an unfinished operation or permit a retry.
-- This step neither invokes a provider nor prepares authorization, counts tokens or persists
-  records.
+- This step neither invokes a provider nor prepares authorization, charges tokens or
+  persists records.
 - Those operations remain explicit separate YAML work.
 
 - Native `prepare-provider-operation-authorization` consumes that same request, attempt and

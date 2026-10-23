@@ -248,11 +248,6 @@ test "response inspection reuses extraction and reports the exact schema path an
     try std.testing.expectEqualStrings("string", checked.expected.?);
     try std.testing.expectEqualStrings("null_value", checked.received.?);
     try std.testing.expectEqual(@as(?u64, 10), checked.input_tokens);
-    var count_description = description;
-    count_description.operation_kind = .input_token_count;
-    const count = try fixture.provider.provider().inspect(a, count_description, "{\"inputTokens\":10}");
-    try std.testing.expectEqual(.unavailable, count.extraction);
-    try std.testing.expectEqual(.unavailable, count.schema);
 }
 
 test "response inspection admits retained native usage through existing normalization and selected schema" {
@@ -630,7 +625,7 @@ test "captured production request reconstructs exactly in both schema modes" {
         production.request.response_guidance_mode = mode;
         production.registry_entry.json = mode == .native_schema;
         try std.testing.expect(production.request.matchesBinding(production.provider_binding));
-        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
+        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
         const restored = try debug.Description.decode(a, serialized);
@@ -639,7 +634,7 @@ test "captured production request reconstructs exactly in both schema modes" {
     }
 }
 
-test "events join the exact operation kind as well as request and attempt" {
+test "events join the exact request attempt" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -650,19 +645,19 @@ test "events join the exact operation kind as well as request and attempt" {
     const events: @import("application/workflow_event_capture.zig").Capture = .{ .barrier = sink.barrier(), .shortcode = shortcode };
     var logger: capture.Capture = .{ .allocator = a, .logs = sink.barrier() };
     defer logger.deinit();
-    for ([_]@import("domain/llm_provider_operation.zig").ProviderOperationKind{ .input_token_count, .inference }) |kind| {
-        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 }, .kind = kind };
+    for ([_]u32{ 1, 2 }, [_][]const u8{ "attempt-1", "attempt-2" }) |attempt, node| {
+        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = attempt } };
         logger.begin(.{ .workflow = shortcode, .workflow_id = .{ .bytes = "spec" }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = "generation-prepare" }, .model_slot = .{ .bytes = "generation" }, .origin = origin });
         try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "{}" }, &.{}));
         logger.end();
-        try std.testing.expect(events.validation(.{ .bytes = @tagName(kind) }, .ok, null, origin) == null);
+        try std.testing.expect(events.validation(.{ .bytes = node }, .ok, null, origin) == null);
     }
     var restored: archive.Archive = .{ .allocator = a };
     try restored.ingest(sink.rows.items);
     try restored.ingestEvents(sink.events.items);
     const calls = try restored.calls();
     try std.testing.expectEqual(@as(usize, 2), calls.len);
-    for (calls, [_][]const u8{ "input_token_count", "inference" }) |call, node| {
+    for (calls, [_][]const u8{ "attempt-1", "attempt-2" }) |call, node| {
         try std.testing.expectEqual(@as(usize, 1), call.events.len);
         try std.testing.expectEqualStrings(node, call.events[0].node.?);
     }
@@ -710,7 +705,7 @@ test "debugger readback preserves explicit assembled repair lineage and subseque
     try std.testing.expectEqualStrings(calls[0].id, calls[1].original);
 }
 
-test "debugger orders split captures across bindings by recorded sequence including retries repairs and count calls" {
+test "debugger orders split captures across bindings by recorded sequence including retries and repairs" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -738,10 +733,6 @@ test "debugger orders split captures across bindings by recorded sequence includ
     logger.begin(metadata);
     try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "retry" }, &.{}));
     logger.end();
-    metadata.origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 }, .kind = .input_token_count };
-    logger.begin(metadata);
-    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "count" }, &.{}));
-    logger.end();
     metadata.origin = .{ .request = .{ .value = 99 }, .attempt = .{ .value = 1 } };
     metadata.kind = .repair;
     metadata.source = .{ .response = origin };
@@ -759,8 +750,8 @@ test "debugger orders split captures across bindings by recorded sequence includ
     try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-one/LOGBIND-2/0001.log", .data = first });
     var store: @import("adapters/filesystem/request_debugger_store.zig").Store = .{ .io = io, .feature = directory.dir };
     const calls = try store.load(a);
-    try std.testing.expectEqual(@as(usize, 5), calls.len);
-    for (calls, [_][]const u8{ "request-10-inference-1", "request-2-inference-1", "request-10-inference-2", "request-2-input_token_count-1", "request-99-inference-1" }, [_]u64{ 2, 10, 11, 12, 13 }, 1..) |call, id, sequence, number| {
+    try std.testing.expectEqual(@as(usize, 4), calls.len);
+    for (calls, [_][]const u8{ "request-10-inference-1", "request-2-inference-1", "request-10-inference-2", "request-99-inference-1" }, [_]u64{ 2, 10, 11, 12 }, 1..) |call, id, sequence, number| {
         try std.testing.expectEqualStrings(id, call.id);
         try std.testing.expectEqual(sequence, call.sequence);
         try std.testing.expectEqual(@as(u64, @intCast(number)), call.execution_order);
@@ -769,8 +760,8 @@ test "debugger orders split captures across bindings by recorded sequence includ
     try std.testing.expectEqualStrings(body, calls[0].request.?);
     try std.testing.expectEqualStrings("retry", calls[2].kind);
     try std.testing.expectEqualStrings(calls[0].id, calls[2].parent.?);
-    try std.testing.expectEqualStrings("repair", calls[4].kind);
-    try std.testing.expectEqualStrings(calls[0].id, calls[4].parent.?);
+    try std.testing.expectEqualStrings("repair", calls[3].kind);
+    try std.testing.expectEqualStrings(calls[0].id, calls[3].parent.?);
 
     // The same call ID in another run gets its own sequence and numbering.
     const second_start = std.mem.indexOf(u8, rest, "|10|2026-09-20").?;
@@ -780,10 +771,10 @@ test "debugger orders split captures across bindings by recorded sequence includ
     try directory.dir.createDirPath(io, "logs/prompts/run-two/LOGBIND-1");
     try directory.dir.writeFile(io, .{ .sub_path = "logs/prompts/run-two/LOGBIND-1/0001.log", .data = try std.mem.concat(a, u8, &.{ format.prompt_heading, other_run }) });
     const grouped = try store.load(a);
-    try std.testing.expectEqual(@as(usize, 6), grouped.len);
-    try std.testing.expectEqualStrings("run-two", grouped[5].run);
-    try std.testing.expectEqualStrings(calls[1].id, grouped[5].id);
-    try std.testing.expectEqual(@as(u64, 1), grouped[5].execution_order);
+    try std.testing.expectEqual(@as(usize, 5), grouped.len);
+    try std.testing.expectEqualStrings("run-two", grouped[4].run);
+    try std.testing.expectEqualStrings(calls[1].id, grouped[4].id);
+    try std.testing.expectEqual(@as(u64, 1), grouped[4].execution_order);
 
     // Regular files without a segment name are left alone at every level.
     for ([_][]const u8{ "logs/prompts/.DS_Store", "logs/prompts/run-one/Thumbs.db", "logs/prompts/run-one/LOGBIND-2/0001.log.bak" }) |stray| {
@@ -977,7 +968,7 @@ test "selected request schemas survive capture and graph release without whole-s
             try std.testing.expectEqualStrings(selected.schema.modelBytes(), projection.schema);
             logger.begin(.{ .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"), .workflow_id = .{ .bytes = projection.workflow_id }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = projection.request_step }, .model_slot = .{ .bytes = projection.model_slot }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .description = projection });
             defer logger.end();
-            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
+            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, production.registry_entry.facts.bedrockFamily().?, production.registry_entry.config.aws_bedrock.max_output_tokens);
             try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
             const response = try debugResponse(source, selected.response);
             try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = response }, &.{}));

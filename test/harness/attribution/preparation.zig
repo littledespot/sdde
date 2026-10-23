@@ -158,7 +158,7 @@ pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
         .reasoning_effort = try @import("../../../src/adapters/provider/model_text_request.zig").reasoningEffort(value.reasoning_effort),
         .family = .@"gpt-oss",
         .max_output_tokens = try frozen.maximumOutput(a),
-    }, .inference);
+    });
 }
 
 /// Mutation is limited to presentation keys in the one original user packet.

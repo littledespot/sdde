@@ -6,7 +6,6 @@ const model_controls = @import("model_controls.zig");
 const provider_reasoning = @import("provider_reasoning.zig");
 
 pub const ProviderOperationKind = enum {
-    input_token_count,
     inference,
 };
 
@@ -170,7 +169,6 @@ pub const ProviderFailureCause = enum {
     service_unavailable,
     transport_failed,
     response_invalid,
-    exact_token_count_unavailable,
 };
 
 pub const ProviderRetryClass = enum {
@@ -199,70 +197,6 @@ pub const ProviderFailure = struct {
 };
 
 pub const ProviderContentDiagnostic = enum { invalid_content, missing_final_text };
-
-pub const ProviderTokenCountObservation = union(enum) {
-    counted: struct {
-        operation_id: ProviderOperationId,
-        binding_id: binding.ProviderModelBindingId,
-        model_visible_input_id: ModelVisibleInputId,
-        input_tokens: u64,
-    },
-    failed: ProviderFailure,
-};
-
-pub const ExactInputTokenCountEvidence = struct {
-    count_operation_id: ProviderOperationId,
-    binding_id: binding.ProviderModelBindingId,
-    model_visible_input_id: ModelVisibleInputId,
-    input_tokens: u64,
-
-    pub fn fromObservation(
-        observation: ProviderTokenCountObservation,
-        request: IdentifiedProviderNeutralModelRequest,
-        provider_binding: binding.ValidatedProviderModelBinding,
-    ) Error!ExactInputTokenCountEvidence {
-        if (!request.matchesBinding(provider_binding)) return error.InvalidExactTokenCountEvidence;
-        const counted = switch (observation) {
-            .counted => |value| value,
-            .failed => return error.ExactTokenCountEvidenceUnavailable,
-        };
-        const expected_binding = provider_binding.bindingId();
-        const evidence: ExactInputTokenCountEvidence = .{
-            .count_operation_id = counted.operation_id,
-            .binding_id = counted.binding_id,
-            .model_visible_input_id = counted.model_visible_input_id,
-            .input_tokens = counted.input_tokens,
-        };
-        if (!evidence.isValidFor(request, expected_binding)) {
-            return error.InvalidExactTokenCountEvidence;
-        }
-        // After validating observed identities, borrow only their canonical
-        // request/binding owners, never separately owned observation strings.
-        return .{
-            .count_operation_id = evidence.count_operation_id,
-            .binding_id = expected_binding,
-            .model_visible_input_id = request.model_visible_input_id,
-            .input_tokens = evidence.input_tokens,
-        };
-    }
-
-    pub fn isValidFor(
-        self: ExactInputTokenCountEvidence,
-        request: IdentifiedProviderNeutralModelRequest,
-        expected_binding: binding.ProviderModelBindingId,
-    ) bool {
-        if (self.count_operation_id.kind != .input_token_count or
-            self.count_operation_id.model_attempt_ordinal.value == 0 or
-            self.count_operation_id.model_request_id != request.model_request_id or
-            !self.binding_id.eql(expected_binding) or
-            !self.binding_id.eql(request.binding_id) or
-            !self.model_visible_input_id.eql(request.model_visible_input_id))
-        {
-            return false;
-        }
-        return true;
-    }
-};
 
 pub const ProviderUsage = struct {
     input_tokens: u64,
@@ -369,37 +303,18 @@ pub const ProviderInvocationObservation = union(enum) {
     }
 };
 
-pub fn validateCountInvocation(
-    provider_binding: *const binding.ValidatedProviderModelBinding,
-    request: *const IdentifiedProviderNeutralModelRequest,
-    operation: *const InvokedProviderOperation,
-) bool {
-    request.validate() catch return false;
-    return operation.id.kind == .input_token_count and
-        provider_binding.registry_entry.capabilities.input_token_count and
-        provider_binding.registry_entry.capabilities.exact_token_counter == .provider_input_token_count and
-        operation.isValid() and
-        operation.id.model_request_id == request.model_request_id and
-        request.matchesBinding(provider_binding.*);
-}
-
 pub fn validateInferenceInvocation(
     provider_binding: *const binding.ValidatedProviderModelBinding,
     request: *const IdentifiedProviderNeutralModelRequest,
     operation: *const InvokedProviderOperation,
 ) bool {
     request.validate() catch return false;
-    return operation.id.kind == .inference and
-        request.matchesBinding(provider_binding.*) and
+    return request.matchesBinding(provider_binding.*) and
         operation.isValid() and
         operation.id.model_request_id == request.model_request_id;
 }
 
 pub const RequestError = error{InvalidProviderNeutralModelRequest};
-pub const Error = RequestError || error{
-    ExactTokenCountEvidenceUnavailable,
-    InvalidExactTokenCountEvidence,
-};
 
 fn validAuthorityId(raw: []const u8) bool {
     if (raw.len == 0 or raw.len > 128) return false;

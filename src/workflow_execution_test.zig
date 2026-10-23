@@ -436,7 +436,7 @@ test "pending independent prohibiting outcome prevents publication finalization 
 
             const occurrence = try runner.envelope.beginOccurrence("test.independent-failure");
             var failure: execution.Candidate = .{ .outcome = prohibiting, .delta = .{} };
-            var pending = try @import("application/workflow_outcome_binding.zig").prepare(&runner.envelope, occurrence, .independent, &failure, null);
+            var pending = try @import("application/workflow_outcome_binding.zig").prepare(&runner.envelope, occurrence, .independent, &failure);
             defer pending.deinit();
             try runner.envelope.applyOccurrence(occurrence, .{ .id = "test.independent-failure", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none }, &failure.delta, prohibiting);
             try runner.envelope.outcomes.commit(&pending);

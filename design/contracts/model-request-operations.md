@@ -3,17 +3,18 @@
 Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
-> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
-> Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
-> being YAML-selectable. Each inference operation becomes a fixed stage of one
-> `request-model` step. The 23 October amendment removes provider token counting, so the
-> four count operations below (`count-model-input-tokens`,
-> `validate-model-token-count-observation`, `complete-count-operation` and
-> `complete-count-request`) go, as does the `input-token-count` value of
-> `assign-provider-operation`'s `kind`. A
-> capability-free kernel orchestrator runs the stages in the order ADR 0030 lists, through
-> runner-owned child bindings. That list also includes the request-phase check, which
-> decides whether the request lifecycle advances (initial attempt only).
+> **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
+> except the token-counting removal).** The 23 October amendment's removal of provider
+> token counting was implemented on 24 October 2026: no count operation remains, and
+> `assign-provider-operation` takes no parameter and always assigns inference.
+>
+> The rest is not yet implemented. Under
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
+> being YAML-selectable. Each request-lifecycle operation becomes a fixed stage of one
+> `request-model` step. A capability-free kernel orchestrator runs the stages in the order
+> ADR 0030 lists, through runner-owned child bindings. That list also includes the
+> request-phase check, which decides whether the request lifecycle advances (initial
+> attempt only).
 >
 > Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
@@ -58,9 +59,9 @@ Detailed contracts for the explicit YAML model-request operations governed by
 
 ## Operation assignment integration
 
-- `assign-provider-operation` consumes the same prepared request and applied attempt;
-  `kind` explicitly selects `inference` or `input-token-count`.
-- The existing lifecycle action proposes one assignment.
+- Parameter-free `assign-provider-operation` consumes the same prepared request and
+  applied attempt.
+- The existing lifecycle action proposes one inference assignment.
 - The runner validates the exact retained association and publishes sealed evidence from
   the applied canonical record with the envelope delta.
 - The evidence retains the operation and request owners.
@@ -211,17 +212,6 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Completion may precede decoding, whose dependencies retain the original evidence.
 - A runtime/budget rejection abandons execution without inserting a hidden completion
   step.
-
-- Count integration uses the same ownership and lifecycle mechanisms.
-- `count-model-input-tokens` retains the original request/binding with its raw result;
-  `validate-model-token-count-observation` retains those owners with validated
-  count/failure facts or distinct rejection/cancellation.
-- `complete-count-operation` consumes this exact evidence through the existing provider
-  lifecycle action.
-- `complete-count-request` closes only failed/cancelled requests after every associated
-  operation is terminal; count success cannot accept a logical request.
-- These parameter-free bindings add no count prerequisite, capacity gate, token charge,
-  retry authority or completion ledger.
 
 ## Pre-call operation termination integration
 

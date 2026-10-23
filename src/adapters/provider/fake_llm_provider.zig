@@ -10,12 +10,6 @@ pub const FailurePlan = struct {
     delivery: operation.ProviderDeliveryDisposition,
 };
 
-pub const CountPlan = union(enum) {
-    counted: u64,
-    failed: FailurePlan,
-    cancelled,
-};
-
 pub const CompletePlan = struct {
     content_diagnostic: ?operation.ProviderContentDiagnostic = null,
     content: []const u8,
@@ -41,9 +35,7 @@ pub const InvocationPlan = union(enum) {
 pub const FakeLLMProvider = struct {
     allocator: std.mem.Allocator,
     authorization_leases: lease.Port,
-    count_plan: CountPlan,
     invocation_plan: InvocationPlan,
-    count_call_count: usize = 0,
     invocation_call_count: usize = 0,
     effect_count: usize = 0,
 
@@ -51,39 +43,6 @@ pub const FakeLLMProvider = struct {
         return .{
             .context = @ptrCast(self),
             .vtable = &vtable,
-        };
-    }
-
-    fn countInputTokens(
-        context: *provider_interface.Context,
-        provider_binding: *const binding.ValidatedProviderModelBinding,
-        request: *const operation.IdentifiedProviderNeutralModelRequest,
-        authorization: *const operation.ValidatedProviderAuthorizationLeaseRef,
-        invoked_operation: *const operation.InvokedProviderOperation,
-    ) provider_interface.Error!operation.ProviderTokenCountObservation {
-        const self = cast(context);
-        self.count_call_count += 1;
-        var capability = self.authorization_leases.consume(authorization, provider_binding, request, invoked_operation) catch |err| {
-            if (err == error.Cancelled) return error.Cancelled;
-            return .{ .failed = authorizationFailure(invoked_operation.id, err) };
-        };
-        defer capability.deinit();
-        if (!operation.validateCountInvocation(
-            provider_binding,
-            request,
-            invoked_operation,
-        )) return invalidCall(invoked_operation.id);
-        self.effect_count += 1;
-
-        return switch (self.count_plan) {
-            .counted => |input_tokens| .{ .counted = .{
-                .operation_id = invoked_operation.id,
-                .binding_id = provider_binding.bindingId(),
-                .model_visible_input_id = request.model_visible_input_id,
-                .input_tokens = input_tokens,
-            } },
-            .failed => |plan| .{ .failed = failure(invoked_operation.id, plan) },
-            .cancelled => error.Cancelled,
         };
     }
 
@@ -203,7 +162,6 @@ pub const FakeLLMProvider = struct {
 };
 
 const vtable: provider_interface.LLMProviderInterface.VTable = .{
-    .count_input_tokens = FakeLLMProvider.countInputTokens,
     .invoke = FakeLLMProvider.invoke,
 };
 
@@ -221,14 +179,6 @@ fn failure(
         .retry_class = plan.retry_class,
         .delivery = plan.delivery,
     };
-}
-
-fn invalidCall(operation_id: operation.ProviderOperationId) operation.ProviderTokenCountObservation {
-    return .{ .failed = failure(operation_id, .{
-        .cause = .request_rejected,
-        .retry_class = .never,
-        .delivery = .not_sent,
-    }) };
 }
 
 fn authorizationFailure(operation_id: operation.ProviderOperationId, err: lease.Error) operation.ProviderFailure {

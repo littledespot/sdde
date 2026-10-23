@@ -11,13 +11,6 @@ pub const LLMProviderInterface = struct {
     vtable: *const VTable,
 
     pub const VTable = struct {
-        count_input_tokens: *const fn (
-            *Context,
-            *const binding.ValidatedProviderModelBinding,
-            *const operation.IdentifiedProviderNeutralModelRequest,
-            *const operation.ValidatedProviderAuthorizationLeaseRef,
-            *const operation.InvokedProviderOperation,
-        ) Error!operation.ProviderTokenCountObservation,
         invoke: *const fn (
             *Context,
             *const binding.ValidatedProviderModelBinding,
@@ -26,22 +19,6 @@ pub const LLMProviderInterface = struct {
             *const operation.InvokedProviderOperation,
         ) Error!operation.ProviderInvocationObservation,
     };
-
-    pub fn countInputTokens(
-        self: LLMProviderInterface,
-        provider_binding: *const binding.ValidatedProviderModelBinding,
-        request: *const operation.IdentifiedProviderNeutralModelRequest,
-        authorization: *const operation.ValidatedProviderAuthorizationLeaseRef,
-        invoked_operation: *const operation.InvokedProviderOperation,
-    ) Error!operation.ProviderTokenCountObservation {
-        return self.vtable.count_input_tokens(
-            self.context,
-            provider_binding,
-            request,
-            authorization,
-            invoked_operation,
-        );
-    }
 
     pub fn invoke(
         self: LLMProviderInterface,

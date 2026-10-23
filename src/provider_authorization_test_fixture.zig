@@ -134,10 +134,6 @@ pub const Fixture = struct {
         return self.operations().advance(authority, self.ledger().revision(), operation_id, if (previous) |record| record.revision else null, command);
     }
 
-    pub fn assignCount(self: *Fixture) !void {
-        try self.change(.input_token_count, .{ .assign_count = self.assignment() });
-    }
-
     pub fn preparationRunner(self: *Fixture) preparation_runner.Runner {
         return .{ .table = &self.operations().authorization_leases, .prepare_action = .{ .authorization = self.preloader.port() }, .clock = self.clock.port() };
     }
@@ -163,23 +159,12 @@ pub const Fixture = struct {
         return self.operations().authorization_leases.port(self.clock.port(), .{});
     }
 
-    pub fn startCount(self: *Fixture) !Authorized {
-        try self.assignCount();
-        const reference = try self.prepare(.input_token_count);
-        return .{ .reference = reference, .invoked = try self.invoke(.input_token_count) };
-    }
-
-    pub fn evidence(self: *Fixture) operation.ExactInputTokenCountEvidence {
-        return .{ .count_operation_id = self.id(.input_token_count), .binding_id = self.provider_binding.bindingId(), .model_visible_input_id = self.request.model_visible_input_id, .input_tokens = 10 };
-    }
-
-    pub fn finishCountAndStartInference(self: *Fixture, count: operation.ExactInputTokenCountEvidence) !Authorized {
-        try self.change(.input_token_count, .{ .terminate = .{ .counted = count } });
-        return self.startInference();
+    pub fn assignInference(self: *Fixture) !void {
+        try self.change(.inference, .{ .assign_inference = self.assignment() });
     }
 
     pub fn startInference(self: *Fixture) !Authorized {
-        try self.change(.inference, .{ .assign_inference = self.assignment() });
+        try self.assignInference();
         const reference = try self.prepare(.inference);
         return .{ .reference = reference, .invoked = try self.invoke(.inference) };
     }

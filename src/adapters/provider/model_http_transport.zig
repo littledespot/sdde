@@ -11,8 +11,8 @@ const operation = @import("../../domain/llm_provider_operation.zig");
 /// owns its URL, authentication header and retained response headers, so a
 /// key can only be sent to its own family's endpoint.
 pub const Target = union(enum) {
-    aws_bedrock: struct { region: contracts.BedrockRegion, model: identity.ModelId, kind: operation.ProviderOperationKind },
-    /// The Messages API carries its model in the body and supports inference only.
+    aws_bedrock: struct { region: contracts.BedrockRegion, model: identity.ModelId },
+    /// The Messages API carries its model in the body.
     anthropic,
 };
 
@@ -25,13 +25,6 @@ pub const Request = struct {
     // received prefix through this borrowed slot; the exchange joins all tasks
     // before publishing it, and the call-local arena owns its bytes.
     response_body_on_error: ?*?ResponseBody = null,
-
-    pub fn kind(self: Request) operation.ProviderOperationKind {
-        return switch (self.target) {
-            .aws_bedrock => |target| target.kind,
-            .anthropic => .inference,
-        };
-    }
 };
 pub const ResponseBody = struct { bytes: []const u8, complete: bool };
 pub const Failure = struct {

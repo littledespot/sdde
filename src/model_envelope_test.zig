@@ -162,7 +162,6 @@ test "fake response decodes one compact object and preserves exact trusted assoc
         try std.testing.expect(ledger == fixture.base.ledger());
         try std.testing.expect(attempts == fixture.base.attempts.current());
         try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
-        try std.testing.expectEqual(@as(usize, 0), fixture.fake.count_call_count);
         try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
     }
 }

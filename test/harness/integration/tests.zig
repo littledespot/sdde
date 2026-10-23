@@ -1748,7 +1748,6 @@ test "production workflow retains typed advice stops and enforces one global tok
         var fake: @import("../../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
             .allocator = std.testing.allocator,
             .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = AdviceProductionRun.consumeLease },
-            .count_plan = .{ .counted = 0 },
             .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 5, .output_tokens = 2 } },
         };
         runtime.native.model_requests.invoke_model.action = .{ .provider = fake.interface() };

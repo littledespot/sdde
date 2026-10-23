@@ -9,7 +9,7 @@ pub const Wire = struct {
     result: ?transport.Response = null,
     cancelled: bool = false,
     inference_body: []const u8 = complete,
-    /// When set, inference must send exactly this maximum and counting none.
+    /// When set, every request must send exactly this maximum.
     expected_max_tokens: ?u32 = null,
 
     pub fn port(self: *Wire) transport.Port {
@@ -33,22 +33,11 @@ pub const Wire = struct {
             };
             defer parsed.deinit();
             const sent = if (parsed.value.object.get("inferenceConfig")) |config| config.object.get("maxTokens") else null;
-            switch (request.kind()) {
-                .inference => std.debug.assert(sent != null and sent.?.integer == maximum),
-                .input_token_count => std.debug.assert(std.mem.indexOf(u8, request.body, "maxTokens") == null),
-            }
+            std.debug.assert(sent != null and sent.?.integer == maximum);
         }
         std.debug.assert(request.api_key.len != 0);
         std.debug.assert(std.mem.indexOf(u8, request.body, request.api_key) == null);
         if (self.cancelled) return error.Cancelled;
-        return self.result orelse .{ .received = .{ .status = 200, .body = if (request.kind() == .input_token_count) "{\"inputTokens\":10}" else self.inference_body } };
+        return self.result orelse .{ .received = .{ .status = 200, .body = self.inference_body } };
     }
 };
-
-// Inspect the Converse body or CountTokens' identical input projection.
-pub fn requestBody(a: std.mem.Allocator, bytes: []const u8, kind: @import("domain/llm_provider_operation.zig").ProviderOperationKind) ![]u8 {
-    if (kind == .inference) return a.dupe(u8, bytes);
-    var parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
-    defer parsed.deinit();
-    return std.json.Stringify.valueAlloc(a, parsed.value.object.get("input").?.object.get("converse").?, .{});
-}

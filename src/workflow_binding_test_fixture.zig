@@ -11,7 +11,7 @@ pub var model_context: ModelContext = .{};
 /// A real narrow port with no external effects; these binding tests never call
 /// a provider. Unexpected calls fail rather than silently succeeding.
 pub fn port() provider_port.LLMProviderInterface {
-    return .{ .context = @ptrCast(&context), .vtable = &.{ .count_input_tokens = count, .invoke = invoke } };
+    return .{ .context = @ptrCast(&context), .vtable = &.{ .invoke = invoke } };
 }
 
 pub fn unused(_: ?*void, _: operations.Input) operations.Error!execution.Candidate {
@@ -20,10 +20,6 @@ pub fn unused(_: ?*void, _: operations.Input) operations.Error!execution.Candida
 
 pub fn unusedModel(_: ?*ModelContext, _: operations.Input) operations.Error!execution.Candidate {
     return error.OperationExecutionFailed;
-}
-
-fn count(_: *provider_port.Context, _: *const provider_binding.ValidatedProviderModelBinding, _: *const provider_operation.IdentifiedProviderNeutralModelRequest, _: *const provider_operation.ValidatedProviderAuthorizationLeaseRef, _: *const provider_operation.InvokedProviderOperation) provider_port.Error!provider_operation.ProviderTokenCountObservation {
-    return error.Cancelled;
 }
 
 fn invoke(_: *provider_port.Context, _: *const provider_binding.ValidatedProviderModelBinding, _: *const provider_operation.IdentifiedProviderNeutralModelRequest, _: *const provider_operation.ValidatedProviderAuthorizationLeaseRef, _: *const provider_operation.InvokedProviderOperation) provider_port.Error!provider_operation.ProviderInvocationObservation {

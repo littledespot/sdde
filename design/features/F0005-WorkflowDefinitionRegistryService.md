@@ -500,8 +500,8 @@ service is published.
 > **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
 > `request-model` step per model request instead of the request-lifecycle bindings described
-> below, and no count operation. A `request-model` step declares the slot, resources and
-> `retry-limit`, and maps `ok`, `invalid`, `failed` and `cancelled`. Only a step marked
+> below. A `request-model` step declares the slot, resources and `retry-limit`, and maps
+> `ok`, `invalid`, `failed` and `cancelled`. Only a step marked
 > `advisory: allowed` also maps `more` and `blocked`, and only such a step may; that marker
 > selects `request-model`'s advisory contract variant (see the variant rule in §3's
 > outcome-mapping bullet). The compiler rejects any `timeout-ms`, because the deadline

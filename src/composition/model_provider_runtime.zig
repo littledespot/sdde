@@ -20,7 +20,6 @@ pub const Assembly = struct {
     pub fn deinit(self: *Assembly) void {
         self.operations.prepare_authorization.action = null;
         self.operations.invoke_model.action = null;
-        self.operations.count_model_input.action = null;
         self.authorization.deinit();
     }
 
@@ -50,7 +49,6 @@ pub const Assembly = struct {
         };
         self.operations.prepare_authorization.action = .{ .authorization = self.authorization.port() };
         self.operations.invoke_model.action = .{ .provider = self.provider.?.port() };
-        self.operations.count_model_input.action = .{ .provider = self.provider.?.port() };
     }
 };
 

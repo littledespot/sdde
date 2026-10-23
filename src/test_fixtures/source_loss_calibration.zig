@@ -513,7 +513,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .reasoning_effort = .low,
         .family = .@"gpt-oss",
         .max_output_tokens = try catalogueMaximum(a),
-    }, .inference);
+    });
 }
 /// The shipped test catalogue owns the GPT-OSS maximum output (ADR 0011). The
 /// production decode, registry build and validation read it, so this projection

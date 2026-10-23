@@ -4,15 +4,16 @@
 - **Date:** 2026-09-05
 - **Decision authority:** Explicit user direction
 - **Amends:** Design Sections 7.3 and 12, ADRs 0004/0005, and F0005/F0006
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
-  yet implemented). One `request-model` step replaces the explicit lifecycle
-  operations, which become engine-run stages that YAML cannot name. Request identity,
-  retained inputs, consumers and release are unchanged; the step that owns identity and
-  retries becomes the `request-model` step. Its 23 October 2026 amendment removes the
-  input-token-count operation kind, so the "both operation kinds" cases below cover
-  inference only, and takes the deadline from the bound catalogue entry's
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
+  amended 23 October 2026; partly implemented). Not yet implemented: one `request-model`
+  step replaces the explicit lifecycle operations, which become engine-run stages that
+  YAML cannot name. Request identity, retained inputs, consumers and release are
+  unchanged; the step that owns identity and retries becomes the `request-model` step.
+  The 23 October amendment also takes the deadline from the bound catalogue entry's
   `requestTimeoutMs`, so the "missing/invalid deadlines" cases move to catalogue
-  validation.
+  validation. Implemented on 24 October 2026: the 23 October amendment removed the
+  input-token-count operation kind, so the "both operation kinds" cases below cover
+  inference only.
 
 ## Decision
 

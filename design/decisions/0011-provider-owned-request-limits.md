@@ -23,13 +23,15 @@
   Converse for model switching. This replaces the previous chat wire mapping only.
 - **Amends:** Design Sections 3, 9, 12–13, 17, 20, 22, 24, 28 and 31; ADRs 0004–0006;
   F0001, F0005–F0007; and their samples and diagrams
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
-  yet implemented). A request's protocol correction runs inside its `request-model`
-  step under that step's `retry-limit`, not as an explicit YAML transition. The runner
-  still accounts every attempt's actual usage against the one workflow budget. Its
-  23 October 2026 amendment removes CountTokens and all provider token counting, and
-  adds a required `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry
-  (see "Model maximum output"). Actual-usage accounting is unchanged.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026,
+  amended 23 October 2026; partly implemented). Not yet implemented: a request's
+  protocol correction runs inside its `request-model` step under that step's
+  `retry-limit`, not as an explicit YAML transition, and the 23 October amendment adds a
+  required `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry (see
+  "Model maximum output"). The runner still accounts every attempt's actual usage
+  against the one workflow budget. Implemented on 24 October 2026: the 23 October
+  amendment's removal of CountTokens and all provider token counting, so the
+  CountTokens text below no longer applies. Actual-usage accounting is unchanged.
 
 ## Decision
 

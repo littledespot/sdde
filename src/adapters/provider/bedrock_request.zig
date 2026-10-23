@@ -1,4 +1,4 @@
-//! Bedrock Converse and CountTokens wire encoding from the shared text layout.
+//! Bedrock Converse wire encoding from the shared text layout.
 const std = @import("std");
 const operation = @import("../../domain/llm_provider_operation.zig");
 const text = @import("model_text_request.zig");
@@ -7,7 +7,7 @@ pub const Error = text.Error;
 pub const Family = @import("../../domain/llm_provider_contracts.zig").BedrockFamily;
 const ModelMaximumOutput = @import("../../domain/llm_provider_contracts.zig").ModelMaximumOutput;
 
-pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, kind: operation.ProviderOperationKind, family: Family, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
+pub fn encode(allocator: std.mem.Allocator, request: *const operation.IdentifiedProviderNeutralModelRequest, family: Family, max_output_tokens: ModelMaximumOutput) Error![]const u8 {
     const schema = try text.schemaFor(allocator, request);
     defer text.freeSchema(allocator, schema);
     return encodeText(allocator, .{
@@ -18,7 +18,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .reasoning_effort = try text.reasoningEffort(request.binding_id.reasoning_effort),
         .family = family,
         .max_output_tokens = max_output_tokens,
-    }, kind);
+    });
 }
 
 pub const TextRequest = struct {
@@ -35,7 +35,7 @@ pub const TextRequest = struct {
 };
 
 // Callers supply validated settings and schema.
-pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
+pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest) Error![]const u8 {
     try text.validateStructure(allocator, request.schema);
     switch (request.family) {
         .converse => if (request.reasoning_effort != null) return error.InvalidRequest,
@@ -51,46 +51,35 @@ pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: oper
     defer parts.deinit(allocator);
     var output: std.Io.Writer.Allocating = .init(allocator);
     defer output.deinit();
-    writeConverse(&output.writer, request, parts, kind) catch return error.OutOfMemory;
+    writeConverse(&output.writer, request, parts) catch return error.OutOfMemory;
     return output.toOwnedSlice();
 }
 
-fn writeConverse(writer: *std.Io.Writer, request: TextRequest, parts: text.Layout, kind: operation.ProviderOperationKind) std.Io.Writer.Error!void {
+fn writeConverse(writer: *std.Io.Writer, request: TextRequest, parts: text.Layout) std.Io.Writer.Error!void {
     var json: std.json.Stringify = .{ .writer = writer, .options = .{} };
     try json.beginObject();
-    if (kind == .input_token_count) {
-        try json.objectField("input");
-        try json.beginObject();
-        try json.objectField("converse");
-        try json.beginObject();
-    }
     try writeInput(&json, parts);
-    try writeModelFields(&json, request, kind);
-    if (kind == .inference) {
-        // The model's documented maximum is sent, because Bedrock otherwise
-        // applies a smaller default; no slot can narrow it (ADR 0011).
-        try json.objectField("inferenceConfig");
-        try json.beginObject();
-        if (request.temperature) |temperature| {
-            try json.objectField("temperature");
-            try json.write(temperature.wireValue());
-        }
-        try json.objectField("maxTokens");
-        try json.write(request.max_output_tokens.tokens);
-        try json.endObject();
-        if (request.schema == .native) {
-            try json.objectField("outputConfig");
-            try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.native.structure } } } });
-        }
-    } else {
-        try json.endObject();
-        try json.endObject();
+    try writeModelFields(&json, request);
+    // The model's documented maximum is sent, because Bedrock otherwise
+    // applies a smaller default; no slot can narrow it (ADR 0011).
+    try json.objectField("inferenceConfig");
+    try json.beginObject();
+    if (request.temperature) |temperature| {
+        try json.objectField("temperature");
+        try json.write(temperature.wireValue());
+    }
+    try json.objectField("maxTokens");
+    try json.write(request.max_output_tokens.tokens);
+    try json.endObject();
+    if (request.schema == .native) {
+        try json.objectField("outputConfig");
+        try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{ .name = request.schema_name, .schema = request.schema.native.structure } } } });
     }
     try json.endObject();
 }
 
-// Converse shares its model-visible input with CountTokens. Model-specific
-// fields use the catalogue-selected compiled family, never model-name text.
+// Model-specific fields use the catalogue-selected compiled family, never
+// model-name text.
 fn writeInput(json: *std.json.Stringify, parts: text.Layout) std.Io.Writer.Error!void {
     try json.objectField("system");
     try json.beginArray();
@@ -109,12 +98,12 @@ fn writeInput(json: *std.json.Stringify, parts: text.Layout) std.Io.Writer.Error
     try json.endArray();
 }
 
-fn writeModelFields(json: *std.json.Stringify, request: TextRequest, kind: operation.ProviderOperationKind) std.Io.Writer.Error!void {
+fn writeModelFields(json: *std.json.Stringify, request: TextRequest) std.Io.Writer.Error!void {
     const reasoning = request.family == .@"gpt-oss" and request.reasoning_effort != null;
     // Claude takes effort in its own `output_config` object; adaptive thinking is
     // the model's default, so no `thinking` field is sent.
     const effort = request.family == .claude and request.reasoning_effort != null;
-    const strict_json = request.family == .luna and request.schema == .native and kind == .inference;
+    const strict_json = request.family == .luna and request.schema == .native;
     if (reasoning or effort or strict_json) {
         try json.objectField("additionalModelRequestFields");
         try json.beginObject();

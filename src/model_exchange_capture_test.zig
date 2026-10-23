@@ -83,19 +83,17 @@ test "model capture preserves full sanitized bodies and existing request attempt
     try std.testing.expect(logger.failure == null);
 }
 
-test "capture keeps binary provider responses reversible and counting distinct" {
+test "capture keeps binary provider responses reversible" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var sink: Sink = .{ .allocator = a };
     var logger: capture.Capture = .{ .allocator = a, .logs = sink.barrier() };
-    var count_metadata = metadata;
-    count_metadata.origin.kind = .input_token_count;
-    logger.begin(count_metadata);
+    logger.begin(metadata);
     defer logger.end();
     try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = "\xff\x00" }, &.{}));
     try std.testing.expectEqualStrings("/wA=", sink.fragments.items[0].content);
-    try std.testing.expect(std.mem.startsWith(u8, sink.fragments.items[0].fragment_id.bytes, "input_token_count-response-provider_body-base64-"));
+    try std.testing.expect(std.mem.startsWith(u8, sink.fragments.items[0].fragment_id.bytes, "inference-response-provider_body-base64-"));
     try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "" }, &.{}));
     try std.testing.expectEqualStrings("", sink.fragments.items[1].content);
 }
@@ -149,7 +147,7 @@ test "capture honors disabled selection and makes persistence failures sticky" {
     try std.testing.expectEqual(.prompt_dropped, drop_logger.failure.?.cause);
 }
 
-test "request lineage distinguishes count retry repair and unrelated requests" {
+test "request lineage distinguishes retry repair and unrelated requests" {
     const lineage = @import("domain/model_call_lineage.zig");
     var history: lineage.History = .{};
     defer history.deinit(std.testing.allocator);
@@ -159,7 +157,6 @@ test "request lineage distinguishes count retry repair and unrelated requests" {
     const repaired_again: lineage.Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
     const unrelated: lineage.Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
     try std.testing.expectEqual(.initial, (try history.observe(std.testing.allocator, first, .initial, .none)).kind);
-    _ = try history.observe(std.testing.allocator, .{ .request = first.request, .attempt = .{ .value = 2 }, .kind = .input_token_count }, .initial, .none);
     _ = try history.observe(std.testing.allocator, unrelated, .initial, .none);
     const retry = try history.observe(std.testing.allocator, retried, .initial, .none);
     try std.testing.expectEqual(.retry, retry.kind);

@@ -19,13 +19,12 @@ const advisory_protocol_completion = @import("../application/advisory_protocol_r
 const request_completion = @import("../application/model_request_completion_workflow.zig");
 const termination = @import("../application/provider_operation_termination_workflow.zig");
 const request_termination = @import("../application/model_request_termination_workflow.zig");
-const count_observation = @import("../application/model_token_count_observation_workflow.zig");
 
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
 const composition = @import("../application/json_composition_workflow.zig");
-pub const count = 36;
-pub const schemas = requests.schemas ++ composition.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema, invocation.count_schema, count_observation.schema };
+pub const count = 32;
+pub const schemas = requests.schemas ++ composition.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
 pub const Assembly = struct {
@@ -51,10 +50,6 @@ pub const Assembly = struct {
     complete_advisory_protocol: advisory_protocol_completion.Complete,
     terminate_operation: termination.Terminate,
     terminate_request: request_termination.Terminate,
-    count_model_input: invocation.Count,
-    validate_count: count_observation.Validate,
-    complete_count_operation: completion.CompleteCount,
-    complete_count_request: request_completion.CompleteCount,
     retire_request: transport.Retire(.request),
     retire_advisory_protocol: transport.RetireAdvisoryProtocol,
     protocol_retry: protocol.Build,
@@ -91,10 +86,6 @@ pub const Assembly = struct {
             .complete_advisory_protocol = .{ .allocator = allocator },
             .terminate_operation = .{},
             .terminate_request = .{ .allocator = allocator },
-            .count_model_input = .{ .allocator = allocator },
-            .validate_count = .{ .allocator = allocator },
-            .complete_count_operation = .{},
-            .complete_count_request = .{ .allocator = allocator },
             .retire_request = .{},
             .retire_advisory_protocol = .{},
             .protocol_retry = .{ .allocator = allocator },
@@ -130,10 +121,6 @@ pub const Assembly = struct {
             entry(advisory_protocol_completion.Complete, &self.complete_advisory_protocol),
             entry(termination.Terminate, &self.terminate_operation),
             entry(request_termination.Terminate, &self.terminate_request),
-            entry(invocation.Count, &self.count_model_input),
-            entry(count_observation.Validate, &self.validate_count),
-            entry(completion.CompleteCount, &self.complete_count_operation),
-            entry(request_completion.CompleteCount, &self.complete_count_request),
             entry(transport.Retire(.request), &self.retire_request),
             entry(transport.RetireAdvisoryProtocol, &self.retire_advisory_protocol),
             entry(protocol.Build, &self.protocol_retry),

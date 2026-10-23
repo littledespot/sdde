@@ -22,7 +22,6 @@ pub const Invocation = struct {
     deadline_monotonic_ms: u64,
 };
 pub const Terminal = union(enum) {
-    counted: provider.ExactInputTokenCountEvidence,
     completed,
     stopped: provider.ProviderNonCandidateStopReason,
     failed: provider.ProviderFailure,
@@ -30,7 +29,6 @@ pub const Terminal = union(enum) {
     cancelled: provider.ProviderDeliveryDisposition,
 };
 pub const Command = union(enum) {
-    assign_count: Assignment,
     assign_inference: Assignment,
     invoke: Invocation,
     terminate: Terminal,
@@ -43,7 +41,6 @@ pub const FailureFact = struct {
     delivery: provider.ProviderDeliveryDisposition,
 };
 pub const TerminalFact = union(enum) {
-    counted: u64,
     completed,
     stopped: provider.ProviderNonCandidateStopReason,
     failed: FailureFact,
@@ -52,7 +49,7 @@ pub const TerminalFact = union(enum) {
 
     pub fn delivery(self: TerminalFact) provider.ProviderDeliveryDisposition {
         return switch (self) {
-            .counted, .completed, .stopped => .response_received,
+            .completed, .stopped => .response_received,
             .failed, .preparation_failed => |failure| failure.delivery,
             .cancelled => |value| value,
         };
@@ -188,7 +185,6 @@ pub const ValidationError = error{
     ProviderOperationStillOpen,
     InvalidProviderOperationTransition,
     InvalidProviderOperationBinding,
-    InvalidProviderOperationCountEvidence,
     ProviderOperationReferenceExhausted,
 };
 pub const Error = std.mem.Allocator.Error || ValidationError;
@@ -253,7 +249,7 @@ pub fn apply(current: *const Ledger, authority: Authority, transition: Transitio
     const snapshot = try allocator.create(Storage);
     const node = try allocator.create(Node);
     var owned = next;
-    if (transition.command == .assign_count or transition.command == .assign_inference) {
+    if (transition.command == .assign_inference) {
         owned.binding_id = try cloneBinding(allocator, next.binding_id);
         owned.model_visible_input_id.bytes = try allocator.dupe(u8, next.model_visible_input_id.bytes);
     }
@@ -280,9 +276,8 @@ fn nextRecord(current: *const Ledger, authority: Authority, transition: Transiti
     } else if (transition.expected_operation_revision != null) return error.ProviderOperationNotFound;
 
     switch (transition.command) {
-        .assign_count, .assign_inference => |facts| {
-            const kind: provider.ProviderOperationKind = if (transition.command == .assign_count) .input_token_count else .inference;
-            if (previous != null or id.kind != kind) return error.InvalidProviderOperationTransition;
+        .assign_inference => |facts| {
+            if (previous != null) return error.InvalidProviderOperationTransition;
             try current.validateRequestClosure(request);
             try validateBinding(request, facts);
             return assignedRecord(id, facts);
@@ -320,17 +315,12 @@ fn terminalFact(record: Record, terminal: Terminal) ValidationError!TerminalFact
             if (record.state == .assigned and delivery != .not_sent) return error.InvalidProviderOperationTransition;
             return .{ .cancelled = delivery };
         },
-        .counted => |evidence| {
-            if (record.state != .invoked or record.id.kind != .input_token_count) return error.InvalidProviderOperationTransition;
-            try validateEvidence(record, evidence);
-            return .{ .counted = evidence.input_tokens };
-        },
         .completed => {
-            if (record.state != .invoked or record.id.kind != .inference) return error.InvalidProviderOperationTransition;
+            if (record.state != .invoked) return error.InvalidProviderOperationTransition;
             return .completed;
         },
         .stopped => |reason| {
-            if (record.state != .invoked or record.id.kind != .inference) return error.InvalidProviderOperationTransition;
+            if (record.state != .invoked) return error.InvalidProviderOperationTransition;
             return .{ .stopped = reason };
         },
         .failed => |failure| {
@@ -343,10 +333,6 @@ fn terminalFact(record: Record, terminal: Terminal) ValidationError!TerminalFact
 fn validateBinding(request: *const identity.ModelRequestId, facts: Assignment) ValidationError!void {
     if (!facts.binding_id.isValid() or !facts.binding_id.operation_id.eql(request.model_operation_id) or
         provider.ModelVisibleInputId.parse(facts.model_visible_input_id.bytes) == null) return error.InvalidProviderOperationBinding;
-}
-fn validateEvidence(record: Record, evidence: provider.ExactInputTokenCountEvidence) ValidationError!void {
-    if (!record.id.eql(evidence.count_operation_id) or !record.binding_id.eql(evidence.binding_id) or
-        !record.model_visible_input_id.eql(evidence.model_visible_input_id)) return error.InvalidProviderOperationCountEvidence;
 }
 fn failureFact(failure: provider.ProviderFailure) FailureFact {
     return .{ .cause = failure.cause, .retry_class = failure.retry_class, .delivery = failure.delivery };

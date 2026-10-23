@@ -189,9 +189,6 @@ test "runner assigns monotonic request identities by unit operation and purpose"
         try std.testing.expectEqual(request == first, source.matches(runner.ledger().?, operation_id));
     }
     var different = original;
-    different.kind = .input_token_count;
-    try std.testing.expect(!source.matches(runner.ledger().?, different));
-    different = original;
     different.model_attempt_ordinal.value = 2;
     try std.testing.expect(!source.matches(runner.ledger().?, different));
     const copied = first.*;

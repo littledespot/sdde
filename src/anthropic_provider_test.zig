@@ -290,15 +290,12 @@ const AdapterFixture = struct {
         std.crypto.secureZero(u8, &self.canary);
     }
 
-    fn start(self: *AdapterFixture, kind: operation.ProviderOperationKind) !fixture_module.Authorized {
-        try self.base.change(kind, switch (kind) {
-            .input_token_count => .{ .assign_count = self.base.assignment() },
-            .inference => .{ .assign_inference = self.base.assignment() },
-        });
+    fn start(self: *AdapterFixture) !fixture_module.Authorized {
+        try self.base.assignInference();
         var preparation = self.base.preparationRunner();
         preparation.prepare_action.authorization = self.auth.port();
-        const prepared = try preparation.prepare(self.base.facts(kind));
-        return .{ .reference = prepared.prepared, .invoked = try self.base.invoke(kind) };
+        const prepared = try preparation.prepare(self.base.facts(.inference));
+        return .{ .reference = prepared.prepared, .invoked = try self.base.invoke(.inference) };
     }
 };
 
@@ -309,7 +306,7 @@ test "the shared provider adapter sends one Messages request with the Anthropic 
     var fixture: AdapterFixture = undefined;
     try fixture.init(a, .{ .received = .{ .status = 200, .request_id = "req_1", .body = try message(arena.allocator(), &.{}) } });
     defer fixture.deinit();
-    const authorized = try fixture.start(.inference);
+    const authorized = try fixture.start();
     var observed = try fixture.provider.port().invoke(&fixture.base.provider_binding, &fixture.base.request, authorized.reference, authorized.invoked);
     defer observed.deinit();
     try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
@@ -343,29 +340,17 @@ test "an Anthropic binding never authorizes with another family's key" {
     try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
 }
 
-test "Anthropic counting rejects before send and failures keep their typed causes" {
+test "Anthropic failures keep their typed causes" {
     const a = std.testing.allocator;
-    {
-        var fixture: AdapterFixture = undefined;
-        try fixture.init(a, .{ .received = .{ .status = 200, .body = "{}" } });
-        defer fixture.deinit();
-        const authorized = try fixture.start(.input_token_count);
-        const counted = try fixture.provider.port().countInputTokens(&fixture.base.provider_binding, &fixture.base.request, authorized.reference, authorized.invoked);
-        try std.testing.expectEqual(.request_rejected, counted.failed.cause);
-        try std.testing.expectEqual(.not_sent, counted.failed.delivery);
-        try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
-    }
-    {
-        var fixture: AdapterFixture = undefined;
-        try fixture.init(a, .{ .received = .{ .status = 429, .body = "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"m\",\"details\":{\"error_code\":\"enforced_spend_limit_reached\"}}}" } });
-        defer fixture.deinit();
-        const authorized = try fixture.start(.inference);
-        var observed = try fixture.provider.port().invoke(&fixture.base.provider_binding, &fixture.base.request, authorized.reference, authorized.invoked);
-        defer observed.deinit();
-        try std.testing.expectEqual(.authorization_denied, observed.failed.cause);
-        try std.testing.expectEqual(.never, observed.failed.retry_class);
-        try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
-    }
+    var fixture: AdapterFixture = undefined;
+    try fixture.init(a, .{ .received = .{ .status = 429, .body = "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"m\",\"details\":{\"error_code\":\"enforced_spend_limit_reached\"}}}" } });
+    defer fixture.deinit();
+    const authorized = try fixture.start();
+    var observed = try fixture.provider.port().invoke(&fixture.base.provider_binding, &fixture.base.request, authorized.reference, authorized.invoked);
+    defer observed.deinit();
+    try std.testing.expectEqual(.authorization_denied, observed.failed.cause);
+    try std.testing.expectEqual(.never, observed.failed.retry_class);
+    try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
 }
 
 test "a request altered after authorization, here adding temperature, is denied before send" {
@@ -373,7 +358,7 @@ test "a request altered after authorization, here adding temperature, is denied 
     var fixture: AdapterFixture = undefined;
     try fixture.init(a, .{ .received = .{ .status = 200, .body = "{}" } });
     defer fixture.deinit();
-    const authorized = try fixture.start(.inference);
+    const authorized = try fixture.start();
     // The lease binds the exact authorized request, so a changed control never
     // reaches encoding; the encoder's own test rejects temperature as well.
     var request = fixture.base.request;

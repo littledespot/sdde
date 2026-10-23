@@ -18,7 +18,6 @@ const raw_invocation = @import("model_invocation_workflow.zig");
 const observation = @import("provider_observation_workflow.zig");
 const decoded = @import("model_envelope_workflow.zig");
 const payload = @import("model_payload_schema_workflow.zig");
-const counts = @import("model_token_count_observation_workflow.zig");
 const authority = @import("required_authority_workflow.zig");
 const authority_values = @import("required_authority_values.zig");
 const clarification = @import("clarification_refresh_workflow.zig");
@@ -49,7 +48,6 @@ pub fn prepare(
     occurrence: envelope_module.Occurrence,
     descriptor: association.Descriptor,
     candidate: *const execution.Candidate,
-    operation_kind: ?provider.ProviderOperationKind,
 ) Error!association.State.Prepared {
     const scope = envelope.scope orelse return error.InvalidOutcomeAssociation;
     if (!scope.eql(occurrence.scope) or occurrence.ordinal == 0 or occurrence.ordinal > envelope.occurrence_count)
@@ -67,7 +65,7 @@ pub fn prepare(
     const subject: association.Subject = if (binding.kind == .request) request_subject: {
         const request = requests.readCurrent(&before, requests.prepared_schema) catch return error.InvalidOutcomeAssociation;
         const evidence_view = if (changed(candidate, binding.evidence)) &after else &before;
-        const operation_id = try requestOperation(evidence_view, binding.evidence, request.id(), operation_kind) orelse {
+        const operation_id = try requestOperation(evidence_view, binding.evidence, request.id()) orelse {
             // A logical phase check has no provider-operation identity. Preserve
             // existing references; a fresh failure remains an opaque occurrence.
             if (association.prohibiting(candidate.outcome)) try changes.add(.{ .observe = .{
@@ -269,15 +267,13 @@ pub fn permitsPublication(envelope: *const envelope_module.PipelineEnvelope, pre
 
 /// Only an exact correction, authorized repair, dependent regeneration or
 /// diagnostic review of current inputs may invoke a provider with outcomes.
-pub fn permitsModel(envelope: *const envelope_module.PipelineEnvelope, request: *const handoff.Request, kind: provider.ProviderOperationKind, repair_state: *const retry.State) bool {
+pub fn permitsModel(envelope: *const envelope_module.PipelineEnvelope, request: *const handoff.Request, repair_state: *const retry.State) bool {
     const current = requests.readCurrent(&.{ .slots = envelope.slots }, requests.prepared_schema) catch return false;
     if (current != request or request.prepared() == null) return false;
     if (envelope.outcomes.firstUnresolved() == null) return true;
     const correction = request.protocolCorrection();
-    // A native protocol correction may require a count operation before its
-    // inference. Both use this exact prepared request; neither admits payload.
+    // A native protocol correction uses this exact prepared request and admits no payload.
     if (correction != null and envelope.outcomes.permitsRequest(request.id(), correction, null, &.{})) return true;
-    _ = kind;
     if (request.id().purpose == .atomic_repair) {
         const packet = request.packet() orelse return false;
         const bound = packet.repairPermit() orelse return false;
@@ -401,12 +397,10 @@ fn repairMergeEvidence(envelope: *const envelope_module.PipelineEnvelope, descri
     return envelope.outcomes.referencesRepair(evidence.native, permit.key);
 }
 
-fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request: *const identity.ModelRequestId, supplied: ?provider.ProviderOperationKind) Error!?provider.ProviderOperationId {
+fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request: *const identity.ModelRequestId) Error!?provider.ProviderOperationId {
     const id: ?provider.ProviderOperationId = switch (evidence) {
-        .provider_invocation_result => (values.read(view, raw_invocation.schema, @import("../domain/model_invocation_result.zig").For(.inference).Result) catch return error.InvalidOutcomeAssociation).operationId(),
-        .provider_token_count_result => (values.read(view, raw_invocation.count_schema, @import("../domain/model_invocation_result.zig").For(.input_token_count).Result) catch return error.InvalidOutcomeAssociation).operationId(),
+        .provider_invocation_result => (values.read(view, raw_invocation.schema, @import("../domain/model_invocation_result.zig").Result) catch return error.InvalidOutcomeAssociation).operationId(),
         .provider_invocation_validation_result => (observation.readCurrent(view) catch return error.InvalidOutcomeAssociation).operationId(),
-        .provider_token_count_validation_result => (counts.readCurrent(view) catch return error.InvalidOutcomeAssociation).operationId(),
         .model_envelope_result => (decoded.readCurrent(view) catch return error.InvalidOutcomeAssociation).source().operationId(),
         .model_payload_schema_result => (payload.readCurrent(view) catch return error.InvalidOutcomeAssociation).source().source().operationId(),
         .assigned_provider_operation => (values.read(view, @import("workflow_model_accounting.zig").operation_schema, lifecycle.AssignedOperation) catch return error.InvalidOutcomeAssociation).record().id,
@@ -428,7 +422,7 @@ fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request:
         else => return error.InvalidOutcomeAssociation,
     };
     if (id) |operation_id| {
-        if (operation_id.model_request_id != request or (supplied != null and supplied.? != operation_id.kind)) return error.InvalidOutcomeAssociation;
+        if (operation_id.model_request_id != request) return error.InvalidOutcomeAssociation;
         if (operation_id.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
         return operation_id;
     }
@@ -488,7 +482,7 @@ test "native outcome preparation applies exact generation only with the whole ac
     var candidate: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
     defer envelope.discard(&candidate.delta);
     candidate.delta.data_writes[@intFromEnum(subject_schema.key)] = try values.create(std.testing.allocator, subject_schema, u8, 1);
-    var pending = try prepare(&envelope, occurrence, observe_subject, &candidate, null);
+    var pending = try prepare(&envelope, occurrence, observe_subject, &candidate);
     defer pending.deinit();
     const expected: association.Subject = .{ .native = .{ .kind = .candidate, .key = subject_schema.key, .generation = 1, .occurrence = occurrence.ordinal } };
     try std.testing.expect((try pending.firstUnresolved()).?.subject.eql(expected));
@@ -515,7 +509,7 @@ test "unrelated native success retains every prohibiting outcome and opaque occu
             try nativeTestValue(&envelope, subject_schema, 1);
             const rejected_occurrence = try envelope.beginOccurrence("test.rejection");
             var rejection: execution.Candidate = .{ .outcome = outcome, .delta = .{} };
-            var rejected = try prepare(&envelope, rejected_occurrence, if (is_opaque) .independent else observe_subject, &rejection, null);
+            var rejected = try prepare(&envelope, rejected_occurrence, if (is_opaque) .independent else observe_subject, &rejection);
             defer rejected.deinit();
             try envelope.outcomes.commit(&rejected);
             const original = envelope.outcomes.firstUnresolved().?;
@@ -523,7 +517,7 @@ test "unrelated native success retains every prohibiting outcome and opaque occu
             var success: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
             defer envelope.discard(&success.delta);
             success.delta.data_writes[@intFromEnum(unrelated_schema.key)] = try values.create(std.testing.allocator, unrelated_schema, u8, 2);
-            var pending = try prepare(&envelope, success_occurrence, .independent, &success, null);
+            var pending = try prepare(&envelope, success_occurrence, .independent, &success);
             defer pending.deinit();
             try std.testing.expect(!pending.compatible(.ok));
             try std.testing.expect(pending.compatible(outcome));
@@ -544,9 +538,9 @@ test "native evidence alias requires exact current generation in either dependen
     try envelope.apply(.{ .id = "test.evidence", .kind = .action, .requires = &.{subject_schema.key}, .produces = &.{evidence_schema.key}, .side_effect = .none }, &evidence, .ok);
     const occurrence = try envelope.beginOccurrence("test.related");
     var candidate: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
-    var related = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = evidence_schema.key } }, &candidate, null);
+    var related = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = evidence_schema.key } }, &candidate);
     defer related.deinit();
-    var reverse = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = evidence_schema.key, .evidence = subject_schema.key } }, &candidate, null);
+    var reverse = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = evidence_schema.key, .evidence = subject_schema.key } }, &candidate);
     defer reverse.deinit();
     // The captured evidence still exists, but targets the prior generation.
     var replacement: pipeline.NodeDelta = .{};
@@ -554,8 +548,8 @@ test "native evidence alias requires exact current generation in either dependen
     replacement.data_replacements[@intFromEnum(subject_schema.key)] = try values.create(std.testing.allocator, subject_schema, u8, 3);
     try envelope.apply(.{ .id = "test.new-generation", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{subject_schema.key}, .side_effect = .none }, &replacement, .ok);
     const stale_occurrence = try envelope.beginOccurrence("test.stale-evidence");
-    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = evidence_schema.key } }, &candidate, null));
-    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = evidence_schema.key, .evidence = subject_schema.key } }, &candidate, null));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = evidence_schema.key } }, &candidate));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = evidence_schema.key, .evidence = subject_schema.key } }, &candidate));
 }
 
 test "transitive native carriers require current generations rather than historical replacement aliases" {
@@ -575,7 +569,7 @@ test "transitive native carriers require current generations rather than histori
         try nativeTestValue(&envelope, foreign_schema, 4);
         const rejected_occurrence = try envelope.beginOccurrence("test.source-rejection");
         var rejection: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
-        var rejected = try prepare(&envelope, rejected_occurrence, observe_subject, &rejection, null);
+        var rejected = try prepare(&envelope, rejected_occurrence, observe_subject, &rejection);
         defer rejected.deinit();
         try envelope.outcomes.commit(&rejected);
         const original = envelope.outcomes.firstUnresolved().?;
@@ -586,7 +580,7 @@ test "transitive native carriers require current generations rather than histori
             var candidate: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
             defer envelope.discard(&candidate.delta);
             candidate.delta.data_writes[@intFromEnum(output.key)] = try values.create(std.testing.allocator, output, u8, 2);
-            var pending = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = input.key, .evidence = input.key, .result = output.key } }, &candidate, null);
+            var pending = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = input.key, .evidence = input.key, .result = output.key } }, &candidate);
             defer pending.deinit();
             try envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome);
             try envelope.outcomes.commit(&pending);
@@ -596,14 +590,14 @@ test "transitive native carriers require current generations rather than histori
         const occurrence = try envelope.beginOccurrence("test.transitive-evidence");
         var candidate: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
         {
-            var forward = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = result_schema.key } }, &candidate, null);
+            var forward = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = result_schema.key } }, &candidate);
             defer forward.deinit();
-            var reverse = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = result_schema.key, .evidence = source_schema.key } }, &candidate, null);
+            var reverse = try prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = result_schema.key, .evidence = source_schema.key } }, &candidate);
             defer reverse.deinit();
             try std.testing.expect((try forward.firstUnresolved()).?.subject.eql(original.subject));
             try std.testing.expect(!forward.compatible(.ok));
         }
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = foreign_schema.key, .evidence = result_schema.key } }, &candidate, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, occurrence, .{ .preserve = .{ .kind = .candidate, .subject = foreign_schema.key, .evidence = result_schema.key } }, &candidate));
         // Keep the historical alias from the source to its replacement. It
         // preserves failure identity but cannot validate prior native evidence.
         const replacement_contract: pipeline.NodeContract = .{ .id = "test.carrier-replacement", .kind = .action, .requires = &.{source_schema.key}, .produces = &.{}, .replaces = &.{source_schema.key}, .side_effect = .none };
@@ -611,14 +605,14 @@ test "transitive native carriers require current generations rather than histori
         var replacement: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
         defer envelope.discard(&replacement.delta);
         replacement.delta.data_replacements[@intFromEnum(source_schema.key)] = try values.create(std.testing.allocator, source_schema, u8, 3);
-        var replaced = try prepare(&envelope, replacement_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = source_schema.key } }, &replacement, null);
+        var replaced = try prepare(&envelope, replacement_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = source_schema.key } }, &replacement);
         defer replaced.deinit();
         try envelope.applyOccurrence(replacement_occurrence, replacement_contract, &replacement.delta, replacement.outcome);
         try envelope.outcomes.commit(&replaced);
         if (captured) try std.testing.expect(envelope.checkCurrentAuthority(result_schema.key) == null);
         const stale_occurrence = try envelope.beginOccurrence("test.stale-transitive-evidence");
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = result_schema.key } }, &candidate, null));
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = result_schema.key, .evidence = source_schema.key } }, &candidate, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = source_schema.key, .evidence = result_schema.key } }, &candidate));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, stale_occurrence, .{ .preserve = .{ .kind = .candidate, .subject = result_schema.key, .evidence = source_schema.key } }, &candidate));
         try std.testing.expect(envelope.outcomes.firstUnresolved().?.subject.eql(original.subject));
     }
 }
@@ -641,7 +635,7 @@ test "native merges carry only the exact authorized repair reference through cap
         for ([_]pipeline.DataKey{ subject_schema.key, foreign_schema.key }, [_]retry.Permit{ permit, foreign }) |key, bound| {
             const occurrence = try envelope.beginOccurrence("test.native-repair-rejection");
             var rejected_candidate: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
-            var rejected = try prepare(&envelope, occurrence, .{ .observe = .{ .kind = .authority, .subject = key, .evidence = key } }, &rejected_candidate, null);
+            var rejected = try prepare(&envelope, occurrence, .{ .observe = .{ .kind = .authority, .subject = key, .evidence = key } }, &rejected_candidate);
             defer rejected.deinit();
             try envelope.outcomes.commit(&rejected);
             const authorization_occurrence = try envelope.beginOccurrence("test.native-authorization");
@@ -650,7 +644,7 @@ test "native merges carry only the exact authorized repair reference through cap
             if (key == subject_schema.key) authorization.delta.data_writes[@intFromEnum(authorization_schema.key)] = try values.create(std.testing.allocator, authorization_schema, u8, 4);
             const retry_owner = if (key == subject_schema.key) &native_retry else &foreign_retry;
             const native_progress = try retry_owner.prepare(authorization.delta.repair_transition.?);
-            var authorized = try prepare(&envelope, authorization_occurrence, .{ .repair_authorize = .{ .kind = .authority, .subject = key, .evidence = key, .result = if (key == subject_schema.key) authorization_schema.key else null } }, &authorization, null);
+            var authorized = try prepare(&envelope, authorization_occurrence, .{ .repair_authorize = .{ .kind = .authority, .subject = key, .evidence = key, .result = if (key == subject_schema.key) authorization_schema.key else null } }, &authorization);
             defer authorized.deinit();
             try envelope.applyOccurrence(authorization_occurrence, .{ .id = "test.native-authorization", .kind = .action, .requires = &.{ subject_schema.key, evidence_schema.key, foreign_schema.key }, .produces = if (key == subject_schema.key) &.{authorization_schema.key} else &.{}, .side_effect = .none, .repair_role = .authorize }, &authorization.delta, authorization.outcome);
             try envelope.outcomes.commit(&authorized);
@@ -663,7 +657,7 @@ test "native merges carry only the exact authorized repair reference through cap
         var parsed: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
         defer envelope.discard(&parsed.delta);
         parsed.delta.data_replacements[@intFromEnum(authorization_schema.key)] = try values.create(std.testing.allocator, authorization_schema, u8, 5);
-        var parsed_outcomes = try prepare(&envelope, parse_occurrence, .{ .preserve = .{ .kind = .authority, .subject = authorization_schema.key, .evidence = authorization_schema.key, .result = authorization_schema.key } }, &parsed, null);
+        var parsed_outcomes = try prepare(&envelope, parse_occurrence, .{ .preserve = .{ .kind = .authority, .subject = authorization_schema.key, .evidence = authorization_schema.key, .result = authorization_schema.key } }, &parsed);
         defer parsed_outcomes.deinit();
         try envelope.applyOccurrence(parse_occurrence, .{ .id = "test.parse-native-authorization", .kind = .action, .requires = &.{authorization_schema.key}, .produces = &.{}, .replaces = &.{authorization_schema.key}, .side_effect = .none }, &parsed.delta, parsed.outcome);
         try envelope.outcomes.commit(&parsed_outcomes);
@@ -684,20 +678,20 @@ test "native merges carry only the exact authorized repair reference through cap
         const state_revision = envelope.outcomes.revision;
         // Neither missing native progress, another transition kind, nor a
         // disconnected parent's authorization permits this candidate bridge.
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged));
         merged.delta.repair_transition = .{ .validated = .{ .permit = permit, .revision = 1, .result = .resolved } };
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged));
         merged.delta.repair_transition = if (combined_validation) .{ .merged_validated = .{ .permit = foreign, .changed = true, .revision_after = 2, .result = .resolved } } else .{ .merged = .{ .permit = foreign, .changed = true, .revision_after = 2, .validation = .dependent_review } };
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged));
         merged.delta.repair_transition = transition;
         var foreign_binding = binding;
         foreign_binding.evidence = foreign_schema.key;
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, if (combined_validation) .{ .repair_validate = foreign_binding } else .{ .repair_merge = foreign_binding }, &merged, null));
-        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, .{ .preserve = binding }, &merged, null));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, if (combined_validation) .{ .repair_validate = foreign_binding } else .{ .repair_merge = foreign_binding }, &merged));
+        try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, .{ .preserve = binding }, &merged));
         try std.testing.expectEqual(state_revision, envelope.outcomes.revision);
         try std.testing.expectEqual(@as(usize, 2), envelope.outcomes.entries.items.len);
         const native_progress = try native_retry.prepare(transition);
-        var merged_outcomes = try prepare(&envelope, merge_occurrence, descriptor, &merged, null);
+        var merged_outcomes = try prepare(&envelope, merge_occurrence, descriptor, &merged);
         defer merged_outcomes.deinit();
         try envelope.applyOccurrence(merge_occurrence, .{ .id = "test.native-merge", .kind = .action, .requires = &.{ target.key, authorization_schema.key }, .produces = &.{}, .replaces = &.{target.key}, .invalidates = &.{authorization_schema.key}, .side_effect = .none, .repair_role = if (combined_validation) .merge_validate else .merge }, &merged.delta, merged.outcome);
         try envelope.outcomes.commit(&merged_outcomes);
@@ -719,7 +713,7 @@ test "clarification outcome changes only with its sealed canonical refresh resul
     try nativeTestValue(&envelope, needs_schema, 1);
     const rejected_occurrence = try envelope.beginOccurrence("test.needs-user");
     var rejected_candidate: execution.Candidate = .{ .outcome = .needs_user, .delta = .{} };
-    var rejected = try prepare(&envelope, rejected_occurrence, .{ .observe = .{ .kind = .clarification, .subject = .clarification_needs, .evidence = .clarification_needs } }, &rejected_candidate, null);
+    var rejected = try prepare(&envelope, rejected_occurrence, .{ .observe = .{ .kind = .clarification, .subject = .clarification_needs, .evidence = .clarification_needs } }, &rejected_candidate);
     defer rejected.deinit();
     try envelope.outcomes.commit(&rejected);
     const occurrence = try envelope.beginOccurrence("test.refresh");
@@ -727,13 +721,13 @@ test "clarification outcome changes only with its sealed canonical refresh resul
     defer envelope.discard(&candidate.delta);
     candidate.delta.data_writes[@intFromEnum(clarification.state_schema.key)] = try values.create(std.testing.allocator, clarification.state_schema, @import("../domain/clarification_refresh.zig").Result, .{ .blocked = .protected_clarification });
     const descriptor = clarification.Refresh.outcome_association;
-    var blocked = try prepare(&envelope, occurrence, descriptor, &candidate, null);
+    var blocked = try prepare(&envelope, occurrence, descriptor, &candidate);
     defer blocked.deinit();
     try std.testing.expect(blocked.compatible(.blocked));
     try std.testing.expect(!blocked.compatible(.needs_user));
     try std.testing.expect(envelope.outcomes.compatible(.needs_user));
     candidate.outcome = .ok;
-    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, occurrence, descriptor, &candidate, null));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, occurrence, descriptor, &candidate));
     try std.testing.expect(envelope.outcomes.compatible(.needs_user));
 }
 
@@ -756,7 +750,7 @@ test "diagnostic admission requires the sealed accepted source or principle coll
         try envelope.apply(.{ .id = "test.support-source", .kind = .action, .requires = &.{}, .produces = &.{support_schema.key}, .side_effect = .none }, &initial.delta, .ok);
         const rejection_occurrence = try envelope.beginOccurrence("test.support-rejection");
         var invalid: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
-        var pending = try prepare(&envelope, rejection_occurrence, .{ .observe = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key } }, &invalid, null);
+        var pending = try prepare(&envelope, rejection_occurrence, .{ .observe = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key } }, &invalid);
         defer pending.deinit();
         try envelope.outcomes.commit(&pending);
         const source: @FieldType(support.Source.Collection, "accepted") = .{ .inputs = native_inputs, .candidate = .{
@@ -781,7 +775,7 @@ test "diagnostic admission requires the sealed accepted source or principle coll
         reviewed.delta.data_replacements[index] = reviewed.delta.data_writes[index];
         reviewed.delta.data_writes[index] = null;
         const occurrence = try envelope.beginOccurrence("test.support-admission");
-        var accepted = try prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key } }, &reviewed, null);
+        var accepted = try prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key } }, &reviewed);
         defer accepted.deinit();
         try std.testing.expectEqual(mode == 1 or mode == 2, accepted.compatible(.ok));
         try std.testing.expect(envelope.outcomes.firstUnresolved() != null);
@@ -854,13 +848,13 @@ test "dependent regeneration requires native merged authority and current packet
         try nativeTestValue(&envelope, unrelated_schema, 2);
         const rejected_occurrence = try envelope.beginOccurrence("test.regeneration-rejection");
         var rejection: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
-        var rejected = try prepare(&envelope, rejected_occurrence, observe_subject, &rejection, null);
+        var rejected = try prepare(&envelope, rejected_occurrence, observe_subject, &rejection);
         defer rejected.deinit();
         try envelope.outcomes.commit(&rejected);
         const authorization_occurrence = try envelope.beginOccurrence("test.regeneration-authorization");
         var authorization: execution.Candidate = .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .authorized = permit } } };
         const authorized_progress = try native_retry.prepare(authorization.delta.repair_transition.?);
-        var authorized = try prepare(&envelope, authorization_occurrence, .{ .repair_authorize = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key } }, &authorization, null);
+        var authorized = try prepare(&envelope, authorization_occurrence, .{ .repair_authorize = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key } }, &authorization);
         defer authorized.deinit();
         try envelope.applyOccurrence(authorization_occurrence, .{ .id = "test.regeneration-authorization", .kind = .action, .requires = &.{subject_schema.key}, .produces = &.{}, .side_effect = .none, .repair_role = .authorize }, &authorization.delta, authorization.outcome);
         try envelope.outcomes.commit(&authorized);
@@ -880,7 +874,7 @@ test "dependent regeneration requires native merged authority and current packet
         merged.delta.data_replacements[@intFromEnum(subject_schema.key)] = try values.create(std.testing.allocator, subject_schema, u8, 3);
         merged.delta.data_invalidations.insert(unrelated_schema.key);
         const merged_progress = try native_retry.prepare(merged.delta.repair_transition.?);
-        var merged_outcomes = try prepare(&envelope, merge_occurrence, .{ .repair_merge = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key, .result = subject_schema.key } }, &merged, null);
+        var merged_outcomes = try prepare(&envelope, merge_occurrence, .{ .repair_merge = .{ .kind = .candidate, .subject = subject_schema.key, .evidence = subject_schema.key, .result = subject_schema.key } }, &merged);
         defer merged_outcomes.deinit();
         try envelope.applyOccurrence(merge_occurrence, .{ .id = "test.regeneration-merge", .kind = .action, .requires = &.{subject_schema.key}, .produces = &.{}, .replaces = &.{subject_schema.key}, .invalidates = &.{unrelated_schema.key}, .side_effect = .none, .repair_role = .merge }, &merged.delta, merged.outcome);
         try envelope.outcomes.commit(&merged_outcomes);
@@ -925,7 +919,7 @@ test "dependent regeneration requires native merged authority and current packet
         try std.testing.expect(envelope.outcomes.firstUnresolved() != null);
         const independent_occurrence = try envelope.beginOccurrence("test.unrelated-regeneration-fault");
         var independent: execution.Candidate = .{ .outcome = .invalid, .delta = .{} };
-        var blocked = try prepare(&envelope, independent_occurrence, .independent, &independent, null);
+        var blocked = try prepare(&envelope, independent_occurrence, .independent, &independent);
         defer blocked.deinit();
         try envelope.outcomes.commit(&blocked);
         try std.testing.expect(!permitsPacket(&envelope, assignment.model_request_id, null, fresh, null, &native_retry));

@@ -6,8 +6,6 @@ const capabilities = @import("workflow_capability.zig");
 
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_authorization_result };
 pub const produces = [_]pipeline.DataKey{.provider_invocation_result};
-pub const count_produces = [_]pipeline.DataKey{.provider_token_count_result};
-pub const count_validation_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_token_count_result };
 pub const validation_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .invoked_provider_operation, .provider_invocation_result };
 pub const decode_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .provider_invocation_validation_result };
 pub const payload_schema_requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .model_envelope_result };
@@ -22,10 +20,10 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
 }
 
 fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, optional: []const pipeline.DataKey, replaces: []const pipeline.DataKey, invalidates: []const pipeline.DataKey, effect: pipeline.SideEffect, accounting: pipeline.RunnerAccountingCapability, parameters: usize, retry: bool, ports: []const []const u8) bool {
-    for ([_]pipeline.DataKey{ .provider_invocation_validation_result, .provider_token_count_validation_result, .model_envelope_result, .model_payload_schema_result }) |key| {
+    for ([_]pipeline.DataKey{ .provider_invocation_validation_result, .model_envelope_result, .model_payload_schema_result }) |key| {
         if (std.mem.indexOfScalar(pipeline.DataKey, replaces, key) != null) return false;
     }
-    const response_inputs: ?[]const pipeline.DataKey = if (validatesCount(outputs)) &count_validation_requires else if (validates(outputs)) &validation_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_envelope_result) != null) &decode_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_payload_schema_result) != null) &payload_schema_requires else null;
+    const response_inputs: ?[]const pipeline.DataKey = if (validates(outputs)) &validation_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_envelope_result) != null) &decode_requires else if (std.mem.indexOfScalar(pipeline.DataKey, outputs, .model_payload_schema_result) != null) &payload_schema_requires else null;
     if (response_inputs) |required| {
         if ((outputs.len != 1 and !std.mem.eql(pipeline.DataKey, outputs, &admission_produces)) or effect != .none or accounting != .none or ports.len != 0 or
             optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or parameters != 0 or retry) return false;
@@ -34,10 +32,9 @@ fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, op
         }
     }
     if (std.mem.indexOfScalar(pipeline.DataKey, replaces, .provider_invocation_result) != null) return false;
-    if (std.mem.indexOfScalar(pipeline.DataKey, replaces, .provider_token_count_result) != null) return false;
-    const publishes = counts(outputs) or std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_invocation_result) != null;
+    const publishes = std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_invocation_result) != null;
     if (effect != .model_call) return !publishes;
-    if (!std.mem.eql(pipeline.DataKey, outputs, if (counts(outputs)) &count_produces else &produces) or optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or
+    if (!std.mem.eql(pipeline.DataKey, outputs, &produces) or optional.len != 0 or replaces.len != 0 or invalidates.len != 0 or
         parameters != 0 or retry or accounting != .none or ports.len != 1 or !std.mem.eql(u8, ports[0], capabilities.model_provider)) return false;
     for (requires) |key| if (std.mem.indexOfScalar(pipeline.DataKey, inputs, key) == null) return false;
     return true;
@@ -45,12 +42,4 @@ fn valid(inputs: []const pipeline.DataKey, outputs: []const pipeline.DataKey, op
 
 pub fn validates(outputs: []const pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_invocation_validation_result) != null;
-}
-
-pub fn counts(outputs: []const pipeline.DataKey) bool {
-    return std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_token_count_result) != null;
-}
-
-pub fn validatesCount(outputs: []const pipeline.DataKey) bool {
-    return std.mem.indexOfScalar(pipeline.DataKey, outputs, .provider_token_count_validation_result) != null;
 }

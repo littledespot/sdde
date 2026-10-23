@@ -12,7 +12,7 @@ test "concrete HTTP captures request identity and rejects duplicate identity hea
         fixture.init(bytes);
         defer fixture.deinit();
         var adapter = fixture.adapter();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         if (duplicate) {
             try std.testing.expectEqual(.response_invalid, result.failed.cause);
             try std.testing.expectEqualStrings("hello", result.failed.body.?.bytes);
@@ -25,38 +25,35 @@ test "concrete HTTP captures request identity and rejects duplicate identity hea
     }
 }
 
-test "concrete HTTP routes every compiled region and catalogue model through Converse or token counting once" {
+test "concrete HTTP routes every compiled region and catalogue model through Converse once" {
     for (@import("model_contract_test_fixture.zig").bedrock_model_ids) |raw_model| {
         const model: @import("domain/llm_provider_identity.zig").ModelId = .{ .bytes = raw_model };
         for (std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)) |region| {
-            for (std.enums.values(@import("domain/llm_provider_operation.zig").ProviderOperationKind)) |kind| {
-                var fixture: fixture_module.Fixture = undefined;
-                fixture.init(good);
-                defer fixture.deinit();
-                var adapter = fixture.adapter();
-                var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-                defer arena.deinit();
-                var request = fixture.request(kind);
-                request.target = .{ .aws_bedrock = .{ .region = region, .model = model, .kind = kind } };
-                fixture.expected_host = try std.fmt.allocPrint(arena.allocator(), "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
-                const result = try adapter.port().exchange(arena.allocator(), request);
-                try std.testing.expectEqualStrings("hello", result.received.body);
-                try std.testing.expectEqual(@as(u16, 200), result.received.status);
-                try fixture.expectJoined();
-                try std.testing.expectEqual(@as(usize, 1), fixture.opens);
-                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
-                const request_line = try std.fmt.allocPrint(arena.allocator(), "POST /model/{f}/{s} HTTP/1.1\r\n", .{
-                    std.fmt.alt(std.Uri.Component{ .raw = model.bytes }, .formatEscaped),
-                    if (kind == .inference) "converse" else "count-tokens",
-                });
-                try std.testing.expect(std.mem.startsWith(u8, fixture.wire.items, request_line));
-                const host = try std.fmt.allocPrint(arena.allocator(), "host: {s}\r\n", .{fixture.expected_host});
-                try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, host) != null);
-                try std.testing.expect(std.mem.endsWith(u8, fixture.wire.items, request.body));
-                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, &fixture.canary));
-                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "authorization: Bearer "));
-                try std.testing.expect(std.mem.indexOf(u8, result.received.body, &fixture.canary) == null);
-            }
+            var fixture: fixture_module.Fixture = undefined;
+            fixture.init(good);
+            defer fixture.deinit();
+            var adapter = fixture.adapter();
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            var request = fixture.request();
+            request.target = .{ .aws_bedrock = .{ .region = region, .model = model } };
+            fixture.expected_host = try std.fmt.allocPrint(arena.allocator(), "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
+            const result = try adapter.port().exchange(arena.allocator(), request);
+            try std.testing.expectEqualStrings("hello", result.received.body);
+            try std.testing.expectEqual(@as(u16, 200), result.received.status);
+            try fixture.expectJoined();
+            try std.testing.expectEqual(@as(usize, 1), fixture.opens);
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
+            const request_line = try std.fmt.allocPrint(arena.allocator(), "POST /model/{f}/converse HTTP/1.1\r\n", .{
+                std.fmt.alt(std.Uri.Component{ .raw = model.bytes }, .formatEscaped),
+            });
+            try std.testing.expect(std.mem.startsWith(u8, fixture.wire.items, request_line));
+            const host = try std.fmt.allocPrint(arena.allocator(), "host: {s}\r\n", .{fixture.expected_host});
+            try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, host) != null);
+            try std.testing.expect(std.mem.endsWith(u8, fixture.wire.items, request.body));
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, &fixture.canary));
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "authorization: Bearer "));
+            try std.testing.expect(std.mem.indexOf(u8, result.received.body, &fixture.canary) == null);
         }
     }
 }
@@ -71,7 +68,7 @@ test "concrete HTTP deadline cancels and joins blocked connect write head and bo
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         try std.testing.expectEqual(.timeout, result.failed.cause);
         try std.testing.expectEqual(.timeout, result.failed.diagnostic.?.cause);
         try std.testing.expectEqual(phase(point), result.failed.diagnostic.?.phase);
@@ -92,7 +89,7 @@ test "concrete HTTP preserves socket cancellation during connect write head and 
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        try std.testing.expectError(error.Cancelled, adapter.port().exchange(arena.allocator(), fixture.request(.inference)));
+        try std.testing.expectError(error.Cancelled, adapter.port().exchange(arena.allocator(), fixture.request()));
         try fixture.expectJoined();
     }
 }
@@ -107,7 +104,7 @@ test "concrete HTTP caller cancellation joins blocked network and timer before r
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        var future = try fixture.io().concurrent(call, .{ &adapter, arena.allocator(), fixture.request(.inference) });
+        var future = try fixture.io().concurrent(call, .{ &adapter, arena.allocator(), fixture.request() });
         defer std.testing.expectError(error.Cancelled, future.cancel(fixture.io())) catch @panic("caller cancellation must join the exchange");
         try fixture.reached.waitTimeout(fixture.io(), .{ .duration = .{ .raw = .fromSeconds(5), .clock = .awake } });
         try std.testing.expectError(error.Cancelled, future.cancel(fixture.io()));
@@ -130,7 +127,7 @@ test "concrete HTTP rejects interrupted response bodies and never returns partia
             var adapter = fixture.adapter();
             var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
             defer arena.deinit();
-            const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+            const result = try adapter.port().exchange(arena.allocator(), fixture.request());
             try std.testing.expect(result == .failed);
             try std.testing.expectEqual(.accepted_or_unknown, result.failed.delivery);
             try std.testing.expect(fixture.cursor > fixture.body_start and fixture.cursor < fixture.response.len);
@@ -148,7 +145,7 @@ test "concrete HTTP preserves timeout when a response finishes during cancellati
     var adapter = fixture.adapter();
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+    const result = try adapter.port().exchange(arena.allocator(), fixture.request());
     try std.testing.expectEqual(.timeout, result.failed.cause);
     try std.testing.expectEqual(.accepted_or_unknown, result.failed.delivery);
     try std.testing.expectEqual(fixture.response.len, fixture.cursor);
@@ -170,7 +167,7 @@ test "concrete HTTP retains received body prefixes through truncation reset time
             var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
             defer arena.deinit();
             var body_on_error: ?transport.ResponseBody = null;
-            var request = fixture.request(.inference);
+            var request = fixture.request();
             request.response_body_on_error = &body_on_error;
             var retained: transport.ResponseBody = undefined;
             if (fault == .held) {
@@ -214,7 +211,7 @@ test "header policy rejection retains raw complete or interrupted bodies without
             fixture.fault = fault;
             fixture.body_prefix_bytes = 3;
             var adapter = fixture.adapter();
-            const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+            const result = try adapter.port().exchange(arena.allocator(), fixture.request());
             try std.testing.expectEqual(.response_invalid, result.failed.cause);
             try std.testing.expectEqual(.never, result.failed.retry_class);
             try std.testing.expectEqual(case.delivery, result.failed.delivery);
@@ -238,14 +235,14 @@ test "concrete HTTP partial sends and interrupted heads fail without a resend" {
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         try std.testing.expectEqual(.transport_failed, result.failed.cause);
         try std.testing.expectEqual(phase(point), result.failed.diagnostic.?.phase);
         try std.testing.expectEqual(@as(@FieldType(@import("domain/llm_provider_operation.zig").TransportDiagnostic, "cause"), if (point == .connect) .connection_refused else .connection_reset), result.failed.diagnostic.?.cause);
         const delivery: @import("domain/llm_provider_operation.zig").ProviderDeliveryDisposition = if (point == .connect) .not_sent else .accepted_or_unknown;
         try std.testing.expectEqual(delivery, result.failed.delivery);
         try std.testing.expect(fixture.fault_fired);
-        if (point == .write) try std.testing.expect(fixture.wire.items.len > 0 and !std.mem.endsWith(u8, fixture.wire.items, fixture.request(.inference).body));
+        if (point == .write) try std.testing.expect(fixture.wire.items.len > 0 and !std.mem.endsWith(u8, fixture.wire.items, fixture.request().body));
         if (point == .head) try std.testing.expect(fixture.cursor > 0 and fixture.cursor < fixture.body_start);
         try fixture.expectJoined();
     }
@@ -272,7 +269,7 @@ test "concrete HTTP reads chunked close-delimited and informational responses wi
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         try std.testing.expectEqualStrings("hello", result.received.body);
         try fixture.expectJoined();
     }
@@ -288,7 +285,7 @@ test "concrete HTTP returns AWS error responses once and never follows redirects
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         if (status < 400) {
             try std.testing.expectEqual(.response_invalid, result.failed.cause);
             try std.testing.expectEqual(.never, result.failed.retry_class);
@@ -319,7 +316,7 @@ test "concrete HTTP rejects malformed truncated and encoded responses without pa
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         try std.testing.expect(result == .failed);
         try fixture.expectJoined();
     }
@@ -335,7 +332,7 @@ test "concrete HTTP owns request headers and bodies beyond socket buffer sizes" 
     fixture.maximum_read = 257;
     fixture.maximum_write = 1024;
     var adapter = fixture.adapter();
-    var request = fixture.request(.inference);
+    var request = fixture.request();
     request.body = body;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -360,7 +357,7 @@ fn allocationScenario(allocator: std.mem.Allocator, fault: fixture_module.Fault)
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     defer fixture.expectCleaned() catch @panic("transport left a task or connection alive");
-    const result = adapter.port().exchange(arena.allocator(), fixture.request(.inference)) catch |err| switch (err) {
+    const result = adapter.port().exchange(arena.allocator(), fixture.request()) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.Cancelled => {
             try std.testing.expectEqual(.cancelled, fault);
@@ -385,7 +382,7 @@ test "concrete HTTP scheduler failure joins an already active request without re
         var adapter = fixture.adapter();
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(.inference));
+        const result = try adapter.port().exchange(arena.allocator(), fixture.request());
         try std.testing.expectEqual(.transport_failed, result.failed.cause);
         const delivery: @import("domain/llm_provider_operation.zig").ProviderDeliveryDisposition = if (spawn == 1) .not_sent else .accepted_or_unknown;
         try std.testing.expectEqual(delivery, result.failed.delivery);
@@ -405,7 +402,7 @@ test "the shared exchange sends Anthropic Messages with its own key header and r
         defer fixture.deinit();
         fixture.expected_host = "api.anthropic.com";
         var adapter = fixture.adapter();
-        var request = fixture.request(.inference);
+        var request = fixture.request();
         request.target = .anthropic;
         const result = try adapter.port().exchange(arena.allocator(), request);
         try fixture.expectJoined();

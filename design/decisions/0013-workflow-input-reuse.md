@@ -4,6 +4,8 @@
 - **Date:** 2026-09-07
 - **Decision authority:** Explicit user instruction to implement TODO001's recommendations with single responsibility, no duplicate authority, and removal of superseded code
 - **Amends:** ADRs 0005, 0006 and 0012; Design Sections 7, 9, 12.7, 14.1 and 28; F0005, F0006 and F0100
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md), which removed provider
+  token counting on 24 October 2026; only providers use the compiled projection.
 
 ## Decision
 

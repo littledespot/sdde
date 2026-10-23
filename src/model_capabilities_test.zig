@@ -50,10 +50,6 @@ test "request result selection keeps exactly one canonical schema or configured 
 test "model contracts validate capabilities without granting unsupported operations" {
     var contract = provider_contract;
     try (contracts.Registry{ .entries = &.{contract} }).validate();
-    contract.capabilities.input_token_count = false;
-    try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
-    contract.capabilities.exact_token_counter = .unavailable;
-    try (contracts.Registry{ .entries = &.{contract} }).validate();
     try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
     contract = provider_contract;
     contract.capabilities.inference = false;
@@ -118,22 +114,16 @@ test "provider operations retain binding control mode and deadline checks" {
     var authorization: @import("provider_authorization_test_fixture.zig").Fixture = undefined;
     try authorization.init(std.testing.allocator);
     defer authorization.deinit();
-    const started = try authorization.startCount();
+    const inference = try authorization.startInference();
     const provider = @import("domain/llm_provider_operation.zig");
-    try std.testing.expect(provider.validateCountInvocation(&authorization.provider_binding, &authorization.request, started.invoked));
+    try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, inference.invoked));
     var request = authorization.request;
     request.controls.temperature = null;
-    try std.testing.expect(!provider.validateCountInvocation(&authorization.provider_binding, &request, started.invoked));
+    try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &request, inference.invoked));
     request = authorization.request;
     request.response_guidance_mode = .native_schema;
-    try std.testing.expect(!provider.validateCountInvocation(&authorization.provider_binding, &request, started.invoked));
-    var invoked = started.invoked.*;
-    invoked.deadline_monotonic_ms = 0;
-    try std.testing.expect(!provider.validateCountInvocation(&authorization.provider_binding, &authorization.request, &invoked));
-    const evidence = authorization.evidence();
-    const inference = try authorization.finishCountAndStartInference(evidence);
-    try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, inference.invoked));
-    invoked = inference.invoked.*;
+    try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &request, inference.invoked));
+    var invoked = inference.invoked.*;
     invoked.deadline_monotonic_ms = 0;
     try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, &invoked));
 }

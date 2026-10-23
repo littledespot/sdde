@@ -103,7 +103,8 @@ already made.
     marked `advisory: allowed` map `more` and `blocked` (they may carry both kinds of
     request; only an advisory request at an unmarked step is rejected). It builds the
     shared contract-variant mechanism that ADR 0033 reuses (confirmed 23 October 2026).
-    Documentation is updated; implementation hasn't started;
+    Implemented so far: the step-trace freeze (slice 1) and the token-counting removal
+    (slice 2, 24 October 2026); the deadline move and `request-model` itself remain;
   - each concept costs about six coordinated edits. *Approved 22 October 2026 (ADR 0031,
     option (b)):* one stage action whose internal steps are typed functions and route no
     outcome; its read-only limit awaits confirmation.

@@ -35,7 +35,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .reasoning_effort = @import("../../src/adapters/provider/model_text_request.zig").reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
         .family = config.family.?,
         .max_output_tokens = config.max_output_tokens,
-    }, .inference) catch |err| return switch (err) {
+    }) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidRequest => error.InvalidEvaluationContract,
     };
@@ -58,7 +58,7 @@ pub const Adapter = struct {
         const now = self.clock.now() catch return .{ .failure = .provider_failed };
         const deadline = std.math.add(u64, now, timeout_ms) catch return .{ .failure = .configuration };
         const received = try self.transport.exchange(a, .{
-            .target = .{ .aws_bedrock = .{ .region = self.region, .model = self.model, .kind = .inference } },
+            .target = .{ .aws_bedrock = .{ .region = self.region, .model = self.model } },
             .body = body,
             .api_key = self.api_key,
             .deadline_monotonic_ms = deadline,
@@ -82,7 +82,7 @@ pub fn response(a: std.mem.Allocator, received: transport.Response) std.mem.Allo
         .throttled => .rate_limited,
         .timeout => .timeout,
         .service_unavailable, .transport_failed => .provider_failed,
-        .response_invalid, .exact_token_count_unavailable => .invalid_response,
+        .response_invalid => .invalid_response,
     } };
     var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer parsed.deinit();

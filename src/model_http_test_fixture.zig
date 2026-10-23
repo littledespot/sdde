@@ -77,8 +77,8 @@ pub const Fixture = struct {
         return .{ .io = self.io(), .clock = .{ .context = @ptrCast(self), .now_fn = now }, .runtime = .{} };
     }
 
-    pub fn request(self: *const Fixture, kind: @import("domain/llm_provider_operation.zig").ProviderOperationKind) transport.Request {
-        return .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" }, .kind = kind } }, .body = "{\"messages\":[]}", .api_key = &self.canary, .deadline_monotonic_ms = 1100 };
+    pub fn request(self: *const Fixture) transport.Request {
+        return .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = "openai.gpt-oss-20b-1:0" } } }, .body = "{\"messages\":[]}", .api_key = &self.canary, .deadline_monotonic_ms = 1100 };
     }
 
     pub fn expectJoined(self: *const Fixture) !void {

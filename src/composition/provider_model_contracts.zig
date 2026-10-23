@@ -4,16 +4,16 @@ pub const bedrock_implementation: contracts.RegisteredProviderImplementationId =
 pub const anthropic_implementation: contracts.RegisteredProviderImplementationId = .{ .ordinal = 2 };
 
 // Claude models (ADR 0028, ADR 0029): adaptive thinking stays on, effort is the only
-// reasoning control, temperature is never sent and no exact counter exists, whether
-// through the Messages API or Bedrock Converse. Each Messages API model still needs
+// reasoning control and temperature is never sent, whether through the Messages
+// API or Bedrock Converse. Each Messages API model still needs
 // its own approved compatibility probe before live use.
 const anthropic_efforts: []const []const u8 = &.{ "low", "medium", "high", "xhigh", "max" };
-const anthropic_capabilities: @import("../domain/model_capabilities.zig").Capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .native_json_schema, .temperature = false };
+const anthropic_capabilities: @import("../domain/model_capabilities.zig").Capabilities = .{ .inference = true, .structured_response = .native_json_schema, .temperature = false };
 
 /// Bedrock family capabilities: Converse inference in either response mode, the
-/// catalogue's `json` flag choosing one, and no CountTokens (ADR 0029).
+/// catalogue's `json` flag choosing one (ADR 0029).
 fn bedrockCapabilities(temperature: bool) @import("../domain/model_capabilities.zig").Capabilities {
-    return .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .native_json_schema, .temperature = temperature };
+    return .{ .inference = true, .structured_response = .native_json_schema, .temperature = temperature };
 }
 
 // Support, not defaults. A Bedrock family contract covers every catalogue model

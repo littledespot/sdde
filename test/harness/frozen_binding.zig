@@ -39,7 +39,7 @@ pub fn validateWire(a: std.mem.Allocator, wire: transport.Request) !void {
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const frozen = try protocol(arena.allocator());
-    if (target.kind != .inference or !std.mem.eql(u8, @tagName(target.region), frozen.region) or
+    if (!std.mem.eql(u8, @tagName(target.region), frozen.region) or
         !std.mem.eql(u8, target.model.bytes, frozen.model)) return error.FrozenBindingRejected;
     // The frozen maximum output is a bound setting: a drifted catalogue cannot send another.
     const body = std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), wire.body, .{}) catch |err|
@@ -99,7 +99,7 @@ test "frozen slot controls retain each role's effort without substituting genera
             .reasoning_effort = example.effort,
             .operation_kind = .inference,
         };
-        const wire: transport.Request = .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model }, .kind = .inference } }, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "", .deadline_monotonic_ms = 1 };
+        const wire: transport.Request = .{ .target = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .model = .{ .bytes = frozen.model } } }, .body = "{\"inferenceConfig\":{\"temperature\":0.1,\"maxTokens\":16384}}", .api_key = "", .deadline_monotonic_ms = 1 };
         try validateDescription(a, description, wire, &models);
         var changed = description;
         changed.reasoning_effort = "medium";

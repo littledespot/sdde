@@ -20,12 +20,12 @@
   - `model-request-debug/v9`, which becomes `v10`.
 
   The overall design remains **Proposed design**.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, not yet
-  implemented). A Bedrock `config` also requires a positive `requestTimeoutMs`, so it
-  accepts four fields, not three. Deadlines are per catalogue entry, which settles
-  "Per-family request deadlines".
-  Provider token counting is removed, so "A family that registers CountTokens" would
-  first need counting itself to return by its own decision.
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026).
+  Not yet implemented: a Bedrock `config` also requires a positive `requestTimeoutMs`, so
+  it accepts four fields, not three. Deadlines are per catalogue entry, which settles
+  "Per-family request deadlines". Implemented on 24 October 2026: provider token
+  counting is removed, so "A family that registers CountTokens" would first need
+  counting itself to return by its own decision.
 
 ## Context
 

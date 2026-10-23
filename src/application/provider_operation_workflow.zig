@@ -3,7 +3,6 @@ const accounting = @import("workflow_model_accounting.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const operation = @import("../domain/workflow_operation.zig");
-const selection = @import("../domain/workflow_provider_operation.zig");
 const lifecycle = @import("../domain/provider_operation_lifecycle.zig");
 
 /// Assignment only. The existing lifecycle action proposes the transition;
@@ -18,7 +17,6 @@ pub const Assign = struct {
         .outcomes = &.{ .ok, .failed },
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
-        .parameters = &.{selection.kind_parameter},
     };
     action: Action = .{},
 
@@ -27,17 +25,13 @@ pub const Assign = struct {
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const prepared = request.prepared() orelse return error.OperationExecutionFailed;
         const attempt = accounting.readAttempt(&input.step.data) catch |operation_error| return operation_error;
-        const kind = selection.resolve(input.step.step.parameters) orelse return error.OperationExecutionFailed;
         const facts = input.step.provider_operation orelse return error.OperationExecutionFailed;
         const assignment: lifecycle.Assignment = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id };
         const delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{
             .model_request_id = request.id(),
             .model_attempt_ordinal = attempt.ordinal(),
-            .kind = kind,
-        }, null, switch (kind) {
-            .inference => .{ .assign_inference = assignment },
-            .input_token_count => .{ .assign_count = assignment },
-        }) catch |operation_error| return operation_error;
+            .kind = .inference,
+        }, null, .{ .assign_inference = assignment }) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };

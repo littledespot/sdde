@@ -28,7 +28,7 @@ classDiagram
     AWSBedrockProvider --> AWSBedrockRuntimePort : performs one deadline-bound exchange
     AWSBedrockProvider ..> ProviderInvocationObservation : returns response and usage evidence
 
-    note for LLMProviderInterface "Supports inference and explicitly requested input-token counting (ADR 0030, amended 23 October 2026, removes counting)"
+    note for LLMProviderInterface "Supports inference"
     note for AWSBedrockProvider "Credentials and transport capabilities stay inside authorized adapters"
     note for ProviderInvocationObservation "A provider response is candidate data; the engine owns validation and workflow outcomes"
 ```

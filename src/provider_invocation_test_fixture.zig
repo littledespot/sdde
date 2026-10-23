@@ -70,7 +70,6 @@ pub const Fixture = struct {
         self.fake = .{
             .allocator = std.testing.allocator,
             .authorization_leases = self.base.leasePort(),
-            .count_plan = .{ .counted = 0 },
             .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 2 } },
         };
     }

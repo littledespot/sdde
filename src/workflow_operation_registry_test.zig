@@ -61,7 +61,7 @@ test "native iteration contracts require finite progress ownership without retry
 test "model-call contracts require complete invocation inputs and owned result publication" {
     const native = @import("application/model_invocation_workflow.zig");
     const selection = @import("domain/workflow_model_invocation.zig");
-    inline for (.{ native.Invoke, native.Count }) |Call| {
+    inline for (.{native.Invoke}) |Call| {
         var context: Call = .{ .allocator = std.testing.allocator };
         const entry: Entry = .{ .contract = Call.contract, .binding = bindings.bind(Call, &context, Call.invoke) };
         const valid: Registry = .{ .operations = &.{entry}, .data_schemas = &@import("composition/model_request_operations.zig").schemas, .policies = &.{}, .gates = &.{} };
@@ -125,7 +125,7 @@ test "operation lookup is exact with one current contract and no version aliases
 }
 
 test "model response contracts require exact inputs without effects or overrides" {
-    inline for (.{ @import("application/model_token_count_observation_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").CompleteCount, @import("application/model_request_completion_workflow.zig").CompleteCount, @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate, @import("application/model_request_termination_workflow.zig").Terminate }) |Native| {
+    inline for (.{ @import("application/provider_observation_workflow.zig").Validate, @import("application/model_envelope_workflow.zig").Decode, @import("application/model_payload_schema_workflow.zig").Validate, @import("application/provider_operation_completion_workflow.zig").Complete, @import("application/model_request_completion_workflow.zig").Complete, @import("application/provider_operation_termination_workflow.zig").Terminate, @import("application/model_request_termination_workflow.zig").Terminate }) |Native| {
         const required = Native.contract.requires;
         var context: Native = if (@hasField(Native, "allocator")) .{ .allocator = std.testing.allocator } else .{};
         const entry: Entry = .{ .contract = Native.contract, .binding = bindings.bind(Native, &context, Native.invoke) };

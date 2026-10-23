@@ -324,9 +324,8 @@ RepairAccountingTransition =
   | AdvanceProviderOperation {
       expectedLedger, expectedLedgerRevision,
       providerOperationId, expectedOperationRevision?,
-      assignCount | assignInference | invoke | terminate
-      // Either assignment binds the request, model binding and exact input;
-      // inference requires no prior count operation or count evidence.
+      assignInference | invoke | terminate
+      // Assignment binds the request, model binding and exact input.
       // Runner applies one immutable successor after validating request and
       // attempt revisions. All operation state is execution-local; there is
       // no journal projection or persisted result handoff.
@@ -345,7 +344,7 @@ RepairAccountingTransition =
 // accounted_model_attempt is a sealed view of the applied canonical record.
 // Envelope publication and accounting installation succeed together or neither
 // becomes visible. The value retains its request and accounting owners.
-// assign-provider-operation selects only inference or input-token-count and
+// Parameter-free assign-provider-operation assigns one inference operation and
 // calls AdvanceProviderOperationLifecycleAction for assignment. The runner
 // compares the proposal to the retained prepared request and applied attempt.
 // assigned_provider_operation is a sealed view of the canonical assigned Record;
@@ -379,18 +378,6 @@ ProviderAuthorizationResult = opaque {
 // of the canonical InvokedProviderOperation while invalidating assignment
 // evidence. Rejection publishes neither change. The lease is still unconsumed;
 // no API call, token charge, new timeout or persisted state is introduced.
-
-// count-model-input-tokens uses the same call binding for the invoked count kind.
-// provider_token_count_result retains the original request/binding before the
-// port call. validate-model-token-count-observation publishes independently owned
-// provider_token_count_validation_result using the existing pure validator:
-// validated(counted | failed) | rejected(association/context) | cancelled.
-// complete-count-operation consumes that result and the exact invoked operation,
-// publishing counted/failed/cancelled through the existing lifecycle runner.
-// complete-count-request permits only failed/cancelled logical closure after all
-// request operations are terminal. Success cannot accept a request or authorize
-// inference. All four bindings are parameter-free; no token charge or implicit
-// retry occurs, and stale/foreign/duplicate completion evidence rejects.
 
 // validate-provider-invocation-observation consumes the retained raw result,
 // prepared request, applied attempt and invoked operation. Its pure action

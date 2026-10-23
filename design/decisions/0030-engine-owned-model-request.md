@@ -1,10 +1,10 @@
 # ADR 0030: One engine-owned step per model request
 
-- **Status:** Accepted amendment, amended 23 October 2026. **Not yet implemented:** the
-  engine, the Specify definition and the packaging fixture still use the explicit
-  request-lifecycle steps, the four token-count operations and the per-step `timeout-ms`
-  until the implementation change lands. Documents that describe those steps carry a
-  pointer to this ADR until then.
+- **Status:** Accepted amendment, amended 23 October 2026. **Partly implemented:**
+  provider token counting was removed on 24 October 2026 ("Token counting is removed").
+  The engine, the Specify definition and the packaging fixture still use the explicit
+  request-lifecycle steps and the per-step `timeout-ms` until the rest lands. Documents
+  that describe those steps carry a pointer to this ADR until then.
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It

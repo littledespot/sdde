@@ -403,12 +403,10 @@ test "request validation rejects divergent binding controls and modes" {
     try std.testing.expectError(error.ModelRequestBindingInvalid, (build.Action{}).execute(std.testing.allocator, selected, fixture.request.content));
 }
 
-test "prepared request reaches fake inference without counting or preparation side effects" {
+test "prepared request reaches fake inference without preparation side effects" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
-    fixture.registry_entry.capabilities.input_token_count = false;
-    fixture.registry_entry.capabilities.exact_token_counter = .unavailable;
     const resource = resultResource(&fixture);
     const selected = try source(&fixture, &resource);
     const large = try std.testing.allocator.alloc(u8, 16_384);
@@ -420,7 +418,6 @@ test "prepared request reaches fake inference without counting or preparation si
     var fake: fake_provider.FakeLLMProvider = .{
         .allocator = std.testing.allocator,
         .authorization_leases = fixture.leasePort(),
-        .count_plan = .{ .counted = 0 },
         .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 1_000_000, .output_tokens = 500_000 } },
     };
     try std.testing.expectEqual(@as(usize, 0), fixture.preloader.prepared_count);
@@ -431,7 +428,6 @@ test "prepared request reaches fake inference without counting or preparation si
     defer response.deinit();
     try std.testing.expectEqualStrings("{}", response.completed.raw_result.complete.content.bytes);
     try std.testing.expectEqual(@as(u64, 1_500_000), response.completed.raw_result.complete.usage.total_tokens);
-    try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.preloader.destroyed_count);
     try std.testing.expectEqualStrings(large, owned.request.content[0].evidence);

@@ -235,7 +235,7 @@ pub const State = struct {
         if (continuation) |value| if (value.mode == .dependent_regeneration and
             !value.owner.permitsDependentContinuation(value.permit, value.permit.key)) return false;
         if (correction) |source| {
-            if (source.model_request_id != request or source.kind != .inference or source.model_attempt_ordinal.value == 0) return false;
+            if (source.model_request_id != request or source.model_attempt_ordinal.value == 0) return false;
             var rejected = false;
             for (self.entries.items) |entry| {
                 if (entry.observation.subject != .request or !entry.observation.subject.request.eql(source)) continue;
@@ -247,7 +247,6 @@ pub const State = struct {
         for (self.entries.items) |entry| {
             if (entry.irreversible or entry.observation.outcome == .needs_user or entry.observation.outcome == .cancelled) return false;
             if (entry.observation.subject == .request and entry.observation.subject.request.model_request_id == request and
-                entry.observation.subject.request.kind == .inference and
                 entry.observation.outcome == .invalid)
             {
                 if (correction) |source| if (entry.observation.subject.request.model_attempt_ordinal.value <= source.model_attempt_ordinal.value) continue;
@@ -365,7 +364,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
         },
         .advisory_request_failed => |request| {
             if (descriptor != .advisory_request_closure or !advisoryClosureRoute(descriptor.advisory_request_closure, outcome) or
-                request.kind != .inference or request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
+                request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
             switch (request.model_request_id.purpose) {
                 .semantic_review, .atomic_repair => {},
                 .initial_generation, .context_followup, .clarification_resolution => return error.InvalidOutcomeAssociation,
@@ -420,7 +419,6 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                 if ((descriptor != .request_decode and descriptor != .request_admission) or outcome != .invalid or !evidence.missingFinalText()) return error.InvalidOutcomeAssociation;
                 const operation = evidence.operationId();
                 const subject: Subject = .{ .request = operation };
-                if (operation.kind != .inference) return error.InvalidOutcomeAssociation;
                 for (entries.items) |*entry| if (entry.observation.subject.eql(subject)) {
                     if (entry.irreversible or (entry.observation.outcome != .failed and entry.observation.outcome != .invalid)) return error.InvalidOutcomeAssociation;
                     entry.observation.outcome = .invalid;
@@ -463,7 +461,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
             };
             if (!validSubject(subject) or subject == .operation) return error.InvalidOutcomeAssociation;
             switch (resolution) {
-                .request_admitted => if (descriptor != .request_admission or outcome != .ok or subject != .request or subject.request.kind != .inference) return error.InvalidOutcomeAssociation,
+                .request_admitted => if (descriptor != .request_admission or outcome != .ok or subject != .request) return error.InvalidOutcomeAssociation,
                 .repair_resolved => |value| {
                     if (descriptor != .repair_validate) return error.InvalidOutcomeAssociation;
                     const permit = switch (value.transition) {
@@ -568,7 +566,7 @@ fn stopAdvice(entries: *std.ArrayList(Entry), aliases: *std.ArrayList(Associatio
     if (descriptor != .advisory_completion or (outcome != .ok and outcome != .more) or stopped.subject != .native or
         stopped.subject.native.kind != .candidate or !validSubject(stopped.subject) or
         descriptor.advisory_completion.kind != .candidate or descriptor.advisory_completion.subject != stopped.subject.native.key or
-        stopped.request.kind != .inference or stopped.request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
+        stopped.request.model_attempt_ordinal.value == 0) return error.InvalidOutcomeAssociation;
     switch (stopped.request.model_request_id.purpose) {
         .semantic_review => {},
         .atomic_repair => if (stopped.permit == null) return error.InvalidOutcomeAssociation,
@@ -721,9 +719,6 @@ test "native advisory closure seals failed authority independently of its bounde
         try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .observe = .{ .subject = .{ .request = operation }, .outcome = witness.route } }}));
         try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .seal = .{ .subject = .{ .request = operation }, .outcome = .failed } }}));
         try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = .{ .request = operation } } }}));
-        var counting = operation;
-        counting.kind = .input_token_count;
-        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(descriptor, witness.route, &.{.{ .advisory_request_failed = counting }}));
     }
 }
 
@@ -835,9 +830,6 @@ test "advice stop preserves cancellation required work unrelated requests and na
         try std.testing.expectEqual(@as(usize, 1), stopped.entries.items.len);
         try std.testing.expectEqualDeep(obstruction, stopped.entries.items[0].observation);
         try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = .{ .model_request_id = mandatory.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .inference } } } }}));
-        var counting = operation;
-        counting.kind = .input_token_count;
-        try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .advisory_completion = binding }, .ok, &.{.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = counting } } }}));
     }
 }
 
@@ -1226,7 +1218,7 @@ test "prepared outcome control rejects foreign owners and stale revisions" {
     try std.testing.expectError(error.InvalidOutcomeAssociation, borrowed.firstUnresolved());
 }
 
-test "request admission excludes foreign subjects transport failure and counting operations" {
+test "request admission excludes foreign subjects and transport failure" {
     const initial = try identity.createInitial(std.testing.allocator, .all());
     defer identity.deinitOwner(initial);
     const first = try identity.createSuccessor(identity.ledger(initial), .initial, .workflow_step, .{ .workflow_id = .{ .bytes = "outcome-test" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "first" } }, .initial_generation);
@@ -1257,14 +1249,6 @@ test "request admission excludes foreign subjects transport failure and counting
             try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = subject } }}));
         } else try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = subject } }}));
     }
-    var counting = State.init(std.testing.allocator);
-    defer counting.deinit();
-    const count: Subject = .{ .request = .{ .model_request_id = first.model_request_id, .model_attempt_ordinal = .{ .value = 1 }, .kind = .input_token_count } };
-    var observed = try counting.prepare(.{ .observe = binding }, .invalid, &.{.{ .observe = .{ .subject = count, .outcome = .invalid } }});
-    defer observed.deinit();
-    try counting.commit(&observed);
-    try std.testing.expect(!counting.permitsRequest(first.model_request_id, count.request, null, &.{}));
-    try std.testing.expectError(error.InvalidOutcomeAssociation, counting.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = count } }}));
 }
 
 test "protocol admission uses the admitted attempt and closure retains genuine failures" {
@@ -1291,9 +1275,6 @@ test "protocol admission uses the admitted attempt and closure retains genuine f
     try std.testing.expect(!state.permitsRequest(request.model_request_id, forged, null, &.{}));
     forged = current.request;
     forged.model_attempt_ordinal.value = 0;
-    try std.testing.expect(!state.permitsRequest(request.model_request_id, forged, null, &.{}));
-    forged = current.request;
-    forged.kind = .input_token_count;
     try std.testing.expect(!state.permitsRequest(request.model_request_id, forged, null, &.{}));
     var replay = try state.prepare(.{ .request_admission = binding }, .ok, &.{.{ .resolve = .{ .request_admitted = prior } }});
     defer replay.deinit();

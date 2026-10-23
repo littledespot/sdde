@@ -115,13 +115,12 @@ pub const State = struct {
         self.requests = requests;
     }
 
-    pub fn prepareAssignment(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, kind: provider.ProviderOperationKind, transition: lifecycle.Transition) Error!Pending {
+    pub fn prepareAssignment(self: *const State, requests: *const identity.ModelRequestIdentityLedger, request: *const provider.IdentifiedProviderNeutralModelRequest, transition: lifecycle.Transition) Error!Pending {
         const id = transition.operation_id;
-        if (id.model_request_id != request.model_request_id or id.kind != kind or
+        if (id.model_request_id != request.model_request_id or
             id.model_attempt_ordinal.value != accounting.accounting(self.attempts).attemptsReserved(request.model_request_id)) return error.InvalidAccountingTransition;
         const facts = switch (transition.command) {
-            .assign_inference => |facts| if (kind == .inference) facts else return error.InvalidAccountingTransition,
-            .assign_count => |facts| if (kind == .input_token_count) facts else return error.InvalidAccountingTransition,
+            .assign_inference => |facts| facts,
             .invoke, .terminate => return error.InvalidAccountingTransition,
         };
         if (!facts.binding_id.eql(request.binding_id) or !facts.model_visible_input_id.eql(request.model_visible_input_id)) return error.InvalidAccountingTransition;

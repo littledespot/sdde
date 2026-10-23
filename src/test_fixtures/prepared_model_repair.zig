@@ -82,7 +82,6 @@ fn checkCompositionCorrection(a: std.mem.Allocator, base: *@import("../provider_
     var fake: @import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
         .allocator = std.testing.allocator,
         .authorization_leases = base.leasePort(),
-        .count_plan = .{ .counted = 0 },
         .invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 7, .output_tokens = 3 } },
     };
     var response = try (@import("../actions/model/invoke_model.zig").Action{ .provider = fake.interface() }).execute(&base.provider_binding, actual, authorized.reference, authorized.invoked);

@@ -7,6 +7,8 @@
 - **Implementation authority:** Subsequent user request to define and implement
   the closed result-schema subset, immutable compilation and negative tests
 - **Amends:** Design Sections 12.3, 12.7 and 22.4; F0006; F0007 request/schema projection
+- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md), which removed provider
+  token counting on 24 October 2026; `modelBytes()` now serves inference only.
 - **Supersedes:** The metadata-bearing model response and repair-response
   examples in `design/code.md`, and F0007's requirement to echo those identities
 

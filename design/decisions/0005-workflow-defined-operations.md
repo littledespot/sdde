@@ -18,13 +18,15 @@ composable definition-local subgraphs expanded by the shared compiler before gra
 validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
 The existing operation registry and runner remain the execution owners.
 
-**Single-request amendment (22 October 2026, not yet implemented):**
+**Single-request amendment (22 October 2026, not yet implemented except the
+token-counting removal):**
 [ADR 0030](0030-engine-owned-model-request.md) adds the stages of one model request to
 the engine-kernel list below. A workflow makes each request with one `request-model` step
 and still declares its slot, resources, retry limit and outcome transitions. The stage
 order and the request's own protocol correction are no longer YAML steps. ADR 0030's
-23 October 2026 amendment removes provider token counting, takes the request deadline
-from the model's catalogue entry instead of YAML, and lets only a step marked
+23 October 2026 amendment removed provider token counting (implemented 24 October 2026,
+so the optional-count rule below no longer applies), takes the request deadline from the
+model's catalogue entry instead of YAML, and lets only a step marked
 `advisory: allowed` map the advisory outcomes. It also lets one operation's single
 current contract consist of closed variants selected at compile time (see "Unversioned
 operation IDs" below), a mechanism ADR 0033 reuses.
