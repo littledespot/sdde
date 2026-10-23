@@ -119,8 +119,9 @@ already made.
   - repair routes repeat one shape: eight routes at `b2f10a3`; today 29 per-owner
     operations, 13 owners and 7 repair model-call sites. *Approved 22 October 2026 (ADR 0033):* four
     generic repair operations with a closed `owner` and owner-supplied rules replace the
-    29 per-owner ones. They convert after A1 and A2's first conversion. Documentation is
-    updated; implementation hasn't started;
+    29 per-owner ones, as per-owner contract variants (choice 1, confirmed 23 October
+    2026) on the mechanism ADR 0030 builds. They convert after A1 and A2's first
+    conversion. Documentation is updated; implementation hasn't started;
   - reconciliation always makes four calls;
   - two pairs of sibling steps are identical. *Proposed:* merge them; this needs no
     ADR change. An ADR 0031 stage conversion may absorb them first.

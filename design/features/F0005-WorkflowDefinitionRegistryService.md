@@ -285,21 +285,26 @@ required inputs and define the `parse` successor, as in the
 - `on` maps every outcome declared by the selected operation contract exactly once to
   either another local step ID or one of `end.ok`, `end.needs-user`, `end.invalid`,
   `end.blocked`, `end.failed`, and `end.cancelled`.
-  - Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
-    the four generic repair operations have one contract with a closed variant per
-    `owner`. The compiler selects the variant from the step's `owner` at compile time.
+  - **Contract variants** ([ADR 0030](../decisions/0030-engine-owned-model-request.md)
+    "Contract variants", not yet implemented). An operation's one contract may consist of
+    closed variants. One closed step parameter selects the variant at compile time; an
+    optional selector names the one variant its absence selects.
   - Each variant is a complete contract: outcomes, all data effects including `optional`
-    and `replaces`, side effect, association, repair role, and whether retry authority is
-    required or forbidden, with its maximum and native key population.
-  - Registry admission validates each variant independently. This rule, the rules below
-    and the runner all check the step's own variant, never a union.
-  - Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) as amended on
-    23 October 2026 (not yet implemented), `request-model` has two variants the same way,
-    through the one contract-variant mechanism ADR 0030 builds and ADR 0033 reuses:
-    the ordinary variant (`ok`, `invalid`, `failed`, `cancelled`) and the advisory variant,
-    selected by `advisory: allowed`, which adds `more` and `blocked` with their
-    deferred-carrier descriptors. The marker selects no policy; advisory classification
-    stays native (ADR 0023).
+    and `replaces`, side effect, per-outcome association descriptors, repair role, and
+    whether retry authority is required or forbidden, with its maximum and native key
+    population.
+  - Registry admission validates each variant independently, and registry-wide checks
+    cover every variant. This rule, the rules below, compiled-graph validation, registry
+    publication and the runner all check the step's own variant, never a union.
+  - Its two users:
+    - `request-model` (ADR 0030 as amended on 23 October 2026): the ordinary variant
+      (`ok`, `invalid`, `failed`, `cancelled`) and the advisory variant, selected by
+      `advisory: allowed`, which adds `more` and `blocked` with their deferred-carrier
+      descriptors. The marker selects no policy; advisory classification stays native
+      (ADR 0023).
+    - The four generic repair operations of
+      [ADR 0033](../decisions/0033-generic-repair-operations.md): one variant per `owner`,
+      which is required.
 - The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   and `cancelled`; the compiler converts them to the corresponding internal tagged-union
   variants.

@@ -25,7 +25,9 @@ and still declares its slot, resources, retry limit and outcome transitions. The
 order and the request's own protocol correction are no longer YAML steps. ADR 0030's
 23 October 2026 amendment removes provider token counting, takes the request deadline
 from the model's catalogue entry instead of YAML, and lets only a step marked
-`advisory: allowed` map the advisory outcomes.
+`advisory: allowed` map the advisory outcomes. It also lets one operation's single
+current contract consist of closed variants selected at compile time (see "Unversioned
+operation IDs" below), a mechanism ADR 0033 reuses.
 
 **Stage-action amendment (22 October 2026, not yet implemented):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic

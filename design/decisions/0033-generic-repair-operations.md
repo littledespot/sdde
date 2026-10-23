@@ -262,7 +262,8 @@ Each statement CLAUDE.md lists is reported separately.
 ## Derived under existing rules
 
 The user approved the suggestion. These choices are derived from existing authority, not
-from the user's words, and await the user's confirmation:
+from the user's words, and await the user's confirmation, except choice 1, which the user
+confirmed on 23 October 2026:
 
 1. **Owner-specialized contracts.** Each generic operation's contract consists of
    complete per-owner variants, validated independently. The alternative was distinct

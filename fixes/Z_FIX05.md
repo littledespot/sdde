@@ -447,7 +447,8 @@ stated goal is simpler workflow YAML.
   - keeping `timeout-ms` as a step parameter;
   - keeping release and advisory routing in YAML.
 
-  ADR 0030 lists them under "Derived under existing rules".
+  ADR 0030 listed them under "Derived under existing rules"; that section became
+  "Choices settled on 23 October 2026" when the user settled them.
 - **Documents.** These now point to ADR 0030:
   - ADRs 0005, 0009, 0011, 0012, 0016, 0019 and 0023;
   - design.md;

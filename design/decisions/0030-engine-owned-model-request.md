@@ -254,22 +254,40 @@ at compile time. This ADR builds the mechanism, and
 so there is one mechanism with two users.
 
 - **A variant is a complete contract:** outcome set, data effects, side-effect class,
-  outcome-association descriptor, repair role and retry authority, the same fields as
-  any registered contract. Nothing is partial or merged from another variant.
+  outcome-association descriptors, repair role and retry authority, the same fields as
+  any registered contract. Its type has no defaulted fields, so every variant states
+  each one. Nothing is partial or merged from another variant. Association descriptors
+  are per outcome; a variant with one descriptor for every outcome is the simple case
+  ADR 0033's variants use, and `request-model`'s advisory variant needs the per-outcome
+  form for its deferred carriers.
 - **Selection.** Exactly one closed enum step parameter selects the variant at compile
   time: `advisory` for `request-model`, `owner` for ADR 0033's operations. A value with
-  no variant, or a step that leaves out a required selector, rejects at compilation. The
-  selector chooses a contract shape only; it selects no policy, scope or owner rule.
+  no variant, or a step that leaves out a required selector, rejects at compilation. A
+  selector is never a version, alias or compatibility form (ADR 0005). It picks a
+  contract variant and grants no policy, scope or defect identity. Whether an operation
+  also selects rules from its compiled variant, and how it checks its selector at run
+  time, belongs to that operation's ADR: `advisory`'s one-directional check is in
+  "Advisory requests", and `owner`'s rules and check are in ADR 0033.
+- **Optional selectors.** A selector may be optional, as `advisory` is. Its contract then
+  names exactly one variant that its absence selects; for `request-model` that is the
+  ordinary variant. A required selector, such as `owner`, has no such variant.
 - **Registry admission** validates every variant independently, with the same checks as
-  any registered contract.
+  any registered contract, and also rejects an optional selector with zero or more than
+  one variant for its absence. Registry-wide checks that read every contract cover every
+  variant of every contract: gate-evidence exclusivity, the gate-issuer check and schema
+  registration.
 - **The compiler** checks each step against its selected variant alone: outcome mapping,
-  data flow, role and association compatibility, and retry authority.
+  data flow, role and association compatibility, and retry authority. Compiled-graph
+  validation and registry publication recheck each step against that same variant.
 - **The runner and the stage actions** check every delta, outcome, association and
   retry authority against the compiled step's variant, never a union of variants. The
   advisory-step check in preparation reads the compiled variant, not the parameter.
-- **Scope.** The mechanism carries exactly what ADR 0033 already specifies for its
-  variants; this ADR adds nothing beyond it. Its two `request-model` variants, which
-  differ only in outcomes, are its first and simplest test before ADR 0033's 29.
+- **Scope.** The mechanism carries what ADR 0033 specifies for its variants, plus two
+  things `request-model` needs: optional selectors and per-outcome association
+  descriptors. It adds no run-time selector check of its own; any check against native
+  facts belongs to the operation that uses it. Its two `request-model` variants, which
+  differ in their outcome sets and those outcomes' descriptors, are its first and
+  simplest test before ADR 0033's 29.
 - **Why this option.** ADR 0033 needs per-owner variants anyway: separate operations
   would bring back most of the 29 per-owner operations W3 removes, and a union contract
   would lose the per-owner checks. Separate `request-model` operations would leave it the
@@ -518,21 +536,30 @@ All offline. The change makes no model call.
     accounted, no lease, no usage and full cleanup. This holds for each producer of the
     binding: the source-review packet, the principle-assessment packet and an
     atomic-repair packet that inherits the binding;
-  - each contract variant is admitted at registry admission on its own, and a variant
-    with a missing or extra outcome is rejected.
+  - each contract variant is admitted at registry admission on its own, and
+    `request-model`'s own contract validation rejects an advisory variant that lacks
+    `more` or `blocked`, and an ordinary variant that declares either;
+  - post-generation review never reaches `review-source-support`'s loss-localization
+    request with an advisory packet, so that unmarked step never carries one.
 - **Contract variants (shared mechanism):**
   - accepted: an operation with one contract of closed variants, each admitted on its
     own, and a step whose selector picks one;
-  - rejected at admission: a variant missing any contract field, and two variants with
-    the same selector value;
-  - rejected at compilation: a selector value with no variant, a missing selector where
-    the contract requires one, and a step checked against the wrong variant's outcomes
-    or data effects;
+  - accepted: a selector forwarded through a subgraph `{param}`, as ADR 0033's call
+    sites will;
+  - rejected at admission: a variant that fails any per-contract check while its
+    sibling variant is valid; two variants with the same selector value; an optional
+    selector with zero or two variants for its absence; and a non-first variant that
+    produces another operation's gate evidence key;
+  - rejected at compilation: a selector value with no variant, a missing required
+    selector, and a step checked against the wrong variant's outcomes or data effects;
+  - rejected by compiled-graph validation and by registry publication: a compiled step
+    whose effects match a non-selected variant;
   - the runner rejects a delta, outcome, association or retry authority that fits
     another variant but not the step's compiled one;
-  - the mechanism has no `request-model`-specific branch: a test contract with two
-    variants that differ in data effects, not just outcomes, passes through the same
-    admission, compiler and runner paths that ADR 0033 will use.
+  - the mechanism has no `request-model`-specific branch: a test contract whose two
+    variants differ in data effects, retry authority (required and forbidden, with
+    different maximums) and repair role passes through the same admission, compiler and
+    runner paths that ADR 0033 will use.
 - **Request deadline:**
   - accepted: catalogue entries of each provider with a positive integer
     `requestTimeoutMs`;

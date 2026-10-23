@@ -1048,3 +1048,12 @@ bounded approval, and each E2E run needs its own explicit approval
   ADR 0033 reuses it; this confirms ADR 0033's derived choice 1. Updated ADRs 0030, 0033
   and 0005, design.md, F0005, A1, W3 and known-work. No code, workflow YAML or catalogue
   changed.
+- **23 October 2026, second review of ADR 0030:** a contract review found ADR 0030's
+  selector sentence ("selects no … owner rule") contradicting ADR 0033's owner rules.
+  Fixed: the selector grants no policy, scope or defect identity, and each operation's
+  ADR owns any rule selection and run-time selector check. Also added optional selectors
+  and per-outcome descriptors to the mechanism, registry-wide checks, compiled-graph and
+  publication rechecks, testable acceptance cases, and a loss-localization case; updated
+  ADRs 0005 and 0033, contract 28, F0005, known-work and a stale Z_FIX05 link. ADR 0033's
+  derived choices 2–8 still await confirmation. No code, workflow YAML or catalogue
+  changed.

@@ -329,8 +329,8 @@ Architecture tests also:
 - once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
   YAML-addressable model-request stage or any remaining token-count path, keep each stage's
   narrow ports and keep its kernel orchestrator capability-free. The ADR's acceptance list
-  covers the spy-binding, equivalence, compiler, advisory-request, deadline and
-  failure-location tests;
+  covers the spy-binding, equivalence, compiler, advisory-request, contract-variant,
+  deadline and failure-location tests;
 - once [ADR 0031](../decisions/0031-stage-actions.md) is implemented for a stage action, run its
   architecture and registry checks, each with rejected fixtures. These cover:
   - its contract fields;
