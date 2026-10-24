@@ -1,5 +1,6 @@
 //! Development harness build identity. Never linked into the production engine.
 const std = @import("std");
+const credential_paths = @import("credential_paths.zig");
 
 pub const Identity = struct { revision: []const u8, source_sha256: []const u8, modified: bool };
 pub const Input = struct {
@@ -47,7 +48,7 @@ fn capture(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir) !Bundle {
         if (previous) |prior| if (std.mem.eql(u8, prior, path)) continue;
         previous = path;
         const tracked = containsName(tracked_names, path);
-        if (excluded(path)) {
+        if (credential_paths.excluded(path)) {
             complete = false;
             try inputs.append(a, .{ .path = path, .tracked = tracked, .state = .excluded, .reason = "credential_path" });
             continue;
@@ -90,14 +91,6 @@ fn capture(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir) !Bundle {
 fn containsName(names: []const u8, expected: []const u8) bool {
     var items = std.mem.tokenizeScalar(u8, names, 0);
     while (items.next()) |name| if (std.mem.eql(u8, name, expected)) return true;
-    return false;
-}
-
-fn excluded(path: []const u8) bool {
-    var parts = std.mem.tokenizeScalar(u8, path, '/');
-    while (parts.next()) |part| {
-        if (std.mem.startsWith(u8, part, ".env") or std.mem.eql(u8, part, ".aws") or std.mem.eql(u8, part, "credentials") or std.mem.eql(u8, part, ".git") or std.mem.endsWith(u8, part, ".pem") or std.mem.endsWith(u8, part, ".key")) return true;
-    }
     return false;
 }
 

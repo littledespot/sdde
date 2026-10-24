@@ -5,6 +5,16 @@ set -eu
 integration_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
 cd -- "$integration_root"
 
+# This script is verification evidence, so its test runs are always fresh.
+for integration_arg in "$@"; do
+    case "$integration_arg" in
+        -Dreuse-test-runs | -Dreuse-test-runs=*)
+            printf 'scripts/test-integration.sh always runs every test fresh; use zig build test-integration -Dreuse-test-runs to reuse runs while iterating.\n' >&2
+            exit 2
+            ;;
+    esac
+done
+
 mkdir -p "$integration_root/.zig-cache"
 integration_log=$(mktemp "$integration_root/.zig-cache/test-integration.XXXXXX")
 printf 'Running offline integration tests...\nFull log: %s\n' "$integration_log"

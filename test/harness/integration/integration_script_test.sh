@@ -58,3 +58,17 @@ for INTEGRATION_EXIT in 1 7 130; do
     [ "$integration_failure_log" != "$integration_success_log" ]
     grep -Fx 'actual build or test diagnostic' "$integration_failure_log" > /dev/null
 done
+
+# Opt-in test-run reuse is refused before any build runs.
+export INTEGRATION_EXIT=0
+for integration_reuse in -Dreuse-test-runs -Dreuse-test-runs=true; do
+    if sh "$INTEGRATION_EXPECT_ROOT/scripts/test-integration.sh" "$integration_reuse" > "$integration_tmp/reuse" 2> "$integration_tmp/stderr"; then
+        exit 1
+    else
+        [ "$?" -eq 2 ]
+    fi
+    grep -F 'always runs every test fresh' "$integration_tmp/stderr" > /dev/null
+    if grep -E 'Running offline|PASSED|FAILED' "$integration_tmp/reuse" "$integration_tmp/stderr"; then
+        exit 1
+    fi
+done

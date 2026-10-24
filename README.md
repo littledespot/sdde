@@ -87,6 +87,39 @@ unique `.zig-cache/test-integration.*` file, whose path is printed at startup.
 Successful runs keep expected workflow-failure logs in that file; failed runs
 also display the complete output and preserve the build's exit status.
 
+Every `zig build` reruns every test binary, even with an explicit `--seed`. While
+iterating, `-Dreuse-test-runs` (for example `zig build test -Dreuse-test-runs`)
+skips a test run that already passed, but only if none of the following changed
+since that step last ran:
+
+- the test binary, its arguments and its working directory;
+- every file that Git lists through the repository's `.gitignore` files, tracked
+  or untracked, by content and executable bit;
+- the ignored locations that tests read, listed in `build/test_run_inputs.zig`;
+- the Git revision and the `git` version;
+- the passed environment, which is `PATH` and `HOME` only.
+
+Credential-like paths, and paths hidden only by your own Git excludes, are keyed by
+size and modification time and never read. Any other symbolic link or hard-linked
+file makes an opt-in build fail, because its content can live outside what the key
+reads.
+
+Each keyed run is also confirmed. Before it starts, it is marked pending in the
+build cache under a name unique to that build. The mark clears only if no
+Git-listed file changed while the run executed, not even an edit that was then
+reverted. A run that fails, is interrupted or can't be confirmed keeps its mark,
+and any remaining mark changes every later key, so that result is never reused.
+Changes inside the ignored locations during a build aren't checked, because the
+tests write there themselves. Only one opt-in build at a time can use a given build
+cache; a second one fails at start. Deleting the build cache clears its marks. Zig
+never reuses a failing run.
+
+With `--summary all`, the build summary marks a reused run `cached`; the default
+summary prints nothing on success. `zig build verify` and
+`./scripts/test-integration.sh` refuse the option, so verification evidence
+always comes from fresh runs. `zig build test-build-reuse` proves these rules in a
+throwaway repository.
+
 Temporary-project workflow
 scenarios live in `test/integration/workflow_tests.zig` and are excluded from the
 unit-test import tree. `zig build verify` includes both

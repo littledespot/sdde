@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const zig_version = @import("build/zig_version.zig");
 const packaging_smoke = @import("test/packaging/smoke.zig");
+const test_run_reuse = @import("build/test_run_reuse.zig");
+const test_run_inputs = @import("build/test_run_inputs.zig");
 
 comptime {
     if (!zig_version.isSupported(builtin.zig_version)) {
@@ -10,8 +12,28 @@ comptime {
 }
 
 pub fn build(b: *std.Build) void {
+    const graph = define(b);
+    // Applied to the complete, checked graph, so every test run is fresh by default
+    // or keyed under -Dreuse-test-runs; verify always runs fresh.
+    test_run_reuse.apply(b, .{
+        .reuse = graph.reuse_test_runs,
+        .key_tool = if (graph.reuse_test_runs) graph.test_run_key_tool.getEmittedBin() else null,
+        .ignored = &test_run_inputs.ignored,
+        .fresh = &.{graph.verify},
+    }) catch |err| std.debug.panic("test-run freshness wiring failed: {s}", .{@errorName(err)});
+}
+
+const Graph = struct {
+    reuse_test_runs: bool,
+    test_run_key_tool: *std.Build.Step.Compile,
+    verify: *std.Build.Step,
+};
+
+/// Every step except the test-run freshness wiring, which `build` applies last.
+fn define(b: *std.Build) Graph {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const reuse_test_runs = b.option(bool, test_run_reuse.option_name, test_run_reuse.option_description) orelse false;
     const unicode_dependency = b.dependency("utf8proc", .{});
     const unicode_module = b.createModule(.{
         .root_source_file = b.path("src/adapters/text/unicode_normalization.zig"),
@@ -652,6 +674,22 @@ pub fn build(b: *std.Build) void {
     b.step("test-build-registration", "Reject extra or missing full-suite test executions").dependOn(&registration_tests.step);
     test_step.dependOn(&registration_tests.step);
 
+    const test_run_key_tool = b.addExecutable(.{ .name = "test-run-key", .root_module = b.createModule(.{
+        .root_source_file = b.path("build_test_run_key.zig"),
+        .target = b.graph.host,
+        .optimize = .ReleaseSafe,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const reuse_tests = b.addSystemCommand(&.{"sh"});
+    reuse_tests.addFileArg(b.path("test/build/test_run_reuse.sh"));
+    reuse_tests.addArg(b.graph.zig_exe);
+    reuse_tests.addFileArg(b.path("test/build/test_run_reuse.zig"));
+    reuse_tests.addFileArg(b.path("test/build/test_run_reuse_counted.zig"));
+    reuse_tests.addFileArg(b.path("build/test_run_reuse.zig"));
+    reuse_tests.addArtifactArg(test_run_key_tool);
+    b.step("test-build-reuse", "Prove test runs are fresh by default and opt-in reuse reruns on any input change and never in verify").dependOn(&reuse_tests.step);
+    test_step.dependOn(&reuse_tests.step);
+
     const timing_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/test_fixtures/scenario_timing.zig"),
         .target = target,
@@ -880,6 +918,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("build_provenance.zig"));
+    lint_command.addFileArg(b.path("build_test_run_key.zig"));
     lint_command.addFileArg(b.path("code_heuristics.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("adjudicate.zig"));
@@ -918,6 +957,7 @@ pub fn build(b: *std.Build) void {
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }
+    return .{ .reuse_test_runs = reuse_test_runs, .test_run_key_tool = test_run_key_tool, .verify = verify_step };
 }
 
 fn offlineExecutable(b: *std.Build, application: *std.Build.Step.Compile) *std.Build.Step.Compile {
