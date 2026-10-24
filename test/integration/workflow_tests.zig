@@ -39,6 +39,7 @@ const composition = @import("../../src/composition/root.zig");
 const runInProjectWithRegistry = composition.runInProjectWithRegistry;
 const reportInvocation = composition.reportInvocation;
 const policy_registry = @import("../../src/composition/toolchain_policy_registry.zig").registry;
+const untraced_allocator = @import("../../src/test_fixtures/untraced_allocator.zig");
 
 fn runInvocationInProject(
     io: std.Io,
@@ -1234,9 +1235,16 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
     return inputs.corpus.state_id.bytes;
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, reuse_regeneration, story_missing, story_false_positive, story_multiple, finding_controls, record_reviews }) !void {
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, story_missing, story_false_positive, story_multiple, finding_controls, record_reviews };
+
+// Every scenario allocates through one leak-checked untraced allocator; the
+// sweep's allocations would otherwise each pay for a stack trace.
+fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
+    return untraced_allocator.run(runSpecificationWorkflows, .{workflow_cases});
+}
+
+fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases) !void {
     const io = std.testing.io;
-    const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
         .{ .stage = .generation, .shape = .inconclusive },
         .{ .stage = .extraction, .shape = .alternating_missing, .repetition = .{ .every_request = 2 } },
@@ -1509,7 +1517,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(&runner, allocator);
         native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
-        var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
+        var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
         if (story_scenario) {
             driver.story_omission = switch (workflow_cases) {
                 .story_missing => .missing,
@@ -2972,7 +2980,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 const next_graph = next_boot.ready.workflows.registry().resolve(graph.authority.workflow_id).?;
                 var next_runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services);
                 defer next_runner.deinit();
-                var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake };
+                var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake, .allocator = allocator };
                 const rejected = next_driver.run();
                 if (rejected != .execution_rejected or rejected.execution_rejected != .operation_failed) std.debug.print("stale extraction contract rerun: outcome={s}, result={s}, operation={s}, calls={d}\n", .{ @tagName(rejected.executionStatus().?), @tagName(rejected), next_driver.rejected_operation orelse "none", next_driver.calls });
                 try std.testing.expect(rejected == .execution_rejected and rejected.execution_rejected == .operation_failed);

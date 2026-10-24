@@ -95,7 +95,7 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
         try std.testing.expectEqual(@as(u32, 2), parsed.source.at(.dispositions, .record).?.attempt.value);
         try std.testing.expect(!view.contains(.accounted_reference_reconciliation));
         const request = try requests.readCurrent(&view, requests.prepared_schema);
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        var arena: std.heap.ArenaAllocator = .init(driver.allocator);
         defer arena.deinit();
         const contents = request.prepared().?.content;
         const previous = try std.json.parseFromSlice(std.json.Value, arena.allocator(), contents[contents.len - 1].bytes(), .{});

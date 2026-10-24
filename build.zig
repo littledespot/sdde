@@ -659,6 +659,13 @@ pub fn build(b: *std.Build) void {
     }) }));
     b.step("test-scenario-timing", "Test scenario cost reporting and incomplete-run accounting").dependOn(&timing_tests.step);
 
+    const untraced_allocator_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/test_fixtures/untraced_allocator.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("test-untraced-allocator", "Test leak-checked untraced test allocation and its allocation-failure sweep").dependOn(&untraced_allocator_tests.step);
+
     const reference_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/reference_preflight_test.zig"),
         .target = target,

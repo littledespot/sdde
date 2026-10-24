@@ -27,6 +27,8 @@ pub const Driver = struct {
     };
     runner: *@import("../application/workflow_pipeline_runner.zig").Runner,
     fake: *@import("../adapters/provider/fake_llm_provider.zig").FakeLLMProvider,
+    /// Backs the driver's scratch arenas; the test that builds the driver chooses it.
+    allocator: std.mem.Allocator,
     finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     support_fault: ?@import("spec_generation_responses.zig").SupportFault = null,
     principle_conflict: bool = false,
@@ -153,7 +155,7 @@ pub const Driver = struct {
         try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), signal_corrections);
         const view: data.View = .{ .slots = self.runner.envelope.slots };
         const identities = try @import("../application/pipeline_values.zig").read(&view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const observations = try @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view);
         assertion = "repair-observation-count";
@@ -222,7 +224,7 @@ pub const Driver = struct {
     }
     fn step(context: *anyopaque, id: workflow.WorkflowStepId) @import("../domain/workflow_execution.zig").Applied {
         const self: *Driver = @ptrCast(@alignCast(context));
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
