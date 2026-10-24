@@ -73,8 +73,9 @@ semantic benefit is not demonstrated (§7).
 
 Section references §9–§17 point to Z_FIX05.
 
-**Live runs, 21–22 October 2026 (AEDT).** Every run used GPT-OSS-20B on Bedrock, ran once
-and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
+**Live runs since 21 October 2026 (AEDT).** Every run in the table used GPT-OSS-20B on
+Bedrock, ran once and was separately approved. The eleven Claude Haiku 5.5 attempts of
+24 October, all `authorization_denied` before any output, are in the §8 log. Advisory scores are `/evaluate-e2e` analysis under
 `evaluations/`, not grades or acceptance.
 
 | Run | Build | Calls / tokens | Outcome |
@@ -91,16 +92,21 @@ and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
 | [Loan-renewal](../zig-out/e2e-spec/2026-10-21T08-13-29Z-c349baea793fb60355880e989bb740d6/report.json), 21 Oct 19:13 | `527f870`, 180 s deadline, modified | 25 / 92,825 | Published; advisory 82.14%; one review call ended `output_limit` (B9) |
 | [Hello-world](../zig-out/e2e-spec/2026-10-21T21-30-07Z-73f19805794c3c63535e6c175ec0c103/report.json), 22 Oct 08:30 | `fee2f39`, modified | 24 / 63,918 | Published; not evaluated |
 | [Loan-renewal](../zig-out/e2e-spec/2026-10-21T21-31-00Z-aee04c3ee1ac6e061551be002d987027/report.json), 22 Oct 08:31 | `fee2f39`, modified | 32 / 100,763 | `WorkflowTokenBudgetExceeded` in principle review |
+| [Hello-world](../zig-out/e2e-spec/2026-10-24T06-49-59Z-172d37237530ce1fdd29108d598ab447/report.json), 24 Oct 17:49 | `8a600d7` | 24 / 63,402 | Published; advisory 89.29% |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-24T06-58-47Z-67dd5ecc82bd3aa1d1ccdc1b6a3be752/report.json), 24 Oct 17:58 | `8a600d7` | 31 / 99,098 | Published, 902 tokens under budget; one bounded protocol correction in source review; advisory 82.14% |
 
-- **Completion.** Hello-world published in 5 of 6 attempts and loan-renewal in 2 of 6.
-  All twelve reports are `spec-e2e-report/v9`, so the published ones can be adjudicated,
+- **Completion.** Hello-world published in 6 of 7 attempts and loan-renewal in 3 of 7.
+  All fourteen reports are `spec-e2e-report/v9`, so the published ones can be adjudicated,
   but none has been. No run counts toward the [ADR 0034](../design/decisions/0034-spec-quality-gate.md)
-  gate yet. Only the first pair (21 October 08:16 and 08:29 AEDT, one run of each case)
-  used an unmodified committed build, `7a88804`; the rest were modified builds.
+  gate yet. Two pairs (one run of each case) used an unmodified committed build:
+  `7a88804` (21 October 08:16 and 08:29 AEDT) and `8a600d7` (24 October 17:49 and 17:58);
+  the rest were modified builds.
 - **Content.** Loan-renewal's published output still weakens "must be able to renew" to
-  "may renew" and has no refusal acceptance criterion (B7).
-- **Budget.** Loan-renewal ran out of the 100,000-token budget in review in 2 of its 6
-  attempts (B4).
+  "may renew" and has no refusal acceptance criterion (B7). On 24 October FR-001 kept
+  "must allow", but the story, a business rule and the entity say "may renew"; FR-001
+  covers both refusal conditions, and an edge case now covers the already-renewed one.
+- **Budget.** Loan-renewal ran out of the 100,000-token budget in review in 2 of its 7
+  attempts (B4); the 24 October run published with 902 tokens left, review taking 81.3%.
 - **Runaway output** caused all three timeouts; the 180 s deadline made it visible (B9).
 
 **Providers.** [ADR 0028](../design/decisions/0028-anthropic-messages-provider.md)
@@ -390,9 +396,9 @@ on one committed build, counting every attempted run. There is no fixed run thre
 the user judges the evidence and decides when Plan is actioned. The full record is in
 [Z_FIX05](Z_FIX05.md#a6-decision-record).
 
-**Status on 23 October.** The gate isn't met: no run has been adjudicated, only one pair
-(one run of each case, on `7a88804`) used an unmodified committed build, and loan-renewal
-published in 2 of its 6 attempts since 21 October (§1).
+**Status on 24 October.** The gate isn't met: no run has been adjudicated, only two pairs
+(one run of each case, on `7a88804` and on `8a600d7`) used an unmodified committed build,
+and loan-renewal published in 3 of its 7 attempts since 21 October (§1).
 
 ## 3. Why runs are brittle
 
@@ -484,7 +490,7 @@ per call before trimming anything. Add no local size ceilings (ADR 0011).
 
 **Evidence since 21 October.** Loan-renewal ended `WorkflowTokenBudgetExceeded` in review
 at 21 October 11:45 (100,793 tokens) and 22 October 08:31 (100,763), and published at
-76,501 and 92,825 tokens (§1). Raising the budget doesn't fix reliability.
+76,501, 92,825 and, on 24 October, 99,098 tokens (§1). Raising the budget doesn't fix reliability.
 
 ### B5. Authoring follows mechanical source groups
 
@@ -1013,9 +1019,8 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
 1. **Adjudicate.** No run counts toward the gate until a human adjudicates a published v9
    report under R8.
 2. **Measure on a committed build.** Repeat both cases on one committed, unmodified build,
-   counting every attempt (§7). Of the 21–22 October runs, only the first pair used an
-   unmodified committed build (`7a88804`). Use `/evaluate-e2e` for advisory defect
-   origins.
+   counting every attempt (§7). Two pairs have used an unmodified committed build
+   (`7a88804` and `8a600d7`). Use `/evaluate-e2e` for advisory defect origins.
 3. **Separate model limitations from engine defects (R7).** All live evidence comes from
    GPT-OSS-20B. A paired comparison with a second permitted model would show whether B7's
    obligation weakening, B9's runaways and B6's entity invention recur. Measure Claude
@@ -1174,3 +1179,8 @@ bounded approval, and each E2E run needs its own explicit approval
   subscription is the likely prerequisite), not the Region. The user then switched every
   E2E slot back to GPT-OSS-20B; ADR 0029 records both changes. All eleven attempts count
   as attempted workloads.
+- **24 October 2026, GPT-OSS pair on `8a600d7`:** the first runs since ADR 0030 slices 1–3
+  both published on an unmodified committed build: hello-world (24 calls, 63,402 tokens,
+  advisory 89.29%, unchanged from 21 October) and loan-renewal (31 calls, 99,098 tokens,
+  902 under budget, advisory 82.14%, unchanged from 21 October). §1 and A6 record the pair; neither run is
+  adjudicated.

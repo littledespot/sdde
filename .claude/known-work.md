@@ -64,7 +64,8 @@ already made.
   its measured maximum-output time replaces it. Lower allowances, bounded correction and
   cardinality bounds each need a decision; don't tune sampling or add retries.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
-  (most recently 22 October, at 100,763 tokens) and published at 76,501–97,475 tokens.
+  (most recently 22 October, at 100,763 tokens) and published at 76,501–99,098 tokens
+  (the 24 October run finished 902 tokens under budget).
   Raising the budget doesn't fix reliability.
 
 ## Other open work
@@ -137,6 +138,6 @@ already made.
   - Quality means R8 human adjudication; stability means repeated runs, counting every
     attempt.
   - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
-  - It isn't met: no run has been adjudicated, only one pair (one run of each case, on
-    `7a88804`) used an unmodified committed build, and loan-renewal published in 2 of 6
-    attempts since 21 October.
+  - It isn't met: no run has been adjudicated, only two pairs (one run of each case, on
+    `7a88804` and `8a600d7`) used an unmodified committed build, and loan-renewal published
+    in 3 of 7 attempts since 21 October.
