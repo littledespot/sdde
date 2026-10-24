@@ -108,8 +108,9 @@ and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
 [ADR 0029](../design/decisions/0029-bedrock-model-families.md) (22 October) lets a Bedrock
 catalogue entry name any model with a compiled family. The E2E catalogue lists Claude
 Haiku 5.5 through both, and the live-test policy permits it for generation. On 23 October
-the user chose Claude Haiku 5.5 on Bedrock (low effort)
-for every E2E slot, as ADR 0029 describes; no live Claude call has been made yet. All
+the user chose Claude Haiku 5.5 on Bedrock (`au.anthropic.claude-haiku-5-5`, low effort)
+for every E2E slot, as ADR 0029 describes; no live Claude run has completed yet (ten
+attempts ended `authorization_denied`; see the 24 October log entry). All
 live evidence in this record so far comes from GPT-OSS-20B, and which failure classes
 are model limitations is unmeasured (R7).
 
@@ -1154,11 +1155,14 @@ bounded approval, and each E2E run needs its own explicit approval
 - **24 October 2026, ADR 0030 slice 3:** the provider-operation deadline moved to each
   catalogue entry's `requestTimeoutMs`; A1 and B9 record the scope, versions, shipped
   values and the freeze recheck.
-- **24 October 2026, Claude Haiku 5.5 pinned to `ap-southeast-2`:** the first live Haiku runs
-  on clean `cbabda6` (nine attempts, one call and 0 tokens each) all ended
-  `authorization_denied` while the account's IAM policy and model access were set up. Run 8
-  and run 9 showed the AU cross-Region profile `au.anthropic.claude-haiku-5-5` routing to
-  `ap-southeast-4`. The user requires `ap-southeast-2` only, so the E2E catalogue, slots and
-  live-test allowlist now use the in-Region model ID `anthropic.claude-haiku-5-5`, and
-  ADR 0029 records the amendment. If Bedrock offers this model only through an inference
-  profile, a Sydney-only route needs a separate decision.
+- **24 October 2026, Claude Haiku 5.5 route:** the first live Haiku runs on clean `cbabda6`
+  (nine attempts, one call and 0 tokens each) all ended `authorization_denied` while the
+  account's IAM policy and model access were set up. Runs 8 and 9 showed the AU
+  cross-Region profile `au.anthropic.claude-haiku-5-5` routing to `ap-southeast-4`. For the
+  user's Sydney-only requirement, `2014df4` pinned the in-Region ID
+  `anthropic.claude-haiku-5-5`; run 10 also ended `authorization_denied` (Bedrock 403: "not
+  available for this account"). The AWS model card (checked 24 October) lists Claude Haiku
+  5.5 in `ap-southeast-2` only through the AU geo and global profiles. The user then chose
+  the AU profile, accepting routing to `ap-southeast-4` and relaxing the Sydney-only
+  requirement; the pin is reverted and ADR 0029 records the clarification. All ten attempts
+  count as attempted workloads.

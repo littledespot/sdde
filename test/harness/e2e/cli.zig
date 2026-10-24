@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for human adjudication. No model grades the output. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 or anthropic.claude-haiku-5-5 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json and captures its published specification with the case's sources and rubric for human adjudication. No model grades the output. This command makes live API calls. Live generation permits only Bedrock openai.gpt-oss-20b-1:0 or au.anthropic.claude-haiku-5-5 from ap-southeast-2. Set TEST_AWS_BEARER_TOKEN_BEDROCK; load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {

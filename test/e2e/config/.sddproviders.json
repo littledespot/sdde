@@ -27,7 +27,7 @@
           }
         },
         {
-          "model": "anthropic.claude-haiku-5-5",
+          "model": "au.anthropic.claude-haiku-5-5",
           "json": true,
           "config": {
             "region": "ap-southeast-2",
