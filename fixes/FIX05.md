@@ -109,8 +109,10 @@ and was separately approved. Advisory scores are `/evaluate-e2e` analysis under
 catalogue entry name any model with a compiled family. The E2E catalogue lists Claude
 Haiku 5.5 through both, and the live-test policy permits it for generation. On 23 October
 the user chose Claude Haiku 5.5 on Bedrock (`au.anthropic.claude-haiku-5-5`, low effort)
-for every E2E slot, as ADR 0029 describes; no live Claude run has completed yet (ten
-attempts ended `authorization_denied`; see the 24 October log entry). All
+for every E2E slot. All eleven attempts ended `authorization_denied`, because the account
+lacks access to the model, and on 24 October the user switched the slots back to
+GPT-OSS-20B (ADR 0029, amended; see the 24 October log entry). No live Claude run has
+completed. All
 live evidence in this record so far comes from GPT-OSS-20B, and which failure classes
 are model limitations is unmeasured (R7).
 
@@ -879,8 +881,9 @@ Score first-pass and recovered outcomes separately. Use repeated paired trials, 
 labels kept outside prompts and separate development and held-out families. Since
 22 October the live-test policy also permits Claude Haiku 5.5 for generation, through the
 Anthropic API (ADR 0028) and Bedrock (ADR 0029), so cross-model generation evidence no
-longer needs a scope change. Since 23 October every E2E slot selects Claude Haiku 5.5 on
-Bedrock, and each run still needs its own approval.
+longer needs a scope change. From 23 to 24 October every E2E slot selected Claude Haiku 5.5
+on Bedrock; the slots select GPT-OSS-20B again while the account lacks Haiku access. Each
+run still needs its own approval.
 
 ### R8. Development acceptance policy
 
@@ -971,11 +974,13 @@ repair workload.
     [.sddtoolkit.json](../test/e2e/wf-001-hello-world/.sddtoolkit.json), still selected
     GPT-OSS-20B, which also failed the compatibility preflight test. The user chose Haiku
     via Bedrock, and the configuration now matches the ADR. Its deadline is the interim
-    180,000 ms until measured (B9).
+    180,000 ms until measured (B9). On 24 October the user switched the slots back to
+    GPT-OSS-20B after every Haiku attempt was denied (ADR 0029, amended).
   - ADR 0028's "Live use" still says the policy permits only GPT-OSS-20B; since
     22 October it also names `anthropic` / `claude-haiku-5-5` for generation.
   - ADR 0028 leaves Claude's response mode (native schema or prompt-only) open until
-    compatibility is measured. No live Claude call or compatibility probe has been made.
+    compatibility is measured. No live Claude call has succeeded, and no compatibility
+    probe has been made.
 - Historical optional provider, reasoning-setting and principle-passage experiments
   are not current tasks.
 
@@ -1164,5 +1169,8 @@ bounded approval, and each E2E run needs its own explicit approval
   available for this account"). The AWS model card (checked 24 October) lists Claude Haiku
   5.5 in `ap-southeast-2` only through the AU geo and global profiles. The user then chose
   the AU profile, accepting routing to `ap-southeast-4` and relaxing the Sydney-only
-  requirement; the pin is reverted and ADR 0029 records the clarification. All ten attempts
-  count as attempted workloads.
+  requirement, and the pin was reverted (`7da8ef0`). Run 11, through the AU profile, got the
+  same 403, so the denial is the account's access to the model (an AWS Marketplace
+  subscription is the likely prerequisite), not the Region. The user then switched every
+  E2E slot back to GPT-OSS-20B; ADR 0029 records both changes. All eleven attempts count
+  as attempted workloads.

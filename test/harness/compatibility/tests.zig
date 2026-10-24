@@ -141,9 +141,9 @@ test "compatibility preflight rejects unpermitted slots and incomplete capture s
     const config = @embedFile("../../integration/fixtures/baseline/protocol.sddtoolkit.json");
     const preflight = @import("cli.zig").preflight;
     try preflight(a, config);
-    // The shipped cases select Claude Haiku 5.5 (ADR 0029): a permitted generation
-    // model, but not the frozen GPT-OSS protocol this probe is bound to.
-    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json")));
+    // The shipped cases select the frozen protocol's exact slot controls again (ADR 0029,
+    // amended 24 October 2026).
+    try preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json"));
     try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/mock-bad-input-drifted-effort.sddtoolkit.json")));
     const disallowed = try std.mem.replaceOwned(u8, a, config, "openai.gpt-oss-20b-1:0", "unpermitted-model");
     try std.testing.expectError(error.DisallowedTestModel, preflight(a, disallowed));

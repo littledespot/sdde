@@ -6,11 +6,11 @@ record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is
 evidence rules for contract changes are in CLAUDE.md.
 
 All live evidence so far comes from one model, GPT-OSS-20B on Bedrock. The live-test
-policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029). Since
-23 October every E2E slot selects Claude Haiku 5.5 on Bedrock through the AU profile
-`au.anthropic.claude-haiku-5-5`, which routes to `ap-southeast-2` or `ap-southeast-4`
-(Bedrock offers no in-Region Haiku 5.5 in Sydney; the user accepted the profile on
-24 October). No live run has completed with it yet, so which classes below are model
+policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029), through the
+AU profile `au.anthropic.claude-haiku-5-5` (Bedrock offers no in-Region Haiku 5.5 in
+Sydney). From 23 to 24 October every E2E slot selected it, but all eleven attempts ended
+`authorization_denied` because the account lacks access to the model, so on 24 October
+the user switched the slots back to GPT-OSS-20B. Which classes below are model
 limitations is unmeasured.
 
 The labels *Proposed*, *Approved* and "needs a decision" record user decisions. Only

@@ -27,16 +27,23 @@
   catalogue entry, which settles "Per-family request deadlines". Provider token counting
   is removed, so "A family that registers CountTokens" would first need counting itself
   to return by its own decision.
-- **Clarified (24 October 2026, user decision):** the E2E catalogue, the shipped E2E
-  slots and the live-test allowlist keep the AU cross-Region inference profile
-  `au.anthropic.claude-haiku-5-5`, called from `ap-southeast-2`. Bedrock routes each
-  request to `ap-southeast-2` or `ap-southeast-4`. The user accepts both, superseding
-  the same day's Sydney-only requirement ("it must be on ap-southeast-2"), because the
-  current [Claude Haiku 5.5 model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-5-5.html)
+- **Clarified (24 October 2026, user decision):** the E2E catalogue and the live-test
+  allowlist keep the AU cross-Region inference profile `au.anthropic.claude-haiku-5-5`,
+  called from `ap-southeast-2`. Bedrock routes each request to `ap-southeast-2` or
+  `ap-southeast-4`. The user accepts both, superseding the same day's Sydney-only
+  requirement ("it must be on ap-southeast-2"), because the current
+  [Claude Haiku 5.5 model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-haiku-5-5.html)
   (checked 2026-10-24) lists no in-Region inference in `ap-southeast-2`, only the AU geo
   and global profiles. A pin to the in-Region ID `anthropic.claude-haiku-5-5`, made for
-  that requirement, got a Bedrock 403 ("not available for this account"), consistent
-  with the card, and is reverted.
+  that requirement, is reverted. Its Bedrock 403 ("not available for this account")
+  later came through the AU profile too, so it reflects the account's access to the
+  model, not the Region.
+- **Amended (24 October 2026, user decision: "switch to openai.gpt-oss-20b"):** the
+  shipped E2E slots select GPT-OSS-20B again, with low effort for `spec_generation` and
+  `repair`, as before 23 October. This supersedes "for the e2e tests make use of haiku 5.5
+  on bedrock with low reasoning effort" for the slots only: Claude Haiku 5.5 stays in the
+  E2E catalogue and the live-test allowlist for generation. All eleven Haiku attempts
+  ended `authorization_denied` because the account lacks access to the model.
 
 ## Context
 
@@ -115,9 +122,10 @@ named tuples, each for named uses:
 | `aws-bedrock` / `au.anthropic.claude-haiku-5-5` | Generation only |
 
 Rubric judging stays on GPT-OSS-20B ([acceptance.md](../harness/acceptance.md)). The
-shipped E2E cases select Claude Haiku 5.5 with low effort in every slot. They no
-longer select the frozen calibration protocol, so the provider-compatibility probe,
-which is bound to that protocol, rejects them.
+shipped E2E cases select GPT-OSS-20B again (amended 24 October 2026), with the frozen
+calibration protocol's slot controls, so the provider-compatibility probe, which is
+bound to that protocol, accepts them. From 23 to 24 October they selected Claude Haiku
+5.5 with low effort in every slot, which the probe rejects.
 
 ### Tests
 
