@@ -116,35 +116,35 @@
       "destination": ".sddtoolkit/workflows/spec/repair.prompt.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/architecture.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/architecture.md",
       "destination": ".sddtoolkit/principles/architecture.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/core.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/core.md",
       "destination": ".sddtoolkit/principles/core.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/observability.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/observability.md",
       "destination": ".sddtoolkit/principles/observability.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/project-structure.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/project-structure.md",
       "destination": ".sddtoolkit/principles/project-structure.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/security.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/security.md",
       "destination": ".sddtoolkit/principles/security.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/user-interface.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/user-interface.md",
       "destination": ".sddtoolkit/principles/user-interface.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/validation.md",
+      "source": "test/e2e/wf-002-loan-renewal/principles/validation.md",
       "destination": ".sddtoolkit/principles/validation.md"
     },
     {
-      "source": "test/e2e/wf-001-hello-world/node-vitest/principles/toolchain.yaml",
+      "source": "test/e2e/wf-002-loan-renewal/principles/toolchain.yaml",
       "destination": ".sddtoolkit/principles/toolchain.yaml"
     }
   ],

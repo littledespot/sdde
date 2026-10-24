@@ -1,28 +1,40 @@
 # Offline test performance
 
 **Measured:** 24 October 2026, Australia/Melbourne. Apple M4 (10 cores, 24 GB),
-macOS 27.0, Zig 0.16.0. **Reviewed:** the same day. The review added findings T10–T14
-and proposals P9–P11, and corrected the `memset` share, T1, T3, T7, P2 and P8 (§7).
+macOS 27.0, Zig 0.16.0. **Reviewed twice the same day:**
+
+- The first review added findings T10–T14 and proposals P9–P11, and corrected the
+  `memset` share, T1, T3, T7, P2 and P8.
+- The second review assessed every proposal (§4) and re-measured on a clean tree. It
+  withdrew P5 and P11, cut the expected effects of P1 and P3, and found feasibility
+  gaps in P2 and P9. It corrected T7, T8 and T12, and added T15 and P12. §7 lists the
+  changes.
 
 **Status:** investigation note, not an active fix record. [FIX05](FIX05.md) remains the
 sole active fix record ([README](README.md)). This note holds findings and proposals only.
-It authorizes no code, build or test change.
+It authorizes no code, build or test change. Adopting a proposal means recording it in
+FIX05 first.
 
 **Evidence:**
 
-- **Integration run.** One cold `zig build test-integration --summary all`, run against
-  an empty scratch `--cache-dir`. It used the working tree later committed as `1a683aa`.
-  A macOS `sample` profile of the test binary was taken every 2 ms, and the run's
+- **Integration run.** One cold `zig build test-integration --summary all`, against an
+  empty scratch `--cache-dir`, on the working tree later committed as `1a683aa`. A
+  macOS `sample` profile of the test binary was taken every 2 ms, and the run's
   `scenario-cost` lines were kept.
 - **Full verification.** Two consecutive `zig build verify --summary all` runs, each
-  against a scratch cache. The `repository-tests` binary was sampled in both. Memory
-  was recorded with `memory_pressure`, `vm_stat` and `vm.swapusage`. Both runs used an
-  uncommitted working tree that was being edited at the time (§2).
-- **Retained logs under `.zig-cache/`.** `test-integration.*` (9–22 October),
-  `global-token-verify.log`, `b4b9-complete-verify.log` and `b4b9-commit-verify.log`.
-  These are git-ignored local files and are not kept anywhere else.
-- **Source and disassembly.** Reading the Zig 0.16 standard library, and disassembling
-  the `ReleaseSafe` integration binary.
+  against a scratch cache, with `repository-tests` sampled. Memory was recorded with
+  `memory_pressure`, `vm_stat` and `vm.swapusage`. Both runs used an uncommitted tree
+  that was being edited at the time (§2).
+- **Clean-tree re-measurement.** One cold `zig build test test-integration`, against a
+  scratch cache, on a clean `d736d9a`, with `repository-tests` sampled. It was
+  followed by a `zig build test-integration` rerun on the same unchanged tree, with
+  the integration binary sampled.
+- **Retained logs under `.zig-cache/`.** `test-integration.*` (9–22 October), the
+  `*-verify.log`, `*-architecture.log` and `b2-final-targeted.log` files. These are
+  git-ignored local files and are not kept anywhere else.
+- **Source, contracts and disassembly.** Reading the repository source and contracts
+  and the Zig 0.16 standard library and build runner, and disassembling the
+  `ReleaseSafe` integration binary.
 
 No model calls were made. A sampled run takes about 1.5 times longer than normal.
 Profile categories overlap, so they don't sum to 100%.
@@ -38,15 +50,24 @@ from an empty cache (240 s against 241 s), and three things drive it:
    Build provenance also forces six harness compiles after documentation-only edits
    and commits (T8).
 2. **Test runs never hit the cache.** Each `zig build` passes a new random `--seed`
-   to the test binaries, so both one-minute test runs repeat every time, even when
-   nothing changed (T10).
+   to the test binaries, so both one-minute test runs repeat every time. This was
+   confirmed on an unchanged tree: the compile was `cached 79ms` and the run still
+   took 1m (T10).
 3. **The testing allocator dominates both runs.** It captures a 10-frame stack trace
    by DWARF unwinding on every allocation, resize and free. That is **73% of
-   `repository-tests`** and **36% of the integration run** (T2). Exhaustive
-   allocation-failure sweeps (T12) and the 196-scenario Spec sweep (T1) multiply it.
+   `repository-tests`** and **36–38% of the integration run** (T2).
+   - The 109 exhaustive allocation-failure sweeps are 51% of the unit run (T12).
+   - The 196-scenario Spec sweep is 90% of the integration run (T1).
 
 Average CPU use during `verify` is only about 2.4 of 10 cores. Wall time is set by a
 serial chain, not by machine capacity, and memory isn't the limit (T7).
+
+The largest test-only lever is P1, scoped to those two sweeps. It is estimated to cut
+the unit run by about 44% and the integration run by about 36%. It shortens `verify`
+after an edit by only about 20–25 s, though, because the integration compile sets that
+critical path; P4 addresses the compile. The largest lever for repeated runs is P9,
+which needs a policy decision. All of these effects are estimates, not measurements
+(§4).
 
 ## 2. Measurements
 
@@ -66,16 +87,17 @@ rebuild after an edit, not a no-op.
 Caveat: in the first run, one unit test failed (`authorization compiler and registry
 reject hidden producers and a forged deadline parameter`). Its file,
 `src/model_request_workflow_test.zig`, was being edited during that run. The failure
-isn't attributed to anything and isn't a performance finding.
+isn't attributed to anything, and the clean-tree run passed 1,920 of 1,920 tests.
 
 Step costs inside `verify`. Parallel contention makes every compile slower than when
-it runs alone.
+it runs alone. Zig's build summary truncates durations to whole minutes, so `1m` means
+60–119 s and `2m` means 120–179 s.
 
 | Step | Time | MaxRSS |
 | --- | --- | --- |
-| Integration test compile (`ReleaseSafe`) | 2m (1m alone) | 4 GB |
-| Integration test run | 1m | 3 GB |
-| `repository-tests` compile | 48–52 s (35 s in older logs) | 3 GB |
+| Integration test compile (`ReleaseSafe`) | 2m (about 110 s alone) | 3–4 GB |
+| Integration test run | 1m | 0.9–3 GB |
+| `repository-tests` compile | 44–52 s (35 s in older logs) | 3–4 GB |
 | `repository-tests` run | 1m (93–95 s under the sampler) | 620 MB |
 | `sdde`, `sdde-e2e-spec`, `sdde-provider-compatibility`, `sdde-baseline` | 17–27 s each, two compiles each | 1–2 GB |
 | `sdde-e2e-call`, `sdde-evaluate-spec`, `sdde-adjudicate-spec`, `sdde-exact-value-replay`, `debugger-smoke` | 3–6 s each | 0.5–0.7 GB |
@@ -89,30 +111,39 @@ Memory during both runs:
 - Nothing swapped, and there were only 2–18 pageouts per run.
 - The memory compressor did handle 1.5–2.1 million pages per run.
 
+### Clean-tree runs (`d736d9a`)
+
+| Run | Result |
+| --- | --- |
+| Cold `zig build test test-integration`, both binaries sampled | 270 s wall, 465 s user; 1,920/1,920 passed. Integration compile 2m (3 GB), `repository-tests` compile 44 s (4 GB). |
+| `zig build test-integration` rerun on the unchanged tree | Compile `cached 79ms`; run `1m` (98 s under the sampler). Seeds `0x4eb44d95`, then `0x71ccdc78`. |
+
 ### Integration run, standalone and cold
 
 | Measure | Value |
 | --- | --- |
 | Wall time | 222 s (190.9 s user, 21.1 s sys) |
 | Test binary started | after 116 s |
-| Compile (`ReleaseSafe`) | `1m`, MaxRSS 5 GB |
-| Run | `1m`, MaxRSS 2 GB, 129/129 passed; 87 s under the sampler (43,357 samples) |
+| Compile (`ReleaseSafe`) | `1m`; about 110 s in practice, since the binary started 116 s in. MaxRSS 5 GB |
+| Run | `1m`, MaxRSS 2 GB, 129/129 passed; about 106 s under the sampler (43,357 samples cover 87 s of it) |
 
 Retained runs agree: 9 October, 84 tests in 51–54 s; 18 and 21 October, 127 tests in
 `1m` at about 3 GB.
 
 ### Where the integration run spends its time
 
+The `1a683aa` profile is shown; the `d736d9a` rerun agrees where it was checked.
+
 | Inclusive share | Frames |
 | --- | --- |
-| 89.4% | `testSpecificationWorkflows` |
+| 89.4% (89.6%) | `testSpecificationWorkflows` |
 | 75.3% | `workflow_engine_orchestrator.run` (execution) |
-| 36.4% | Stack-trace capture (`debug.SelfUnwinder`, `debug.Dwarf.*`, `StackIterator`) |
+| 36.4% (37.5%) | Stack-trace capture (`debug.SelfUnwinder`, `debug.Dwarf.*`, `StackIterator`); 35.9% of the run is inside the sweep |
 | 16.9% | Feature-log persistence (`persistEventBinding`, `LogService.process`) |
 | 15.8% | Filesystem syscalls; `openat` alone 10.6%, `fsync` 0.3% |
 | 15.6% | `runInProjectWithRegistry` (bootstrap) |
 | 13.3% | Workflow compilation and validation (`workflow_subgraphs.Compiler`, `Registry.validate`, `workflow_data_flow.analyze`) |
-| 10.8% | JSON parsing |
+| 10.8% | JSON parsing (T15) |
 | 9.0% | `mem.eqlBytes` (self time) |
 | 6.9% | JSON writing, including canonical JSON |
 | 6.4% | `std.sort.block` |
@@ -133,16 +164,18 @@ Retained runs agree: 9 October, 84 tests in 51–54 s; 18 and 21 October, 127 te
 
 ### Where `repository-tests` spends its time
 
-From the sampled `verify` runs; the two runs agree to within 1.2 points.
+From three sampled runs, which agree to within 1.2 points. The sweep figures come from
+the `d736d9a` run and are measured by call stack.
 
 | Inclusive share | Frames or tests |
 | --- | --- |
 | 72.7–73.9% | Stack-trace capture |
-| 11.7% | JSON parsing |
-| 30.8% | 24 allocation-failure sweep tests (T12) |
-| 53.8% | The 10 most expensive tests |
-| 12.8% | `composition application handoffs release retained parts and requests at every allocation failure` |
-| 10.4% | `reconciliation assignments scope instructions while retaining complete source evidence` |
+| 51.0% | Inside `checkAllAllocationFailures` sweeps (T12) |
+| 44.5% | Stack-trace capture inside those sweeps |
+| 28.3% | Stack-trace capture outside the sweeps; the three largest tests hold 8.4%, the rest is a long tail |
+| 11.7% | JSON parsing; `strict_json.parse` alone 7.1% (T15) |
+| 12.8% | The most expensive sweep: `composition application handoffs release retained parts and requests at every allocation failure` |
+| 0.9% | `std.sort.block` |
 | 0.7% | `architecture_test` |
 | 0.6% | Filesystem syscalls |
 
@@ -157,17 +190,21 @@ figures are from the sampled run.
 
 One test accounts for 177 of these scenarios (83.9 s): `configured specification
 generation YAML executes native references models and authority gates`. The other
-seven tests share the remaining 19.
+seven tests share the remaining 19, about 10 s. The other 121 integration tests take
+roughly 12 s together. Both figures are under the sampler.
 
-### Retained `verify` logs
+### Retained logs
 
-- **Cold** (`global-token-verify.log`):
+- **Cold `verify`** (`global-token-verify.log`):
   - integration test: compile 1m at 4 GB, run 1m;
   - `repository-tests`: compile 35 s, run 1m;
   - engine-sized executables: 13–17 s each, two compiles each.
-- **Warm, after a commit** (`b4b9-commit-verify.log`): every step was cached except
-  `sdde-e2e-spec` (16 s, 15 s) and `sdde-provider-compatibility` (15 s, 14 s). The two
-  test runs still took 1m each (T10).
+- **Warm `verify`, after a commit** (`b4b9-commit-verify.log`): every step was cached
+  except `sdde-e2e-spec` (16 s, 15 s) and `sdde-provider-compatibility` (15 s, 14 s).
+  The two test runs still took 1m each (T10).
+- **`/verify` ladder pre-steps:** `zig build test-architecture` compiles in 2 s and runs
+  in 1 s. Targeted `zig build test-<area>` steps compile in 2–16 s and run in under 5 s
+  (`b2-final-targeted.log`).
 
 ## 3. Findings
 
@@ -190,7 +227,8 @@ A scripted fake provider stands in for the model. A test driver
 work is about 4% of the run, mostly the snapshots that back preservation assertions.
 
 The Zig test runner executes the tests in a binary one after another in a single
-process, so scenarios never overlap. T2–T5 and T11 are the costs inside each scenario.
+process. The build runner only spreads work across processes for fuzzing. So
+scenarios never overlap. T2–T5, T11 and T15 are the costs inside each scenario.
 
 ### T2. The testing allocator captures a stack trace on every allocation
 
@@ -202,7 +240,7 @@ trace, in Debug and `ReleaseSafe` alike.
 On aarch64 Darwin, Zig 0.16 rates frame-pointer unwinding `.safe` but not `.ideal`
 (`StackIterator.fp_usability` in `lib/zig/std/debug.zig`). So it always unwinds through
 DWARF debug data when that data is present, and uses frame pointers only as a fallback.
-The result is 73% of `repository-tests` and 36% of the integration run. Moving the
+The result is 73% of `repository-tests` and 36–38% of the integration run. Moving the
 integration suite to `ReleaseSafe` in `b021e9b` (9 October) doesn't avoid it.
 
 Test builds can't change this through `std_options`, because the Zig test runner is the
@@ -218,6 +256,12 @@ down:
   `std.testing.allocator` as the backing allocator (T12).
 - **Everything else:** the repository contains 3,496 references to
   `std.testing.allocator`.
+
+Leak detection currently comes from the test runner, not the tests. After each test the
+runner calls `testing.allocator_instance.detectLeaks()` and fails the test on a leak
+(`lib/zig/compiler/test_runner.zig`, `run_test` handler). `checkAllAllocationFailures`
+relies on that runner check to report leaks from its failing iterations. Any
+replacement allocator therefore has to take over that check itself (P1).
 
 ### T3. The feature log does a full lock and file cycle for every event
 
@@ -235,14 +279,27 @@ handles each emitted event in this order:
 
 The two opens account for 1,717 and 1,647 `openat` samples, about 8% of the run.
 Logging overall is 17%, including stack-trace capture for its allocations. `fsync` is
-negligible. Scenarios log at debug level.
+negligible.
+
+Scenarios log at debug level, and the sweep asserts on those events. It reads the event
+log and checks that `action.started` balances the completed, invalid and failed events
+([workflow_tests.zig:1797-1798](../test/integration/workflow_tests.zig#L1797-L1798)).
+Lowering the sweep's log level would therefore weaken an assertion.
 
 The per-event cycle is contract behaviour, not an adapter detail:
 
-- The §13.9 catalogue defines `AcquireFeatureLogStreamLockAction` as one attempt with a
-  fixed deadline, and requires every lock to be released on every path
+- **§13.9 action sequence.** `AcquireFeatureLogStreamLockAction` makes one attempt with
+  a fixed deadline, and every lock is released on every path
   ([13-09-logging.md:14-41](../design/contracts/actions/13-09-logging.md#L14-L41)).
-- Retention ([ADR 0026](../design/decisions/0026-header-identity-log-retention.md)) and
+- **§26 lock and identity rules.** One exclusive lock exists per
+  `(featureId, runId, stream)` "while a writer is … appending"
+  ([26-security.md:209-212](../design/contracts/26-security.md#L209-L212)).
+  Target identity checks must be repeated at commit with no-follow operations
+  ([26-security.md:21](../design/contracts/26-security.md#L21)). Today's per-append
+  `openFile` with `follow_symlinks = false` and `resolve_beneath = true`, plus the size
+  check, is how the code meets that.
+- **Shared lock.** Retention
+  ([ADR 0026](../design/decisions/0026-header-identity-log-retention.md)) and
   historical finalization
   ([14-orchestration.md:302](../design/contracts/14-orchestration.md#L302)) take the same
   per-run stream lock.
@@ -255,23 +312,32 @@ compiles and validates the workflow registry. That takes about 55 ms per scenari
 
 ### T5. `std.sort.block` fills a 512-element buffer on every call
 
-`std.sort.block` declares `var cache: [512]T = undefined;`
-(`lib/zig/std/sort/block.zig:116`). Safety-checked builds fill `undefined` memory with
-`0xAA`. That is confirmed for `ReleaseSafe`: the integration binary's `sort.block`
-contains `mov w1, #0xaa` followed by `bl _compiler_rt.memset`. So every call writes
-512 × `@sizeOf(T)` bytes, however short the input.
+`std.sort.block`, which is what `std.mem.sort` uses, declares
+`var cache: [512]T = undefined;` (`lib/zig/std/sort/block.zig:116`). Safety-checked
+builds fill `undefined` memory with `0xAA`. That is confirmed for `ReleaseSafe`: the
+integration binary's `sort.block` contains `mov w1, #0xaa` followed by
+`bl _compiler_rt.memset`. So every call writes 512 × `@sizeOf(T)` bytes, however short
+the input.
 
-The heavy callers are `workflow_subgraphs.Compiler.scope` (recursive),
-`canonical_json.write` and `required_authority.build`. This is 6.4% of the integration
-run and 0.9% of `repository-tests`.
+Engine source calls `std.mem.sort` at 37 sites. Element types include large structs,
+such as `DeclarativeStep` in
+[workflow_subgraphs.zig:33](../src/domain/workflow_subgraphs.zig#L33). The heavy
+callers are `workflow_subgraphs.Compiler.scope` (recursive), `canonical_json.write` and
+`required_authority.build`. This is 6.4% of the integration run and 0.9% of
+`repository-tests`.
 
 ### T6. The integration suite compiles in `ReleaseSafe`, at the start of the critical path
 
 [build.zig:348](../build.zig#L348) compiles the root integration module, meaning the
-engine and tests imported by relative path, in `ReleaseSafe`. That takes 1 minute alone
-and 2 minutes inside `verify`, at 4–5 GB. With the run that follows, the integration
-chain is about 3 of the 4 minutes `verify` takes after an edit. The `repository-tests`
-chain is shorter: a 48–52 s compile, then a 1-minute run.
+engine and tests imported by relative path, in `ReleaseSafe`. That takes about 110 s
+alone and `2m` (120–179 s) inside `verify`, at 3–5 GB. With the run that follows (60–119
+s), the integration chain accounts for most of the 4 minutes `verify` takes after an
+edit. The `repository-tests` chain is shorter: a 44–52 s compile, then a run of about a
+minute.
+
+The choice is deliberate and documented. [README.md:82](../README.md#L82) states that
+the integration executable always uses `ReleaseSafe`. `b021e9b` made the switch in the
+same commit that moved the workflow scenarios into this suite.
 
 The dependency modules (`yaml`, `bounded_yaml_syntax`, `unicode_normalization`,
 `exact_value_unicode`) still compile in Debug, because they take the default optimize
@@ -279,27 +345,32 @@ mode.
 
 Not measured: how long this module takes to compile and run in Debug.
 
-### T7. Each offline harness executable is compiled twice
+### T7. Each offline harness application is compiled in two configurations
 
-`offlineExecutable` ([build.zig:916](../build.zig#L916)) wraps an application as a new
-root module. That is a second full compile of the same code. It applies to `sdde`,
-`sdde-e2e-spec`, `sdde-provider-compatibility`, `sdde-baseline`, `sdde-e2e-call` and
-`sdde-evaluate-spec`. The smoke steps also depend on the unwrapped executables
+`offlineExecutable` ([build.zig:916](../build.zig#L916)) wraps an application in a new
+root ([test/packaging/offline.zig](../test/packaging/offline.zig)) that sets
+`live_model_connections = false`. That comptime switch disables
+`native_model_http` ([native_model_http.zig:7](../src/adapters/provider/native_model_http.zig#L7)).
+It applies to `sdde`, `sdde-e2e-spec`, `sdde-provider-compatibility`, `sdde-baseline`,
+`sdde-e2e-call` and `sdde-evaluate-spec`.
+
+The smoke steps also depend on the unwrapped executables
 ([build.zig:331](../build.zig#L331), [build.zig:415](../build.zig#L415),
-[build.zig:447](../build.zig#L447)), so both variants are always built. In `verify`,
-the four engine-sized pairs cost 17–27 s per compile.
+[build.zig:447](../build.zig#L447)). Those are the only offline compile of the live
+configuration, so the second compile is coverage, not duplication. In `verify`, the
+four engine-sized pairs cost 17–27 s per compile.
 
 These compiles cost CPU and memory but sit off the critical path (T6), and memory is
-not the bottleneck. Free memory stayed at or above 39% with no swap, so the earlier
-claim that they push the machine into memory pressure was wrong.
+not the bottleneck. Free memory stayed at or above 39% with no swap.
 
 ### T8. Build provenance invalidates harness compiles after any edit
 
 `capture-build-provenance` ([build/provenance.zig](../build/provenance.zig)) hashes the
-contents of `src`, `test`, `design`, `scripts` and the root build files. Its step runs
-on every build (`has_side_effects`, [build.zig:255](../build.zig#L255)). The output is
-embedded through `@embedFile("build_provenance")` in the e2e, compatibility and
-baseline harnesses.
+contents of `src`, `test`, `design`, `scripts` and the root build files, and records
+the Git revision. Its step runs on every build (`has_side_effects`,
+[build.zig:255](../build.zig#L255)). The output is embedded through
+`@embedFile("build_provenance")` in the e2e, compatibility and baseline harnesses, in
+both configurations (T7).
 
 The comment at [build.zig:257](../build.zig#L257) says offline builds must not be
 invalidated by provenance. But `test` and `smoke` depend on those executables through
@@ -307,6 +378,11 @@ their smoke steps ([build.zig:427](../build.zig#L427),
 [build.zig:450](../build.zig#L450), [build.zig:847](../build.zig#L847)). So any edit to
 `design/`, or any commit, recompiles six executables at about 15–27 s and 1–2 GB each.
 `b4b9-commit-verify.log` shows exactly this: nothing else in that run recompiled.
+
+The coverage is a contract requirement.
+[design/harness/e2e.md:492-502](../design/harness/e2e.md#L492-L502) requires live
+reports to embed a build-time digest covering "build, engine, harness, test, design and
+script inputs".
 
 ### T9. The local cache was inconsistent
 
@@ -323,7 +399,8 @@ At measurement time, `.zig-cache` held 15 GB:
 empty cache directory. The likely cause is that objects under `o/` were deleted while
 their manifests under `h/` were kept. This was inferred from the cache state, not
 reproduced. A `fix04-stale-manifests/` directory in the cache suggests this has
-happened before.
+happened before. No script, skill or hook in the repository refers to
+`.zig-cache/fresh`.
 
 `.zig-cache` also holds material that isn't build cache:
 
@@ -340,8 +417,8 @@ A test `Run` step can be cached: `.zig_test` stdio reports no side effects
 (`Run.zig:244`) adds `--seed=0x<random>` to the test's arguments, and `zig build`
 picks a new random seed on each invocation unless `--seed` is passed. So the
 arguments change every time, the cache always misses, and both one-minute runs repeat
-even when compiles are cached. The 21 October log shows this: compile `cached 59ms`,
-run `1m`. A no-op `verify` therefore costs at least about one minute.
+even when compiles are cached. On the unchanged `d736d9a` tree, a rerun showed the
+compile `cached 79ms` and the run `1m`, with different seeds.
 
 No test uses `std.testing.random_seed`. The one PRNG in the test harness uses a fixed
 protocol seed. So the random seed buys these suites nothing.
@@ -350,11 +427,17 @@ A fixed seed alone would make the cache unsafe, though:
 
 - 14 run steps set their working directory to the repository root.
 - Tests read repository files at runtime, including
-  `design/workflows/spec.workflow.yaml`, the `test/e2e/*` cases, the
-  `test/integration/fixtures/baseline/*` files and the `src/actions` and
-  `src/application` trees.
-- None of those files is declared with `addFileInput`, so a cached run could pass
-  against stale inputs.
+  `design/workflows/spec.workflow.yaml`, the `test/e2e/*` cases and the
+  `test/integration/fixtures/baseline/*` files.
+- `architecture_test` walks the `src`, `src/actions` and `src/application` trees
+  ([architecture_test.zig:49](../src/architecture_test.zig#L49),
+  [:192](../src/architecture_test.zig#L192), [:218](../src/architecture_test.zig#L218)).
+  A newly added file that nothing imports changes no compile.
+- None of those inputs is declared with `addFileInput`, so a cached run could pass
+  against stale inputs or miss a new file.
+
+The main suites pass explicit `Environ.Map` values instead of reading the inherited
+environment, so environment leakage is a smaller risk.
 
 ### T11. Execution re-derives facts that are fixed at bootstrap
 
@@ -370,27 +453,35 @@ A fixed seed alone would make the cache unsafe, though:
   ([reference_extraction_contract.zig:27](../src/domain/reference_extraction_contract.zig#L27)).
   That is 2.5% of the sweep.
 
-Both costs apply to production runs too. Much of the 9% `mem.eqlBytes` self time comes
-from linear, string-keyed lookups in these validators, in bootstrap compilation and in
-`findTransition`.
+No contract clause requiring per-step revalidation was found.
+[14-orchestration.md:33](../design/contracts/14-orchestration.md#L33) requires
+registry validation before workflow-specific work. Both costs apply to production runs
+too. Much of the 9% `mem.eqlBytes` self time comes from linear, string-keyed lookups in
+these validators, in bootstrap compilation and in `findTransition`.
 
 ### T12. Allocation-failure sweeps are quadratic, and every allocation is traced
 
 `std.testing.checkAllAllocationFailures` runs a case once to count its allocations,
 then once more for each allocation with a failure injected at that index. The
-repository has 109 such sweeps. The 24 that appear in the profile account for 30.8% of
-the `repository-tests` run, and the most expensive single sweep for 12.8%. Each pass
-allocates through the 10-frame tracing allocator (T2).
+repository has 109 such sweeps. On `d736d9a`, frames inside the sweeps were 51.0% of
+the `repository-tests` run, and stack-trace capture inside them was 44.5%. The most
+expensive single sweep is 12.8%. Each pass allocates through the 10-frame tracing
+allocator (T2).
+
+The earlier figure (24 tests, 30.8%) counted tests by name and missed sweeps whose names
+don't mention allocation failure.
 
 The four integration cancellation sweeps have the same shape but cost only 1.2%.
 
 ### T13. Fixture configs mirror every log event to stderr
 
 Fixture configs with `"console": true` route every emitted event row to stderr through
-the console sink:
+the console sink. The only such fixtures are frozen protocol or live-case inputs:
 
-- `test/integration/fixtures/baseline/*.sddtoolkit.json`;
-- `test/e2e/wf-001-hello-world/.sddtoolkit.json`.
+- `test/integration/fixtures/baseline/protocol.sddtoolkit.json` and its drifted mock,
+  which [frozen_protocol_fixture.zig](../test/integration/frozen_protocol_fixture.zig)
+  binds and the immutable protocol validator checks;
+- `test/e2e/wf-001-hello-world/.sddtoolkit.json`, the live case's configuration.
 
 The sink is [log_output.zig](../src/adapters/system/log_output.zig), called from
 [feature_log_runner.zig:231](../src/application/feature_log_runner.zig#L231) and
@@ -399,49 +490,255 @@ run therefore prints about 7,800 rows, 8–9 MB, even when every test passes. No
 writes show up in the profile, so the cost is output size, not time. It is why
 `scripts/test-integration.sh` redirects the full log to a file.
 
-### T14. Checked and not material
+### T14. Checked and not material, or not viable
 
-| Step | Cost |
+| Item | Finding |
 | --- | --- |
 | Lint | 0.4 s |
 | Packaged smoke runs | 27–473 ms each |
 | Launcher shell tests | 0.1–0.5 s each; they use a fake `zig` |
 | Provenance capture | 1 s |
 | Nested `zig build` fixtures | 4–5 s cold |
+| `/verify` pre-steps (`test-architecture`, targeted `test-<area>`) | 2–16 s compile and under 5 s run each; their binaries can't be reused by `verify`, but the cost is small |
 | `architecture_test` | 0.7% of the unit run |
 | Temporary-directory cleanup | 1% of the integration run |
 | `fsync` | 0.3% of the integration run |
+| Self-hosted aarch64 backend (`-fno-llvm`) | Not viable: with `-fno-lld` the binary failed with "exec format error"; with the default linker a hello-world compile ran past two minutes and was stopped |
 
 None of these is worth pursuing.
 
-## 4. Proposals
+### T15. Strict JSON decoding reads every document three times
+
+`strict_json.decode`
+([strict_json.zig:83-93](../src/domain/strict_json.zig#L83-L93)) makes three passes:
+
+1. `validateTransport` runs a full scanner pass to check nesting depth
+   ([:182-188](../src/domain/strict_json.zig#L182-L188)).
+2. `parseDocument` builds a complete `std.json.Value` tree with `.alloc_always`
+   ([:167-180](../src/domain/strict_json.zig#L167-L180)). That copies every string,
+   and under the testing allocator traces every copy.
+3. `wireTypes` checks that tree, and `parseFromSliceLeaky` parses the bytes a third time
+   into the closed type.
+
+JSON parsing is 10.8% of the integration run and 11.7% of the unit run.
+`strict_json.parse` alone is 7.1% of the unit run, and packet building
+(`specification_support.packetFor`, `model_candidate_json.encodeFor`) is the main
+caller in the sweep. Production runs pay the same cost. The passes exist to reject what
+Zig's typed parser would otherwise accept: quoted numbers, numeric enum tags and byte
+arrays.
+
+## 4. Proposals and their assessment
 
 None may drop scenarios, skip or focus tests, weaken assertions or relax leak
-detection (AGENTS.md, Prohibited shortcuts). IDs are kept stable; the suggested order
-follows the table.
+detection (AGENTS.md, Prohibited shortcuts). Each code change also needs the AGENTS.md
+"Before editing" analysis (`/preflight`), targeted tests, `zig build verify` and a
+`contract-reviewer` pass. IDs are kept stable.
 
-| ID | Proposal | Addresses | Expected effect | Constraint or decision needed |
-| --- | --- | --- | --- | --- |
-| P1 | Use a `DebugAllocator` with `stack_trace_frames = 0` instead of `std.testing.allocator`. Start with the sweep's binding and its driver arenas, and the backing allocators of the 107 allocation-failure sweeps. | T2, T12 | Up to about 70% of `repository-tests` and about a third of the integration run. The sweep change is a few lines; the allocation-failure sweeps are 107 one-argument changes. | Leak and double-free detection stay; leak reports lose allocation stack traces. The user decides whether that trade is acceptable. A custom test runner that disables tracing globally (`allow_stack_tracing = false`, or a `debug.SelfInfo` override) would also strip symbols from failure traces, so it is the weaker option. |
-| P2 | Shard the 177-scenario test inside one compiled integration binary: several `Run` steps of the same artifact, each given a shard selector. | T1 | The integration run's wall time divided by the shard count; cores are mostly idle (§1). No extra compile. | Splitting into separate test executables costs a full compile each (2 minutes and 4 GB inside `verify`). Splitting by test doesn't help, because one test holds 177 of the 196 scenarios. The selector is a new test input and needs a decision. Update the full-suite registration check ([build.zig:899](../build.zig#L899), [build/test_registration.zig](../build/test_registration.zig)) and keep `test-integration` complete. |
-| P3 | Remove the provenance dependency from the offline smoke executables. Only the live steps need the checkout identity. | T8 | Six compiles (15–27 s and 1–2 GB each, partly in parallel) saved on each docs-only edit or commit. | Build provenance is harness evidence. Choosing how offline smoke binaries satisfy `@embedFile("build_provenance")` is a decision. No fallback or dual path. Keep live-step isolation tests passing. |
-| P4 | Measure the integration module's compile and run time in Debug. If the compile is much faster, reconsider `ReleaseSafe` after P1. | T6 | Up to about 1–1.5 minutes off the critical path after every source edit. | Unmeasured. The Debug run may be slower; decide on both numbers. |
-| P5 | Avoid compiling each smoke application twice, for example by smoke-testing only the offline variant. | T7 | Fewer compiles and less CPU. Off the critical path, so little wall-time gain. | `smoke-*` steps currently prove both variants build. Decide whether building the unwrapped executable is a required check. |
-| P6 | Hold the feature-log stream lock and segment file across appends within a binding. | T3 | Up to about 8% of the integration run, plus a production benefit. | This changes the §13.9 per-event action sequence and the lock that ADR 0026 retention and §14 historical finalization rely on. It needs a contract decision, a `/preflight` analysis, and failure and recovery tests. Not a test-only change. |
-| P7 | Replace the stable sort in hot paths with one that doesn't fill a fixed 512-element buffer, or sort indices instead of large values. | T5 | About 6% of the integration run. | Order must stay byte-identical (canonical JSON, deterministic rendering). |
-| P8 | Clear the Zig-owned cache directories (`o/`, `h/`, `z/`, `tmp/` and `fresh/`), and find out which tool removed `o/` without `h/`. | T9 | Restores working builds; reclaims up to 15 GB. | Don't delete the whole of `.zig-cache`: it holds retained logs and experiment directories (T9). Move them first if they matter. The next build is fully cold. |
-| P9 | Make test runs cacheable: pass a fixed `--seed`, and declare every file the tests read at runtime with `addFileInput`, or embed those files. | T10 | Unchanged test runs become cache hits. A no-op or docs-only `verify` drops from about 1 minute or more to seconds. | Incomplete input declarations give stale passes, so this needs a test proving that editing a runtime-read file reruns the suite. It also changes what "ran `verify` on the exact tree" means for the commit rule in AGENTS.md. Decision needed. |
-| P10 | Validate the operation registry and derive the data-flow facts once, when the runner and specification state are built, and make the registry immutable by construction. | T11 | About 8% of the integration run, plus a production benefit. | Engine change. Per-step revalidation may be an intended defence against registries changed after bootstrap, and tests rely on that rejection. The contract owner decides whether a one-time check plus immutability gives the same guarantee. |
-| P11 | Turn console output off in test fixtures that don't assert on it. | T13 | Smaller logs and readable `verify` output; no measurable time. | Keep `"console": true` wherever a test checks console behaviour. Fixtures under `test/e2e/` are live-case inputs, so change them only with the case owner's agreement. |
+| ID | Verdict | Scope | Measured or estimated effect |
+| --- | --- | --- | --- |
+| P1 | Recommended, in phases | Test-only | Phase 1: about 44% of the unit run and 36% of the integration run (estimate from profile shares) |
+| P2 | Defer until after P1 | Test and build | About 40 s ÷ shards after P1; needs gating |
+| P3 | Low value; needs decision | Build | Three compiles per docs-only edit or commit, not six |
+| P4 | Measure after P1 | Build and docs | Up to 1–1.5 min off the critical path; unmeasured |
+| P5 | **Withdrawn** | | Would remove the only offline compile of the live configuration |
+| P6 | Needs contract decision; low priority | Engine contract | Under 8% of the integration run |
+| P7 | Recommended | Engine (shared helper) | About 6% of the integration run, plus production |
+| P8 | User's call | Local cache | Working builds; up to 15 GB |
+| P9 | Highest payoff for repeated runs; needs decision | Build and policy | No-op and docs-only reruns drop from at least 1 min to seconds |
+| P10 | Needs contract decision | Engine | About 8% of the integration run, plus production |
+| P11 | **Withdrawn** | | Would edit frozen protocol and live-case inputs |
+| P12 | Candidate after P1 | Engine (canonical validator) | Part of the 7–12% JSON parsing share, plus production |
 
-**Suggested order:**
+### P1. Untraced leak-checking allocator for the hot sweeps (T2, T12)
 
-1. **P1:** the largest saving, with a test-only scope.
-2. **P9 and P3:** they remove the reruns that happen when nothing relevant changed.
-3. **P2, then P4:** they shorten the critical path.
-4. **P6, P7 and P10:** engine changes, each needing its owning contract.
+- **Change.** Add one shared test helper that wraps a `DebugAllocator` with
+  `stack_trace_frames = 0` and fails the test when `deinit` or `detectLeaks` reports a
+  leak. Use it in three places: the sweep's allocator binding, the driver's two arena
+  backings, and as the backing allocator of the 107 allocation-failure sweeps.
+- **Effect.** Stack-trace capture inside those scopes is 44.5% of the unit run and
+  35.9% of the integration run. The remaining 28.3% of the unit run is spread across
+  many tests. Replacing all 3,496 references (a second phase) would chase a long tail
+  and isn't recommended without its own decision.
+- **Conditions.**
+  - Leak detection must move with the allocator (T2). A call site that skips the check
+    silently loses leak detection, which would be a weakened check. One owning helper
+    therefore beats per-site `DebugAllocator` code.
+  - Add a regression test proving the helper fails on a deliberate leak and passes when
+    the case frees everything.
+  - Optionally, add an architecture check that rejects ad hoc `DebugAllocator`
+    construction in test code.
+  - Leak reports lose allocation stack traces. To diagnose a leak, temporarily switch
+    the call site back to `std.testing.allocator`.
+- **Rejected alternatives.**
+  - A custom test runner with `allow_stack_tracing = false` or a `debug.SelfInfo`
+    override would also strip symbols from failure traces.
+  - Non-checking allocators would drop leak detection.
 
-T4 is intentional coverage of the production path, so no proposal targets it.
+### P2. Shard the 177-scenario test (T1)
+
+- **Change.** Several `Run` steps of the one compiled integration binary, each given a
+  shard selector.
+- **Gaps found in review.**
+  - The test runner panics on any unrecognized argument
+    (`lib/zig/compiler/test_runner.zig:52-62`). The selector would have to arrive
+    through the environment (`Run.setEnvironmentVariable`, read via
+    `std.testing.environ`).
+  - Each shard `Run` step runs every test in the binary. Without gating, the other 128
+    tests (about 20 s under the sampler, including the other seven sweep tests' 19
+    scenarios) would run once per shard. That breaks the exactly-once rule that
+    `test-build-registration` enforces ([build.zig:899](../build.zig#L899),
+    [build/test_registration.zig](../build/test_registration.zig)).
+  - So every test needs a shard owner, or the non-sweep tests must run in shard 0 only.
+- **Conditions.**
+  - Prove that the shards partition the scenario set exactly once.
+  - Keep one `scenario-cost` report per shard.
+  - Update the registration check.
+- **Effect.** After P1 the integration run is estimated at about 40 s, so the remaining
+  gain is about 40 s × (1 − 1/shards), plus memory for concurrent test processes
+  (0.9–3 GB each). Separate test executables cost a full 2-minute compile each, so they
+  aren't an alternative.
+
+### P3. Drop provenance from the offline smoke variants (T8)
+
+- **Review finding.** Only the three offline variants (e2e, compatibility, baseline) can
+  lose provenance:
+  - The live variants must embed it
+    ([e2e.md:492-502](../design/harness/e2e.md#L492-L502)).
+  - The live variants must keep compiling in `test` as the live-configuration check
+    (T7, P5).
+  - Docs-only edits and commits would therefore still recompile three executables, not
+    zero.
+- **Conditions.**
+  - The harness code embeds `build_provenance` unconditionally, so offline variants
+    still need some bytes, for example a fixed fixture bundle. That is a second
+    embedding source, so it needs a decision. No fallback or dual path.
+  - Offline binaries can't make model calls, so they can't produce evidence, but that
+    has to stay true.
+  - Keep the live-step isolation tests passing.
+
+### P4. Reconsider `ReleaseSafe` for the integration suite (T6)
+
+- **Change.** Measure Debug compile and run times for the integration module, after P1,
+  since P1 removes the cost that Debug would otherwise amplify.
+- **Conditions.**
+  - The `ReleaseSafe` choice is documented ([README.md:82](../README.md#L82)) and
+    deliberate (`b021e9b`). A change updates the README in the same commit.
+  - `test-exact-value-admission` shares this module and changes with it.
+- **Checked alternative.** The self-hosted backend isn't viable on this platform (T14).
+
+### P5. Smoke-test only the offline variants — withdrawn (T7)
+
+The unwrapped executables are the only offline compile of `live_model_connections =
+true` code. Removing them would leave live-only code unchecked until a billed live run.
+The cost is coverage, not waste.
+
+### P6. Hold the feature-log lock and segment file across appends (T3)
+
+- **Review finding.** §26 allows one lock held "while a writer is … appending", so
+  holding it is compatible in principle. But:
+  - §26.21 still requires identity checks at commit. A held descriptor needs a
+    per-append identity check (path against descriptor), so part of the open cost
+    returns.
+  - The §13.9 per-event action sequence must change.
+  - Retention and historical finalization share the lock.
+- **Verdict.** A contract change with a saving under 8%. Low priority. Lowering the
+  sweep's log level isn't an alternative: the sweep asserts on debug events.
+
+### P7. A shared stable sort without the fixed buffer (T5)
+
+- **Change.** Add one domain helper that replaces the 37 direct `std.mem.sort` calls.
+  For example: insertion sort below a small threshold, and block sort, or sorting
+  indices, above it.
+- **Why output stays byte-identical.** Every stable sort produces the same order for
+  the same strict weak ordering. Unstable sorts (`pdq`, `heap`) don't guarantee that,
+  and are excluded.
+- **Conditions.**
+  - Add a property test that the helper matches `std.mem.sort` on inputs with ties.
+  - Keep the canonical-rendering byte-identity tests.
+  - Optionally, add an architecture check against direct `std.mem.sort` in `src/`.
+- **Effect.** About 6% of the integration run and 1% of the unit run, plus production
+  `ReleaseSafe` builds.
+
+### P8. Repair the local cache (T9)
+
+- **Change.** Clear only the Zig-owned directories: `o/`, `h/`, `z/`, `tmp/` and
+  `fresh/`, which nothing in the repository refers to. Move the retained logs and
+  experiment directories first if they matter.
+- **Notes.** The tool that removed `o/` without `h/` couldn't be identified. The next
+  build is fully cold.
+
+### P9. Make test runs cacheable (T10)
+
+- **Change.** Fix the seed and declare every runtime input.
+- **Effect.** Directly measured: an unchanged-tree rerun spent 1m in a test run whose
+  compile was cached. P9 would turn that, and the `repository-tests` run, into cache
+  hits.
+- **Gaps found in review.**
+  - **Seed.** It comes from `zig build --seed`, or a new random seed per invocation.
+    Every entry point (`scripts/test-integration.sh`, the `/verify` skill, manual runs)
+    would have to pass it, or `build.zig` would need a supported way to pin it.
+  - **Inputs.** `addFileInput` tracks files, not directory contents. `build.zig` would
+    have to enumerate the trees that `architecture_test` walks, at configure time, so
+    that adding a file changes the input set. It must also list every fixture, workflow
+    and case file the tests read.
+- **Conditions.**
+  - Add negative tests: editing a runtime-read fixture reruns the suite, and adding an
+    unimported file under `src/` reruns `architecture_test`.
+  - Decide how the `/verify` report states cached runs: AGENTS.md says never claim a
+    check ran when it didn't, and the commit rule asks for `verify` "on the exact tree".
+  - Decision needed.
+
+### P10. Derive bootstrap facts once (T11)
+
+- **Change.** Validate the registry and compute the data-flow facts once, when the
+  runner and specification state are built, and make the registry immutable by
+  construction.
+- **Review finding.** The unit test that tampers with a graph before the run expects
+  failure before any prepare. A one-time check at runner start still meets that. Only a
+  registry changed in the middle of a run would no longer be caught, so immutability
+  has to replace the per-step check.
+- **Conditions.** Engine change. The contract owner decides; keep every existing
+  rejection test.
+
+### P11. Turn off console output in fixtures — withdrawn (T13)
+
+Every `"console": true` fixture is a frozen protocol input or a live-case
+configuration. Editing them risks frozen-binding drift and changes live runs, for an
+output-size problem that `scripts/test-integration.sh` already handles.
+
+### P12. Single-pass strict JSON decoding (T15)
+
+- **Change.** Enforce the strict wire rules during one typed parse, for example with
+  `jsonParse` overrides or a validating token pass, instead of building a throwaway
+  dynamic tree. The owner is [strict_json.zig](../src/domain/strict_json.zig).
+- **Conditions.**
+  - Every rejection must survive: empty document, byte limit, UTF-8, byte-order mark,
+    depth, duplicate fields, unknown fields, quoted numbers, numeric enum tags and byte
+    arrays.
+  - Keep the existing accepted and rejected fixtures and add any that are missing.
+  - This is the canonical validator, so it needs high scrutiny and a contract-reviewer
+    pass.
+- **Effect.** Part of the 7–12% JSON parsing share. P1 already removes the tracing part
+  of the dynamic tree's allocations.
+
+### Suggested order and expected combined effect
+
+1. **P1 phase 1.** Test-only, with a measured scope.
+2. **P9.** Decision first; the biggest gain for repeated runs.
+3. **P4 measurement**, after P1.
+4. **P7 and P12.** Shared owners, with a production benefit.
+5. **P2,** only if the integration run still matters after 1–4.
+6. **P3, P6 and P10** wait on their decisions.
+
+Expected combined effect (estimates from profile shares, not measurements):
+
+- **P1 phase 1:** about 25 s off the unit run and about 20–25 s off the integration run.
+  `zig build test` and `test-integration` speed up by those amounts, and CPU use drops.
+- **`verify` after a source edit:** only about 20–25 s faster, roughly 3.5 minutes
+  instead of 4. The integration compile (120–179 s) still sets the critical path, so P4
+  is the lever for `verify` wall time. P2 adds little once P1 is in.
+- **P9:** an unchanged-input rerun drops to seconds, plus the provenance recompiles
+  (T8).
 
 ## 5. Re-measuring
 
@@ -450,14 +747,18 @@ T4 is intentional coverage of the production path, so no proposal targets it.
   per-scenario phase times.
 - **Cold timings:** run `zig build <step> --summary all --cache-dir <empty directory>`.
   This leaves the shared cache untouched.
-- **No-op timings:** run the same command twice with no edits in between. Check that
-  `git status` and file modification times didn't change; a concurrent edit turns the
-  second run into a rebuild (§2). Until P9 lands, test runs repeat regardless.
-- **Profile:** while the step runs, find the test binary with
-  `pgrep -f '/o/[0-9a-f]+/(test|repository-tests) --cache-dir'`, then run
-  `sample <pid> 150 2 -mayDie -file <output>`. Unsymbolicated hot addresses resolve with
-  `nm -n <binary>`; in this run the top one was `memset`. Aggregate inclusive samples
-  by outermost `test.` frame to rank tests.
+- **No-op timings:** run the same command twice with no edits in between. Record
+  `git rev-parse HEAD` and `git status --porcelain` before and after; a concurrent edit
+  turns the second run into a rebuild (§2). Until P9 lands, test runs repeat regardless.
+- **Profile:** find the test binary with `pgrep -f '/o/[0-9a-f]+/<name> --cache-dir'`,
+  then run `sample <pid> 180 2 -mayDie -file <output>`.
+  - Under `zig build test`, other small binaries are also named `test`. Profile the
+    integration binary from `zig build test-integration` alone.
+  - Confirm that the sample's call graph contains the expected `test.` frames.
+  - Unsymbolicated hot addresses resolve with `nm -n <binary>`.
+  - Aggregate inclusive samples by outermost `test.` frame to rank tests, and by
+    ancestor frame (for example `checkAllAllocationFailures`) to size a proposal's
+    scope.
 - **Memory:** poll `memory_pressure -Q` and `sysctl vm.swapusage`, and diff `vm_stat`
   pageouts and swapouts across the run.
 - **Comparing changes:** report wall time, CPU time, per-step compile and run times, and
@@ -466,34 +767,59 @@ T4 is intentional coverage of the production path, so no proposal targets it.
 
 ## 6. Open uncertainty
 
-- Each profile comes from one or two sampled runs. The sampler slowed them by about
-  1.5 times; relative shares should hold, and the two `repository-tests` runs agree.
-- Not measured directly: a true no-op `verify`. The roughly one-minute floor comes from
-  retained logs and the `Run.zig` seed handling.
+- Each profile comes from one to three sampled runs. The sampler slowed them by about
+  1.5 times; relative shares should hold, and repeated runs agree.
+- Not measured directly: a complete no-op `verify`. The test-run rerun was measured for
+  the integration suite (T10); the rest is inferred.
 - Not measured: the integration module's Debug compile and run times (P4), and the
-  saving from P1 and P2.
-- Unresolved: whether per-step registry revalidation (T11) is a contract requirement.
+  actual savings from P1, P2, P7, P10 and P12. The figures in §4 are estimates from
+  profile shares.
+- Unresolved: whether per-step registry revalidation (T11) is an intended contract
+  defence.
 - Unattributed: the unit-test failure in the first `verify` run (§2), which happened
-  while its file was being edited.
+  while its file was being edited. The clean-tree run passed.
 
 ## 7. Review corrections
 
-Changes to the first version of this note, made the same day:
+**First review**, same day:
 
-- The `memset` share is 36.4%, not 32%; its caller counts were corrected. The first
-  count included one address outside `memset`.
-- T7 claimed the parallel compiles pushed the machine into memory pressure. Measurement
-  showed free memory at or above 39% and no swap.
-- T1 now says that execution uses a scripted provider and a test driver, and that one
-  test holds 177 of the 196 scenarios.
-- T2 now explains why the cost appears in every optimize mode and on this platform, and
-  sizes the change. Its frame-pointer question was resolved.
-- T3 now cites the contract clauses that make the per-event lock a contract matter.
-- P2 now prefers sharding one binary, since separate executables each cost a 2-minute
-  compile.
-- P8 no longer proposes deleting all of `.zig-cache`, which holds retained evidence.
-- The `0xAA` fill is confirmed by disassembly instead of inferred.
-- The month-old `repository-tests` sample was replaced by two fresh profiles.
-- Added: T10 (test runs never cached), T11 (bootstrap facts re-derived during
-  execution), T12 (quadratic allocation-failure sweeps), T13 (console mirroring) and
-  T14 (items checked and found immaterial), with P9–P11.
+- The `memset` share is 36.4%, not 32%; its caller counts were corrected.
+- T7's memory-pressure claim was withdrawn; free memory stayed at or above 39% with no
+  swap.
+- T1 now records the scripted provider, the test driver, and the 177 of 196 scenarios
+  in one test.
+- T2 now explains the cost in every optimize mode and on this platform.
+- T3 now cites its contract clauses.
+- P2 now prefers sharding one binary.
+- P8 no longer proposes deleting all of `.zig-cache`.
+- The `0xAA` fill was confirmed by disassembly, and the month-old `repository-tests`
+  sample was replaced.
+- Added T10–T14 and P9–P11.
+
+**Second review**, assessing the proposals:
+
+- **T7 corrected.** The second compile uses a different comptime configuration and is
+  the only offline compile of the live build, so it is coverage, not duplication.
+- **P5 withdrawn** for the same reason.
+- **T8 and P3 corrected.** Provenance coverage is contract-required, and P3 saves three
+  compiles, not six.
+- **T12 corrected.** The sweeps are 51.0% of the unit run by call stack, not 30.8% by
+  name.
+- **P1 rescoped.** Its expected effect was "up to about 70%" for a scope that covers
+  44.5%. It now requires the replacement allocator to take over leak detection, with a
+  regression test.
+- **P2 gaps.** Selectors must come through the environment, and unsharded tests would
+  run once per shard.
+- **P9 gaps.** The seed must be pinned at every entry point, directory trees must be
+  tracked, and cached runs must be reported honestly.
+- **P6 constraints added** from §26 identity re-checks; lowering the sweep's log level
+  was ruled out because the sweep asserts on debug events.
+- **P7 condition added:** keep the sort stable; there are 37 call sites.
+- **P10:** no contract clause requiring per-step revalidation was found.
+- **P11 withdrawn:** its fixtures are frozen or live-case inputs.
+- **Minute truncation.** Zig's summary truncates to whole minutes. The standalone
+  integration compile was about 110 s, not 1 minute. The combined-effect estimate was
+  also corrected: P1 shortens `verify` by about 20–25 s, not to 2.7 minutes.
+- **Added:** T15 and P12 (strict JSON triple pass), the `/verify` pre-step and
+  self-hosted-backend rows in T14, the clean-tree measurements, and the direct
+  confirmation of T10.

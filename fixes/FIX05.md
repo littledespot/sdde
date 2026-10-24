@@ -1184,3 +1184,11 @@ bounded approval, and each E2E run needs its own explicit approval
   advisory 89.29%, unchanged from 21 October) and loan-renewal (31 calls, 99,098 tokens,
   902 under budget, advisory 82.14%, unchanged from 21 October). §1 and A6 record the pair; neither run is
   adjudicated.
+- **24 October 2026, loan-renewal principles:** loan-renewal copied hello-world's principles,
+  whose "State Ownership: Keep no application state" made the policy review mark the
+  stateful loan behaviour `conflicting` (four findings on `8a600d7`). By user direction the
+  case now supplies its own project principles, `test/e2e/wf-002-loan-renewal/principles/`,
+  for a "Library Lending" project: same seven files and `toolchain.yaml`, with domain-owned
+  in-memory state, atomic operations and typed rejections, and no rule taken from the
+  renewal story. Principles reach only the policy review, not generation. Loan-renewal
+  principle findings before this change come from hello-world's principles.

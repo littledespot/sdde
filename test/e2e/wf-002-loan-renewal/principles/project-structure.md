@@ -1,0 +1,60 @@
+# Constitution Project Structure Standards
+
+<!--
+Section: project-structure
+Priority: high
+Applies to: wf-002 Node + Vitest fixture
+Dependencies: [core, architecture]
+Version: 1.0.0
+Last Updated: 2026-10-24
+Project: Library Lending
+-->
+
+## 1. Directory Organization Principles
+
+| Principle                  | Description                                                   | Priority |
+| -------------------------- | ------------------------------------------------------------- | -------- |
+| **Feature Grouping**       | Keep related feature behavior together.                       | MUST     |
+| Separation of Concerns     | Separate domain behavior, presentation and validation assets. | MUST     |
+| Naming Conventions         | Use short, descriptive names.                                | MUST     |
+| Depth Limits               | Avoid unnecessary nesting.                                    | SHOULD   |
+| Co-location                | Keep directly related implementation files together.         | SHOULD   |
+| Generated Output Isolation | Keep generated output outside authored source responsibilities. | MUST   |
+
+---
+
+## 2. Responsibility Placement
+
+This principle defines placement relationships without repeating exact roots,
+filenames, suffixes, or include patterns.
+
+| Content Category    | Placement Policy                                                 | Priority |
+| ------------------- | ---------------------------------------------------------------- | -------- |
+| Executable Source   | Keep entry and domain behavior in the toolchain source area.     | MUST     |
+| Validation Assets   | Keep Vitest validation separate from runtime entry behavior.     | MUST     |
+| Static Assets       | Not applicable.                                                  | SHOULD   |
+| Configuration       | Keep only configuration required by TypeScript and Vitest.       | MUST     |
+| Generated Artifacts | Do not place generated artifacts with authored source.           | MUST     |
+
+---
+
+## 3. Naming and Co-location
+
+| Area                    | Requirement                                                  | Priority |
+| ----------------------- | ------------------------------------------------------------ | -------- |
+| Modules and Components  | Name modules for their one responsibility.                   | MUST     |
+| Validation Files        | Make the tested responsibility clear.                        | MUST     |
+| Shared Types            | Share a type only when more than one module uses it.         | MUST     |
+| Feature-local Assets    | Not applicable.                                              | SHOULD   |
+
+---
+
+## 4. Structural Anti-Patterns
+
+| Anti-pattern                 | Policy                                             |
+| ---------------------------- | -------------------------------------------------- |
+| Mixed generated/source files | Keep generated output separate from authored code. |
+| Circular dependencies        | Do not introduce dependency cycles.                |
+| Unowned shared directories   | Do not create a shared directory without an owner. |
+| Duplicate responsibility     | Keep one owner for each behavior.                  |
+| Excessive nesting            | Avoid unnecessary nesting.                         |
