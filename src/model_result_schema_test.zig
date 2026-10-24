@@ -320,7 +320,7 @@ test "nullable terminal integer choices preserve absence and narrow only authori
 }
 
 test "unique collection metadata survives packet projections and tagged selection" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, uniqueCollectionPacket, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(uniqueCollectionPacket, .{});
 }
 
 fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
@@ -345,7 +345,7 @@ fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
 }
 
 test "ID restrictions validate definition and selected part association before omitting sibling locations" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, selectedIdChoices, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(selectedIdChoices, .{});
 }
 
 fn selectedIdChoices(allocator: std.mem.Allocator) !void {
@@ -726,7 +726,7 @@ fn objectProperties(allocator: std.mem.Allocator, count: usize, child: []const u
 }
 
 test "schema compilation and cloning release every allocation on failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, compileAndClone, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(compileAndClone, .{});
 }
 
 fn compileAndClone(allocator: std.mem.Allocator) !void {
@@ -850,7 +850,7 @@ test "nested type-disjoint alternatives accept but overlapping and nonobject res
 }
 
 test "native availability narrows nested alternatives without altering canonical schemas" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, restrictChoices, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(restrictChoices, .{});
 }
 
 fn restrictChoices(allocator: std.mem.Allocator) !void {

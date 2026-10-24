@@ -68,7 +68,7 @@ test "composition binding query requires current base epoch and exact prerequisi
 
 test "composition selects native assignment contexts without filtering evidence or changing authority" {
     try assignmentContexts(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, assignmentContexts, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(assignmentContexts, .{});
 }
 fn assignmentContexts(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -188,7 +188,7 @@ test "composition retains only accepted schema-associated requests and placement
     const conflicting_proof = payload.validate(conflicting_decoded.candidate).valid;
     try std.testing.expectError(error.ConflictingCompositionPart, retained.retain(a, binding, conflicting_proof, producer, accepted));
     try std.testing.expectEqualStrings("{\"value\":1e0}", (try retained.assemble(a)).body);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationLifecycle, .{ plan, packet, proof, producer, accepted });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationLifecycle, .{ plan, packet, proof, producer, accepted });
 
     const failed_owner = try identity.createLifecycleSuccessor(invoked, invoked.revision(), id, .invoked, .{ .terminal = .failed });
     defer identity.deinitOwner(failed_owner);
@@ -560,5 +560,5 @@ test "composition reconstructs native singleton choices while retaining the orig
     try std.testing.expect(assembled.validate() == null);
     try std.testing.expectEqualStrings("{\"value\":{\"kind\":\"selected\",\"occurrence\":53}}", assembled.body);
     try std.testing.expectEqualStrings("{\"value\":{\"kind\":\"selected\"}}", answer.proof().candidate().content());
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationLifecycle, .{ plan, packet, answer.proof(), answer.producer, fixture.base.requests.ledger().? });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationLifecycle, .{ plan, packet, answer.proof(), answer.producer, fixture.base.requests.ledger().? });
 }

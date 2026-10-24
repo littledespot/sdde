@@ -71,7 +71,7 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
 }
 
 test "reference packets preserve chunk scope and evidence with deterministic allocation cleanup" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, exercisePackets, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(exercisePackets, .{});
 }
 
 test "reconciliation assignments scope instructions while retaining complete source evidence" {
@@ -79,7 +79,7 @@ test "reconciliation assignments scope instructions while retaining complete sou
         "The application must start. Display `Hello, World!` and the current UTC time.\n",
         "Renew a library loan and show its new due date. Display `Loan renewed!`.\n",
     }) |source_text| {
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, exerciseAssignmentPackets, .{source_text});
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(exerciseAssignmentPackets, .{source_text});
     }
 }
 
@@ -726,14 +726,14 @@ test "packet body and domain identity are owned independently of caller allocati
 }
 
 test "typed and admitted packet context preserve exact numbers and assignment ownership" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, packetContextPrecision, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(packetContextPrecision, .{});
     const base = try packets.create(std.testing.allocator, "{\"candidate\":{}}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
     try std.testing.expectError(error.InvalidModelInputPacket, packets.withContext(struct {}, std.testing.allocator, base, "candidate", .{}));
 }
 
 test "packet projections replace native contexts while preserving repair authority and ownership" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, repairPacketContexts, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(repairPacketContexts, .{});
 }
 fn repairPacketContexts(allocator: std.mem.Allocator) !void {
     const authorization = "native-repair";

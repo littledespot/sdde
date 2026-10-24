@@ -1026,5 +1026,5 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
 }
 
 test "native receipt failure proof ownership cleans up every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, rejectionAllocationScenario, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(rejectionAllocationScenario, .{});
 }

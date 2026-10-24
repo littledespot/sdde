@@ -451,7 +451,7 @@ test "binding experiment preserves lexical rejection and cleans up allocation fa
     defer outcome.deinit(std.testing.allocator);
     try std.testing.expect(outcome == .rejected and outcome.rejected == .lexical);
     try std.testing.expectEqual(.invalid_prose, outcome.rejected.lexical.reason);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn expectBindingRejection(policy: Policy, input: Input, expected: Rejection) !void {
     const outcome = try evaluate(std.testing.allocator, policy, input, test_classifier);

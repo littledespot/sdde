@@ -813,8 +813,8 @@ test "shared reference support resolves ordered claims without Spec policy" {
 }
 
 test "shared reference support releases allocations on every failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, supportAllocationCase, .{});
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, lineageAllocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(supportAllocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(lineageAllocationCase, .{});
 }
 
 fn lineageAllocationCase(allocator: std.mem.Allocator) !void {
@@ -1109,7 +1109,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     _ = (try f.finish(a, input, try f.global(a, input), fixture.context())).valid;
 }
 test "reconciliation releases allocation failures throughout all stages" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 test "every existing claim kind uses the same reconciliation text and signal contracts" {
@@ -1489,7 +1489,7 @@ const reuse_summary = @import("actions/reference/reuse_reference_reconciliation_
 const check_summary_reuse = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = f.validate_summary.validator };
 
 test "native summaries preserve normalized child content tokens and original producer lineage" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSummaryCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeSummaryCase, .{});
 }
 fn nativeSummaryCase(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -1740,7 +1740,7 @@ test "native reuse binding retains its child after the preceding pipeline value 
 }
 
 test "summary normalization preserves occurrence provenance and distinct source literals" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, summaryNormalizationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(summaryNormalizationCase, .{});
 }
 
 fn summaryNormalizationCase(allocator: std.mem.Allocator) !void {
@@ -2079,7 +2079,7 @@ test "atomic reconciliation insertion normalization and packet construction rele
     missing.statements = good.statements[1..];
     const parsed: r.Parsed = .{ .input = input, .proposal = .{ .summary = missing } };
     const rejection = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, reconciliationRepairAllocation, .{ parsed, fixture.context(), rejection, good.statements[0].content });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(reconciliationRepairAllocation, .{ parsed, fixture.context(), rejection, good.statements[0].content });
 }
 fn reconciliationRepairAllocation(allocator: std.mem.Allocator, parsed: r.Parsed, context: f.Context, rejection: r.diagnostic.Rejection, content: r.ContentProposal) !void {
     const repair = @import("domain/reference_reconciliation_repair.zig");
@@ -2381,7 +2381,7 @@ test "misbound extra projections recover by proven deletion with intact siblings
             try std.testing.expectEqualDeep(&[_]r.ClaimId{business.id}, rejected.relations.selection);
         }
         try std.testing.expectEqual(index, rejected.relations.redundant.?);
-        if (global and first) try std.testing.checkAllAllocationFailures(std.testing.allocator, redundantDeletionAllocation, .{ parsed, fixture.context() });
+        if (global and first) try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(redundantDeletionAllocation, .{ parsed, fixture.context() });
         const automatic = (try repair.authorize(a, parsed, fixture.context(), rejected)).automatic;
         try std.testing.expect(automatic.authorization.operation == .delete);
         const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context()).inputs), parsed, fixture.context(), automatic.authorization, null, null);
@@ -2866,7 +2866,7 @@ test "relationship rejection facts and repair paths retain ownership under alloc
             values[3].disposition.superseded.related_claim_ids = &.{ values[2].claim_id, values[1].claim_id };
             parsed.proposal.global.claim_dispositions = values;
         }
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, relationRepairAllocation, .{ parsed, fixture.context() });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(relationRepairAllocation, .{ parsed, fixture.context() });
     }
 }
 

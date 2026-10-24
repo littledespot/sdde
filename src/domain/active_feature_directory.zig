@@ -135,7 +135,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "active feature authority releases every failed allocation" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("../test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 test "active directory capability owns borrowed feature and root text" {

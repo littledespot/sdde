@@ -186,7 +186,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     _ = try reports.markdown(a, bedrock_report);
 }
 test "all allocation failures release candidate data" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 const wire = @import("openai.zig");
@@ -542,7 +542,7 @@ fn bedrockResponseBytes(a: std.mem.Allocator, stop: []const u8, payload: []const
 }
 
 test "Bedrock evaluator response allocation failures propagate and release decoded text" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, bedrockResponseAllocationCase, .{});
+    try @import("../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(bedrockResponseAllocationCase, .{});
 }
 
 fn bedrockResponseAllocationCase(a: std.mem.Allocator) !void {

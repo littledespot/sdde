@@ -89,7 +89,7 @@ test "native raw prose selectors are deep owned schema bound and absent from pro
 }
 
 test "native packet prose selectors survive clones and release all failed allocations" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, prosePacketAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(prosePacketAllocation, .{});
 }
 
 fn prosePacketAllocation(a: std.mem.Allocator) !void {
@@ -434,7 +434,7 @@ test "prepared request reaches fake inference without preparation side effects" 
 }
 
 test "request construction releases every partial allocation without changing source authority" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 fn allocationCase(allocator: std.mem.Allocator) !void {
@@ -528,7 +528,7 @@ test "native exact occurrence scope is deep owned and bound across request descr
 }
 
 test "native exact packet scope narrows without widening and cleans every failed allocation" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, exactPacketAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(exactPacketAllocation, .{});
 }
 
 fn exactPacketAllocation(a: std.mem.Allocator) !void {

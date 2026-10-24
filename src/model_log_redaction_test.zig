@@ -97,11 +97,11 @@ test "model log redaction base64 preserves invalid UTF8 after removing credentia
 
 test "model log redaction releases allocations at every failure point" {
     for ([_][]const u8{ "credential|\"a\\\"b\"|tail", "\xffcredential|\"a\\\"b\"|tail" }) |input| {
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{input});
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{input});
     }
     const nested = try std.json.Stringify.valueAlloc(std.testing.allocator, "a\\\"b", .{});
     defer std.testing.allocator.free(nested);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{nested});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{nested});
 }
 
 fn allocationCase(allocator: std.mem.Allocator, input: []const u8) !void {

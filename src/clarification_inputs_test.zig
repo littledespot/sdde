@@ -222,7 +222,7 @@ test "clarification publication selects its terminal outcome before any write" {
 }
 
 test "fixed paths use configured roots and preserve the selected feature key" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, checkPaths, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(checkPaths, .{});
 }
 fn checkPaths(allocator: std.mem.Allocator) !void {
     const roots: artifacts.FeatureRoots = .{ .specs = "requirements/current", .archive = "requirements/archive", .workflows = "engine/flows" };
@@ -470,7 +470,7 @@ test "clarification actions propagate parser failures and skip absent state" {
 }
 
 test "clarification pipeline ownership is leak-free on allocation failures" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, checkLoadAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(checkLoadAllocation, .{});
 }
 fn checkLoadAllocation(backing: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(backing);

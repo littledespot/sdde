@@ -614,7 +614,7 @@ test "Bedrock endpoint encoding is HTTPS fixed-region with no target reinterpret
 }
 
 test "Bedrock allocation failures release request response and single-use authorization owners" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var fixture: Fixture = undefined;
@@ -1003,7 +1003,7 @@ fn converseDiagnosticAllocationScenario(a: std.mem.Allocator, expected: @FieldTy
 test "Converse envelope diagnostic allocation failures preserve cleanup and exact rejection" {
     for (std.meta.tags(@FieldType(@import("adapters/provider/provider_response_support.zig").DecodeDiagnostic, "reason"))) |reason| {
         try converseDiagnosticAllocationScenario(std.testing.allocator, reason);
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, converseDiagnosticAllocationScenario, .{reason});
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(converseDiagnosticAllocationScenario, .{reason});
     }
 }
 
@@ -1364,7 +1364,7 @@ fn ownedReasoningScenario(a: std.mem.Allocator) !void {
 
 test "Converse owns ordered reasoning signatures and opaque redaction independently of final text" {
     try ownedReasoningScenario(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, ownedReasoningScenario, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(ownedReasoningScenario, .{});
 }
 
 test "Converse preserves reasoning on stopped rejected and missing-answer responses without admitting it" {
@@ -1469,7 +1469,7 @@ fn productionReasoningScenario(a: std.mem.Allocator, expected: ReasoningProducti
 test "production provider observations retain owned reasoning across complete stopped and rejected results" {
     inline for (std.meta.tags(ReasoningProductionResult)) |expected| {
         try productionReasoningScenario(std.testing.allocator, expected);
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, productionReasoningScenario, .{expected});
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(productionReasoningScenario, .{expected});
     }
 }
 

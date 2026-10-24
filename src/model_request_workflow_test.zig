@@ -492,7 +492,7 @@ test "native preparation releases partial allocations and unapplied deltas" {
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(if (consolidated) try consolidatedPreparation(fixture.arena.allocator(), yaml) else yaml);
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
     }
 }
 
@@ -673,7 +673,7 @@ test "accounting cancellation and allocation failures retain no partial evidence
         try std.testing.expectEqual(.cancelled, harness.run());
         if (boundary <= 4) try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_model_attempt)] == null);
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
 }
 
 fn accountingYaml(fixture: *Fixture, limit: u32, cycle: bool) ![]const u8 {
@@ -923,7 +923,7 @@ test "assignment cancellation and allocation failures publish no partial ledger 
             if (runner.model_accounting) |state| try std.testing.expectEqual(@as(u64, 0), state.current_operations.revision().value);
         }
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
 }
 
 test "assignment registration and compiled graphs reject hidden authority" {
@@ -1363,7 +1363,7 @@ test "authorization cancellation and allocation faults release all unpublished c
         }
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
 }
 
@@ -1918,7 +1918,7 @@ test "pre-call request closure allocation failures release every owner and depos
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try requestTerminationYaml(&fixture));
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, requestTerminationAllocationCase, .{ &fixture, graph, cancelled });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(requestTerminationAllocationCase, .{ &fixture, graph, cancelled });
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
 }
@@ -2285,7 +2285,7 @@ test "pre-call termination allocation failures release every owner without calls
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try terminationYaml(&fixture));
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, terminationAllocationCase, .{ &fixture, graph, cancelled });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(terminationAllocationCase, .{ &fixture, graph, cancelled });
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
 }
@@ -2544,7 +2544,7 @@ test "request lifecycle cancellation allocation faults and compiler tampering fa
         }
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     fixture.native.init(std.testing.allocator);
     fixture.authorization.allocator = std.testing.allocator;
@@ -2847,7 +2847,7 @@ test "provider invocation cancellation allocation failures and retained evidence
         }
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ &fixture, graph });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     fixture.native.init(std.testing.allocator);
     fixture.authorization.allocator = std.testing.allocator;
@@ -3412,7 +3412,7 @@ test "YAML invocation allocation failures release pending responses and consumed
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const graph = try fixture.compile(try invocationYaml(&fixture));
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, invocationAllocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(invocationAllocationCase, .{ &fixture, graph });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
 }
 
@@ -4557,7 +4557,7 @@ test "correction handoff releases copied rejection context at every allocation f
     const nested = "{\"type\":\"object\",\"properties\":{\"result\":" ++ schema_bytes ++ "},\"required\":[\"result\"],\"additionalProperties\":false}";
     const graph = try fixture.compileWithSchema(try protocolRetryYaml(&fixture), nested);
     for ([_][]const u8{ "{\"result\":{\"foreign\":true}}", malformed_protocol_record }) |body|
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, correctionAllocation, .{ &fixture, graph, body });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(correctionAllocation, .{ &fixture, graph, body });
 }
 
 fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, body: []const u8) !void {
@@ -4984,7 +4984,7 @@ test "request closure releases owned ledgers and responses on allocation failure
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try requestCompletionYaml(&fixture));
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, requestClosureAllocationCase, .{ &fixture, graph, plan });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(requestClosureAllocationCase, .{ &fixture, graph, plan });
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
 }
@@ -5407,7 +5407,7 @@ test "YAML completion releases all retained owners on every allocation failure a
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try completionYaml(&fixture));
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, completionAllocationCase, .{ &fixture, graph, plan });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(completionAllocationCase, .{ &fixture, graph, plan });
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
 }
@@ -5793,7 +5793,7 @@ test "YAML payload validation allocation failures release retained candidates on
             try fixture.init(std.testing.allocator);
             defer fixture.deinit();
             const graph = try fixture.compile(try responseAdmissionYaml(&fixture, try payloadYaml(&fixture), consolidated));
-            try std.testing.checkAllAllocationFailures(std.testing.allocator, payloadAllocationCase, .{ &fixture, graph, body });
+            try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(payloadAllocationCase, .{ &fixture, graph, body });
             try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
         }
     }
@@ -6092,7 +6092,7 @@ test "YAML decoder releases parse trees and retained evidence on every allocatio
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
         const graph = try fixture.compile(try envelopeYaml(&fixture));
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, envelopeAllocationCase, .{ &fixture, graph, body, index == 0 });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(envelopeAllocationCase, .{ &fixture, graph, body, index == 0 });
         try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
     }
 }
@@ -6393,7 +6393,7 @@ test "observation validation releases all references on every allocation failure
     try fixture.init(std.testing.allocator);
     defer fixture.deinit();
     const graph = try fixture.compile(try observationYaml(&fixture));
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, invocationAllocationCase, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(invocationAllocationCase, .{ &fixture, graph });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
 }
 
@@ -6943,7 +6943,7 @@ test "composition application handoffs release retained parts and requests at ev
     }};
     fixture.registry.operations = &entries;
     const graph = try fixture.compileResources(composition_yaml, address_schema, false, address_composition, null);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, compositionAllocationCase, .{ &fixture, graph, &entries, &input });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(compositionAllocationCase, .{ &fixture, graph, &entries, &input });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
 }
 
@@ -7836,7 +7836,7 @@ test "retained semantic assignments require complete current packet request bind
     var admission_step = selected;
     admission_step.binding.operation_id.workflow_step_id = .{ .bytes = "reuse-current-assignment" };
     try std.testing.expect(try admission_step.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, retentionAllocationCase, .{ selected, ledger, request, origin });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retentionAllocationCase, .{ selected, ledger, request, origin });
     try std.testing.expectEqual(records_before, ledger.recordCount());
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
     for ([_][]const u8{

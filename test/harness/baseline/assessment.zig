@@ -912,7 +912,7 @@ fn allocationScenario(a: std.mem.Allocator) !void {
     defer result.deinit(a);
 }
 test "assessment bridge cleans up each allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationScenario, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationScenario, .{});
 }
 
 const FindingTest = struct {

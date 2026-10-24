@@ -21,7 +21,7 @@ test "toolchain bindings derive only the narrow capabilities their actions hold"
 test "safety result publication cleans up its sole native owner on every allocation failure" {
     const input = try values.create(std.testing.allocator, schemas.composed, @import("domain/toolchain.zig").Composed, .{ .packages = &.{"example@1.0.0"}, .policies = &.{} });
     defer values.destroy(input);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, safetyAllocationCase, .{input});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(safetyAllocationCase, .{input});
 }
 
 fn safetyAllocationCase(allocator: std.mem.Allocator, input: *@import("domain/pipeline_data.zig").Value) !void {

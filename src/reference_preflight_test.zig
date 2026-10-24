@@ -87,7 +87,7 @@ fn normalizationAllocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "selector normalization cleans up at every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, normalizationAllocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(normalizationAllocationCase, .{});
 }
 
 test "invocation publishes only validated owned context and rejects without output" {
@@ -124,7 +124,7 @@ fn invocationAllocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "invocation cleans up every failed allocation without leaking parsed context" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, invocationAllocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(invocationAllocationCase, .{});
 }
 
 test "reference directory action exposes only inspection and propagates source failure" {

@@ -242,7 +242,7 @@ test "shared JSON pointers decode escaped properties and compare complete segmen
     const array: std.json.Value = .{ .array = values };
     try std.testing.expectEqualStrings("first", pointer.lookup(array, try pointer.parse(allocator, "/0")).?.string);
     for ([_][]const u8{ "/00", "/-", "/1", "/+0" }) |invalid| try std.testing.expect(pointer.lookup(array, try pointer.parse(allocator, invalid)) == null);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, pointerAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(pointerAllocation, .{});
 }
 
 fn pointerAllocation(allocator: std.mem.Allocator) !void {

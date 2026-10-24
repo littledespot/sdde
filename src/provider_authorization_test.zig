@@ -332,7 +332,7 @@ test "execution teardown releases unused backing but not consumed backing twice"
 }
 
 test "authorization preparation and NodeDelta ownership clean every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 fn allocationCase(allocator: std.mem.Allocator) !void {

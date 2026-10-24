@@ -98,11 +98,11 @@ test "shape validation checks all record families without asserting their meanin
 }
 
 test "closed specification parsing cleans up every allocation failure" {
-    try testing.checkAllAllocationFailures(testing.allocator, parseAllocated, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(parseAllocated, .{});
 }
 
 test "editable specification round-trips every family and exact spans with allocation cleanup" {
-    try testing.checkAllAllocationFailures(testing.allocator, roundTrip, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(roundTrip, .{});
 }
 
 fn roundTrip(allocator: std.mem.Allocator) !void {

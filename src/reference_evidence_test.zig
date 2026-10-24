@@ -262,7 +262,7 @@ test "empty source is accounted but cannot provide a fabricated citation" {
 }
 
 test "reference evidence and citation preparation clean up every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(backing: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(backing);

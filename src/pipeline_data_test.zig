@@ -86,7 +86,7 @@ test "workflow information placement is idempotent isolated and cannot revive hi
 }
 
 test "information retention and current-value publication are atomic under allocation failures" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, informationAllocationExercise, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(informationAllocationExercise, .{});
 }
 
 test "one application shares origin metadata across outputs and releases it after partial changes" {
@@ -114,7 +114,7 @@ test "one application shares origin metadata across outputs and releases it afte
 }
 
 test "multi-output application allocates one origin and abandons every failed preparation" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, multiOutputAllocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(multiOutputAllocationCase, .{});
     var measured = std.testing.FailingAllocator.init(std.testing.allocator, .{});
     var envelope = envelope_module.PipelineEnvelope.init(measured.allocator(), &schemas);
     defer envelope.deinit();
@@ -545,7 +545,7 @@ test "unregistered schemas invalid telemetry and conflicting effects leave value
 }
 
 test "value and envelope ownership survives every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationExercise, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationExercise, .{});
 }
 
 fn allocationExercise(allocator: std.mem.Allocator) !void {

@@ -194,7 +194,7 @@ test "reader enforces source and decoded byte ceilings before allocation" {
 }
 
 test "reference input preparation cleans up partial allocations" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(backing: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(backing);

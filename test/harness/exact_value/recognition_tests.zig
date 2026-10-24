@@ -17,7 +17,7 @@ const allocation_input: recognition.Input = .{
 };
 
 test "prototype owns every result array and cleans up every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(a: std.mem.Allocator) !void {
     const outcome = try recognition.recognize(a, allocation_input, classifier);

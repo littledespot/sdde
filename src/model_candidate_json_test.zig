@@ -65,7 +65,7 @@ test "compact model JSON rejects empty mixed legacy and malformed nested variant
 }
 
 test "compact candidate encoding and decoding release every failed allocation" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, roundTrip, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(roundTrip, .{});
 }
 
 test "model codec rejects every declared engine derived variant without changing persistence" {
@@ -133,7 +133,7 @@ const TextPacket = struct {
 
 test "declared text fields preserve native nodes while separating prose and explicit composition" {
     try textRoundTrip(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, textRoundTrip, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(textRoundTrip, .{});
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -666,7 +666,7 @@ test "model JSON optional fields round trip without relaxing required nullable f
 
 test "declared compact values preserve typed identities and reject legacy or ambiguous wire shapes" {
     try compactRoundTrip(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, compactRoundTrip, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(compactRoundTrip, .{});
 }
 fn compactRoundTrip(allocator: std.mem.Allocator) !void {
     const Id = struct {
@@ -705,7 +705,7 @@ fn compactRoundTrip(allocator: std.mem.Allocator) !void {
 
 test "native singleton fields reconstruct by bound occurrence without changing raw responses" {
     try nativeSingletonFields(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSingletonFields, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeSingletonFields, .{});
 }
 fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
     const Node = union(enum) {

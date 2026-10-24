@@ -444,7 +444,7 @@ fn allocatingScenario(allocator: std.mem.Allocator) !void {
 }
 
 test "repair progress releases every allocation on failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocatingScenario, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocatingScenario, .{});
 }
 
 test "native progress effects require their exact registered role" {

@@ -201,7 +201,7 @@ fn allocationScenario(a: std.mem.Allocator) !void {
     try tracker.retain(a, "{\"corrected\":true}", false);
 }
 test "native candidate snapshot ownership cleans up every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationScenario, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationScenario, .{});
 }
 
 test "native assembled observations resolve unrelated exact values and preserve every native input" {

@@ -37,7 +37,7 @@ test "sealed native results keep identity and have one owner on apply discard an
 }
 
 test "native ownership transfer releases every allocation on allocation failures" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 test "native ownership rejects wrong types and bounds without consuming the owner or weakening copy limits" {

@@ -344,7 +344,7 @@ test "concrete HTTP owns request headers and bodies beyond socket buffer sizes" 
 
 test "concrete HTTP allocation failures join tasks and release connections on every path" {
     for ([_]fixture_module.Fault{ .none, .reset, .cancelled, .deadline }) |fault| {
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationScenario, .{fault});
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationScenario, .{fault});
     }
 }
 

@@ -472,7 +472,7 @@ test "final accounting rejects changed bytes kind obligation and missing or dupl
 }
 
 test "allocation failures release the whole exact-value candidate pipeline" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);

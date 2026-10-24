@@ -308,7 +308,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                 try std.testing.expectEqualStrings("not_applicable", entities.object.get("disposition").?.string);
                 try std.testing.expectEqualStrings(example.claim, entities.object.get("basis").?.string);
             }
-            if (index >= 2) try std.testing.checkAllAllocationFailures(std.testing.allocator, generationPacketAllocationCase, .{ current, fixture.context });
+            if (index >= 2) try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(generationPacketAllocationCase, .{ current, fixture.context });
             const assigned = try codec.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_assignment").?, .{}));
             try std.testing.expectEqualStrings(before, try codec.encode(binding.Bound, a, bound));
             try std.testing.expectEqualStrings(example.source, body.get("sources").?.array.items[0].object.get("text").?.string);
@@ -2808,7 +2808,7 @@ test "retained specification rejection and authorization release allocation fail
     const candidate: @import("domain/specification_candidate.zig").Candidate = .{ .response = .{ .content = .{ .primary_user_story = bad } } };
     var story = current;
     story.completed = 1;
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, rejectionAllocationCase, .{ fixture.context, story, candidate, good });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(rejectionAllocationCase, .{ fixture.context, story, candidate, good });
 }
 fn rejectionAllocationCase(allocator: std.mem.Allocator, context: provenance.Context, current: @import("domain/specification_session.zig").Session, candidate: @import("domain/specification_candidate.zig").Candidate, good: spec.Model.AttributedValue) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -4779,7 +4779,7 @@ test "pre-generation localized disposition evidence replaces source review linea
             const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .reconciliation_disposition = retained }, located.preservation.?);
             const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, invalid_location.provenance, invalid_location.source_ids, invalid_location.detail, invalid_location.missing_obligation, invalid_location.loss, null, null);
             try std.testing.expectEqual(.invalid_loss, rejected.rejected.issue);
-            try std.testing.checkAllAllocationFailures(std.testing.allocator, lossPacketAllocationCase, .{ inputs, fixture.context, pending });
+            try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(lossPacketAllocationCase, .{ inputs, fixture.context, pending });
         }
     }
 }
@@ -5172,7 +5172,7 @@ test "scalar source assessments resolve their assigned field and preserve comple
             try expectSameReviewSubject(a, packet, correction);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.get("subject").?, .{}), try std.json.Stringify.valueAlloc(a, correction_body.get("subject").?, .{}));
             for ([_][]const u8{ "extraction", "dispositions", "signals", "conflicts" }) |key| try std.testing.expect(!correction_body.contains(key));
-            try std.testing.checkAllAllocationFailures(std.testing.allocator, scalarReviewPacketAllocationCase, .{ inputs, fixture.context, id });
+            try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(scalarReviewPacketAllocationCase, .{ inputs, fixture.context, id });
         }
         // Readiness has no authored brief; generated review requires the pair.
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/specification_authority.zig").project(a, session.feature, fixture.context.references, null, .{ .title = title, .description = description, .primary_goal = goal }));
@@ -6922,7 +6922,7 @@ test "principle packets resolve assigned business subjects without exposing nati
                                 if (std.meta.eql(source_requirement.seed.id, id)) break index;
                             } else return error.MissingEntityRequirement;
                             if (source_index == 0 and disposition == .required)
-                                try std.testing.checkAllAllocationFailures(std.testing.allocator, scalarReviewPacketAllocationCase, .{ source_inputs, fixture.context, id });
+                                try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(scalarReviewPacketAllocationCase, .{ source_inputs, fixture.context, id });
                             for ([_]struct { value: spec.AttributedValue, allowed: bool }{ .{ .value = literal, .allowed = true }, .{ .value = exact, .allowed = false }, .{ .value = passive, .allowed = true } }) |basis_case| {
                                 const basis = basis_case.value;
                                 var entity_source = source_inputs;
@@ -6953,7 +6953,7 @@ test "principle packets resolve assigned business subjects without exposing nati
                 defer packets.release(correction);
                 try expectSameReviewSubject(a, packet, correction);
                 if (source_index == 0 and disposition == .required and (id.slot == .display_name or id.slot == .entities or id.slot == .functional_requirements or id.slot == .given)) {
-                    try std.testing.checkAllAllocationFailures(std.testing.allocator, policyReviewPacketAllocationCase, .{ inputs, fixture.context, requirement.seed.id });
+                    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(policyReviewPacketAllocationCase, .{ inputs, fixture.context, requirement.seed.id });
                 }
             }
             var foreign = ledger.requirements[0].seed.id;
@@ -7669,7 +7669,7 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     const a = arena.allocator();
     const stored = try @import("domain/strict_json.zig").decode(contract.Binding, a, bytes, .{ .maximum_bytes = 10000, .maximum_depth = 32 });
     var current = try fixture_type.init(a);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, contract.validate, .{ stored, &current.authority, .source_blocks_v1 });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(contract.validate, .{ stored, &current.authority, .source_blocks_v1 });
     current.authority.workflow_version += 1;
     try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
     current.authority.workflow_version -= 1;
@@ -9133,7 +9133,7 @@ fn preservationAllocationCheck(a: std.mem.Allocator) !void {
 }
 
 test "bound preservation preparation cleans up allocation failures" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, preservationAllocationCheck, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(preservationAllocationCheck, .{});
 }
 
 test "bound preservation does not attribute composite classification loss to claim insertion" {

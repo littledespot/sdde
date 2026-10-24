@@ -201,7 +201,7 @@ test "multi-token filenames share exact policy matching and retain Unicode raw s
 
 test "path-token preparation and scanning clean up after every allocation failure" {
     try allocationCase(std.testing.allocator);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
     const owner = authority(allocator) catch |err| return if (err == error.InvalidToolchain) error.OutOfMemory else err;

@@ -263,7 +263,7 @@ test "native authority bindings release inputs and partial results at every allo
     try fixture.init(std.testing.allocator, .feature_intent, .none);
     defer fixture.arena.deinit();
     const graph = try fixture.compile(yaml);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationRun, .{ &fixture, graph });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationRun, .{ &fixture, graph });
 }
 
 test "malformed authority result cannot downgrade contract rejection to a clarification" {

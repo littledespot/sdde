@@ -242,5 +242,5 @@ fn allocationCase(a: std.mem.Allocator) !void {
     try std.testing.expect(ambiguous == .ambiguous);
 }
 test "exact recognition cleans every allocation path for witnesses and ambiguity diagnostics" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("../test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }

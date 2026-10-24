@@ -129,7 +129,7 @@ test "reference values enforce byte bounds and release partial-clone references"
 }
 
 test "execution reference values clean up at every allocation failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationExercise, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationExercise, .{});
 }
 
 fn allocationExercise(allocator: std.mem.Allocator) !void {

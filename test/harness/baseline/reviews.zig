@@ -466,7 +466,7 @@ fn allocationScenario(a: std.mem.Allocator) !void {
 }
 
 test "native review capture cleans allocation failures" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationScenario, .{});
+    try @import("../../../src/test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationScenario, .{});
 }
 
 test "native principle findings retain their own decisions and verify exact selected wire contracts" {

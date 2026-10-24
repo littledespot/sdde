@@ -44,7 +44,7 @@ test "correction outlines expose conditional child requirements without recursiv
     defer response.deinit();
     var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer captured.deinit();
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .type_mismatch, .expected = fixture.prepared.request.response_schema.root() } }), "Correct syntax only." });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .type_mismatch, .expected = fixture.prepared.request.response_schema.root() } }), "Correct syntax only." });
 }
 
 test "reconciliation repair definitions admit only the natively selected payload" {
@@ -276,7 +276,7 @@ test "protocol retry retains exact request schema and identity and releases ever
     defer captured.deinit();
     const rejected = captured.evidence;
     const diagnostic: @import("domain/model_protocol_retry.zig").Diagnostic = .{ .schema = .{ .reason = .missing_required_property, .expected = fixture.prepared.request.response_schema.root() } };
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, rejected, diagnostic, "Correct syntax only." });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, rejected, diagnostic, "Correct syntax only." });
     var source = try fixture.requestSource();
     var other: Fixture = undefined;
     try other.initWithSchema(empty);
@@ -285,7 +285,7 @@ test "protocol retry retains exact request schema and identity and releases ever
     try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, rejected, .{ .decoder = .{ .reason = .ExpectedObject } }, .unconfirmed, "Correct syntax only."));
     try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, rejected, .{ .schema = .{ .reason = .type_mismatch, .expected = other.prepared.request.response_schema.root() } }, .unconfirmed, "Correct syntax only."));
     const child = @import("domain/model_result_schema.zig").findProperty(fixture.prepared.request.response_schema.root().one_of[0].object, "value").?.schema;
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, rejected, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .string_length, .expected = child } }), "Correct syntax only." });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, rejected, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .schema = .{ .reason = .string_length, .expected = child } }), "Correct syntax only." });
 }
 
 test "missing-answer correction admits only validated missing content and cleans up every failed allocation" {
@@ -306,7 +306,7 @@ test "missing-answer correction admits only validated missing content and cleans
     var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer captured.deinit();
     try std.testing.expect(captured.evidence.missingFinalText());
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .missing_final_text), "Return the complete assigned response." });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .missing_final_text), "Return the complete assigned response." });
     const retry_action: @import("actions/model/build_model_protocol_retry.zig").Action = .{};
     try std.testing.expectError(error.ModelRequestAssociationInvalid, retry_action.execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .decoder = .{ .reason = .ExpectedObject } }, .unconfirmed, "Correct syntax only."));
 }
@@ -395,7 +395,7 @@ test "selected protocol guidance explains duplicate property names and preserves
         try std.testing.expect(std.mem.startsWith(u8, guidance.value.object.get("explanation").?.string, "JSON decoding failed:"));
         if (duplicate) {
             try std.testing.expectEqualStrings("JSON decoding failed: property names must be unique within each object. This diagnostic concerns repeated names, not repeated identifier values.", guidance.value.object.get("explanation").?.string);
-            try std.testing.checkAllAllocationFailures(std.testing.allocator, retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .decoder = diagnostic.? }), prompt });
+            try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(retryAllocation, .{ &fixture, captured.evidence, @as(@import("domain/model_protocol_retry.zig").Diagnostic, .{ .decoder = diagnostic.? }), prompt });
         }
         const supplied = guidance.value.object.get("diagnostic").?.object.get("decoder").?.object;
         try std.testing.expectEqual(@as(usize, 3), supplied.count());

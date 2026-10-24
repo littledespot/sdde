@@ -123,7 +123,7 @@ test "source-aware wire scanner preserves ordinary prose and frees every failed 
     const wire = @import("domain/model_text_wire.zig");
     try std.testing.expect((try wire.checkProse(std.testing.allocator, "Use {broken JSON or the fragments label.", &.{})) == null);
     try std.testing.expectEqual(wire.Issue.embedded_insertion_syntax, (try wire.checkProse(std.testing.allocator, "{\"fragments\":[\"text\"]}", &.{})).?);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, wireAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(wireAllocation, .{});
 }
 fn wireAllocation(a: std.mem.Allocator) !void {
     const issue = try @import("domain/model_text_wire.zig").checkProse(a, "Before {\"fragments\":[\"text \",{\"kind\":\"exact_copy\",\"claim_id\":1}]} after", &.{});
@@ -510,7 +510,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, case.accepted });
+        try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ validated.evidence.result().complete, case.accepted });
         try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
     }
 }
@@ -591,7 +591,7 @@ test "response composition aggregates concrete sibling fields typed reasons and 
     try std.testing.expect(diagnostic.eql(copied));
     try std.testing.expect(diagnostic.fields.ptr != copied.fields.ptr);
     try std.testing.expect(diagnostic.fields[0].path.ptr != copied.fields[0].path.ptr);
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, aggregateAllocation, .{document.value});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(aggregateAllocation, .{document.value});
 }
 fn aggregateAllocation(a: std.mem.Allocator, value: std.json.Value) !void {
     const diagnostic = (try @import("domain/model_text_composition.zig").check(a, value, aggregate_bindings, aggregate_questions, &.{}, .{ .exact_scope = null })).?;
@@ -644,7 +644,7 @@ test "aggregate admission and protocol diagnostic copying clean every failed all
     defer response.deinit();
     var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, false });
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{ validated.evidence.result().complete, false });
     try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
 }
 
@@ -682,7 +682,7 @@ test "native exact scope classifies raw prose without granting semantic support 
         // the separate native coverage owner still checks exact obligations.
         try std.testing.expectEqualStrings(bytes, try std.json.Stringify.valueAlloc(a, document.value, .{}));
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeCompositionAllocation, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeCompositionAllocation, .{});
 }
 fn nativeCompositionAllocation(a: std.mem.Allocator) !void {
     const raw = "{\"value\":\"ACTIVE\"}";

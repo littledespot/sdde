@@ -52,7 +52,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "feature normalization and resolution release every failed allocation" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 test "feature inspection is a narrow read capability not a reference or model capability" {

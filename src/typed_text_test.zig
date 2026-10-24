@@ -192,7 +192,7 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
 }
 
 test "source-backed literal and typed-text allocations clean up on every failure" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);

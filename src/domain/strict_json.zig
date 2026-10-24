@@ -344,7 +344,7 @@ test "duplicate diagnostics identify object scope decoded key and both occurrenc
         try std.testing.expectEqual(@as(u8, '"'), case.bytes[@intCast(context.first_occurrence.?.byte_offset)]);
         try std.testing.expectEqual(@as(u8, '"'), case.bytes[@intCast(context.repeated_occurrence.?.byte_offset)]);
     }
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, diagnosticAllocation, .{});
+    try @import("../test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(diagnosticAllocation, .{});
 }
 
 fn diagnosticAllocation(allocator: std.mem.Allocator) !void {

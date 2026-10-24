@@ -92,7 +92,7 @@ test "cancellation and allocation errors escape unchanged with no retry and cons
     try expectCalls(&fixture, 1, 1);
     try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
     try std.testing.expect(ledger == fixture.base.ledger());
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 test "a reused authorization reaches the same port once and cannot cause a second effect" {

@@ -293,7 +293,7 @@ test "abandoned assigned and invoked operations require no recovery for a fresh 
 }
 
 test "lifecycle allocation failures preserve current state and release all ownership" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 
 fn allocationCase(allocator: std.mem.Allocator) !void {

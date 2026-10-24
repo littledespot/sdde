@@ -268,7 +268,7 @@ test "final accounting rejects omitted orphan duplicate and foreign identity joi
 }
 
 test "allocation failures abandon the extraction candidate" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(allocationCase, .{});
 }
 fn allocationCase(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -280,7 +280,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "sealed extraction values retain only owned candidate data after inputs are released" {
-    try std.testing.checkAllAllocationFailures(std.testing.allocator, ownershipCase, .{});
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(ownershipCase, .{});
 }
 fn ownershipCase(allocator: std.mem.Allocator) !void {
     const owned = @import("domain/reference_candidate_value.zig");
