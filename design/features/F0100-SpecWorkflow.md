@@ -1240,8 +1240,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Content units are a feature brief (title, description, primary goal), primary story,
   feature-wide entity applicability plus entity records, or a source-group batch
   of non-entity records (§17.3). Each entity independently selects its support.
-- Native validation normalizes typed text, checks closed record variants and identical
-  normalized records, and keeps questions outside specification content.
+- Native validation normalizes typed text, checks closed record variants, identical
+  normalized records and covered restatements (ADR 0035), and keeps questions outside
+  specification content.
 
 - The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`
@@ -1298,7 +1299,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   stable diagnostic order.
 - Record-field and relationship locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
-  blocked. Closed variant/schema correction handles malformed record shapes; there
+  blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
+  single-statement record that restates the primary user story or another
+  single-statement kind is deleted only when the kept occurrence covers its evidence. A
+  functional requirement and the story are always kept, and an uncovered restatement is
+  not flagged. Closed variant/schema correction handles malformed record shapes; there
   is no whole-record kind replacement. The feature-wide entities unit can delete one contradictory entity or insert one missing required entity,
   bound to the unchanged applicability decision and fixed feature-basis selection.
   Record batches cannot author or insert entities.

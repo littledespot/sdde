@@ -1092,6 +1092,9 @@ fn misboundProjection(comptime T: type, projections: []const T) !r.SignalProposa
 fn storyValue(allocator: std.mem.Allocator, all: r.Items, complete: bool) !g.spec.BusinessValue {
     var segments: std.ArrayList(r.text.BusinessSegment) = .empty;
     if (complete) {
+        // A complete story still differs from any one record's wording, so these
+        // scenarios exercise review advice rather than ADR 0035's restatement delete.
+        try segments.append(allocator, .{ .literal = .{ .value = "MOCK complete story " } });
         for (all.entries) |item| {
             if (item.claim.content != .model) continue;
             if (try businessValue(allocator, item.claim)) |value| try segments.appendSlice(allocator, value.segments);

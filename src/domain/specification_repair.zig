@@ -80,9 +80,10 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         .provenance => return error.UnsafeSpecificationRepair,
         .typed_text, .exact_copy => if (rejection.issue.value_choices) |choices| try choices.correction(allocator, rejection.issue.text_issue orelse return error.InvalidSpecificationRepair) else (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
+        .restatement => "Remove only the restatement whose evidence the kept occurrence covers; preserve coverage and sibling order.",
         .entity_membership, .unit_kind, .interpretation => return error.UnsafeSpecificationRepair,
     } };
-    var authorization = if (rejection.issue.rule == .duplicate_record)
+    var authorization = if (rejection.issue.rule == .duplicate_record or rejection.issue.rule == .restatement)
         try atomic.authorizeDelete(allocator, owner, candidate.revision, target, expected, facts, rule)
     else
         try atomic.authorize(allocator, owner, candidate.revision, target, expected, facts, rule);

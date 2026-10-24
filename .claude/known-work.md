@@ -24,8 +24,20 @@ already made.
   also lacks a refusal acceptance criterion. Extraction also returns one claim for a
   whole Markdown list. *Tried and reverted, 21 October 2026:* list-item extraction
   (ADR 0027, `2bf5ca6`) gave one claim per item but no better output and higher cost,
-  and the user directed its revert (`527f870`, ADR 0027 deleted). The weakening has no
-  current proposal; measure whether it recurs with another permitted model first.
+  and the user directed its revert (`527f870`, ADR 0027 deleted).
+  - On 24 October every later call received both the cited source text and the weakened
+    claim, and followed the claim.
+  - *Approved 25 October 2026 (user: "YES"):* source-quoted claim wording. The engine
+    takes each claim's wording from its cited source lines, so a paraphrase can't change
+    obligation strength.
+  - *Approved 25 October 2026 (user: "apply the best option"):* one claim per source
+    requirement. A claim whose citation spans several top-level list items is split
+    natively into one claim per item, with no model call. ADR 0027's per-item chunking
+    stays withdrawn.
+  - Both need one ADR amending §16, and neither is implemented. The approved
+    125,000-token budget (B4) gives the split room in loan-renewal; whether it is enough
+    is unmeasured.
+  - Details are in FIX05 B7.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
   `candidate_omission`, has judged byte-identical text both supported and omitted,
@@ -35,13 +47,34 @@ already made.
   source review assigns one record family per call (ADR 0023 "Record families",
   `specification-state/v19`). Its effect on cost is not yet measured live, and
   loan-renewal still ran out of budget in review twice on 21–22 October.
+  - On 25 October the user kept source review and chose a larger budget instead (B4).
+    Under "quality over cost, but never waste", the open problems are review's accuracy
+    and any spending that buys no quality. In the 24 October clean runs, all 46
+    source-review findings were "supported".
 - **Record authoring duplicates.** A record batch can re-author the whole feature.
   Groups holding only preserved tokens no longer get a batch (ADR 0024). The native
-  duplicate rule compares whole typed content, including the record kind, so
-  identical text in two record kinds passes. *Proposed:* compare per-group records
-  with one complete collection, only if generation-boundary failures remain. Add an
-  acceptance-criterion diagnostic or per-family collections only where measured
-  failures justify them.
+  duplicate rule compares whole typed content, including the record kind, and only
+  records with records. So identical text in two record kinds passes, and so does a
+  record repeating the user story: BR-001 equals the story in both cases on `8a600d7`.
+  - *Implemented 25 October 2026 (ADR 0035), for identical text across kinds (FIX05
+    B5):*
+    - widen the native `duplicate_record` rule to compare statement text across
+      single-statement record kinds and against the user story;
+    - keep its native delete, which makes no model call.
+    - A covered restatement is deleted; an uncovered one is left as today. The
+      functional requirement is kept, and same-kind checks run first.
+    - It doesn't catch paraphrases, and an entity description that copies the story
+      needs a separate remedy.
+  - *Proposed, 25 October 2026, as the recommended option for whole-feature
+    re-authoring (FIX05 B5):* one complete record collection per feature, each record
+    naming the claims it supports. Native coverage would require every behavioural
+    claim to be cited by an acceptance criterion or edge case.
+  - This replaces the A/C comparison, which can't discriminate while each case forms
+    one group.
+  - It needs a decision and an ADR (generation contract, ADR 0020's group binding).
+  - It pays off only with requirement-level claims (B7's split, approved 25 October) and
+    review budget headroom (the approved 125,000-token budget, B4).
+  - Loan-renewal had no refusal acceptance criterion in all three evaluated runs.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
   `required`.
@@ -63,10 +96,21 @@ already made.
   entry declares its own `requestTimeoutMs`; Haiku starts at the shared 180,000 ms until
   its measured maximum-output time replaces it. Lower allowances, bounded correction and
   cardinality bounds each need a decision; don't tune sampling or add retries.
+  - On 25 October (step 0, `269410b`) a source-review runaway on `Renewal refused.` cost
+    19,404 tokens and the run failed on budget.
+  - It's the second completed runaway on that same subject, so the subject-linked
+    trigger has more support but isn't established.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
-  (most recently 22 October, at 100,763 tokens) and published at 76,501–99,098 tokens
-  (the 24 October run finished 902 tokens under budget).
-  Raising the budget doesn't fix reliability.
+  (most recently 25 October, at 109,327 tokens, after a runaway) and published at
+  76,501–99,098 tokens (the 24 October run finished 902 tokens under budget).
+  - *Approved 25 October 2026 (user), not implemented:* make the workflow budget
+    configurable and raise it to 125,000. The user's rule is "quality over cost, but
+    never waste".
+    - Spend more tokens where it buys quality.
+    - Never drop a check to save tokens.
+    - Remove spending that buys no quality, at its owner.
+  - On its own, a larger budget doesn't make review cheaper or runs more reliable.
+  - Experiment stops and qualified scope stay open before any baseline freeze (FIX05 B4).
 
 ## Other open work
 
@@ -138,6 +182,8 @@ already made.
   - Quality means R8 human adjudication; stability means repeated runs, counting every
     attempt.
   - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
-  - It isn't met: no run has been adjudicated, only two pairs (one run of each case, on
-    `7a88804` and `8a600d7`) used an unmodified committed build, and loan-renewal published
-    in 3 of 7 attempts since 21 October.
+  - It isn't met:
+    - no run has been adjudicated;
+    - only three pairs (one run of each case, on `7a88804`, `8a600d7` and `269410b`) used
+      an unmodified committed build;
+    - loan-renewal published in 3 of 8 attempts since 21 October.

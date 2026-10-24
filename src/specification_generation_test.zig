@@ -1083,7 +1083,16 @@ test "record generation and selected value repairs retain every family purpose w
         defer fixture.deinit();
         const value = try fixture.proposal(source);
         const records = try a.alloc(spec.Model.RecordProposal, std.meta.fields(spec.Kind).len);
-        inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| records[index] = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, value.value)), .source_group_ids = value.source_group_ids, .provenance = value.provenance };
+        // Functional requirements, acceptance criteria, edge cases and entities keep
+        // one shared wording. ADR 0035 would remove the other single-statement
+        // kinds as restatements, so each of those states its own text.
+        inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
+            const own = switch (kind) {
+                .acceptance_criterion, .edge_case, .functional_requirement, .entity => value,
+                else => try fixture.proposal(try std.fmt.allocPrint(a, "{s} {s}", .{ source, @tagName(kind) })),
+            };
+            records[index] = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, own.value)), .source_group_ids = own.source_group_ids, .provenance = own.provenance };
+        }
         records[records.len - 1].content.entity.relationships = &.{ value.value, value.value };
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
@@ -1104,8 +1113,9 @@ test "record generation and selected value repairs retain every family purpose w
         const valid = (try validate_unit.execute(a, current, fixture.context, .{ .response = response, .origins = .{ .initial = origin } })).valid;
         try std.testing.expectEqual(records.len - 1, valid.response.content.records.len);
         for (records[0 .. records.len - 1], valid.response.content.records) |proposed, accepted| try std.testing.expectEqualDeep(proposed.content, accepted.content);
-        // Equal wording in distinct families, including FR and AC, remains
-        // distinct candidate data. Purpose guidance creates no deduplication rule.
+        // Equal wording in a functional requirement, acceptance criterion, edge case
+        // and entity remains distinct candidate data; purpose guidance creates no
+        // deduplication rule beyond ADR 0035's restatements.
         const complete = try appendMockChecked(a, current, fixture.context, valid);
         const identified = (try sessions.assemble(a, text.validator, fixture.context, complete)).content;
         try std.testing.expectEqual(records.len, identified.records.len);
@@ -1127,6 +1137,7 @@ test "record generation and selected value repairs retain every family purpose w
                     }
                     const local_index = if (kind == .entity) 0 else index;
                     const target: candidates.Target = .{ .value = .{ .subject = .{ .record = local_index }, .field = selected } };
+                    const original = (try candidates.select(owned_response, target)).value;
                     const candidate: repair.Candidate = .{
                         .response = try candidates.replace(a, owned_response, target, .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} } }),
                         .origins = .{ .initial = origin },
@@ -1143,8 +1154,8 @@ test "record generation and selected value repairs retain every family purpose w
                     const selected_record = try json.decode(candidates.ReadContext, a, try std.json.Stringify.valueAlloc(a, input.get("candidate").?, .{}));
                     try std.testing.expectEqualDeep(g.recordCollection(.model, candidate.response.content).?[local_index], selected_record.record);
                     try std.testing.expectEqualDeep(origin, authorization.dependencies.candidate.origins.initial.?);
-                    try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema_owner, try json.encodeSelected(repair.Replacement, a, .{ .value = value.value }), null);
-                    const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context).inputs), selected_current, fixture.context, candidate, authorization, .{ .value = value.value }, null);
+                    try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema_owner, try json.encodeSelected(repair.Replacement, a, .{ .value = original }), null);
+                    const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context).inputs), selected_current, fixture.context, candidate, authorization, .{ .value = original }, null);
                     try std.testing.expectEqualDeep(owned_response, fixed.response);
                     _ = (try validate_unit.execute(a, selected_current, fixture.context, fixed)).valid;
                 }
@@ -1752,6 +1763,14 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
         try std.testing.expectEqual(.duplicate_record, failure.issue.rule);
         try std.testing.expectEqual(.competing_records, failure.issue.blocked.?);
         try std.testing.expectError(error.UnsafeSpecificationRepair, repair.authorize(a, current, fixture.context, duplicate, failure));
+        // ADR 0035 decides that competing pair first; without it, the same non-goal
+        // beside a functional requirement that covers its evidence is a removable
+        // restatement, and the requirement is kept.
+        const restated: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ records[0], misclassified } } } };
+        const redundant = (try validate_unit.execute(a, current, fixture.context, restated)).invalid;
+        try std.testing.expectEqual(.restatement, redundant.issue.rule);
+        try std.testing.expect(redundant.issue.blocked == null);
+        try std.testing.expectEqual(@as(usize, 1), (try repair.authorize(a, current, fixture.context, restated, redundant)).target.record);
     }
 }
 
@@ -1809,20 +1828,20 @@ test "source-bound record batches reject duplicates without merging their eviden
     current.record_cursor = 1;
     current.record_group_count = 2;
     const repeated = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{first} } })).valid;
-    const same = (try sessions.checkConsistency(a, current, fixture.context, repeated)).?;
+    const same = (try sessions.checkConsistency(a, current, fixture.context, repeated, null)).?;
     try std.testing.expectEqual(.duplicate_record, same.rule);
     try std.testing.expect(same.blocked == null);
     var competing = first;
     competing.provenance.claim_ids = &.{.{ .ordinal = 2 }};
     competing.source_group_ids = &.{fixture.context.references.records.signals[1].id};
     const checked = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{competing} } })).valid;
-    const issue = (try sessions.checkConsistency(a, current, fixture.context, checked)).?;
+    const issue = (try sessions.checkConsistency(a, current, fixture.context, checked, null)).?;
     try std.testing.expectEqual(.duplicate_record, issue.rule);
     try std.testing.expectEqual(.competing_records, issue.blocked.?);
     var distinct = first;
     distinct.content.functional_requirement.text = (try fixture.proposal("The clock result is visible.")).value;
     const different = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{distinct} } })).valid;
-    try std.testing.expect((try sessions.checkConsistency(a, current, fixture.context, different)) == null);
+    try std.testing.expect((try sessions.checkConsistency(a, current, fixture.context, different, null)) == null);
 }
 
 test "grouped record clarifications retain family subjects and reject absent or foreign assignment selectors" {
@@ -2530,6 +2549,171 @@ test "record repair removes only an evidence-equivalent duplicate and preserves 
     }
 }
 
+test "ADR 0035 restatement keeps functional requirements and needs covered evidence" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = "Display a startup greeting. Show the current UTC date and time.";
+    var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+    defer fixture.deinit();
+    const story = try fixture.value("The visitor sees a greeting.");
+    const other = try fixture.value("The visitor sees the time.");
+    const record = struct {
+        fn of(comptime kind: spec.Kind, value: spec.AttributedValue) spec.RecordProposal {
+            return .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, value.value)), .source_group_ids = value.source_group_ids, .provenance = value.provenance };
+        }
+    }.of;
+    // Every single-statement kind except a functional requirement restates the story.
+    inline for (.{ spec.Kind.business_rule, spec.Kind.assumption, spec.Kind.non_goal, spec.Kind.prohibited_behavior, spec.Kind.user_visible_outcome }) |kind| {
+        try std.testing.expect(try g.restatesStory(a, story, record(kind, story)));
+    }
+    try std.testing.expect(!try g.restatesStory(a, story, record(.functional_requirement, story)));
+    // Multi-field kinds and different wording never restate it.
+    try std.testing.expect(!try g.restatesStory(a, story, record(.acceptance_criterion, story)));
+    try std.testing.expect(!try g.restatesStory(a, story, record(.edge_case, story)));
+    try std.testing.expect(!try g.restatesStory(a, story, record(.business_rule, other)));
+    // Identical wording whose evidence the story doesn't cover stays in place.
+    var uncovered = record(.business_rule, story);
+    uncovered.source_group_ids = &.{fixture.context.references.records.signals[1].id};
+    uncovered.provenance.claim_ids = &.{.{ .ordinal = 2 }};
+    try std.testing.expect(!try g.restatesStory(a, story, uncovered));
+    // Across record kinds the functional requirement is kept wherever it stands,
+    // otherwise the earlier occurrence is; same-kind duplicates aren't restatements.
+    try std.testing.expectEqual(.later, (try g.restatement(a, record(.functional_requirement, story), record(.business_rule, story))).?);
+    try std.testing.expectEqual(.earlier, (try g.restatement(a, record(.business_rule, story), record(.functional_requirement, story))).?);
+    try std.testing.expectEqual(.later, (try g.restatement(a, record(.non_goal, story), record(.business_rule, story))).?);
+    try std.testing.expect(try g.restatement(a, record(.business_rule, story), record(.business_rule, story)) == null);
+    try std.testing.expect(try g.restatement(a, record(.acceptance_criterion, story), record(.functional_requirement, story)) == null);
+    try std.testing.expect(try g.restatement(a, record(.functional_requirement, story), uncovered) == null);
+}
+
+test "a business rule that restates the story is deleted natively and coverage holds" {
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A borrower renews a loan.");
+    defer fixture.deinit();
+    const story = try fixture.proposal("A borrower can renew an active loan.");
+    const requirement = try fixture.proposal("The system renews an eligible loan.");
+    var current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    while (current.completed < sessions.records_index) {
+        const response: g.Response = .{ .content = switch (try sessions.unit(current.completed)) {
+            .brief => .{ .brief = .{ .title = story, .description = story, .primary_goal = story } },
+            .primary_user_story => .{ .primary_user_story = story },
+            .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = story } },
+            .records => unreachable,
+        } };
+        current = try appendMockResponse(a, current, fixture.context, response);
+    }
+    const fr: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = requirement.value } }, .source_group_ids = requirement.source_group_ids, .provenance = requirement.provenance };
+    const ac: spec.Model.RecordProposal = .{ .content = .{ .acceptance_criterion = .{ .given = requirement.value, .when = requirement.value, .then = requirement.value } }, .source_group_ids = requirement.source_group_ids, .provenance = requirement.provenance };
+    const rule: spec.Model.RecordProposal = .{ .content = .{ .business_rule = .{ .text = story.value } }, .source_group_ids = story.source_group_ids, .provenance = story.provenance };
+    const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ fr, rule, ac } } } };
+    const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
+    try std.testing.expectEqual(.restatement, rejection.issue.rule);
+    try std.testing.expect(rejection.issue.blocked == null);
+    // The session rule binds the observed model record for the old-value precondition.
+    try std.testing.expectEqualDeep(@as(@import("domain/specification_candidate.zig").Replacement, .{ .record = rule }), rejection.issue.observed.?);
+    const authorization = try repair.authorize(a, current, fixture.context, proposed, rejection);
+    try std.testing.expectEqual(@as(usize, 1), authorization.target.record);
+    const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs), current, fixture.context, proposed, authorization, null, null);
+    try std.testing.expectEqual(@as(usize, 2), merged.response.content.records.len);
+    try std.testing.expectEqualDeep(fr, merged.response.content.records[0]);
+    try std.testing.expectEqualDeep(ac, merged.response.content.records[1]);
+    try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?.validated.result);
+    const checked = (try validate_unit.execute(a, current, fixture.context, merged)).valid;
+    // The remaining specification still assembles with complete claim coverage.
+    _ = try sessions.assemble(a, text.validator, fixture.context, try sessions.appendBound(a, current, checked));
+    // A functional requirement with the story's wording is kept.
+    const story_requirement: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = story.value } }, .source_group_ids = story.source_group_ids, .provenance = story.provenance };
+    _ = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{ story_requirement, ac } } } })).valid;
+}
+
+fn sessionAtRecords(a: std.mem.Allocator, fixture: *const Fixture, story: spec.Model.AttributedValue) !@import("domain/specification_session.zig").Session {
+    const sessions = @import("domain/specification_session.zig");
+    var current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    while (current.completed < sessions.records_index) {
+        const response: g.Response = .{ .content = switch (try sessions.unit(current.completed)) {
+            .brief => .{ .brief = .{ .title = story, .description = story, .primary_goal = story } },
+            .primary_user_story => .{ .primary_user_story = story },
+            .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = story } },
+            .records => unreachable,
+        } };
+        current = try appendMockResponse(a, current, fixture.context, response);
+    }
+    return current;
+}
+
+test "ADR 0035 restatements use production evidence shapes and keep uncovered wording" {
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = "Display a startup greeting. Show the current UTC date and time.";
+    const wording = "The visitor sees a greeting with the time.";
+    var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+    defer fixture.deinit();
+    const other = try fixture.proposal("The visitor sees the time.");
+    const fr: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = other.value } }, .source_group_ids = other.source_group_ids, .provenance = other.provenance };
+    const ac: spec.Model.RecordProposal = .{ .content = .{ .acceptance_criterion = .{ .given = other.value, .when = other.value, .then = other.value } }, .source_group_ids = other.source_group_ids, .provenance = other.provenance };
+    // The story cites every group; a batch record cites only its own group.
+    {
+        const story = try fixture.proposalAllGroups(wording);
+        const bound = try fixture.proposal(wording);
+        const rule: spec.Model.RecordProposal = .{ .content = .{ .business_rule = .{ .text = bound.value } }, .source_group_ids = bound.source_group_ids, .provenance = bound.provenance };
+        const current = try sessionAtRecords(a, &fixture, story);
+        const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ fr, ac, rule } } } };
+        const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
+        try std.testing.expectEqual(.restatement, rejection.issue.rule);
+        try std.testing.expectEqual(@as(usize, 2), (try repair.authorize(a, current, fixture.context, proposed, rejection)).target.record);
+    }
+    // A later functional requirement removes the earlier record that restates it.
+    {
+        const story = try fixture.proposal("The visitor sees a greeting.");
+        const current = try sessionAtRecords(a, &fixture, story);
+        const non_goal: spec.Model.RecordProposal = .{ .content = .{ .non_goal = .{ .text = other.value } }, .source_group_ids = other.source_group_ids, .provenance = other.provenance };
+        const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ non_goal, fr, ac } } } };
+        const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
+        try std.testing.expectEqual(.restatement, rejection.issue.rule);
+        try std.testing.expectEqualDeep(@as(@import("domain/specification_candidate.zig").Replacement, .{ .record = non_goal }), rejection.issue.observed.?);
+        const authorization = try repair.authorize(a, current, fixture.context, proposed, rejection);
+        try std.testing.expectEqual(@as(usize, 0), authorization.target.record);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs), current, fixture.context, proposed, authorization, null, null);
+        try std.testing.expectEqualDeep(fr, merged.response.content.records[0]);
+    }
+    // A competing same-kind pair across batches is decided before any restatement.
+    {
+        const story = try fixture.proposal("The visitor sees a greeting.");
+        var current = try sessionAtRecords(a, &fixture, story);
+        const earlier: spec.Model.RecordProposal = .{ .content = .{ .non_goal = .{ .text = other.value } }, .source_group_ids = other.source_group_ids, .provenance = other.provenance };
+        const first = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{ ac, earlier } } } })).valid;
+        current = try sessions.appendBound(a, current, first);
+        var second_requirement = fr;
+        second_requirement.source_group_ids = &.{fixture.context.references.records.signals[1].id};
+        second_requirement.provenance.claim_ids = &.{.{ .ordinal = 2 }};
+        var second_non_goal = earlier;
+        second_non_goal.source_group_ids = second_requirement.source_group_ids;
+        second_non_goal.provenance = second_requirement.provenance;
+        const rejection = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{ second_requirement, second_non_goal } } } })).invalid;
+        try std.testing.expectEqual(.duplicate_record, rejection.issue.rule);
+        try std.testing.expectEqual(.competing_records, rejection.issue.blocked.?);
+    }
+    // A second-batch record with the story's wording but evidence the story
+    // doesn't cite is admitted unchanged.
+    {
+        const story = try fixture.proposal(wording);
+        var current = try sessionAtRecords(a, &fixture, story);
+        const first = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{ fr, ac } } } })).valid;
+        current = try sessions.appendBound(a, current, first);
+        var uncovered: spec.Model.RecordProposal = .{ .content = .{ .business_rule = .{ .text = story.value } }, .source_group_ids = &.{fixture.context.references.records.signals[1].id}, .provenance = story.provenance };
+        uncovered.provenance.claim_ids = &.{.{ .ordinal = 2 }};
+        _ = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{uncovered} } } })).valid;
+    }
+}
+
 test "claim coverage rejects omitted business claims and unfulfilled exact-copy obligations" {
     const coverage = @import("domain/specification_coverage.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -2946,7 +3130,9 @@ test "coverage rejects unsafe whole-field reconstruction without changing busine
         const good = try fixture.proposal("The requested outcome is observable.");
         const raw = token.value.raw_value.bytes;
         const normalized: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = raw[0..3] } }, .{ .literal = .{ .value = raw[3..] } } } };
-        const record: spec.Model.RecordProposal = .{ .content = .{ .user_visible_outcome = .{ .text = good.value } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance };
+        // Distinct from the story, so ADR 0035's restatement rule leaves it in place.
+        const visible = try fixture.proposal("The requested outcome is visible.");
+        const record: spec.Model.RecordProposal = .{ .content = .{ .user_visible_outcome = .{ .text = visible.value } }, .source_group_ids = visible.source_group_ids, .provenance = visible.provenance };
         var exact_only = record;
         exact_only.content.user_visible_outcome.text = normalized;
         var inspection: provenance.Inspection = .{};
@@ -5084,7 +5270,7 @@ fn appendMockChecked(a: std.mem.Allocator, current: @import("domain/specificatio
         batch.origins = .{ .fields = origins.items };
         batch.record_assignment = null;
         const admitted = try sessions.admit(a, next, context, batch);
-        try std.testing.expect((try sessions.checkConsistency(a, next, context, admitted)) == null);
+        try std.testing.expect((try sessions.checkConsistency(a, next, context, admitted, null)) == null);
         next = try sessions.appendBound(a, next, admitted);
     }
     if (dispatched != response.content.records.len) return error.InvalidMockAssociation;

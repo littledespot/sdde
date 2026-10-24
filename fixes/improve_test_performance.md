@@ -13,7 +13,9 @@ macOS 27.0, Zig 0.16.0. **Reviewed twice the same day:**
 **Status:** investigation note, not an active fix record. [FIX05](FIX05.md) remains the
 sole active fix record ([README](README.md)). This note holds findings and proposals only.
 It authorizes no code, build or test change. Adopting a proposal means recording it in
-FIX05 first.
+FIX05 first. P1 and P9 were adopted and implemented on 24 October 2026; their record is
+[Z_FIX05 §18](Z_FIX05.md#18-offline-test-performance-p1-and-p9--24-october-2026). The
+other proposals remain unadopted.
 
 **Evidence:**
 
@@ -536,7 +538,7 @@ detection (AGENTS.md, Prohibited shortcuts). Each code change also needs the AGE
 
 | ID | Verdict | Scope | Measured or estimated effect |
 | --- | --- | --- | --- |
-| P1 | Recommended, in phases | Test-only | Phase 1: about 44% of the unit run and 36% of the integration run (estimate from profile shares) |
+| P1 | Phase 1 implemented 24 October (Z_FIX05 §18); phase 2 not adopted | Test-only | Phase 1: about 44% of the unit run and 36% of the integration run (estimate from profile shares) |
 | P2 | Defer until after P1 | Test and build | About 40 s ÷ shards after P1; needs gating |
 | P3 | Low value; needs decision | Build | Three compiles per docs-only edit or commit, not six |
 | P4 | Measure after P1 | Build and docs | Up to 1–1.5 min off the critical path; unmeasured |
@@ -544,7 +546,7 @@ detection (AGENTS.md, Prohibited shortcuts). Each code change also needs the AGE
 | P6 | Needs contract decision; low priority | Engine contract | Under 8% of the integration run |
 | P7 | Recommended | Engine (shared helper) | About 6% of the integration run, plus production |
 | P8 | User's call | Local cache | Working builds; up to 15 GB |
-| P9 | Highest payoff for repeated runs; needs decision | Build and policy | No-op and docs-only reruns drop from at least 1 min to seconds |
+| P9 | Implemented 24 October as opt-in; `verify` refuses it (Z_FIX05 §18) | Build and policy | No-op and docs-only reruns drop from at least 1 min to seconds |
 | P10 | Needs contract decision | Engine | About 8% of the integration run, plus production |
 | P11 | **Withdrawn** | | Would edit frozen protocol and live-case inputs |
 | P12 | Candidate after P1 | Engine (canonical validator) | Part of the 7–12% JSON parsing share, plus production |

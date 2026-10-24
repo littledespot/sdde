@@ -398,7 +398,7 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
         .valid => |checked| try session.admit(a, current, context, checked),
         .invalid => |issue| return .{ .invalid = issue },
     };
-    if (try session.checkConsistency(a, current, context, checked)) |issue| return .{ .invalid = issue };
+    if (try session.checkConsistency(a, current, context, checked, parsed)) |issue| return .{ .invalid = issue };
     return .{ .valid = checked };
 }
 

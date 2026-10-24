@@ -290,6 +290,9 @@ fn inspectAuthored(comptime boundary: spec.Boundary, allocator: std.mem.Allocato
 
 /// Equality over normalized typed content, never a second rendered text source.
 pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessValue), b: spec.Content(spec.BusinessValue)) std.mem.Allocator.Error!bool {
+    return equalTyped(spec.Content(spec.BusinessValue), allocator, a, b);
+}
+fn equalTyped(comptime T: type, allocator: std.mem.Allocator, a: T, b: T) std.mem.Allocator.Error!bool {
     const left = try std.json.Stringify.valueAlloc(allocator, a, .{});
     defer allocator.free(left);
     const right = try std.json.Stringify.valueAlloc(allocator, b, .{});
@@ -301,6 +304,57 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
 pub fn duplicateRecordIssue(allocator: std.mem.Allocator, prior: spec.RecordProposal, current: spec.RecordProposal, index: usize, observed: ?candidate.Replacement) Error!?candidate.Issue {
     if (!try equalContent(allocator, prior.content, current.content)) return null;
     return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (sameGroups(prior.source_group_ids, current.source_group_ids) and try equalEvidence(allocator, prior.provenance, current.provenance)) null else .competing_records };
+}
+
+/// The one statement of a single-statement record kind. Acceptance criteria,
+/// edge cases and entities compare only as whole same-kind content.
+pub fn statement(content: spec.Content(spec.BusinessValue)) ?spec.BusinessValue {
+    return switch (content) {
+        .acceptance_criterion, .edge_case, .entity => null,
+        inline .user_visible_outcome, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior => |value| value.text,
+    };
+}
+
+/// ADR 0035: identical statements in two single-statement kinds are redundant
+/// only when the kept occurrence covers the other's evidence. A functional
+/// requirement is always kept; otherwise the earlier occurrence is.
+pub fn restatement(allocator: std.mem.Allocator, earlier: spec.RecordProposal, later: spec.RecordProposal) Error!?enum { earlier, later } {
+    if (std.meta.activeTag(earlier.content) == std.meta.activeTag(later.content)) return null;
+    const earlier_statement = statement(earlier.content) orelse return null;
+    const later_statement = statement(later.content) orelse return null;
+    if (!try equalTyped(spec.BusinessValue, allocator, earlier_statement, later_statement)) return null;
+    if (later.content == .functional_requirement) {
+        return if (coversEvidence(later.source_group_ids, later.provenance, earlier.source_group_ids, earlier.provenance)) .earlier else null;
+    }
+    return if (coversEvidence(earlier.source_group_ids, earlier.provenance, later.source_group_ids, later.provenance)) .later else null;
+}
+
+/// ADR 0035: a record restates the primary user story when its statement equals
+/// the story and the story covers its evidence. The story is never removed, and
+/// a functional requirement is always kept.
+pub fn restatesStory(allocator: std.mem.Allocator, story: spec.AttributedValue, record: spec.RecordProposal) Error!bool {
+    if (record.content == .functional_requirement) return false;
+    const record_statement = statement(record.content) orelse return false;
+    if (!try equalTyped(spec.BusinessValue, allocator, story.value, record_statement)) return false;
+    return coversEvidence(story.source_group_ids, story.provenance, record.source_group_ids, record.provenance);
+}
+
+/// A covered restatement; its repair is a native delete with no model call.
+pub fn restatementIssue(index: usize, observed: ?candidate.Replacement) candidate.Issue {
+    return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .restatement, .observed = observed };
+}
+
+/// The kept occurrence cites every group, claim, citation and clarification
+/// response the removed one cites.
+fn coversEvidence(kept_groups: []const @import("reference_reconciliation.zig").SignalId, kept: spec.Provenance, removed_groups: []const @import("reference_reconciliation.zig").SignalId, removed: spec.Provenance) bool {
+    return covers(@import("reference_reconciliation.zig").SignalId, kept_groups, removed_groups) and
+        covers(@import("reference_reconciliation.zig").ClaimId, kept.claim_ids, removed.claim_ids) and
+        covers(@import("reference_extraction.zig").CitationId, kept.citation_ids, removed.citation_ids) and
+        covers(spec.ResponseId, kept.clarification_response_ids, removed.clarification_response_ids);
+}
+fn covers(comptime Id: type, kept: []const Id, removed: []const Id) bool {
+    for (removed) |id| if (!@import("reference_reconciliation.zig").contains(Id, kept, id)) return false;
+    return true;
 }
 
 fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, text_issue: ?@import("typed_text.zig").Issue, err: provenance.Error) Error!Validation {
@@ -328,11 +382,7 @@ fn sameGroups(left: []const @import("reference_reconciliation.zig").SignalId, ri
     return true;
 }
 fn equalEvidence(a: std.mem.Allocator, left: spec.Provenance, right: spec.Provenance) std.mem.Allocator.Error!bool {
-    const lhs = try std.json.Stringify.valueAlloc(a, left, .{});
-    defer a.free(lhs);
-    const rhs = try std.json.Stringify.valueAlloc(a, right, .{});
-    defer a.free(rhs);
-    return std.mem.eql(u8, lhs, rhs);
+    return equalTyped(spec.Provenance, a, left, right);
 }
 fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Responses(boundary).Response, subject: candidate.Subject, inspection: provenance.Inspection, err: provenance.Error) Error!Validation {
     const target = candidate.locate(subject, inspection.part);

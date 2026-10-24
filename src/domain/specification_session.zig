@@ -485,18 +485,54 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
 }
 
 /// Cross-batch and cross-unit consistency belongs to the session. The same
-/// check governs admission, completed replacements and assembly.
-pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+/// check governs admission, completed replacements and assembly; its records
+/// rules, including ADR 0035 restatements, apply while records are admitted.
+/// `model` is the candidate these checked records came from; it supplies the
+/// observed old value a native delete requires.
+pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
     _ = context;
     if (checked.response != .content) return null;
     const proposed = checked.response.content;
     if (proposed != .records and proposed != .entities) return null;
-    if (proposed == .records and current.completed == records_index) for (proposed.records, 0..) |record, index| {
-        for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
-            if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
-        };
-    };
+    if (proposed == .records and current.completed == records_index) {
+        // Every same-kind duplicate, competing ones included, is decided before
+        // a restatement can remove a record (ADR 0035).
+        for (proposed.records, 0..) |record, index| {
+            for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
+                if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
+            };
+        }
+        return restatementIssue(a, current, proposed.records, model);
+    }
     return null;
+}
+
+/// ADR 0035 restatements within this batch, then against the story. Records in
+/// different batches bind different groups, so none covers another.
+fn restatementIssue(a: std.mem.Allocator, current: Session, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
+    for (records, 0..) |later, index| for (records[0..index], 0..) |earlier, prior_index| {
+        if (try g.restatement(a, earlier, later)) |removed| {
+            const target = if (removed == .later) index else prior_index;
+            return g.restatementIssue(target, try observedRecord(model, target));
+        }
+    };
+    const story = completedStory(current) orelse return null;
+    for (records, 0..) |record, index| if (try g.restatesStory(a, story, record)) return g.restatementIssue(index, try observedRecord(model, index));
+    return null;
+}
+fn observedRecord(model: ?g.Response, index: usize) Error!?@import("specification_candidate.zig").Replacement {
+    const response = model orelse return null;
+    return @import("specification_candidate.zig").select(response, .{ .record = index }) catch |err| switch (err) {
+        error.OutOfMemory => error.OutOfMemory,
+        else => error.InvalidSpecificationUnit,
+    };
+}
+
+/// The admitted story content, when one exists to compare records against.
+fn completedStory(current: Session) ?g.spec.AttributedValue {
+    const checked = current.units[@intFromEnum(std.meta.Tag(g.Unit).primary_user_story)] orelse return null;
+    if (checked.response != .content or checked.response.content != .primary_user_story) return null;
+    return checked.response.content.primary_user_story;
 }
 
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
@@ -511,7 +547,7 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkConsistency(allocator, current, context, result) != null) return error.InvalidSpecificationUnit;
+        if (try checkConsistency(allocator, current, context, result, null) != null) return error.InvalidSpecificationUnit;
         if (g.recordCollection(.canonical, result.response.content)) |unit_records| {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.
