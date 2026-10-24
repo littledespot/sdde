@@ -27,6 +27,12 @@
   catalogue entry, which settles "Per-family request deadlines". Provider token counting
   is removed, so "A family that registers CountTokens" would first need counting itself
   to return by its own decision.
+- **Amended (24 October 2026, user decision: "it must be on ap-southeast-2"):** the E2E
+  catalogue, the shipped E2E slots and the live-test allowlist use the in-Region model ID
+  `anthropic.claude-haiku-5-5` in `ap-southeast-2` instead of the AU cross-Region
+  inference profile `au.anthropic.claude-haiku-5-5`, which a live run showed Bedrock
+  routing to `ap-southeast-4`. The catalogue example below still shows a valid profile
+  ID.
 
 ## Context
 
@@ -102,7 +108,7 @@ named tuples, each for named uses:
 | Provider / model | Uses |
 | --- | --- |
 | `aws-bedrock` / `openai.gpt-oss-20b-1:0` | Generation and rubric judging |
-| `aws-bedrock` / `au.anthropic.claude-haiku-5-5` | Generation only |
+| `aws-bedrock` / `anthropic.claude-haiku-5-5` (in `ap-southeast-2`; amended 24 October 2026) | Generation only |
 
 Rubric judging stays on GPT-OSS-20B ([acceptance.md](../harness/acceptance.md)). The
 shipped E2E cases select Claude Haiku 5.5 with low effort in every slot. They no

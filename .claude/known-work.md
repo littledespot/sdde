@@ -7,8 +7,10 @@ evidence rules for contract changes are in CLAUDE.md.
 
 All live evidence so far comes from one model, GPT-OSS-20B on Bedrock. The live-test
 policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029). Since
-23 October every E2E slot selects Claude Haiku 5.5 on Bedrock, but no live run has used
-it yet, so which classes below are model limitations is unmeasured.
+23 October every E2E slot selects Claude Haiku 5.5 on Bedrock; since 24 October it is the
+in-Region model ID `anthropic.claude-haiku-5-5` in `ap-southeast-2` (the user requires
+Sydney only; the AU profile routed to `ap-southeast-4`). No live run has completed with it
+yet, so which classes below are model limitations is unmeasured.
 
 The labels *Proposed*, *Approved* and "needs a decision" record user decisions. Only
 the user changes them; change a label here only to record a decision the user has

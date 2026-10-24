@@ -5,12 +5,12 @@
   },
   "models": {
     "slots": {
-      "audit_analysis": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
-      "drift_analysis": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
-      "spec_generation": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
-      "repair": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
-      "design_section_generation": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
-      "implementation": { "provider": "aws-bedrock", "model": "au.anthropic.claude-haiku-5-5", "reasoningEffort": "low" }
+      "audit_analysis": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
+      "drift_analysis": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
+      "spec_generation": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
+      "repair": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
+      "design_section_generation": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" },
+      "implementation": { "provider": "aws-bedrock", "model": "anthropic.claude-haiku-5-5", "reasoningEffort": "low" }
     }
   },
   "validation": { "sourcePreservationCheck": false },

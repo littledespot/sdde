@@ -16,8 +16,10 @@ pub const Permitted = struct { provider: []const u8, model: []const u8, uses: []
 // other provider/model/use fails closed. This list supplies no default selection.
 pub const permitted = [_]Permitted{
     .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .uses = &.{ .generation, .judge } },
-    // ADR 0029: Claude Haiku 5.5 through the AU geo profile, for generation only.
-    .{ .provider = "aws-bedrock", .model = "au.anthropic.claude-haiku-5-5", .uses = &.{.generation} },
+    // ADR 0029: Claude Haiku 5.5 on Bedrock, for generation only. The in-Region model ID
+    // keeps every request in ap-southeast-2; the AU geo profile could route to
+    // ap-southeast-4 (user decision, 24 October 2026: "it must be on ap-southeast-2").
+    .{ .provider = "aws-bedrock", .model = "anthropic.claude-haiku-5-5", .uses = &.{.generation} },
     // ADR 0028: Claude Haiku 5.5 through the Anthropic Messages API, for generation
     // only (user direction, 22 October 2026: "update the providers to connect to claude").
     .{ .provider = "anthropic", .model = "claude-haiku-5-5", .uses = &.{.generation} },
