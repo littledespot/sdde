@@ -280,7 +280,7 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
 }
 
 const config_bytes =
-    \\{"logs":{"level":"debug","console":false},"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low"}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
+    \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low"}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
 ;
 const run_path = "runs/unrelated-run";
 const provider_bytes = "MOCK provider catalogue read without workflow execution";

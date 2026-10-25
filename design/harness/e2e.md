@@ -579,8 +579,8 @@ scorer verifies these facts independently of assessor labels and keeps
 stages.
 
 The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v9`,
-`baseline-freeze/v2`, `baseline-acquisition/v7`, `baseline-score/v4` and
-`baseline-budget-feasibility/v1`. Step events remain
+`baseline-freeze/v3`, `baseline-acquisition/v7`, `baseline-score/v4` and
+`baseline-budget-feasibility/v2`. Step events remain
 `e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
 not yet implemented, model-request stages become events of one `request-model` step,
 and this version advances if the event shape changes; retained runs and captures made
@@ -598,6 +598,12 @@ adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
 `spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
 needed for each. `evaluation-report/v7` then removed the standalone evaluator's
 judge-independence field and its never-produced passed or failed model decision.
+`baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
+budget became the configured `workflowTokenBudget`
+([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Every configuration
+now requires that member, so a retained run's captured `.sddtoolkit.json` without it can
+no longer be replayed by `e2e-call` or used as budget-feasibility evidence; adjudication
+doesn't decode configuration and is unaffected.
 The compatibility report's outer
 format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
 historical evidence; current readers reject superseded report versions and fields.
@@ -695,7 +701,7 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
 
-The report records one 100,000-token total budget for all model work, with
+The report records the one configured total budget for all model work, with
 aggregate actual usage including full overshoots. Global-budget rejection is a
 workflow failure during advice too. An explicitly incomplete review from an
 eligible non-budget stop does not establish acceptance: R8's rubric thresholds,

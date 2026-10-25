@@ -1722,6 +1722,10 @@ test "production workflow retains typed advice stops and enforces one global tok
         const a = arena.allocator();
         const choice = try c.parse(a, if (mode == .global_budget) @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json") else @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
         var captured = try fixture.capture(io, a, .cwd(), choice);
+        // ADR 0037: the project configuration supplies the budget. A value unlike the
+        // shipped one shows the ledger starts from the configuration.
+        captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"workflowTokenBudget\": 125000", "\"workflowTokenBudget\": 90000");
+        try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"workflowTokenBudget\": 90000") != null);
         if (mode == .required_source_output_limit) {
             captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"sourcePreservationCheck\": false", "\"sourcePreservationCheck\": true");
             try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"sourcePreservationCheck\": true") != null);
@@ -1775,7 +1779,7 @@ test "production workflow retains typed advice stops and enforces one global tok
         var actual_tokens: u128 = 0;
         for (scripted.exchanges.items) |exchange| actual_tokens += exchange.usage.?.total_tokens;
         try std.testing.expectEqual(actual_tokens, tokens.total_tokens);
-        try std.testing.expectEqual(@as(u64, 100_000), tokens.total_budget.value);
+        try std.testing.expectEqual(@as(u64, 90_000), tokens.total_budget.value);
         const roots = runtime.boot.ready.roots.registry();
         const selected_feature = try @import("../../../src/domain/feature_directory.zig").validate(a, .{ .bytes = choice.feature }, roots.featureDirectoryRoots());
         const paths = try artifacts.resolveFeaturePaths(a, roots.featureArtifactRoots(), selected_feature);
@@ -1783,7 +1787,7 @@ test "production workflow retains typed advice stops and enforces one global tok
             try std.testing.expect(outcome == .execution_rejected);
             try std.testing.expect(outcome.execution_rejected == .token_budget);
             try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
-            try std.testing.expectEqual(@as(u128, 100_001), tokens.total_tokens);
+            try std.testing.expectEqual(@as(u128, 90_001), tokens.total_tokens);
             try std.testing.expect(scripted.budget_before_stop.? > 0);
             const last = scripted.exchanges.items[scripted.exchanges.items.len - 1];
             try std.testing.expectEqual(tokens.total_tokens, scripted.budget_before_stop.? + last.usage.?.total_tokens);

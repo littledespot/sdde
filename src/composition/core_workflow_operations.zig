@@ -32,17 +32,14 @@ pub const profiles = [_]@import("../domain/workflow_operation.zig").PolicyProfil
     .id = capability_free_policy_id,
     .allowed_capabilities = &.{},
     .allowed_terminal_outcomes = &.{ .ok, .needs_user, .invalid, .blocked, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.model-authorization@1",
     .allowed_capabilities = &.{@import("../domain/workflow_capability.zig").provider_authorization},
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.model-inference@1",
     .allowed_capabilities = &.{ @import("../domain/workflow_capability.zig").model_provider, @import("../domain/workflow_capability.zig").provider_authorization },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 } };
 
 pub const registry: operations.Registry = .{

@@ -117,7 +117,6 @@ test "source projection diagnoses missing resources paths steps and source chain
             .workflow_version = 1,
             .invocation_operation_id = .{ .bytes = "core.empty-invocation" },
             .policy_profile_id = .{ .bytes = "core.capability-free@1" },
-            .total_model_token_budget = .{ .value = 1 },
             .start_step_id = steps[0].id,
             .invocation_outputs = &.{},
             .resources = &resources,

@@ -83,7 +83,7 @@ already made.
   - It needs a decision and an ADR (generation contract, ADR 0020's group binding).
   - It pays off only with requirement-level claims, whose native split (B7) was
     withdrawn on 25 October after it inflated records, and review budget headroom (the
-    approved 125,000-token budget, B4).
+    configured 125,000-token budget, B4).
   - Loan-renewal had no refusal acceptance criterion in all three evaluated runs.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
@@ -117,9 +117,10 @@ already made.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
   (most recently 25 October, at 109,327 tokens, after a runaway) and published at
   76,501–99,098 tokens (the 24 October run finished 902 tokens under budget).
-  - *Approved 25 October 2026 (user), not implemented:* make the workflow budget
-    configurable and raise it to 125,000. The user's rule is "quality over cost, but
-    never waste".
+  - *Approved and implemented 25 October 2026, uncommitted
+    ([ADR 0037](../design/decisions/0037-configured-workflow-token-budget.md)):* the
+    budget is `.sddtoolkit.json`'s required `workflowTokenBudget`, 125,000 in the E2E
+    configuration. The user's rule is "quality over cost, but never waste".
     - Spend more tokens where it buys quality.
     - Never drop a check to save tokens.
     - Remove spending that buys no quality, at its owner.

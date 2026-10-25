@@ -623,32 +623,26 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .needs_user, .blocked, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.reference-read@1",
     .allowed_capabilities = &.{capabilities.reference_read},
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.directory-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.feature-input-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.reference-ingestion@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .blocked, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 } };
 
 fn invocationEntry(comptime T: type, context: *T) operations.Entry {

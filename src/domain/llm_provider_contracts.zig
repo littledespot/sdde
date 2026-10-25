@@ -82,26 +82,8 @@ pub const BedrockRegion = enum {
 // (ADR 0029).
 pub const BedrockFamily = enum { converse, @"gpt-oss", luna, claude };
 
-/// The one rule for a catalogue's integer limits: a positive value in the u32
-/// range. No limit is zero, and every value fits the transport's u32 fields.
-fn positiveU32(value: i64) ?u32 {
-    const narrowed = std.math.cast(u32, value) orelse return null;
-    return if (narrowed == 0) null else narrowed;
-}
-
-/// A catalogue limit on the wire: one integer-written JSON number admitted by
-/// `positiveU32`. No quoted, fractional or exponent form names a limit,
-/// whichever JSON decoder runs.
-fn jsonPositiveU32(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!u32 {
-    const token = try source.nextAllocMax(a, .alloc_if_needed, options.max_value_len orelse std.json.default_max_value_len);
-    const written = switch (token) {
-        .number => |bytes| bytes,
-        .allocated_number => |bytes| bytes,
-        else => return error.UnexpectedToken,
-    };
-    if (!std.json.isNumberFormattedLikeAnInteger(written)) return error.InvalidNumber;
-    return positiveU32(try std.fmt.parseInt(i64, written, 10)) orelse error.InvalidNumber;
-}
+const positiveU32 = @import("positive_json_integer.zig").positiveU32;
+const jsonPositiveU32 = @import("positive_json_integer.zig").jsonPositiveU32;
 
 /// A model's documented maximum output, recorded in the catalogue and sent as
 /// every inference request's ceiling, so no provider default or required field

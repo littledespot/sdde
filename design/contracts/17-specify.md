@@ -157,7 +157,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   Retention must compare the complete current assignment and dependencies;
   reuse creates neither a new call nor semantic proof.
   All inference, including post-generation review and correction, counts once
-  against the single 100,000-token workflow budget (ADR 0011). Global exhaustion, overshoot or unavailable
+  against the single configured workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`, including during advice; it cannot publish or
   become incomplete advice. Eligible provider stops, exhausted protocol correction

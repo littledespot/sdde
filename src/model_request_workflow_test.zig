@@ -3194,7 +3194,7 @@ test "YAML invocation accounts exact budget exhaustion and overshoot before bloc
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 + overshoot } };
+        fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 + overshoot } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         const first = runner.bindings().invokeStep(.{ .bytes = "call" });
         if (overshoot == 0) {
@@ -3205,7 +3205,7 @@ test "YAML invocation accounts exact budget exhaustion and overshoot before bloc
             try std.testing.expectEqual(.exceeded, runner.tokenLedger().status());
             try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
         }
-        try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + overshoot, runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + overshoot, runner.tokenLedger().committed());
         try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
     }
@@ -3271,14 +3271,14 @@ test "workflow result retains the exact budget rejection and does not follow a Y
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value, .output_tokens = 1 } };
+    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value, .output_tokens = 1 } };
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.result();
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
     try std.testing.expectEqualStrings("WorkflowTokenBudgetExceeded", outcome.execution_rejected.diagnostic());
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + 1, runner.tokenLedger().committed());
 }
 
 test "YAML call guards cancellation expiry and absent adapters before effects" {
@@ -3998,9 +3998,7 @@ test "bounded protocol assignments continue many valid units and stop repeated o
             .binding = bindings.bind(ProtocolUnits, &owner, ProtocolUnits.select),
         }};
         fixture.registry.operations = &entries;
-        var profiles = core.profiles;
-        for (&profiles) |*profile| profile.total_model_token_budget.value = 10000;
-        fixture.registry.policies = &profiles;
+        fixture.token_budget = .{ .value = 10000 };
         const graph = try fixture.compileWithAssets(source, example.schema, false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -4145,9 +4143,7 @@ test "native repair progress permits independent requests while retaining the gl
         .binding = bindings.bind(RepairSequence, &owner, RepairSequence.authorize),
     }};
     fixture.registry.operations = &entries;
-    var profiles = core.profiles;
-    for (&profiles) |*profile| profile.total_model_token_budget.value = 21;
-    fixture.registry.policies = &profiles;
+    fixture.token_budget = .{ .value = 21 };
     const graph = try fixture.compileWithAssets(source, schema_bytes, false);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
@@ -4240,9 +4236,7 @@ test "dependent reviews retain parent allowances through initial protocol correc
             .{ .contract = .{ .id = "test.merge-dependent", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none, .repair_role = .merge }, .binding = bindings.bind(DependentReviewSequence, &owner, DependentReviewSequence.merge) },
         };
         fixture.registry.operations = &entries;
-        var profiles = core.profiles;
-        for (&profiles) |*profile| profile.total_model_token_budget.value = if (recurring) 1000 else 28;
-        fixture.registry.policies = &profiles;
+        fixture.token_budget = .{ .value = if (recurring) 1000 else 28 };
         const graph = try fixture.compile(source);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -4634,10 +4628,10 @@ test "protocol retry budget overshoot charges the response before decoding and b
     try rejectProtocolResponse(&runner, false);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
     try prepareProtocolAttempt(&runner, true);
-    fake.invocation_plan.complete = .{ .content = malformed_protocol_record, .input_tokens = graph.authority.total_model_token_budget.value - 7, .output_tokens = 1 };
+    fake.invocation_plan.complete = .{ .content = malformed_protocol_record, .input_tokens = fixture.token_budget.value - 7, .output_tokens = 1 };
     const rejected = runner.bindings().invokeStep(.{ .bytes = "call" });
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, rejected.rejected.token_budget);
-    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + 1, runner.tokenLedger().committed());
     try std.testing.expectEqual(@as(u64, 2), runner.tokenLedger().revision().value);
     try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
     try std.testing.expect(runner.envelope.slots[@intFromEnum(envelope_workflow.schema.key)] == null);
@@ -4855,7 +4849,7 @@ test "request closure needs no live lease deadline or remaining token budget and
     defer if (active) runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-    fake.invocation_plan.complete.input_tokens = graph.authority.total_model_token_budget.value - 2;
+    fake.invocation_plan.complete.input_tokens = fixture.token_budget.value - 2;
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     try prepareRequestClosure(&runner, .ok);
     const result = try payloadResult(&runner);
@@ -4869,7 +4863,7 @@ test "request closure needs no live lease deadline or remaining token budget and
     try std.testing.expect(original_operations == runner.model_accounting.?.current_operations);
     try std.testing.expect(result == try payloadResult(&runner));
     try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
-    try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+    try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
     const retained_payload = try values.retain(runner.envelope.slots[@intFromEnum(payload_workflow.schema.key)].?);
     defer values.destroy(retained_payload);
     const retained_ledger = try values.retain(runner.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
@@ -5151,7 +5145,7 @@ test "YAML completion needs no live lease and works at exact token exhaustion" {
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 } };
+    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     try prepareCompletable(&runner);
     fixture.clock.now_ms = std.math.maxInt(u64);
@@ -5159,7 +5153,7 @@ test "YAML completion needs no live lease and works at exact token exhaustion" {
     try std.testing.expectEqual(.completed, (try completedOperation(&runner)).record().state.terminal);
     try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
     try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
-    try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+    try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
 }
 
 test "YAML completion releases unused authorization after provider-side cancellation exactly once" {
@@ -5831,7 +5825,7 @@ test "YAML payload validation remains available at the token budget without anot
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 } };
+        fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
@@ -5840,7 +5834,7 @@ test "YAML payload validation remains available at the token budget without anot
         try std.testing.expectEqualStrings("{\"answer\":\"value\"}", (try observationResult(&runner)).outcome().validated.result().complete.content());
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
         try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
-        try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+        try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
     }
 }
 
@@ -6980,6 +6974,8 @@ const Fixture = struct {
     clock: @import("provider_authorization_test_fixture.zig").TestClock,
     entries: [core.entries.len + native.count + 1]operations.Entry,
     registry: operations.Registry,
+    /// The configured workflow budget the runner starts from (ADR 0037).
+    token_budget: @import("domain/workflow_token_budget.zig").TotalTokenBudget,
 
     fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
         return self.initWithProvider(allocator, null, false);
@@ -7001,6 +6997,7 @@ const Fixture = struct {
             .binding = bindings.bind(Observer, &self.observer, Observer.invoke),
         }};
         self.registry = .{ .operations = &self.entries, .data_schemas = &native.schemas, .policies = &core.profiles, .gates = &.{} };
+        self.token_budget = .{ .value = 100_000 };
     }
 
     fn deinit(self: *Fixture) void {
@@ -7057,7 +7054,7 @@ const Fixture = struct {
     }
 
     fn runner(self: *Fixture, graph: *const compilation.CompiledWorkflow, allocator: std.mem.Allocator) runner_module.Runner {
-        var result = runner_module.Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph }, &self.registry, .{ .context = self, .process_fn = noTelemetry }, .{}, &self.services);
+        var result = runner_module.Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph }, &self.registry, .{ .context = self, .process_fn = noTelemetry }, .{}, &self.services, .{ .budget = self.token_budget });
         result.provider_clock = self.clock.port();
         return result;
     }
@@ -8312,7 +8309,7 @@ test "native advice shares the global budget and overshoot fails the run" {
         try prepareInvocable(&runner);
         try std.testing.expect((try currentRequest(&runner)).advisoryAssessment() != null);
         try std.testing.expectEqual(.ok, try nativeStepOutcome(&runner, "advance-operation"));
-        const limit = graph.authority.total_model_token_budget.value;
+        const limit = fixture.token_budget.value;
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"faithful response\"}", .input_tokens = limit - 2, .output_tokens = 2 + overshoot } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
@@ -8349,7 +8346,7 @@ test "global exhaustion and unknown usage block native advice before sending" {
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, try nativeStepOutcome(&runner, "advance-operation"));
         const current = try currentRequest(&runner);
-        const limit = graph.authority.total_model_token_budget.value;
+        const limit = fixture.token_budget.value;
         // Seed a prior reconciled observation; this setup grants no call authority.
         const prior: provider.ProviderOperationId = .{ .model_request_id = current.id(), .model_attempt_ordinal = .{ .value = 99 }, .kind = .inference };
         if (unknown) {

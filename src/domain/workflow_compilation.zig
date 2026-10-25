@@ -5,7 +5,6 @@ const workflow = @import("workflow.zig");
 const operation = @import("workflow_operation.zig");
 const provider_identity = @import("llm_provider_identity.zig");
 const workflow_retry = @import("workflow_retry.zig");
-const workflow_token_budget = @import("workflow_token_budget.zig");
 
 pub const CompiledParameterValue = union(enum) {
     boolean: bool,
@@ -105,7 +104,6 @@ pub const SemanticAuthority = struct {
     workflow_version: u32,
     invocation_operation_id: workflow.OperationId,
     policy_profile_id: workflow.RegisteredRef,
-    total_model_token_budget: workflow_token_budget.TotalTokenBudget,
     start_step_id: workflow.WorkflowStepId,
     invocation_outputs: []const pipeline.DataKey,
     resources: []const CompiledResource,

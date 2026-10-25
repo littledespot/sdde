@@ -423,7 +423,7 @@ findings. Only complete native collection validation permits authority advanceme
 - Inference requires no size estimate, token count or static-capacity preflight; the provider
   reports its own size errors or stops.
 - The runner accounts API-reported input plus output usage exactly once against
-  the execution's single `totalModelTokenBudget`, currently 100,000 tokens, across
+  the execution's single configured `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), across
   all inference calls. Advice has no separate allowance or usage subtotal
   (ADR 0011). Global exhaustion, overshoot or unavailable usage prohibits later
   model calls. Native advisory classification controls eligible non-budget

@@ -37,7 +37,6 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     if (steps.len == 0 or steps.len > definition.max_steps or
         !compilation.publicationTerminates(graph.authority) or
         !compilation.validResourceBindings(graph.authority.resources) or
-        !graph.authority.total_model_token_budget.isValid() or
         graph.authority.maximum_step_executions != (compilation.calculateExecutionLimit(steps) orelse return invalid())) return invalid();
     for (steps) |step| {
         if (!@import("../../domain/workflow_iteration.zig").validProjection(step)) return invalid();
@@ -340,7 +339,6 @@ fn testGraph(steps: []const compilation.CompiledStep, transitions: []const workf
             .workflow_version = 1,
             .invocation_operation_id = workflow.OperationId.parse("core.empty").?,
             .policy_profile_id = workflow.RegisteredRef.parse("core.safe@1").?,
-            .total_model_token_budget = .{ .value = 1 },
             .start_step_id = steps[0].id,
             .invocation_outputs = &.{},
             .resources = &.{},
@@ -457,13 +455,6 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
         (Action{}).execute(arena.allocator(), &.{wrong_bound}),
-    );
-
-    var zero_budget = testGraph(&guarded_steps, &transitions);
-    zero_budget.authority.total_model_token_budget = .{ .value = 0 };
-    try std.testing.expectError(
-        error.WorkflowGraphCompileInvalid,
-        (Action{}).execute(arena.allocator(), &.{zero_budget}),
     );
 
     var wrong_retry_steps = guarded_steps;

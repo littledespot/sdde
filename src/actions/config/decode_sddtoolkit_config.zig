@@ -34,6 +34,7 @@ pub const Action = struct {
 const valid_config =
     \\{
     \\  "logs": { "level": "debug", "console": true },
+    \\  "workflowTokenBudget": 100000,
     \\  "models": { "slots": { "implementation": { "provider": "openai", "model": "gpt-5.4-mini" } } },
     \\  "paths": {
     \\    "specs": "specs/", "references": "references/",
@@ -65,6 +66,26 @@ test "slots configure no output-token allowance or request deadline" {
         defer a.free(bytes);
         try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
     };
+}
+
+test "the workflow token budget is a required positive integer within the u32 range" {
+    // ADR 0037: the project configuration is the budget's one source; no default exists.
+    const a = std.testing.allocator;
+    const configured = "\"workflowTokenBudget\": 100000,\n";
+    for ([_]struct { raw: []const u8, value: u64 }{ .{ .raw = "1", .value = 1 }, .{ .raw = "125000", .value = 125_000 }, .{ .raw = "4294967295", .value = 4_294_967_295 } }) |case| {
+        const replacement = try std.fmt.allocPrint(a, "\"workflowTokenBudget\": {s},\n", .{case.raw});
+        defer a.free(replacement);
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, configured, replacement);
+        defer a.free(bytes);
+        var decoded = try (Action{}).execute(a, bytes);
+        defer decoded.deinit();
+        try std.testing.expectEqual(case.value, decoded.value().workflowTokenBudget.budget.value);
+    }
+    for ([_][]const u8{ "", "\"workflowTokenBudget\": 0,\n", "\"workflowTokenBudget\": -1,\n", "\"workflowTokenBudget\": 1.5,\n", "\"workflowTokenBudget\": 1e3,\n", "\"workflowTokenBudget\": \"125000\",\n", "\"workflowTokenBudget\": null,\n", "\"workflowTokenBudget\": 4294967296,\n", "\"workflowTokenBudget\": [],\n", "\"workflowTokenBudget\": 1,\n  \"workflowTokenBudget\": 2,\n" }) |replacement| {
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, configured, replacement);
+        defer a.free(bytes);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
 }
 
 fn configurationWithValidation(allocator: std.mem.Allocator, section: []const u8) ![]u8 {
@@ -105,33 +126,33 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
     const invalid = [_][]const u8{
         "{",
         valid_config ++ "\ntrue",
-        \\{"version":"legacy","logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"version":"legacy","logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"extra":true,"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"extra":true,"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}}}
         ,
-        \\{"logs":{"level":"debug","console":false},"logs":{"level":"info","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":"no"},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":"no"},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"extra":true},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false,"extra":true},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug"},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug"},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
     };
 
@@ -151,7 +172,7 @@ test "rejects the removed promptCapture configuration field" {
 
 test "accepts JSON member reordering" {
     const reordered =
-        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"models":{"slots":{}},"logs":{"console":false,"level":"INFO"}}
+        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"workflowTokenBudget":100000,"models":{"slots":{}},"logs":{"console":false,"level":"INFO"}}
     ;
     var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();

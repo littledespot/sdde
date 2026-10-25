@@ -45,7 +45,6 @@ test "compiled binding requirements activate bootstrap without granting provider
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
@@ -388,7 +387,6 @@ const operation_registry: operations.Registry = .{
         .id = "test.safe@1",
         .allowed_capabilities = &.{requirement.capability_id},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
 };
@@ -404,7 +402,6 @@ const binding_only_registry: operations.Registry = .{
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
 };
@@ -441,7 +438,7 @@ const missing_model_config = toolkitPrefix() ++
 
 fn toolkitPrefix() []const u8 {
     return
-    \\{"logs":{"level":"info","console":false},"models":{"slots":
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":
     ;
 }
 

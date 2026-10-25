@@ -11,8 +11,9 @@ extraction and reconciliation response parts with prompt-free native assembly;
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) own exact lineage,
 reconciliation phases and token authority; and
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md) keeps every
-post-generation source and principle finding as advice. One 100,000-token budget
-covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)).
+post-generation source and principle finding as advice. One configured token budget
+covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md),
+[ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 [Implementation status](#implementation-status) and [FIX05](../../fixes/FIX05.md)
 record what is built and what remains.
 

@@ -61,7 +61,7 @@ semantic benefit is not demonstrated (§7).
 | --- | --- | --- |
 | B2 | Advisory post-generation review (ADR 0023) and one record family per source-review call; live effect open (B2 below) | [B2 records](Z_FIX05.md#b2-records) |
 | B3 | Native exact-value recognition; mechanical live gate closed 17 October | [B3](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model) |
-| B4 | Option 3 and the single workflow budget. Approved 25 October, not implemented: a configurable budget at 125,000 tokens. Open: experiment stops and qualified scope (B4 below) | [B4 records](Z_FIX05.md#b4-records), §9 |
+| B4 | Option 3 and the single workflow budget. Implemented 25 October, uncommitted: the budget is `.sddtoolkit.json`'s required `workflowTokenBudget`, 125,000 for E2E (ADR 0037). Open: experiment stops and qualified scope (B4 below) | [B4 records](Z_FIX05.md#b4-records), §9 |
 | B5 | No record batch for token-only groups (ADR 0024). Implemented 25 October: cross-kind restatement in the native duplicate rule (ADR 0035). Proposed: one complete record collection with native acceptance-criterion coverage (B5 below) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches) |
 | B6 | GPT-OSS envelope prefix normalized; entity applicability open (B6 below) | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix), §12 |
 | B7 | List-item chunking tried and reverted on 21 October. Implemented 25 October, uncommitted: source-quoted claim wording and code-delimiter removal (ADR 0036); the native list-item claim split was withdrawn the same day after two live pairs (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
@@ -494,7 +494,8 @@ controls. Further calls need bounded approval.
 ### B4. Fixed per-call overhead exhausts a compiled budget
 
 **Done.** Option 3 (one principle assignment per complete principle set) and the single
-100,000-token workflow budget are implemented. Option 1, a separate advisory allowance,
+workflow budget are implemented; since ADR 0037 the budget is the configured
+`workflowTokenBudget`. Option 1, a separate advisory allowance,
 was withdrawn: there is one total limit. Records are in
 [Z_FIX05](Z_FIX05.md#b4-records) and §9.
 
@@ -502,10 +503,8 @@ Input is 93% of tokens. Review sends average about 2,500 input tokens for
 single-field subjects. The four response schemas are 11.9–14.1 KB each, with 15–32
 definitions.
 
-The 100,000-token budget is compiled into every policy profile
-([core](../src/composition/core_workflow_operations.zig#L35),
-[native](../src/composition/native_workflow_operations.zig#L638)); it is not case
-configuration. The protocol's experiment-wide stops of 1,000 sends and 2,000,000
+Until ADR 0037 the 100,000-token budget was compiled into every policy profile and was
+not case configuration. The protocol's experiment-wide stops of 1,000 sends and 2,000,000
 tokens cover fewer than 20 such workflows, against 144 development workloads. The
 Phase 2 budget-feasibility report is `insufficient`.
 
@@ -530,7 +529,7 @@ increased in favour of quality it is fine", then "quality over cost, but never w
 - Token cost is not a reason to drop or weaken a quality check.
 - Spending that buys no quality is waste, to remove at its owner.
 
-This settles the budget half of the decision above; nothing is implemented yet.
+This settles the budget half of the decision above.
 
 - **Change.**
   - The single workflow token budget stops being compiled into the policy profiles
@@ -549,6 +548,30 @@ This settles the budget half of the decision above; nothing is implemented yet.
     set their own explicit values, so the ADR 0030 freeze stays comparable.
   - Persisted values that carry the budget, such as a report's
     `token_accounting.total_budget`, take the configured value.
+- **Implemented 25 October 2026, uncommitted
+  ([ADR 0037](../design/decisions/0037-configured-workflow-token-budget.md)).** The user
+  directed "make the token cap an external setting, that is stored and loaded from
+  .sddtoolkit.json, to the e2e test set the token cap to 125000".
+  - `.sddtoolkit.json` has a required root `workflowTokenBudget`, an integer from 1 to
+    4,294,967,295, decoded through the positive-integer rule the catalogue's limits
+    now share (moved to `positive_json_integer.zig`). It sits at the root so model-slot
+    consumers don't depend on it.
+  - The composition root passes it to the pipeline runner's per-execution ledger.
+    Policy profiles (nine copies of 100,000) and compiled graph authority no longer
+    carry a budget, and the runner's policy cross-check compares capabilities only.
+  - Values: 125,000 in the E2E configuration and the example; 100,000 in the baseline
+    protocol and unit fixtures; 90,000 in the scripted budget test, which shows the
+    ledger reads the configuration.
+  - The baseline harness reads the configured value; its feasibility report's field is
+    now `configured_workflow_budget` (`baseline-budget-feasibility/v2`,
+    `baseline-freeze/v3`). The E2E report is unchanged at v9.
+  - Checks: `zig build test` 1,813 of 1,813 and integration 129 of 129 passed.
+  - **Live pair, 25 October 18:19** (advisory analyses in `evaluations/e2e/`): both
+    published, each at advisory 85.71% with no critical failure; reports record the
+    configured 125,000. Hello-world used 61,885 tokens; loan-renewal 98,492, under the old
+    100,000 too, so the larger budget wasn't decisive. Loan-renewal's source-review call
+    24 ran to the 16,384-token maximum on `Renewal refused.` (B9), and its refusal
+    behaviour still has no scenario (B5). Records: 2 per case, no filler.
 - **Still open, before any baseline freeze: the experiment stops and the qualified
   scope.** At 125,000 tokens per workflow, the protocol's 2,000,000-token stop covers
   16 workflows, so the Phase 2 feasibility report stays `insufficient`.
@@ -1110,7 +1133,7 @@ changes or extra retries (§7).
 - **Deadline and maximum output.** The 180 s deadline covers GPT-OSS-20B's 16,384-token
   maximum. The catalogue's Claude Haiku 5.5 entries declare 128,000. If a slot selects
   that model, a runaway could again end as an unexplained `timeout`, and one completed
-  runaway would exceed the 100,000-token budget. *Implemented 24 October 2026* (ADR 0030
+  runaway would exceed the workflow budget (125,000 in the E2E configuration). *Implemented 24 October 2026* (ADR 0030
   slice 3): each catalogue entry declares its own required `requestTimeoutMs`, so a
   deadline follows its model. Claude Haiku 5.5 starts at the shared 180,000 ms until its
   measured maximum-output time replaces it, and the budget point stands.
@@ -1507,7 +1530,7 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
    - first, B5's cross-kind restatement in the native duplicate rule, which is
      independent of the others (done: ADR 0035);
    - the configurable workflow budget at 125,000 tokens (B4), which gives the later
-     changes room in loan-renewal's live runs;
+     changes room in loan-renewal's live runs (done, uncommitted: ADR 0037);
    - then B7's source-quoted claim wording, under one ADR amending §16 (done,
      uncommitted: ADR 0036). Its native list-item split was implemented and withdrawn.
 
@@ -1807,3 +1830,9 @@ bounded approval, and each E2E run needs its own explicit approval
 - **25 October 2026, live pair after the split's withdrawal:** by user direction.
   Hello-world published at advisory 85.71% with no filler records; loan-renewal failed on
   budget after a 40-record batch with repeats. The B7 block records the details.
+- **25 October 2026, B4 implemented (ADR 0037):** the user directed that the token cap
+  be stored in and loaded from `.sddtoolkit.json`, at 125,000 for E2E. The budget is a
+  required root `workflowTokenBudget`; policy profiles and compiled graphs no longer
+  carry it. The B4 block records the details.
+- **25 October 2026, live pair at the configured 125,000 budget:** by user direction.
+  Both cases published at advisory 85.71%. The B4 block records the details.

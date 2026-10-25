@@ -3,6 +3,7 @@
     "level": "debug",
     "console": true
   },
+  "workflowTokenBudget": 125000,
   "models": {
     "slots": {
       "audit_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },

@@ -85,6 +85,7 @@ pub const Assembly = struct {
                     self.services.logs.barrier(),
                     self.selection.runtime,
                     self.preparedProviderServices(),
+                    self.services.config.config().workflowTokenBudget,
                 );
                 self.pipeline_runner.?.provider_clock = self.provider_clock;
                 self.pipeline_runner.?.publication_finalizer = self.finalizer;

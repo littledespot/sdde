@@ -636,7 +636,7 @@ recorded; explicit request closure remains failed/invalid unless a later respons
 passes ordinary admission. Missing answers, JSON and schema failures share one
 assignment allowance, including selected native-repair parents. Charge every exchange
 before continuation; unknown usage or an exhausted global budget prohibits a new
-call. All inference and corrections share the same `totalModelTokenBudget` and
+call. All inference and corrections share the same `workflowTokenBudget` and
 aggregate usage ledger. Global-budget rejection remains fatal during advisory repair and cannot be
 converted into incomplete advice.
 

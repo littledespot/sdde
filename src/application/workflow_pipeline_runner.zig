@@ -77,6 +77,9 @@ pub const Runner = struct {
         barrier: telemetry_barrier.Barrier,
         runtime: pipeline.NodeRuntime,
         model_provider_services: ?*const provider_services.ModelProviderBootstrapServices,
+        /// The project's decoded budget (ADR 0037); its closed decoder admits only
+        /// positive values, so the execution ledger always initializes.
+        token_budget: @import("../domain/config.zig").WorkflowTokenBudget,
     ) Runner {
         return .{
             .allocator = allocator,
@@ -87,10 +90,7 @@ pub const Runner = struct {
             .runtime = runtime,
             .model_provider_services = model_provider_services,
             .envelope = .init(allocator, selected.graph.authority.data_schemas),
-            .token_accounting = workflow_token_runner.Runner.init(
-                allocator,
-                selected.graph.authority.total_model_token_budget,
-            ),
+            .token_accounting = workflow_token_runner.Runner.init(allocator, token_budget.budget),
             .repair_retry = retry.State.init(allocator),
             .remaining_step_executions = selected.graph.authority.maximum_step_executions,
         };
@@ -688,8 +688,7 @@ pub const Runner = struct {
         if (!self.operation_registry.validate()) return false;
         const authority = self.selected.graph.authority;
         const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
-        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities) or
-            policy.total_model_token_budget.value != authority.total_model_token_budget.value) return false;
+        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities)) return false;
         for (self.selected.graph.authority.data_schemas) |schema| {
             const current = data.find(self.operation_registry.data_schemas, schema.key) orelse return false;
             if (!schema.eql(current)) return false;

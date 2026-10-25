@@ -152,7 +152,6 @@ fn testAuthority(steps: []const compilation.CompiledStep, transitions: []const w
         .workflow_version = 1,
         .invocation_operation_id = .{ .bytes = "input" },
         .policy_profile_id = .{ .bytes = "policy" },
-        .total_model_token_budget = .{ .value = 1 },
         .start_step_id = steps[0].id,
         .invocation_outputs = &.{},
         .resources = &.{},

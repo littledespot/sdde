@@ -32,7 +32,7 @@ pub const Fixture = struct {
         steps[6].invalidates = &.{ .assembled_json, .validated_assembled_json };
         const edges = try a.alloc(w.Transition, steps.len);
         for (edges, 0..) |*edge, i| edge.* = .{ .from = steps[i].id, .outcome = .ok, .target = if (i + 1 < steps.len) .{ .step = steps[i + 1].id } else .{ .terminal = .ok } };
-        return .{ .authority = .{ .workflow_id = .{ .bytes = "fixture-extraction" }, .workflow_version = 1, .invocation_operation_id = .{ .bytes = "fixture-input" }, .policy_profile_id = .{ .bytes = "fixture@1" }, .total_model_token_budget = .{ .value = 1000 }, .start_step_id = steps[0].id, .invocation_outputs = &.{ .model_request_identity_ledger, .reference_extraction_progress }, .resources = resources, .steps = steps, .transitions = edges, .maximum_step_executions = steps.len } };
+        return .{ .authority = .{ .workflow_id = .{ .bytes = "fixture-extraction" }, .workflow_version = 1, .invocation_operation_id = .{ .bytes = "fixture-input" }, .policy_profile_id = .{ .bytes = "fixture@1" }, .start_step_id = steps[0].id, .invocation_outputs = &.{ .model_request_identity_ledger, .reference_extraction_progress }, .resources = resources, .steps = steps, .transitions = edges, .maximum_step_executions = steps.len } };
     }
     pub fn port(self: *const Fixture) source.Source {
         return .{ .context = @ptrCast(self), .resolve_fn = resolve };

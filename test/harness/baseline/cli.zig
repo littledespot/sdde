@@ -78,9 +78,9 @@ fn command(init: std.process.Init) !bool {
             defer run.close(init.io);
             const native_project = try inputs.project(a, frozen, frozen.trials[0]);
             try @import("../e2e/fixture.zig").materialize(init.io, run.project, native_project.captured);
-            const compiled_budget = try @import("preflight.zig").workflowBudget(init.io, a, run.project, frozen.template.workflow_id);
+            const configured_budget = try @import("preflight.zig").workflowBudget(init.io, a, run.project, frozen.template.workflow_id);
             const budget_plan = try @import("feasibility.zig").parse(a, try files.read(init.io, a, .cwd(), selected.budget_plan));
-            const feasibility = try @import("feasibility.zig").evaluate(init.io, a, .cwd(), budget_plan, frozen.protocol, bundle.identity, compiled_budget);
+            const feasibility = try @import("feasibility.zig").evaluate(init.io, a, .cwd(), budget_plan, frozen.protocol, bundle.identity, configured_budget);
             try output.write(init.io, run.dir, "budget-feasibility.json", try std.json.Stringify.valueAlloc(a, feasibility, .{ .whitespace = .indent_2 }));
             const store: @import("../evidence.zig").Store = .{ .io = init.io, .allocator = a, .run = run.dir, .secrets = &.{} };
             if (try @import("../e2e/build_evidence.zig").save(store, bundle_bytes) != .captured) return error.IncompleteBuildCapture;
@@ -111,7 +111,7 @@ fn command(init: std.process.Init) !bool {
             const native_project = try inputs.project(a, frozen, frozen.trials[0]);
             try @import("../e2e/fixture.zig").materialize(init.io, run.project, native_project.captured);
             const budget = try @import("preflight.zig").workflowBudget(init.io, a, run.project, frozen.template.workflow_id);
-            if (budget != frozen.admission.frozen.feasibility.compiled_workflow_budget) return error.BaselineBudgetChanged;
+            if (budget != frozen.admission.frozen.feasibility.configured_workflow_budget) return error.BaselineBudgetChanged;
             const freeze_sha256 = try inputs.hash(a, freeze_bytes);
             const experiment = @import("experiment.zig");
             const claim: experiment.Claim = .{ .schema = .@"baseline-experiment-claim/v1", .experiment_sha256 = try inputs.experimentHash(a, frozen), .freeze_sha256 = freeze_sha256, .execution_id = try a.dupe(u8, &run.name), .limits = .{ .maximum_sends = frozen.protocol.limits.maximum_sends, .maximum_actual_tokens = frozen.protocol.limits.maximum_actual_tokens }, .phases = frozen.admission.frozen.feasibility.plan.phases };

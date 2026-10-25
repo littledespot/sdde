@@ -11,8 +11,8 @@ const provenance = @import("../../../build/provenance.zig");
 pub const Phase = enum { baseline, selection, qualification };
 pub const UserDecision = union(enum) {
     unresolved,
-    /// A recorded user decision to retain the declared scope and existing
-    /// compiled policy. This cannot approve a larger production budget.
+    /// A recorded user decision to retain the declared scope and the configured
+    /// workflow budget. This cannot approve a larger production budget.
     retain_existing_scope: struct { record: []const u8 },
 };
 pub const BudgetPlan = struct {
@@ -54,12 +54,12 @@ pub const Reason = enum {
     no_complete_product_flow_evidence,
     workflow_budget_unconfirmed,
     observed_workflow_budget_exhaustion,
-    compiled_workflow_budget_mismatch,
+    configured_workflow_budget_mismatch,
     projected_send_budget_exceeded,
     projected_token_budget_exceeded,
 };
 pub const Report = struct {
-    schema: enum { @"baseline-budget-feasibility/v1" },
+    schema: enum { @"baseline-budget-feasibility/v2" },
     status: enum { feasible, infeasible, insufficient },
     projection: enum { worst_observed_workflow } = .worst_observed_workflow,
     /// Costs from different historical builds inform planning only. They never
@@ -67,7 +67,7 @@ pub const Report = struct {
     evidence_role: enum { diagnostic_cost_planning } = .diagnostic_cost_planning,
     plan: BudgetPlan,
     baseline_build: provenance.Identity,
-    compiled_workflow_budget: u64,
+    configured_workflow_budget: u64,
     phases: []const Coverage,
     evidence: []const Evidence,
     minimum_workloads: u64,
@@ -103,15 +103,16 @@ pub fn validate(plan: BudgetPlan) !void {
     }
 }
 
-/// Caller supplies the actual budget from its validated compiled native graph.
+/// Caller supplies the budget the engine enforces, from the bootstrapped project
+/// configuration (ADR 0037).
 /// Every retained value uses the caller's arena. No credentials are consulted.
-pub fn evaluate(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, plan: BudgetPlan, protocol: comparison.Protocol, baseline_build: provenance.Identity, compiled_workflow_budget: u64) !Report {
+pub fn evaluate(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, plan: BudgetPlan, protocol: comparison.Protocol, baseline_build: provenance.Identity, configured_workflow_budget: u64) !Report {
     try validate(plan);
     try comparison.validateProtocol(protocol);
-    if (compiled_workflow_budget == 0 or plan.maximum_sends != protocol.limits.maximum_sends or plan.maximum_actual_tokens != protocol.limits.maximum_actual_tokens) return error.InvalidBudgetPlan;
+    if (configured_workflow_budget == 0 or plan.maximum_sends != protocol.limits.maximum_sends or plan.maximum_actual_tokens != protocol.limits.maximum_actual_tokens) return error.InvalidBudgetPlan;
     const evidence = try a.alloc(Evidence, plan.evidence_runs.len);
     for (plan.evidence_runs, evidence) |path, *item| item.* = try readEvidence(io, a, repository, path, protocol);
-    return summarize(a, plan, protocol, baseline_build, compiled_workflow_budget, evidence);
+    return summarize(a, plan, protocol, baseline_build, configured_workflow_budget, evidence);
 }
 
 fn hash(a: std.mem.Allocator, bytes: []const u8) ![]const u8 {
@@ -317,7 +318,7 @@ pub fn phaseWorkloads(protocol: comparison.Protocol, phase: Phase) !Coverage {
     return .{ .phase = phase, .minimum_workloads = try multiply(bounds[0], variants_repetitions), .maximum_workloads = try multiply(bounds[1], variants_repetitions) };
 }
 
-fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protocol, baseline_build: provenance.Identity, compiled_workflow_budget: u64, evidence: []const Evidence) !Report {
+fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protocol, baseline_build: provenance.Identity, configured_workflow_budget: u64, evidence: []const Evidence) !Report {
     const phases = try a.alloc(Coverage, plan.phases.len);
     var minimum_workloads: u64 = 0;
     var maximum_workloads: u64 = 0;
@@ -329,7 +330,7 @@ fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protoc
     var reasons: std.ArrayList(Reason) = .empty;
     if (plan.decision == .unresolved) try reasons.append(a, .unresolved_user_decision);
     if (baseline_build.modified) try reasons.append(a, .uncommitted_baseline);
-    if (plan.workflow_token_budget != compiled_workflow_budget) try reasons.append(a, .compiled_workflow_budget_mismatch);
+    if (plan.workflow_token_budget != configured_workflow_budget) try reasons.append(a, .configured_workflow_budget_mismatch);
     var completed: u32 = 0;
     var worst_sends: ?u64 = null;
     var worst_tokens: ?u64 = null;
@@ -341,7 +342,7 @@ fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protoc
         if (item.actual_tokens) |tokens| worst_tokens = @max(worst_tokens orelse 0, tokens);
         if (!item.usage_complete) incomplete_usage = true;
         if (item.completed_product_flow) completed += 1;
-        if (item.observed_workflow_budget == null or item.observed_workflow_budget.? != compiled_workflow_budget) budget_unconfirmed = true;
+        if (item.observed_workflow_budget == null or item.observed_workflow_budget.? != configured_workflow_budget) budget_unconfirmed = true;
         budget_exhausted = budget_exhausted or item.budget_exhausted;
     }
     if (evidence.len == 0) try reasons.append(a, .no_usage_evidence);
@@ -360,13 +361,13 @@ fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protoc
     // Stopped runs are diagnostic lower bounds, not evidence that every panel
     // feature has the same completion cost. They require investigation/decision
     // and cannot turn an outside-panel failure into an infeasible panel claim.
-    const infeasible = completed != 0 and !incomplete_usage and (send_over or token_over or plan.workflow_token_budget != compiled_workflow_budget);
+    const infeasible = completed != 0 and !incomplete_usage and (send_over or token_over or plan.workflow_token_budget != configured_workflow_budget);
     return .{
-        .schema = .@"baseline-budget-feasibility/v1",
+        .schema = .@"baseline-budget-feasibility/v2",
         .status = if (infeasible) .infeasible else if (reasons.items.len != 0) .insufficient else .feasible,
         .plan = plan,
         .baseline_build = baseline_build,
-        .compiled_workflow_budget = compiled_workflow_budget,
+        .configured_workflow_budget = configured_workflow_budget,
         .phases = phases,
         .evidence = evidence,
         .minimum_workloads = minimum_workloads,
@@ -378,7 +379,7 @@ fn summarize(a: std.mem.Allocator, plan: BudgetPlan, protocol: comparison.Protoc
         .projected_minimum_tokens = min_tokens,
         .projected_maximum_tokens = max_tokens,
         .reasons = try reasons.toOwnedSlice(a),
-        .user_decision_required = plan.decision == .unresolved or infeasible or budget_exhausted or plan.workflow_token_budget != compiled_workflow_budget,
+        .user_decision_required = plan.decision == .unresolved or infeasible or budget_exhausted or plan.workflow_token_budget != configured_workflow_budget,
     };
 }
 fn multiply(left: u64, right: u64) !u64 {
@@ -465,7 +466,7 @@ test "only complete known usage committed source and explicit existing scope can
     const a = arena.allocator();
     const protocol = try comparison.parseProtocol(a, @embedFile("../../calibration/semantic-simplicity/protocol.json"));
     var plan = testPlan();
-    plan.decision = .{ .retain_existing_scope = .{ .record = "User retained this explicit phase scope and compiled budget before dispatch." } };
+    plan.decision = .{ .retain_existing_scope = .{ .record = "User retained this explicit phase scope and configured budget before dispatch." } };
     var observed = testEvidence(true);
     observed.sends = 1;
     observed.actual_tokens = 500;
@@ -489,7 +490,7 @@ test "only complete known usage committed source and explicit existing scope can
     plan.workflow_token_budget = 200000;
     const mismatch = try summarize(a, plan, protocol, testBuild(false), 100000, &.{observed});
     try std.testing.expectEqual(.insufficient, mismatch.status);
-    try std.testing.expect(hasReason(mismatch, .compiled_workflow_budget_mismatch));
+    try std.testing.expect(hasReason(mismatch, .configured_workflow_budget_mismatch));
     try std.testing.expect(mismatch.user_decision_required);
 }
 
@@ -586,10 +587,10 @@ test "persisted feasibility report requires its explicit closed version" {
     const report = try summarize(a, testPlan(), protocol, testBuild(true), 100000, &.{});
     const bytes = try std.json.Stringify.valueAlloc(a, report, .{});
     _ = try contracts.decode(Report, a, bytes);
-    const missing = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":\"baseline-budget-feasibility/v1\",", "");
+    const missing = try std.mem.replaceOwned(u8, a, bytes, "\"schema\":\"baseline-budget-feasibility/v2\",", "");
     try std.testing.expect(!std.mem.eql(u8, bytes, missing));
     try std.testing.expectError(error.InvalidEvaluationContract, contracts.decode(Report, a, missing));
-    const unknown = try std.mem.replaceOwned(u8, a, bytes, "baseline-budget-feasibility/v1", "baseline-budget-feasibility/v2");
+    const unknown = try std.mem.replaceOwned(u8, a, bytes, "baseline-budget-feasibility/v2", "baseline-budget-feasibility/v1");
     try std.testing.expectError(error.InvalidEvaluationContract, contracts.decode(Report, a, unknown));
 }
 

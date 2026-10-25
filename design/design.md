@@ -886,9 +886,9 @@ The new engine is ready for production evaluation when all of the following are 
       nano-class model and has an ADR 0006 compact closed response schema, complete
       evidence/guidance packet, and deterministic runner-owned request identity/accounting
       without model echoes.
-    - The selected workflow policy supplies one positive `totalModelTokenBudget`,
-      currently 100,000 tokens, initialized for each execution and shared by all
-      inference calls, with no per-purpose pool, subtotal or reservation.
+    - The project configuration's required `workflowTokenBudget` ([ADR 0037](decisions/0037-configured-workflow-token-budget.md)) supplies
+      one positive total, initialized for each execution and shared by all inference
+      calls, with no per-purpose pool, subtotal or reservation.
     - Every retry-capable operation instance supplies its own explicit compiler-validated
       `retry-limit`; no workflow policy, configuration, provider, adapter, or runner supplies a
       retry default or global attempt ceiling. Atomic repair counts follow the native
@@ -1103,7 +1103,7 @@ naming) was superseded by 0010 and removed.
 | [0007](decisions/0007-unicode-normalization.md) | Pinned utf8proc NFC, statically packaged Unicode data and license notices. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, the model's documented maximum output sent explicitly, logged provider stops and actual execution-token accounting. |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, the model's documented maximum output sent explicitly, logged provider stops and actual execution-token accounting; ADR 0037 moves the budget to configuration. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. ADR 0030 replaces those operations with one `request-model` step; identity, consumers and release are unchanged (not yet implemented). |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
@@ -1128,6 +1128,7 @@ naming) was superseded by 0010 and removed.
 | [0034](decisions/0034-spec-quality-gate.md) | No Plan, Tasks or Implement contracts, workflow definitions or code until the Spec workflow is stable and producing high-quality output on both development cases. Quality means R8 human adjudication; stability means repeated runs, counting every attempt, with no fixed threshold. The user judges the evidence and decides when Plan is actioned. |
 | [0035](decisions/0035-cross-kind-restatement.md) | The native duplicate rule compares single-statement records (functional requirement, business rule, assumption, non-goal, prohibited behavior, user-visible outcome) by typed statement across kinds and against the primary user story. A restatement is deleted natively only when the kept occurrence covers its groups, claims, citations and responses. A functional requirement and the story are always kept; otherwise the earlier record is. An uncovered restatement is not flagged. Same-kind duplicate checks run first, so a competing pair still blocks, and a restatement has its own `restatement` repair rule. Acceptance criteria, edge cases and entities keep same-kind comparison. |
 | [0036](decisions/0036-source-quoted-claims.md) | A model extraction claim is a category and a set of supplied, nonblank source-line IDs, bounded at admission; it carries no wording. The engine quotes each claim's cited lines as written, Markdown included, trimming each run only at its ends (never inside fenced code) and joining separate runs with an ellipsis line. One proposal is one claim; a native list-item split was withdrawn after live evidence. Claim-text repair, citation repair and their diagnostics are deleted; only the `no_feature_claim` reason remains model text. Generated text loses the Markdown code delimiters directly around a recognised exact value. |
+| [0037](decisions/0037-configured-workflow-token-budget.md) | The single workflow token budget is the project configuration's required `workflowTokenBudget` (1 to 4,294,967,295, no default), decoded at bootstrap and passed to the runner's per-execution ledger. Policy profiles and compiled graphs no longer carry it. The E2E configuration and the example set 125,000. |
 
 Additional accepted feature boundaries:
 

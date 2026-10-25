@@ -192,7 +192,7 @@ Every definition contains these exact concise fields:
 | `version` | Positive unsigned 32-bit integer. It is part of semantic authority; v1 performs no migration or range selection. |
 | `shortcode` | Exactly four case-sensitive ASCII alphanumeric bytes. F0002's canonical parser owns the same syntax. |
 | `invoke` | Exact unversioned ID of one registered capability-free invocation operation. |
-| `policy` | Exact versioned reference to one registered workflow policy profile containing the positive total model-token budget applied to each execution; it supplies no retry count. |
+| `policy` | Exact versioned reference to one registered workflow policy profile, which bounds capabilities and terminal outcomes; it supplies no token budget ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) and no retry count. |
 | `start` | Definition-local ID of the graph entry step. |
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
 | `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
@@ -772,9 +772,9 @@ transitions and their existing native authority.
   owned by the initial SDD operations selected in their YAML definitions; and
 - effective capabilities are derived only from registered contracts and are a
   subset of the selected workflow policy profile; and
-- the selected policy contributes exactly one positive total model-token
-  budget to immutable compiled workflow authority, initialized as a fresh
-  accounting ledger for each execution rather than shared across executions.
+- compiled workflow authority carries no token budget: the project configuration's
+  `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) initializes a fresh accounting ledger for each
+  execution rather than one shared across executions.
 
 Unknown or mismatched contracts, outcomes, gates, policies, schema/policy versions;
 dangling, unreachable, unbounded-cycle, duplicate transition-key, or unhandled graph
@@ -927,9 +927,9 @@ Those concerns remain with their accepted owners or later increments.
 20. Explicit cancellation remains `cancelled`; deterministic rejection,
     adapter failure, and deadline exhaustion return `failed`. Neither publishes
     a service or partial registry.
-21. The selected policy supplies exactly one positive total model-token budget,
-    which is applied to a fresh ledger for each workflow execution and supplies
-    no retry count. Every retry-capable operation instance declares its own
+21. The project configuration supplies exactly one positive total model-token budget
+    ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), applied to a fresh ledger for each workflow execution; the selected
+    policy supplies no budget and no retry count. Every retry-capable operation instance declares its own
     bounded `retry-limit`; missing limits, policy-supplied retry defaults, and
     retry parameters on non-retry contracts fail compilation.
 
@@ -994,7 +994,7 @@ Implementation tests must cover the owning boundaries:
 - capability escalation
 - missing, negative, excessive, or policy-supplied retry limits
 - retry limits on non-retry contracts
-- a missing or nonpositive policy token budget
+- a missing or nonpositive configured token budget (decoded by F0001)
 - runner bypass.
 
 **Registry**
@@ -1047,9 +1047,9 @@ Implementation tests must cover the owning boundaries:
   compiles through the single generic operation registry, and publishes an immutable
   graph registry.
 - ADR 0003's generic runner executes only those compiled transitions.
-- The selected policy's positive total-token budget and each retry-capable operation
-  instance's explicit `retry-limit` are compiled into that immutable authority; initial
-  execution is separate from the declared retry count.
+- Each retry-capable operation instance's explicit `retry-limit` is compiled into that
+  immutable authority; initial execution is separate from the declared retry count.
+  The total-token budget comes from the project configuration at execution ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 - No legacy reader, generic loop budget, or split invocation/step registry remains.
 - Concrete domain operations and workflow definitions have their own feature contracts
   (for example [F0100](F0100-SpecWorkflow.md)).

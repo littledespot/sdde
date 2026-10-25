@@ -104,6 +104,7 @@ fn runInProjectWithRuntime(
 const valid_config =
     \\{
     \\  "logs": { "level": "debug", "console": false },
+    \\  "workflowTokenBudget": 100000,
     \\  "models": { "slots": {} },
     \\  "principles": { "filenameHints": {}, "selections": [{ "stage": "spec", "environment": null, "fileKind": null, "categories": ["core", "custom"] }] },
     \\  "paths": {
@@ -151,6 +152,7 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
     const config_with_nested_provider =
         \\{
         \\  "logs": { "level": "debug", "console": false },
+        \\  "workflowTokenBudget": 100000,
         \\  "models": { "slots": {
         \\    "implementation": { "provider": "compiled-provider", "model": "model-a" }
         \\  } },
@@ -1510,7 +1512,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
         if (scenario == 0) try verifyAuthoringDiagnosticParent(io, allocator, project.dir, graph, boot.ready.roots.registry().llmProviderConfig());
-        var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
+        var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services, boot.ready.config.config().workflowTokenBudget);
         var runner_active = true;
         defer if (runner_active) runner.deinit();
         runner.publication_finalizer = logging.finalizer();
@@ -2914,7 +2916,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 native.bindRoots(next_boot.ready.roots.registry());
                 native.bindWorkflows(next_boot.ready.workflows.registry());
                 const next_graph = next_boot.ready.workflows.registry().resolve(graph.authority.workflow_id).?;
-                var next_runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services);
+                var next_runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = runner.selected.invocation, .graph = next_graph }, &native.registry, next_boot.ready.logs.barrier(), .{}, &services, next_boot.ready.config.config().workflowTokenBudget);
                 defer next_runner.deinit();
                 var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake, .allocator = allocator };
                 const rejected = next_driver.run();
@@ -3807,7 +3809,6 @@ const test_model_graph: workflow_compilation.CompiledWorkflow = .{
         .workflow_version = 1,
         .invocation_operation_id = workflow.OperationId.parse("test.empty").?,
         .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
-        .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = test_model_step.id,
         .invocation_outputs = &.{},
         .resources = &.{},
@@ -4326,6 +4327,7 @@ test "a complete root collision fails as a registry error" {
     const colliding_config =
         \\{
         \\  "logs": { "level": "debug", "console": false },
+        \\  "workflowTokenBudget": 100000,
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "specs", "references": "SPECS",
@@ -4357,6 +4359,7 @@ test "normalization-equivalent absent roots fail as a registry error" {
     const colliding_config =
         \\{
         \\  "logs": { "level": "debug", "console": false },
+        \\  "workflowTokenBudget": 100000,
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "shared", "references": "shared/",

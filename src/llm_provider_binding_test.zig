@@ -185,7 +185,7 @@ test "runner rejects altered or missing compiled model controls before operation
         var runner = workflow_runner.Runner.init(std.testing.allocator, .{
             .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} },
             .graph = &graph,
-        }, &registry, barrier.port(), .{}, &fixture.services);
+        }, &registry, barrier.port(), .{}, &fixture.services, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(step.id).rejected);
         try std.testing.expectEqual(@as(usize, 0), control.state.calls);
@@ -210,6 +210,7 @@ test "generic runner supplies immutable binding to a pure operation without a pr
         barrier.port(),
         .{},
         &fixture.services,
+        .{ .budget = .{ .value = 1000 } },
     );
     defer runner.deinit();
 
@@ -224,6 +225,7 @@ test "generic runner supplies immutable binding to a pure operation without a pr
         barrier.port(),
         .{},
         null,
+        .{ .budget = .{ .value = 1000 } },
     );
     defer runner_without_authority.deinit();
     try std.testing.expectEqual(
@@ -245,7 +247,7 @@ test "generic runner blocks provider ports at exhausted budget but permits pure 
     var runner = workflow_runner.Runner.init(std.testing.allocator, .{
         .invocation = .{ .workflow_id = model_graph.authority.workflow_id, .arguments = &.{} },
         .graph = &model_graph,
-    }, &registry, barrier.port(), .{}, &fixture.services);
+    }, &registry, barrier.port(), .{}, &fixture.services, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     try runner.token_accounting.reconcile(.initial, identity_fixture.id(.inference), .{
         .exact_usage = @import("domain/llm_provider_operation.zig").ProviderUsage.init(900, 100, 1000).?,
@@ -266,7 +268,6 @@ test "generic runner blocks provider ports at exhausted budget but permits pure 
         .id = "test.model-policy@1",
         .allowed_capabilities = &.{"model-provider"},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }};
     var step = model_step;
     step.capabilities = &.{"model-provider"};
@@ -357,7 +358,6 @@ const model_graph: compilation.CompiledWorkflow = .{
         .workflow_version = 1,
         .invocation_operation_id = .{ .bytes = "test.empty" },
         .policy_profile_id = .{ .bytes = "test.model-policy@1" },
-        .total_model_token_budget = .{ .value = 1000 },
         .start_step_id = model_step.id,
         .invocation_outputs = &.{},
         .resources = &.{},
@@ -393,7 +393,6 @@ const OperationControl = struct {
                 .id = "test.model-policy@1",
                 .allowed_capabilities = &.{},
                 .allowed_terminal_outcomes = &.{.ok},
-                .total_model_token_budget = .{ .value = 1000 },
             }},
             .gates = &.{},
         };
@@ -428,7 +427,7 @@ const FakeBarrier = struct {
 };
 
 const toolkit_config =
-    \\{"logs":{"level":"info","console":false},"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
 ;
 
 test "model JSON selection owns binding mode independently of workflow identity" {

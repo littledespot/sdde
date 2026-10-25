@@ -88,7 +88,8 @@ workflow without branching on workflow names:
   inside that step under its declared `retry-limit`.
 - Every retry-capable operation instance declares its own bounded limit, which the compiler
   binds to monotonic accounting and which no transition cycle can bypass.
-- The selected policy contributes only the workflow execution's total-token budget.
+- The workflow execution's total-token budget comes from the project configuration
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), not the selected policy.
 
 Bounded collection operations may return `more` for successful progress with
 remaining work. It is a registered, non-terminal outcome: YAML declares its

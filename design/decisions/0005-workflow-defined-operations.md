@@ -13,6 +13,10 @@
 removes model-call size ceilings and estimates; provider APIs report their own
 limits and the workflow accounts actual token usage.
 
+**Budget amendment:** [ADR 0037](0037-configured-workflow-token-budget.md) moves the
+per-execution token budget from the selected workflow policy to the project
+configuration's `workflowTokenBudget`.
+
 **Authoring amendment:** [ADR 0013](0013-workflow-input-reuse.md) permits local,
 composable definition-local subgraphs expanded by the shared compiler before graph
 validation. ADR 0013’s 2026-09-16 amendment permits nested calls and rejects recursion.
@@ -185,7 +189,9 @@ An originating generic model-request step declares in YAML:
   remains the provider catalogue.
 - Workflow YAML selects an allowed slot; neither configuration file defines workflow
   control flow.
-- The selected workflow policy owns only the per-execution total model-token budget.
+- The per-execution total model-token budget is the project configuration's
+  `workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)); the
+  selected workflow policy no longer owns it.
 - Retry limits are explicit per retry-capable operation instance and are never inherited
   from configuration, provider policy, or a global retry default.
 - Workflow definitions stay compact through mappings, native scalars, local resource

@@ -18,6 +18,17 @@ pub const ModelsConfig = struct {
     slots: std.json.ArrayHashMap(ModelSlotConfig),
 };
 
+/// The total model tokens one workflow execution may use, shared by every call
+/// (ADR 0037). Required, with no engine default; on the wire it is one positive
+/// integer-written JSON number in the u32 range.
+pub const WorkflowTokenBudget = struct {
+    budget: @import("workflow_token_budget.zig").TotalTokenBudget,
+
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!WorkflowTokenBudget {
+        return .{ .budget = .{ .value = try @import("positive_json_integer.zig").jsonPositiveU32(a, source, options) } };
+    }
+};
+
 pub const PathsConfig = struct {
     specs: []const u8,
     references: []const u8,
@@ -32,6 +43,7 @@ pub const PathsConfig = struct {
 pub const SDDToolKitConfig = struct {
     logs: LogsConfig,
     models: ModelsConfig,
+    workflowTokenBudget: WorkflowTokenBudget,
     paths: PathsConfig,
     principles: ?@import("principle_policy.zig").Config = null,
     validation: ValidationConfig = .{},

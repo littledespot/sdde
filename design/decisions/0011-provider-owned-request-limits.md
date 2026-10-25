@@ -32,6 +32,9 @@
   counting, so the CountTokens text below no longer applies, and its required
   `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry (see "Model
   maximum output"). Actual-usage accounting is unchanged.
+- **Amended by:** [ADR 0037](0037-configured-workflow-token-budget.md) (25 October
+  2026): the project configuration's required `workflowTokenBudget` supplies the one
+  total limit; workflow policy no longer owns it. Accounting is unchanged.
 
 ## Decision
 
@@ -104,9 +107,9 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
 
 ### Workflow token accounting
 
-There is one total limit: the native workflow policy's positive
-`totalModelTokenBudget`, currently **100,000 tokens**, initialized freshly for every
-execution. It covers all model work, including post-generation source and principle
+There is one total limit: the project configuration's positive
+`workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)), initialized
+freshly for every execution. It covers all model work, including post-generation source and principle
 advice, which has no pool or allowance of its own. Native advisory classification
 controls only the permitted non-budget incomplete-assessment outcome; it does not
 partition token usage.

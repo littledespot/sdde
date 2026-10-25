@@ -168,7 +168,7 @@ comparison attempt; unresolved ownership and known unsupported repair remain
 distinct from invalid evidence. Origins are observations, never evidence authority
 or a requirement for log replay during readback.
 
-The execution snapshot records the single `totalModelTokenBudget`, aggregate
+The execution snapshot records the single configured `workflowTokenBudget`, aggregate
 actual tokens and unavailable-usage state. Every inference is charged once,
 including retries and stopped output, with no per-class pool or subtotal (ADR 0011).
 A global budget rejection remains

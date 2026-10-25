@@ -146,7 +146,6 @@ fn graphProjectsDefinition(
         !std.mem.eql(u8, graph.authority.invocation_operation_id.bytes, declared.invocation_operation_id.bytes) or
         !std.mem.eql(u8, graph.authority.policy_profile_id.bytes, declared.policy_profile_id.bytes) or
         !std.mem.eql(u8, graph.authority.start_step_id.bytes, declared.start_step_id.bytes) or
-        !graph.authority.total_model_token_budget.isValid() or
         graph.authority.resources.len != declared.resources.len or
         graph.authority.steps.len != declared.steps.len or
         !compilation.publicationTerminates(graph.authority) or
@@ -281,7 +280,6 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
             .workflow_version = source.authority.workflow_version,
             .invocation_operation_id = .{ .bytes = try allocator.dupe(u8, source.authority.invocation_operation_id.bytes) },
             .policy_profile_id = .{ .bytes = try allocator.dupe(u8, source.authority.policy_profile_id.bytes) },
-            .total_model_token_budget = source.authority.total_model_token_budget,
             .start_step_id = .{ .bytes = try allocator.dupe(u8, source.authority.start_step_id.bytes) },
             .invocation_outputs = try allocator.dupe(pipeline.DataKey, source.authority.invocation_outputs),
             .resources = resources,

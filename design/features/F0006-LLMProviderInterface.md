@@ -550,8 +550,8 @@ Resources and outcomes remain in the existing concise workflow structure.
 
 **Actual token accounting**
 
-- The selected workflow policy contributes one `totalModelTokenBudget` to each workflow
-  execution.
+- The project configuration contributes one `workflowTokenBudget` to each workflow
+  execution ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 - Its sole accounting authority records actual API-reported input plus output tokens.
 - A pre-call check reads the current total without changing it; total usage at or above
   the budget rejects further model calls.
@@ -1162,9 +1162,9 @@ F0006 does not:
     - Generic requests need no SDD owner.
     - Explicit consumer steps retain one immutable request association; they cannot
       rebind its model or resources.
-    - The selected workflow policy contributes the only workflow-global limit: one
-      positive total model-token budget initialized independently for each workflow
-      execution.
+    - The project configuration contributes the only workflow-global limit: one
+      positive total model-token budget (`workflowTokenBudget`, [ADR 0037](../decisions/0037-configured-workflow-token-budget.md)) initialized
+      independently for each workflow execution.
 11. The port's only provider operation is inference, which has no prerequisite operation
     or input-size preflight.
 

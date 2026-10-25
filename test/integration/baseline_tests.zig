@@ -75,7 +75,7 @@ test "test.integration.baseline drifted slot controls cannot silently change the
     try fixture.verifySources(std.testing.io, a, .cwd(), captured);
 }
 
-test "test.integration.baseline reads compiled budget without dispatch and refuses an unresolved preparation" {
+test "test.integration.baseline reads the configured budget without dispatch and refuses an unresolved preparation" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -94,6 +94,14 @@ test "test.integration.baseline reads compiled budget without dispatch and refus
     try fixture.materialize(std.testing.io, target.dir, projected.captured);
     const budget = try @import("../harness/baseline/preflight.zig").workflowBudget(std.testing.io, a, target.dir, projected.selected.workflow_id);
     try std.testing.expectEqual(@as(u64, 100000), budget);
+    // ADR 0037: the preflight reads the project's configured budget, whatever its value.
+    var distinct = projected.captured;
+    distinct.config = try std.mem.replaceOwned(u8, a, distinct.config, "\"workflowTokenBudget\": 100000", "\"workflowTokenBudget\": 80000");
+    try std.testing.expect(!std.mem.eql(u8, distinct.config, projected.captured.config));
+    var other = std.testing.tmpDir(.{});
+    defer other.cleanup();
+    try fixture.materialize(std.testing.io, other.dir, distinct);
+    try std.testing.expectEqual(@as(u64, 80000), try @import("../harness/baseline/preflight.zig").workflowBudget(std.testing.io, a, other.dir, projected.selected.workflow_id));
     const feasibility = @import("../harness/baseline/feasibility.zig");
     const plan = try feasibility.parse(a, try files.read(std.testing.io, a, .cwd(), "test/calibration/semantic-simplicity/budget-plan.example.json"));
     const report = try feasibility.evaluate(std.testing.io, a, .cwd(), plan, frozen.protocol, frozen.build, budget);
@@ -141,9 +149,9 @@ test "test.integration.baseline frozen development projects contain original sou
     var foreign = decoded;
     foreign.inputs.files = with_foreign_reference;
     try std.testing.expectError(error.UnselectedReferenceInput, frozen_inputs.project(a, foreign, decoded.trials[0]));
-    const unversioned = try std.mem.replaceOwned(u8, a, serialized, "\"schema\":\"baseline-freeze/v2\",", "");
+    const unversioned = try std.mem.replaceOwned(u8, a, serialized, "\"schema\":\"baseline-freeze/v3\",", "");
     try std.testing.expectError(error.InvalidJsonDocument, frozen_inputs.decode(a, unversioned));
-    const wrong_version = try std.mem.replaceOwned(u8, a, serialized, "baseline-freeze/v2", "baseline-freeze/v1");
+    const wrong_version = try std.mem.replaceOwned(u8, a, serialized, "baseline-freeze/v3", "baseline-freeze/v2");
     try std.testing.expectError(error.InvalidJsonDocument, frozen_inputs.decode(a, wrong_version));
     // The retired E2E judge configuration is not readable freeze content.
     for ([_][]const u8{ "\"config_source\":\"MOCK-retired\",", "\"config_bytes\":\"{}\"," }) |retired| {

@@ -40,6 +40,8 @@
   packet's advisory-assessment binding; an advisory request at an unmarked step is a
   terminal runner rejection with a closed diagnostic, not a YAML outcome, before any
   attempt.
+- **Amended by:** [ADR 0037](0037-configured-workflow-token-budget.md) (25 October
+  2026): the single budget is the configured `workflowTokenBudget`, not a policy value.
 
 ## Decision
 
@@ -68,8 +70,8 @@ or stale findings cannot complete an assessment.
 
 Advice counts against the single workflow token budget
 ([ADR 0011](0011-provider-owned-request-limits.md#workflow-token-accounting)): the
-policy's `totalModelTokenBudget` of 100,000 tokens across all inference, including
-retries and correction. Advice has no allowance, reservation, usage subtotal, size
+configured `workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md))
+across all inference, including retries and correction. Advice has no allowance, reservation, usage subtotal, size
 estimate or budget-derived output control. Reaching or exceeding the total
 prohibits every later model call. A global budget rejection is
 `WorkflowTokenBudgetExceeded` during advice as well as required work; it cannot

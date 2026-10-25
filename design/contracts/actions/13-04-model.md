@@ -206,7 +206,9 @@ bounded fragment; no tail truncation is permitted.
 - **Input:** current workflow-execution actual-usage ledger
 - **Output:** read-only budget check
 - **Responsibility:** Reject a subsequent provider call when actual usage is at or above the
-  selected policy budget; reserve no tokens and derive no output allowance.
+  configured `workflowTokenBudget`
+  ([ADR 0037](../../decisions/0037-configured-workflow-token-budget.md)); reserve no tokens
+  and derive no output allowance.
 
 ## `ReconcileWorkflowTokenUsageAction`
 

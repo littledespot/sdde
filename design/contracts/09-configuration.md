@@ -5,7 +5,8 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
 
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
   contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
-- The closed top-level members are required `logs`, `models` and `paths`, plus optional
+- The closed top-level members are required `logs`, `models`, `workflowTokenBudget` and
+  `paths`, plus optional
   `principles` under ADR 0015 and `validation` under
   [ADR 0021](../decisions/0021-optional-source-preservation-review.md).
 - Neither file is a runtime default, packaged asset, search location, or fallback.
@@ -87,9 +88,13 @@ exists.
 - For the bounded F0001 reader increment, the current closed shape is the formal [JSON
   Schema](../schemas/sddtoolkit-config.schema.json), the repository example, and the typed contract
   in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
-- The root requires `logs`, `models` and `paths` and permits optional `principles`
-  and `validation`;
+- The root requires `logs`, `models`, `workflowTokenBudget` and `paths` and permits
+  optional `principles` and `validation`;
   fixed records reject missing required, duplicate and unknown members.
+- `workflowTokenBudget` is the total model tokens one workflow execution may use, an
+  integer from 1 to 4,294,967,295 with no default
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). A missing, zero,
+  negative, fractional, exponent, quoted or out-of-range value is a decode failure.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
@@ -164,9 +169,10 @@ bootstrap:
 - Project workflow files are never executable scripts, infrastructure selectors, raw
   path/command sources, or operational capabilities.
 
-- The selected workflow policy owns the sole workflow-global execution limit: a positive total
-  model-token budget initialized afresh for each execution.
-- It does not own an attempt, retry, repair, or per-action count.
+- The sole workflow-global execution limit is the configuration's `workflowTokenBudget`
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)): a positive total model-token budget initialized afresh for each
+  execution. Workflow policy and compiled graphs don't carry it.
+- It is not an attempt, retry, repair, or per-action count.
 - Every registered action or function that exposes a retry path instead requires an explicit
   bounded `retry-limit` parameter on that YAML operation instance.
 - The compiler rejects a missing limit, a retry edge without registered monotonic accounting, or
