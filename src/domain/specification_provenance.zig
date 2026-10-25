@@ -224,9 +224,18 @@ pub fn recognizeValue(a: std.mem.Allocator, references: refs.Records, value: spe
 }
 
 fn recognizeValueDetailed(a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue, field: text.field_policy.Field, fixed: ?[]const r.ClaimId) (Error || error{AmbiguousExactValue})!spec.BusinessValue {
-    if (text.field_policy.get(field).exact_copy == .prohibited) return value;
-    const occurrences = try exactOccurrences(a, references, fixed);
+    // A field that can't hold exact copies keeps a recognised value as text, but
+    // still loses the code delimiters around it (ADR 0036).
+    const prohibited = text.field_policy.get(field).exact_copy == .prohibited;
+    if (prohibited) for (value.segments) |segment| if (segment == .exact_copy) return value;
+    // Removing delimiters there needs no lineage, so every eligible value counts.
+    const occurrences = try exactOccurrences(a, references, if (prohibited) null else fixed);
     defer a.free(occurrences);
+    // Later checks match every eligible value, so delimiter removal is decided
+    // against all of them, whatever this unit's lineage (ADR 0036).
+    const shared = prohibited or fixed == null;
+    const eligible = if (shared) occurrences else try exactOccurrences(a, references, null);
+    defer if (!shared) a.free(eligible);
     var segments: std.ArrayList(text.BusinessSegment) = .empty;
     errdefer {
         for (segments.items) |segment| if (segment == .literal) a.free(segment.literal.value);
@@ -264,24 +273,48 @@ fn recognizeValueDetailed(a: std.mem.Allocator, references: refs.Records, value:
             };
             continue;
         }
-        var found = try recognition.recognize(a, run.items, occurrences, .{ .left = if (run_start == 0) .field_edge else .reference_boundary, .right = if (index == value.segments.len) .field_edge else .reference_boundary });
+        const edges: @import("exact_value_boundary.zig").Edges = .{ .left = if (run_start == 0) .field_edge else .reference_boundary, .right = if (index == value.segments.len) .field_edge else .reference_boundary };
+        var found = try recognition.recognize(a, run.items, occurrences, edges);
         defer found.deinit(a);
+        const cuts: []const recognition.Witness = if (found == .matched) try recognition.delimited(a, run.items, found.matched, eligible, edges) else &.{};
+        defer if (found == .matched) a.free(cuts);
+        if (prohibited) {
+            try appendWithoutDelimiters(a, &segments, run.items, cuts);
+            continue;
+        }
         switch (found) {
             .rejected => return error.InvalidTypedText,
             .ambiguous => return error.AmbiguousExactValue,
             .no_match => if (run.items.len != 0) try appendLiteral(a, &segments, run.items),
-            .matched => |witnesses| {
+            .matched => {
                 var cursor: usize = 0;
-                for (witnesses) |witness| {
-                    if (witness.start_byte > cursor) try appendLiteral(a, &segments, run.items[cursor..witness.start_byte]);
+                for (cuts) |witness| {
+                    // The engine formats exact values; their code delimiters go (ADR 0036).
+                    if (witness.outerStart() > cursor) try appendLiteral(a, &segments, run.items[cursor..witness.outerStart()]);
                     try segments.append(a, .{ .exact_copy = .{ .claim_id = witness.claim_id } });
-                    cursor = witness.end_byte;
+                    cursor = witness.outerEnd();
                 }
                 if (cursor < run.items.len) try appendLiteral(a, &segments, run.items[cursor..]);
             },
         }
     }
     return .{ .segments = try segments.toOwnedSlice(a) };
+}
+
+/// A field that can't hold exact copies keeps each value's bytes as text.
+fn appendWithoutDelimiters(a: std.mem.Allocator, segments: *std.ArrayList(text.BusinessSegment), bytes: []const u8, witnesses: []const recognition.Witness) std.mem.Allocator.Error!void {
+    var value: std.ArrayList(u8) = .empty;
+    errdefer value.deinit(a);
+    var cursor: usize = 0;
+    for (witnesses) |witness| {
+        try value.appendSlice(a, bytes[cursor..witness.outerStart()]);
+        try value.appendSlice(a, bytes[witness.start_byte..witness.end_byte]);
+        cursor = witness.outerEnd();
+    }
+    try value.appendSlice(a, bytes[cursor..]);
+    const owned = try value.toOwnedSlice(a);
+    errdefer a.free(owned);
+    try segments.append(a, .{ .literal = .{ .value = owned } });
 }
 
 fn appendLiteral(a: std.mem.Allocator, segments: *std.ArrayList(text.BusinessSegment), bytes: []const u8) std.mem.Allocator.Error!void {
@@ -457,11 +490,8 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
     }
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
-    const recognized = try recognizeValue(arena.allocator(), refs.records(context.references), accepted, field, null);
-    if (!try sameValue(arena.allocator(), accepted, recognized)) {
-        inspection.text_issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = if (accepted.segments.len == 0) 0 else accepted.segments.len - 1, .field = field };
-        return error.InvalidTypedText;
-    }
+    // Admission is idempotent; a re-check failure is a typed candidate issue.
+    _ = try recognizeInspected(.canonical, arena.allocator(), refs.records(context.references), accepted, field, inspection);
     return accepted;
 }
 

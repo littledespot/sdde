@@ -293,7 +293,14 @@ test "response inspection admits retained native usage through existing normaliz
     const bytes = @embedFile("test_fixtures/bedrock_converse_usage/response.json");
     var selected = description;
     selected.schema = @embedFile("test_fixtures/bedrock_converse_usage/schema.json");
-    selected.field_policies = try @import("domain/model_candidate_json.zig").fieldBindings(@import("domain/reference_extraction_parser.zig").Response, a, .{ .reference_phase = .extraction });
+    // The exchange predates ADR 0036, when claims carried model wording, so its
+    // captured field policies come from that retained wire shape.
+    const extraction = @import("domain/reference_extraction.zig");
+    const Retained = union(enum) {
+        claims: struct { claims: []const struct { content: extraction.ProposalContent, citations: []const @import("domain/source_selections.zig").Selection }, token_classifications: []const extraction.tokens.Classification },
+        no_feature_claim: @FieldType(@import("domain/reference_extraction_parser.zig").Response, "no_feature_claim"),
+    };
+    selected.field_policies = try @import("domain/model_candidate_json.zig").fieldBindings(Retained, a, .{ .reference_phase = .extraction });
     selected.response_mode = .native_schema;
     const checked = try fixture.provider.provider().inspect(a, selected, bytes);
     try std.testing.expectEqual(.valid, checked.extraction);
@@ -1096,7 +1103,7 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     const canonical = try compiler.compile(a, raw);
     const plan = try compiler.compileComposition(a, config, canonical);
     if (shape == 6) return debuggerExtractionShape(a, try plan.selectSchema(0, &.{}),
-        \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":{"fragments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]}},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":{"fragments":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]}},"citations":[{"first":6,"last":7}]}]}
+        \\{"kind":"claims","claims":[{"category":"business","citations":[5,6,7]},{"category":"technical","citations":[6,7]}]}
     );
     const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"No feature behavior.\"}}";
     const prior = try std.json.parseFromSlice(std.json.Value, a, content, .{});

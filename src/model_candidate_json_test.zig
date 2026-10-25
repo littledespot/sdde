@@ -180,7 +180,6 @@ const response_wire = struct {
     const normalized = segments;
     const plain = "\"Display the required exact value verbatim.\"";
     const attributed = "{\"signal_ids\":[" ++ id ++ "],\"value\":" ++ normalized ++ "}";
-    const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
     const records = .{
@@ -199,14 +198,12 @@ const response_wire = struct {
 test "independent wire cases cover every selected specification result and nested content variant" {
     inline for (.{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
         const content = "{\"kind\":\"" ++ kind ++ "\"," ++ (if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "\"segments\":" ++ response_wire.segments else "\"nodes\":" ++ response_wire.nodes) ++ "}";
-        try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":" ++ content ++ ",\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":" ++ response_wire.classifications ++ "}");
+        try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"" ++ kind ++ "\",\"citations\":[" ++ response_wire.id ++ ",9]}],\"token_classifications\":" ++ response_wire.classifications ++ "}");
         try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}]}");
         try checkCandidate("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}]}");
     }
     try checkCandidate("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":" ++ response_wire.nodes ++ "},\"token_classifications\":[]}");
     try checkCandidate("extraction", "classification_replacement", "{\"token_classifications\":" ++ response_wire.classifications ++ "}");
-    try checkCandidate("extraction", "citation_replacement", "{\"citations\":[" ++ response_wire.selection ++ "]}");
-    try checkCandidate("extraction", "source_selection_replacement", response_wire.selection);
     try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[7],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}]}", .unknown_property, "/statements/0/content/token_id");
     try checkCandidate("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}");
     // Structural conformance is not a claim that these independently shaped
@@ -324,10 +321,9 @@ test "D1 source variants require questions only for gaps in focused findings" {
 }
 
 test "selected source and reconciliation repairs conform to their native response owners" {
-    try checkCandidate("extraction", "claim", "{\"content\":{\"kind\":\"business\",\"segments\":" ++ response_wire.segments ++ "},\"citations\":[" ++ response_wire.selection ++ "]}");
+    try checkCandidate("extraction", "claim", "{\"category\":\"business\",\"citations\":[" ++ response_wire.id ++ "]}");
     try checkCandidate("extraction", "classification", "{\"kind\":\"irrelevant\",\"source_id\":" ++ response_wire.id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7}");
     try checkCandidate("extraction", "classification", "{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ response_wire.id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}}");
-    try checkCandidate("extraction", "business_text_replacement", "{\"segments\":" ++ response_wire.segments ++ "}");
     try checkCandidate("extraction", "reference_text_replacement", "{\"nodes\":" ++ response_wire.nodes ++ "}");
     try checkCandidate("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ "}");
     try checkCandidate("reconciliation", "reference_text", "{\"nodes\":" ++ response_wire.nodes ++ "}");
@@ -339,23 +335,16 @@ test "selected source and reconciliation repairs conform to their native respons
     try checkCandidate("reconciliation", "repair_disposition", "{\"kind\":\"retained\"}");
     inline for (.{"superseded"}) |kind| try checkCandidate("reconciliation", "repair_disposition", "{\"kind\":\"" ++ kind ++ "\",\"related_claim_ids\":[" ++ response_wire.id ++ "]}");
     try checkCandidate("reconciliation", "repair_disposition", "{\"kind\":\"duplicate\",\"target_claim_id\":" ++ response_wire.id ++ "}");
-    try candidateCase("extraction", "claim", "{\"content\":{\"kind\":\"business\",\"segments\":" ++ response_wire.segments ++ "}}", .missing_required_property, "/citations");
+    try candidateCase("extraction", "claim", "{\"category\":\"business\"}", .missing_required_property, "/citations");
+    // ADR 0036: claim wording comes from the cited lines, never the model.
+    try candidateCase("extraction", "claim", "{\"category\":\"business\",\"citations\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"business\",\"segments\":" ++ response_wire.segments ++ "}}", .unknown_property, "/content");
     try candidateCase("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ ",\"claim_ids\":[]}", .unknown_property, "/claim_ids");
 }
 
 test "required text and citation presence follows native rules in initial and selected schemas" {
-    const claim = "{\"content\":{\"kind\":\"business\",\"segments\":\"Requirement\"},\"citations\":[" ++ response_wire.selection ++ "]}";
-    try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[" ++ claim ++ "],\"token_classifications\":[]}");
-    try candidateSchemaCase("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"segments\":\"Requirement\"},\"citations\":[]}],\"token_classifications\":[]}", .array_length, "/claims/0/citations");
-    try candidateSchemaCase("extraction", "citation_replacement", "{\"citations\":[]}", .array_length, "/citations");
-    inline for (.{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
-        const field = if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
-        const prefix = "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"" ++ kind ++ "\",\"" ++ field ++ "\":";
-        try candidateSchemaCase("extraction", null, prefix ++ "{\"fragments\":[]}},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .array_length, "/claims/0/content/" ++ field ++ "/fragments");
-        try candidateSchemaCase("extraction", null, prefix ++ "\"\"},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .string_length, "/claims/0/content/" ++ field);
-    }
+    try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[" ++ response_wire.id ++ "]}],\"token_classifications\":[]}");
+    try candidateSchemaCase("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[]}],\"token_classifications\":[]}", .array_length, "/claims/0/citations");
     try candidateSchemaCase("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":{\"fragments\":[]}},\"token_classifications\":[]}", .array_length, "/reason/nodes/fragments");
-    try candidateSchemaCase("extraction", "business_text_replacement", "{\"segments\":\"\"}", .string_length, "/segments");
     try candidateSchemaCase("extraction", "reference_text_replacement", "{\"nodes\":\"\"}", .string_length, "/nodes");
 
     try checkCandidate("reconciliation", "summary", "{\"statements\":[]}");
@@ -393,7 +382,7 @@ test "provider schema projections retain expressible collection minima" {
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     inline for (.{
-        .{ "extraction", "citation_replacement", "citations" },
+        .{ "extraction", "claim", "citations" },
         .{ "generation", "value", "value" },
         .{ "reconciliation", "business_text", "segments" },
         .{ "reconciliation", "reference_text", "nodes" },
@@ -521,10 +510,9 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         if (comptime selection) |definition| {
             if (comptime std.mem.eql(u8, definition, "claim")) return nativeWire(r.extraction.Proposal, a, bytes);
             if (comptime std.mem.eql(u8, definition, "classification")) return nativeWire(r.extraction.tokens.Classification, a, bytes);
-            if (comptime std.mem.eql(u8, definition, "business_text_replacement")) return nativeWire(r.text.BusinessText, a, bytes);
             if (comptime std.mem.eql(u8, definition, "reference_text_replacement")) return nativeWire(r.text.ReferenceSemanticText, a, bytes);
             const T = @import("domain/reference_extraction_repair.zig").Replacement;
-            return selectedWire(T, a, if (std.mem.eql(u8, definition, "classification_replacement")) .classifications else if (std.mem.eql(u8, definition, "citation_replacement")) .citations else .citation, bytes);
+            return selectedWire(T, a, .classifications, bytes);
         } else return nativeWire(@import("domain/reference_extraction_parser.zig").Response, a, bytes);
     } else if (comptime std.mem.eql(u8, name, "reconciliation")) {
         const definition = selection.?;

@@ -593,11 +593,13 @@ current registry. No separate resolver action or historical-schema registry is n
 
 ## `ValidateReferenceClaimProposalAction`
 
-- **Input:** one `ReferenceClaimProposal`, current chunk, canonical citations, passive-literal
-  registry, and closed claim schema
-- **Output:** validated claim proposal
-- **Responsibility:** Validate kind/content and require every citation to be canonical, unique,
-  and chunk-local; accept no disposition or model-owned ID.
+- **Input:** one `ReferenceClaimProposal` (a category and supplied line IDs), current chunk,
+  canonical citations, passive-literal registry, and closed claim schema
+- **Output:** one validated claim quoted from its cited lines
+  ([ADR 0036](../../decisions/0036-source-quoted-claims.md))
+- **Responsibility:** Require every cited line to be supplied, citable and chunk-local; quote
+  the cited lines as written and validate the wording with the shared text policy; accept no
+  wording, disposition or model-owned ID.
 
 ## `AssignReferenceClaimIdAction`
 

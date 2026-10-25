@@ -684,6 +684,23 @@ test "native exact scope classifies raw prose without granting semantic support 
     }
     try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(nativeCompositionAllocation, .{});
 }
+test "composition treats code delimiters around an exact value as markup" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 2 }, .bytes = "ACTIVE" }} };
+    const fields: []const @import("domain/model_text_field.zig").Binding = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    // ADR 0036: a code-wrapped value alone is still only the value.
+    for ([_][]const u8{ "{\"value\":\"`ACTIVE`\"}", "{\"value\":\"``ACTIVE``\"}" }) |raw| {
+        var document = try @import("domain/strict_json.zig").parse(a, raw, .{ .maximum_depth = schema.max_json_depth }, false, null);
+        const diagnostic = (try @import("domain/model_text_composition.zig").check(a, document.value, fields, &.{}, &.{}, .{ .exact_scope = scope })).?;
+        try std.testing.expectEqual(.reference_only, diagnostic.fields[0].issue.reason);
+        document.deinit();
+    }
+    var prose = try @import("domain/strict_json.zig").parse(a, "{\"value\":\"Show `ACTIVE` now.\"}", .{ .maximum_depth = schema.max_json_depth }, false, null);
+    defer prose.deinit();
+    try std.testing.expect((try @import("domain/model_text_composition.zig").check(a, prose.value, fields, &.{}, &.{}, .{ .exact_scope = scope })) == null);
+}
 fn nativeCompositionAllocation(a: std.mem.Allocator) !void {
     const raw = "{\"value\":\"ACTIVE\"}";
     var document = try @import("domain/strict_json.zig").parse(a, raw, .{ .maximum_depth = schema.max_json_depth }, false, null);

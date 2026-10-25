@@ -31,7 +31,6 @@ pub const Authorize = struct {
         const rejected = values.read(&input.step.data, extraction.selections_schema, reference.Value) catch |operation_error| return operation_error;
         const rejection: repair.Rejection = switch (rejected.payload().*) {
             .token_classification_rejected => |diagnostic| .{ .token_classifications = diagnostic },
-            .citation_rejected => |diagnostic| .{ .source_selections = diagnostic },
             else => return error.OperationExecutionFailed,
         };
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
@@ -109,22 +108,3 @@ fn facts(view: *const data.View, candidate: @import("../domain/reference_extract
     const candidates = values.read(view, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
     return .{ .inputs = source.*, .candidates = candidates.*, .candidate = candidate };
 }
-
-/// Retire derived claims/tokens while preserving the original selection facts.
-pub const RetainClaimRejection = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_claims, .evidence = .validated_reference_claims, .result = .validated_reference_selections } };
-    pub const Action = @import("../actions/reference/retain_reference_claim_rejection.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const prior = try extraction.read(&input.step.data, extraction.validated_schema, .citation_rejected);
-        const owner = reference.create(self.allocator, prior) catch |operation_error| return operation_error;
-        errdefer reference.destroy(owner);
-        owner.payload = .{ .citation_rejected = self.action.execute(prior.payload().citation_rejected) };
-        var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(extraction.selections_schema.key)] = values.adopt(self.allocator, extraction.selections_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
-        for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-        return .{ .outcome = .ok, .delta = delta };
-    }
-};

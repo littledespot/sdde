@@ -14,7 +14,6 @@ pub const Payload = union(enum) {
     tokens_assigned: extraction.TokenAssignments,
     prepared: extraction.Prepared,
     validated: extraction.Validated,
-    citation_rejected: @import("reference_selection_validation.zig").Rejection,
     assigned: extraction.Assignments,
     ledger: extraction.Ledger,
     accounted: extraction.Accounted,

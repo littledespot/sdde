@@ -56,8 +56,6 @@ pub const Options = struct {
     advisory_control: ?AdvisoryControl = null,
     record_review: ?RecordReviewControl = null,
     extraction_omission: bool = false,
-    text_fault: bool = false,
-    failed_text_repair: bool = false,
     reconciliation_repair_fault: ?enum { unchanged, alternating, unchanged_text } = null,
     reconciliation_fault: ?ReconciliationFault = null,
     uncertain: bool = false,
@@ -69,8 +67,6 @@ pub const Options = struct {
     failed_repair: bool = false,
     omit_exact: bool = false,
     normalize_exact: bool = false,
-    citation_fault: ?enum { unknown, missing } = null,
-    failed_citation_repair: bool = false,
     missing_classifications: bool = false,
     failed_classification_repair: bool = false,
     entities_required: bool = false,
@@ -126,26 +122,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const chunk = selected_chunk.chunk;
             const candidates = (try values.read(&view, @import("../application/structured_token_workflow.zig").candidates_schema, r.extraction.tokens.Candidates)).*;
             if (request.id().purpose == .atomic_repair) {
-                const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
                 if (view.contains(.source_omission_repair)) {
                     const state = try @import("../application/source_omission_repair_workflow.zig").read(&view);
                     if (state.authorization.extraction.target == .classification) {
                         const id = state.authorization.extraction.operation.replace.classification.id();
                         return @import("../domain/model_candidate_json.zig").encode(r.extraction.tokens.Classification, allocator, .{ .preserve = .{ .token_candidate_id = id, .kind = if (id.extractor_id == .markdown_fenced_code_v1) .code_sample else .business_exact_string } });
                     }
-                    return @import("../domain/model_candidate_json.zig").encode(r.extraction.Proposal, allocator, .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Preserve the source-required deadline." } }} } }, .citations = &.{@import("../reference_extraction_test.zig").wholeChunk(chunk)} });
-                }
-                if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "business_text_replacement")) {
-                    const replacement: @import("../domain/reference_extraction_text_repair.zig").Replacement = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.failed_text_repair) "Invalid\x01text" else try extractedClaim(allocator, chunk.id) } }} } };
-                    return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_text_repair.zig").Replacement, allocator, replacement);
-                }
-                if (options.citation_fault) |fault| {
-                    const choice = if (options.failed_citation_repair) @import("../domain/source_selections.zig").Selection{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
-                    const replacement: @import("../domain/reference_extraction_repair.zig").Replacement = switch (fault) {
-                        .unknown => .{ .citation = choice },
-                        .missing => .{ .citations = .{ .citations = &.{choice} } },
-                    };
-                    return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_repair.zig").Replacement, allocator, replacement);
+                    // Cite only the last line, a quote distinct from the whole-chunk claim.
+                    const lines = try @import("../reference_extraction_test.zig").citableLines(allocator, inputs, chunk);
+                    return @import("../domain/model_candidate_json.zig").encode(r.extraction.Proposal, allocator, .{ .category = .business, .citations = lines[lines.len - 1 ..] });
                 }
                 const choices = if (options.failed_classification_repair) &.{} else try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
                 return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/reference_extraction_repair.zig").Replacement, allocator, .{ .classifications = .{ .token_classifications = choices } });
@@ -158,12 +143,12 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const reply = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .no_feature_claim = .{ .reason = .{ .nodes = &.{.{ .literal = .{ .value = "The rejected response JSON has a syntax error in its claims array." } }} }, .token_classifications = &.{} } });
                 return @import("reference_tokens.zig").wire(allocator, reply, discarded);
             }
-            const claim = if (options.brief_text) |texts| texts[1] else try extractedClaim(allocator, chunk.id);
-            const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
             const mixed_kinds = options.summary_sequence != null or options.global_sequence != null or options.disposition_sequence != null or options.reconciliation_fault == .mixed_selection;
-            // Empty citations now fail the complete response schema. A protocol
-            // correction must provide the full claim again before native repair.
-            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.text_fault) "Invalid\x01text" else claim } }} } }, .citations = if (options.citation_fault == .missing and options.attempt == 1) &.{} else &.{citation} }}, .token_classifications = &.{} } });
+            // The claim quotes every citable line of its chunk (ADR 0036). A
+            // classification loss leaves the token's final line unquoted.
+            const lines = try @import("../reference_extraction_test.zig").citableLines(allocator, inputs, chunk);
+            const cited = if (options.source_loss == .classification) lines[0 .. lines.len - 1] else lines;
+            const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .category = .business, .citations = cited }}, .token_classifications = &.{} } });
             // Native correlation faults need two eligible semantic kinds;
             // selecting an exact-token ID is now rejected by the wire schema.
             if (falseConflict(options.source_loss) or (mixed_kinds and chunk.id.eql(inputs.chunks.entries[0].id))) {
@@ -171,7 +156,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 var response = try @import("../domain/model_candidate_json.zig").decode(response_type, allocator, body);
                 const claims = try allocator.alloc(r.extraction.Proposal, 2);
                 claims[0] = response.claims.claims[0];
-                claims[1] = .{ .content = .{ .technical = .{ .nodes = &.{.{ .literal = .{ .value = "Present the source-required confirmation at startup." } }} } }, .citations = claims[0].citations };
+                claims[1] = .{ .category = .technical, .citations = claims[0].citations };
                 response.claims.claims = claims;
                 response.claims.token_classifications = try @import("reference_tokens.zig").classifications(allocator, candidates, chunk);
                 return @import("../domain/model_candidate_json.zig").encode(response_type, allocator, response);
@@ -399,7 +384,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const first = for (dispositions) |disposition| {
                 if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try r.item(all, disposition.claim_id)).claim.content == .model and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
             } else return error.InvalidFixture;
-            const value = try attributed(allocator, all, &.{first});
+            const value = try withoutExact(allocator, options, try attributed(allocator, all, &.{first}));
             if (request.id().purpose == .atomic_repair) {
                 if (view.contains(.specification_repair_authorization)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
@@ -441,7 +426,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         for (all.entries) |item| {
                             const retained = eligibleRecordClaim(dispositions, item.claim.id);
                             if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
-                            const selected = try attributed(allocator, all, &.{item.claim.id});
+                            const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
                             if (kind == .acceptance_criterion and item.claim.content == .model) {
                                 const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = if (options.record_review == .two_omissions and records.items.len == 0) .{
                                     .given = .{ .segments = &.{.{ .literal = .{ .value = "A librarian holds a loan." } }} },
@@ -920,6 +905,15 @@ fn outcomeClaim(allocator: std.mem.Allocator, all: r.Items, dispositions: []cons
     }
     return error.InvalidFixture;
 }
+/// Claims quote the source (ADR 0036), so copying one copies its exact values.
+/// An omitted-exact script authors its own text instead.
+fn withoutExact(allocator: std.mem.Allocator, options: Options, value: g.spec.Model.AttributedValue) !g.spec.Model.AttributedValue {
+    if (!options.omit_exact) return value;
+    var result = value;
+    const text = try std.fmt.allocPrint(allocator, "MOCK Required behavior {d} is described.", .{value.provenance.claim_ids[0].ordinal});
+    result.value = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = text } }}) };
+    return result;
+}
 fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
     const value = (try businessValue(allocator, (try r.item(all, ids[0])).claim)) orelse return error.InvalidFixture;
     return .{ .value = value, .provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, ids), .clarification_response_ids = &.{} } };
@@ -979,10 +973,6 @@ fn associateFixtureValue(allocator: std.mem.Allocator, context: @import("../doma
 
 fn selection(value: g.spec.Provenance) g.spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
-}
-
-fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.ChunkId) ![]const u8 {
-    return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
 }
 
 // Canonical fixture proposals include native token facts. The scripted model

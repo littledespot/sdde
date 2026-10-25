@@ -228,7 +228,7 @@ test "native assembled observations resolve unrelated exact values and preserve 
         const raw = try a.alloc(extraction.RawResult, inputs.chunks.entries.len);
         for (inputs.chunks.entries, raw) |chunk, *entry| entry.* = .{
             .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id },
-            .result = .{ .response = try tokens.wire(a, try extraction_fixture.reply(a, chunk, example[1]), try tokens.classifications(a, available, chunk)) },
+            .result = .{ .response = try tokens.wire(a, try extraction_fixture.reply(a, inputs, chunk), try tokens.classifications(a, available, chunk)) },
         };
         const extracted = try extraction_fixture.finishText(a, inputs, try text.check(a, inputs, try @import("../../../src/domain/reference_extraction_parser.zig").parse(a, .{ .entries = raw })));
         const reference_context: references.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };

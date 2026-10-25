@@ -424,10 +424,7 @@ subgraphs:
         on: {ok: validate-claims, failed: end.failed}
       validate-claims:
         use: validate-reference-claims
-        on: {ok: assign-claims, invalid: retain-claim-rejection, failed: end.failed}
-      retain-claim-rejection:
-        use: retain-reference-claim-rejection
-        on: {ok: authorize-extraction-repair, failed: end.failed}
+        on: {ok: assign-claims, failed: end.failed}
       assign-claims:
         use: assign-reference-claim-identities
         on: {ok: build-ledger, failed: end.failed}

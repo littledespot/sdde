@@ -48,12 +48,12 @@ its question text cannot grant clarification publication. Optional verdict
 reassessment is not approved.
 
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
-  token-classification collection, one invalid source selection, or an empty claim-citation
-  collection.
-- Citation repair includes the unchanged claim and scoped source choices.
-- Both selection checks run before derived claims are built.
-- Merge invalidates the selection result; the same checks run again before token/claim
-  construction, ledger validation and full-candidate publication.
+  token-classification collection. Claim citations are bounded at admission and claim
+  wording is quoted natively, so neither is repaired
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md)).
+- The classification check runs before derived claims are built.
+- Merge invalidates the classification result; the same check runs again before
+  token/claim construction, ledger validation and full-candidate publication.
 - Missing semantic support remains an authority gap, not a selection repair.
 
 **Reference handoffs ([ADR 0022](../decisions/0022-native-reference-phase-handoffs.md)):** use native

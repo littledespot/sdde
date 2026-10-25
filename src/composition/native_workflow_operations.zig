@@ -108,7 +108,6 @@ pub const Assembly = struct {
     extract_structured_facts: structured_tokens.Extract,
     assign_token_candidates: structured_tokens.AssignCandidates,
     validate_token_classifications: extraction.ValidateSelections,
-    retain_claim_rejection: extraction_repair.RetainClaimRejection,
     authorize_summary_repair: reconciliation_repair.Authorize(.summary),
     authorize_dispositions_repair: reconciliation_repair.Authorize(.dispositions),
     authorize_signals_repair: reconciliation_repair.Authorize(.signals),
@@ -227,7 +226,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 171 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 170 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -290,7 +289,6 @@ pub const Assembly = struct {
             .extract_structured_facts = .{ .allocator = allocator },
             .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
-            .retain_claim_rejection = .{ .allocator = allocator },
             .authorize_summary_repair = .{ .allocator = allocator },
             .authorize_dispositions_repair = .{ .allocator = allocator },
             .authorize_signals_repair = .{ .allocator = allocator },
@@ -509,7 +507,6 @@ pub const Assembly = struct {
             entry(structured_tokens.Extract, &self.extract_structured_facts),
             entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(extraction.ValidateSelections, &self.validate_token_classifications),
-            entry(extraction_repair.RetainClaimRejection, &self.retain_claim_rejection),
             entry(reconciliation_repair.Authorize(.summary), &self.authorize_summary_repair),
             entry(reconciliation_repair.Authorize(.dispositions), &self.authorize_dispositions_repair),
             entry(reconciliation_repair.Authorize(.signals), &self.authorize_signals_repair),

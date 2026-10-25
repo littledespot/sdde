@@ -1,6 +1,6 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 24 October 2026. It mirrors the repository's active fix
+Dated snapshot, last updated 25 October 2026. It mirrors the repository's active fix
 record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
 [Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
@@ -30,13 +30,22 @@ already made.
   - *Approved 25 October 2026 (user: "YES"):* source-quoted claim wording. The engine
     takes each claim's wording from its cited source lines, so a paraphrase can't change
     obligation strength.
-  - *Approved 25 October 2026 (user: "apply the best option"):* one claim per source
-    requirement. A claim whose citation spans several top-level list items is split
-    natively into one claim per item, with no model call. ADR 0027's per-item chunking
-    stays withdrawn.
-  - Both need one ADR amending §16, and neither is implemented. The approved
-    125,000-token budget (B4) gives the split room in loan-renewal; whether it is enough
-    is unmeasured.
+  - *Implemented 25 October 2026, uncommitted ([ADR 0036](../design/decisions/0036-source-quoted-claims.md)):*
+    source-quoted wording.
+    - A claim is a category and admission-bounded line IDs. The engine quotes the cited
+      source lines as written; one proposal is one claim.
+    - Claim-text and citation repair are deleted. The Markdown reader now rejects C1
+      control characters.
+    - Re-quoting at stored readback is open.
+    - Quoted claims carry Markdown into generation, which wrapped exact values in
+      backticks in the first live pair. ADR 0036 Decision 6 now drops those delimiters at
+      admission (25 October, uncommitted).
+  - *Implemented and withdrawn 25 October 2026:* a native split into one claim per
+    top-level list item (user: "apply the best option", then "make the changes as
+    suggested"). In two live pairs the records call authored 3, 12, 8 and 304 records,
+    against 2 to 4 with one claim per list, adding fillers, restatements and once a
+    runaway. List collapse is open again; ADR 0027's per-item chunking stays withdrawn.
+  - The live effect of quoting with one merged claim is unmeasured.
   - Details are in FIX05 B7.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
@@ -72,8 +81,9 @@ already made.
   - This replaces the A/C comparison, which can't discriminate while each case forms
     one group.
   - It needs a decision and an ADR (generation contract, ADR 0020's group binding).
-  - It pays off only with requirement-level claims (B7's split, approved 25 October) and
-    review budget headroom (the approved 125,000-token budget, B4).
+  - It pays off only with requirement-level claims, whose native split (B7) was
+    withdrawn on 25 October after it inflated records, and review budget headroom (the
+    approved 125,000-token budget, B4).
   - Loan-renewal had no refusal acceptance criterion in all three evaluated runs.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
@@ -98,6 +108,10 @@ already made.
   cardinality bounds each need a decision; don't tune sampling or add retries.
   - On 25 October (step 0, `269410b`) a source-review runaway on `Renewal refused.` cost
     19,404 tokens and the run failed on budget.
+  - On 25 October 14:31 (uncommitted B7 tree) a records call ran away instead: 294 edge
+    cases (9,318 output tokens) enumerating loan-state combinations. Source review of
+    them exhausted the budget. A native cardinality bound per records batch is the
+    open choice that would stop it before review.
   - It's the second completed runaway on that same subject, so the subject-linked
     trigger has more support but isn't established.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review

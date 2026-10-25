@@ -86,7 +86,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, ledger: ext
                         if (id.ordinal == 0 or id.ordinal > ledger.claims.len) return error.InvalidReferenceExtraction;
                         const claim = ledger.claims[id.ordinal - 1];
                         if (claim.id.ordinal != id.ordinal or !claim.chunk_id.eql(chunk.scope.chunk_id)) return error.InvalidReferenceExtraction;
-                        if (claim.content == .model) try proposals.append(a, .{ .content = claim.content.model, .citations = &.{}, .citation_origins = &.{} });
+                        if (claim.content == .model) try proposals.append(a, .{ .content = claim.content.model, .citations = &.{} });
                     }
                     break :claims .{ .claims = try proposals.toOwnedSlice(a) };
                 },

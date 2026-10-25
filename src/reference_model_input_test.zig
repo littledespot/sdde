@@ -380,6 +380,33 @@ test "shared text choice refresh retains unrelated restrictions and replaces sta
     try std.testing.expectEqual(@as(usize, 2), third.integerChoices().len);
 }
 
+test "extraction claims may cite only the supplied nonblank source lines" {
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    const schema = @import("domain/model_result_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .unlimited));
+    for ([_][]const u8{ "- Renew a loan.\n\n- Refuse overdue loans.\n", "Display `Hello, World!`.\n\nShow the date.\n" }) |bytes| {
+        var ids: source.IdSource = .{};
+        const inputs = try source.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "requirements.md", bytes));
+        try std.testing.expectEqual(@as(usize, 1), inputs.chunks.entries.len);
+        const passive = try text.prepare(a, inputs);
+        defer passive.deinit();
+        const packet = try input.extractionPacket(std.testing.allocator, inputs, passive.registry, try tokens.candidates(a, inputs), .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id });
+        defer packets.release(packet);
+        const restricted = try schema.restrict(std.testing.allocator, schemas, packet.excludedVariants(), packet.integerChoices());
+        defer restricted.release();
+        const contract = restricted.selected().modelBytes();
+        const claim = "{{\"kind\":\"claims\",\"claims\":[{{\"category\":\"business\",\"citations\":{s}}}],\"token_classifications\":[]}}";
+        try check(contract, .{ .bytes = try std.fmt.allocPrint(a, claim, .{"[3,1]"}) });
+        // Line 2 is blank and line 4 is not supplied, so neither is citable.
+        for ([_][]const u8{ "[2]", "[1,4]" }) |citations| try check(contract, .{ .bytes = try std.fmt.allocPrint(a, claim, .{citations}), .rejection = .enum_mismatch, .path = if (citations.len == 3) "/claims/0/citations/0" else "/claims/0/citations/1" });
+        try check(contract, .{ .bytes = try std.fmt.allocPrint(a, claim, .{"[1,3,1]"}), .rejection = .array_length, .path = "/claims/0/citations" });
+    }
+}
+
 test "summary and signal schemas restrict semantic claim choices while retaining native token evidence" {
     const r = reconciliation.r;
     const stage = @import("domain/reference_reconciliation_stage.zig");
@@ -578,7 +605,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
         }
         try std.testing.expectEqualStrings(inputs.corpus.sources[0].bytes[chunk.span.start.byte..chunk.span.end.byte], reconstructed.items);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Hello, World!") != null);
-        const response = try tokens.wire(a, try extraction.reply(a, chunk, "The application displays a greeting."), try tokens.classifications(a, candidates, chunk));
+        const response = try tokens.wire(a, try extraction.reply(a, inputs, chunk), try tokens.classifications(a, candidates, chunk));
         progress = try iteration.append(a, progress, scope, response, content, producers);
     }
     try std.testing.expect(iteration.current(progress) == null);

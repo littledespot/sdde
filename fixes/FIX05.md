@@ -1,6 +1,6 @@
 # FIX05 — Architecture review and consolidated open work
 
-**Reviewed:** 17 October 2026, Australia/Melbourne, at `b2f10a3`. **Updated:** 23 October
+**Reviewed:** 17 October 2026, Australia/Melbourne, at `b2f10a3`. **Updated:** 25 October
 2026.
 
 **Status:** sole active fix record. It holds open work only: unimplemented decisions, open
@@ -64,7 +64,7 @@ semantic benefit is not demonstrated (§7).
 | B4 | Option 3 and the single workflow budget. Approved 25 October, not implemented: a configurable budget at 125,000 tokens. Open: experiment stops and qualified scope (B4 below) | [B4 records](Z_FIX05.md#b4-records), §9 |
 | B5 | No record batch for token-only groups (ADR 0024). Implemented 25 October: cross-kind restatement in the native duplicate rule (ADR 0035). Proposed: one complete record collection with native acceptance-criterion coverage (B5 below) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches) |
 | B6 | GPT-OSS envelope prefix normalized; entity applicability open (B6 below) | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix), §12 |
-| B7 | List-item chunking tried and reverted on 21 October. Approved 25 October, not implemented: source-quoted claim wording and a native list-item claim split, under one §16 ADR (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
+| B7 | List-item chunking tried and reverted on 21 October. Implemented 25 October, uncommitted: source-quoted claim wording and code-delimiter removal (ADR 0036); the native list-item claim split was withdrawn the same day after two live pairs (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
 | B8 | Native preserved-token bookkeeping (ADR 0024) | [B8](Z_FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens) |
 | B9 | Feature-owned entity records and no output allowance; runaway class open (B9 below) | [B9 records](Z_FIX05.md#b9-records), §§9, 11, 16 |
 | W1, W2 | No post-generation upstream rebuild; the duplicate path is deleted | [W1](Z_FIX05.md#w1-review-can-restart-the-whole-pipeline), [W2](Z_FIX05.md#w2-the-upstream-repair-path-exists-twice) |
@@ -97,8 +97,14 @@ Bedrock, ran once and was separately approved. The eleven Claude Haiku 5.5 attem
 | [Loan-renewal](../zig-out/e2e-spec/2026-10-24T06-58-47Z-67dd5ecc82bd3aa1d1ccdc1b6a3be752/report.json), 24 Oct 17:58 | `8a600d7` | 31 / 99,098 | Published, 902 tokens under budget; one bounded protocol correction in source review; advisory 82.14% |
 | [Hello-world](../zig-out/e2e-spec/2026-10-24T20-52-24Z-920d6f61f4f754ba0febe016a63a0d73/report.json), 25 Oct 07:52 (step 0) | `269410b` | 24 / 63,013 | Published; advisory 89.29% |
 | [Loan-renewal](../zig-out/e2e-spec/2026-10-24T20-52-59Z-2eea9516eda639fe5f16f42ea5f8d431/report.json), 25 Oct 07:52 (step 0) | `269410b`, own principles | 29 / 109,327 | `WorkflowTokenBudgetExceeded` in principle review, after a source-review runaway (`output_limit`, 19,404 tokens) on `Renewal refused.` (B9) |
+| [Hello-world](../zig-out/e2e-spec/2026-10-24T22-15-43Z-30b8b0c83633333af9b587cffd04a72f/report.json), 25 Oct 09:15 (B5) | `47723fd` | 24 / 63,479 | Published; advisory 82.14%; no restatement to delete |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-24T22-16-19Z-66cb68e78884933cdbb32c75a15a6314/report.json), 25 Oct 09:16 (B5) | `47723fd` | 25 / 80,195 | Published; advisory 82.14%; no restatement to delete |
+| [Hello-world](../zig-out/e2e-spec/2026-10-25T02-14-59Z-affe7e5515d88a93ea871e6cac782617/report.json), 25 Oct 13:14 (B7) | `47723fd`, ADR 0036 uncommitted | 24 / 65,021 | Published; advisory 82.14%; escaped backticks around the greeting |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-25T02-15-01Z-67214efa45244f986e884838c171a5c5/report.json), 25 Oct 13:15 (B7) | `47723fd`, ADR 0036 uncommitted | 27 / 109,967 | `WorkflowTokenBudgetExceeded` in policy review, after a source-review runaway (`output_limit`, 19,270 tokens) on `Loan renewed!` (B9) |
+| [Hello-world](../zig-out/e2e-spec/2026-10-25T03-31-56Z-8ad5e999fcf1b2bd4f7c2fdeba3a0fab/report.json), 25 Oct 14:31 (B7 + Decision 6) | `47723fd`, ADR 0036 uncommitted | 27 / 75,877 | Published; advisory 71.43%, critical failure on source-grounding (filler assumption, non-goal and prohibition) |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-25T03-31-57Z-b94ba811af124b3c5fc699618cae4e01/report.json), 25 Oct 14:31 (B7 + Decision 6) | `47723fd`, ADR 0036 uncommitted | 18 / 112,532 | `WorkflowTokenBudgetExceeded` in source review, after a records runaway (294 edge cases) (B9) |
 
-- **Completion.** Hello-world published in 7 of 8 attempts and loan-renewal in 3 of 8.
+- **Completion.** Hello-world published in 10 of 11 attempts and loan-renewal in 4 of 11.
   All sixteen reports are `spec-e2e-report/v9`, so the published ones can be adjudicated,
   but none has been. No run counts toward the
   [ADR 0034](../design/decisions/0034-spec-quality-gate.md) gate yet. Three pairs (one run
@@ -608,8 +614,9 @@ implementation.
 - **What it depends on to pay off.**
   - **Requirement-level claims.** With one merged claim, one acceptance criterion
     already satisfies coverage, so the missing refusal criterion is still not caught.
-    This needs B7's list-collapse half, approved on 25 October as a native list-item
-    split. With C, more claims no longer add records calls.
+    B7's native list-item split, which supplied them, was withdrawn on 25 October after
+    the records call inflated with more claims. With C, more claims no longer add
+    records calls.
   - **Review headroom (B2, B4).** More claims mean more review subjects. The 21 October
     list-item run exhausted the budget in source review. The approved 125,000-token
     budget (B4) provides headroom; whether it is enough is unmeasured.
@@ -772,11 +779,206 @@ received each item as its own requirement and which B7 does not change.
 
 **Status.** Per-item chunking before extraction (ADR 0027) stays withdrawn by that revert.
 One pair cannot decide a contract change under §7, so the revert is a user decision, not
-evidence that segmentation can't help. Both halves of B7 now have an approved fix, and
-neither has been implemented. The obligation-weakening half is fixed by source-quoted
-claim wording. The list-collapse half is fixed by splitting claims natively at list-item
-boundaries, rather than by chunking. The original record is in
-[Z_FIX05](Z_FIX05.md#b7-original-record).
+evidence that segmentation can't help. Source-quoted claim wording, for the
+obligation-weakening half, is implemented
+([ADR 0036](../design/decisions/0036-source-quoted-claims.md)). The native list-item split
+for the list-collapse half was implemented and withdrawn on 25 October, so list collapse
+is open again. The original record is in [Z_FIX05](Z_FIX05.md#b7-original-record).
+
+**Implemented 25 October 2026, uncommitted (ADR 0036, option 1).** The user directed
+"implement B7 with option 1". ADR 0036 is authoritative where the approved text below
+differs.
+
+- **Contract.** A model claim is `{category, citations}`, where `citations` is a set of
+  line IDs. Admission restricts them to the chunk's citable lines, decided by one shared
+  predicate.
+  - One function at extraction text validation quotes the cited lines as written,
+    Markdown included. A run continues across uncited blank lines and is trimmed only at
+    its ends.
+  - One proposal is one claim. The list-item split described in the reviews below was
+    withdrawn (see "Split withdrawn").
+- **Deleted.** Claim-text repair (text repair keeps only the `no_feature_claim` reason),
+  citation repair, the `source_selections` diagnostic, `business_text_replacement`, the
+  `retain-reference-claim-rejection` operation and the write-only claim citation origins.
+  `validate-reference-claims` now ends `ok` or `failed`.
+- **Defects found and fixed.**
+  - In implementation:
+    - A citation choice scoped to the `claim` definition couldn't bind the whole
+      extraction response, so every initial request would have failed at handoff. The
+      initial request now bounds `/claims/*/citations`, and the omission claim repair
+      bounds its own `citations`.
+    - The source-omission merge kept only the first claim of a split proposal; it then
+      inserted every claim. With the split withdrawn, it inserts its one claim again.
+  - In two contract reviews:
+    - **Rewriting the quote was fragile.** The first draft removed markers and code
+      delimiters and changed whitespace. Its line-by-line parsing ignored fenced code,
+      multi-line code spans and wrapped numbers such as `2024.`. Some admitted citations
+      quoted to nothing and failed the run, words fused and delimiters leaked. A code
+      block with a blank line lost its exact-value duty.
+      - The quote is now the cited source bytes as written, which removes that class.
+      - List structure was given one Markdown owner (withdrawn with the split).
+    - **Quadratic cost.** Rebuilding the whole source's scan for every chunk was
+      quadratic: 777 MB held at 256 chunks. Each source's fenced code is now scanned once
+      per validation.
+    - **C1 control characters** passed ingestion but fail the text validator. The
+      Markdown reader now uses the typed-text scalar rule.
+  - In a third review:
+    - Trimming a run's ends could strip a fenced block's own bytes and lose its
+      exact-value duty. Code lines are no longer trimmed.
+    - Joining runs with a line break could form a JSON insertion object absent from the
+      source and fail the run. Runs are now joined by an ellipsis line.
+    - Other fixes:
+      - Each chunk's first line is found by binary search.
+      - The test helpers use the shared citable predicate.
+      - List-structure fixes (HTML blocks, one marker parser) went with the split.
+- **Tests.**
+  - New coverage:
+    - quoting, one claim per proposal, including lines cited out of order, a heading with
+      a nested list, runs across blank lines, fenced code, leading indentation, and chunks
+      starting inside and after a fenced block in two sources;
+    - the exact-value duty for a multi-line code span and a fenced block with a blank
+      line;
+    - an allocation bound across 128 chunks;
+    - admission bounds, including blank lines, for the initial request and omission
+      repair;
+    - rejection of model wording;
+    - an omission repair over two list items, inserting one quoted claim;
+    - C1 rejection at ingestion;
+    - a reason-repair test that keeps the deleted claim-text test's packet, origin,
+      progress and stale-authority coverage.
+  - Deleted: four unit tests and six integration scenarios for the deleted routes.
+  - **Scripted fixtures:**
+    - claims cite only citable lines;
+    - the omit-exact scenario authors distinct text per claim;
+    - the classification-loss scenario keeps its token on an unquoted line;
+    - the omission repair cites one line.
+  - **Retained GPT-OSS exchange:** the debugger replays it with its retained wire shape;
+    the provider-compatibility test now expects the current schema to reject it.
+- **Checks.**
+  - `zig build test`: 1,809 of 1,809 passed. Fix3's `test-build-reuse` fails only with a
+    repository-relative cache.
+  - Integration: 129 of 129 passed.
+  - `zig build lint`, `zig build test-architecture` and `zig build verify` (out-of-repo
+    cache) passed.
+- **Open, from the contract review.**
+  - Stored readback doesn't re-quote claim text from its citations. It would need the
+    Unicode normalizer at readback.
+  - Admission caps the citation count but admits a repeated ID; the quote ignores the
+    repeat.
+  - The extraction reason's text-repair route now has unit coverage only.
+  - No synthetic current-schema exchange replaces the retained one's `compatible`
+    assessment.
+  - Claim wording now carries Markdown (list markers, backticks) into later calls. The
+    first live pair showed generation copying backticks around exact values; Decision 6
+    removes them at admission. Other Markdown effects are unmeasured.
+  - `source_selections`'s typed rejection detail is read only by tests now, and the
+    `validate-reference-selections` operation and its value key validate token
+    classifications only. Renaming or trimming them was left out of scope.
+- **Live pair, 25 October 13:14–13:15, on the uncommitted tree** (advisory analyses in
+  `evaluations/e2e/`):
+  - **Extraction:** both cases cited a whole list as one claim, and the engine split it
+    into one quoted claim per item (3 and 5). Reconciliation grouped each case's claims
+    back into one signal.
+  - **Hello-world** published at 65,021 tokens, advisory 82.14% (unchanged). Its "should
+    output" weakening didn't recur. A new defect appeared: generation copied the
+    quoted Markdown and wrapped the greeting in backticks, which render escaped beside
+    the exact-value code span.
+  - **Loan-renewal** failed `WorkflowTokenBudgetExceeded` at 109,967 tokens, after a
+    source-review runaway on the preserved-token subject `Loan renewed!`. This is the
+    third runaway on a preserved-token subject (B9).
+    - Before failing, its records batch authored 12 records against 2 in the previous
+      run, including both refusal conditions as edge cases.
+    - Generation still wrote "may renew" in the brief, story and entity, although every
+      claim and signal it received said "must be able to renew". The weakening's source
+      is now generation.
+    - Under the approved 125,000 budget (B4) the run would have continued.
+- **Backtick fix, 25 October (user: "apply recommendations as per above", ADR 0036
+  Decision 6):** the exact-value recogniser reports equal backtick runs directly around a
+  value, and admission drops them with it. The value becomes an exact copy in an
+  obligation-bearing field and stays text elsewhere. Nothing else in the text changes.
+  - Fixed during implementation: prohibited fields used the unit's lineage for the first
+    recognition and every value for the re-check, so their stored value no longer
+    matched. They now always use every eligible value.
+  - Fixed after contract review:
+    - Removing delimiters could join a longer value across the gap, so the re-check
+      turned ambiguous and escaped as an untyped error. Delimiters now stay unless
+      removing them leaves the same matches, and the re-check reports a typed issue.
+    - A backtick between two values could be claimed by both, panicking in a prohibited
+      field. It now belongs to neither, and every caller cuts one outer span.
+    - Tests now catch both cases and a reverted composition cut.
+    - A second review found that repairs recognise with a narrower lineage than the
+      re-check, so the guard could approve a removal that the re-check then found
+      ambiguous. Removal is now a separate recogniser step, checked against every
+      eligible value. A repair-path test catches the narrow-set mutation.
+  - Checks: `zig build test` 1,812 of 1,812, integration 129 of 129, lint and
+    architecture passed. The typed re-check in `valueIn` has no reachable test once the
+    guard shares one set; it stays as a typed outcome.
+  - The other open items affect no outcome, so they stay open: readback re-quoting, the
+    repeated citation ID and reason-repair integration coverage.
+- **Live pair, 25 October 14:31, B7 + Decision 6** (advisory analyses in
+  `evaluations/e2e/`):
+  - **Hello-world** published, advisory 71.43%, with a critical failure on
+    source-grounding.
+    - Decision 6 worked: the greeting renders once.
+    - The records call added a filler assumption ("system clock is set to UTC"), a
+      non-goal forbidding any other output and a crash prohibition. It also wrote
+      business rules that restate the quoted claims. Source review flagged the three
+      fillers, as advice only and filed as `candidate_omission`.
+  - **Loan-renewal** failed on budget. Its records call ran away with 294 edge cases
+    (9,318 output tokens) enumerating loan-state combinations, which source review then
+    had to assess.
+    - This is a new form of the B9 runaway class, in generation.
+    - B9's open "cardinality bounds" choice is its owner.
+    - The 125,000 budget alone would not have saved it.
+  - Across the four B7 runs, generation output varies widely: loan-renewal's records went
+    from 12 to 304 (294 of them edge cases), and hello-world's from 3 to 8.
+- **Split withdrawn, 25 October (user: "make the changes as suggested").** Quoting stays;
+  the native list-item split is removed, so one proposal is one claim again.
+  - **Why.** In the four B7 runs the records call authored 3, 12, 8 and 304 records,
+    against 2 to 4 for the same cases with one claim per list. The extra records were
+    unsupported fillers and restatements, and once a runaway enumeration. The evidence is
+    correlational and small; it says requirement-level claims don't pay off while the
+    records call is unbounded (B9).
+  - **Changed.**
+    - [reference_extraction_text.zig](../src/domain/reference_extraction_text.zig) quotes
+      each proposal as one claim. It keeps a per-validation cache of each source's fenced
+      code blocks, which the quote needs for the code-line trimming rule.
+    - `markdown_code_spans.zig` is back to its committed form: `listSegments`, `ListLine`
+      and the shared marker parser are deleted.
+    - The source-omission merge inserts its one claim.
+    - The extraction `citations` guidance again asks for the lines of "the complete
+      claim", and drops "and no others", which pushed toward narrow claims.
+  - **Tests.** The quoting test now asserts one claim per proposal, including a two-item
+    list cited out of order, a heading with a nested list and trimmed indentation. The
+    chunk-boundary case uses two sources, with chunks starting inside and after fenced
+    blocks; a cache keyed to the wrong source fails it. The omission-repair test inserts
+    one claim over two items and checks its quote; the authoring test quotes
+    hello-world's whole chunk; the post-generation advice test uses the default
+    whole-chunk claim again.
+  - **Checks.** `zig build verify` (out-of-repo cache): 164 of 164 steps, 1,941 of 1,941
+    tests. A contract review found no code defect; its document and coverage findings
+    are fixed.
+  - **Live pair, 25 October 16:46** (advisory analyses in `evaluations/e2e/`):
+    - **Hello-world** published, advisory 85.71% (71.43% before), no critical failure.
+      Extraction itself cited one line per claim; reconciliation merged them. The
+      records call wrote 3 records and the native restatement rule deleted one. No
+      filler families. The invented entity persists, and review judged it supported.
+    - **Loan-renewal** failed on budget at 101,424, after the last source-review subject.
+      Generation received one merged quoted claim, yet the records call wrote 40 records:
+      five near-repeats of all eight families, fillers included. Native deletes removed
+      17 exact copies; 23 reached review. The 125,000 budget would probably have let it
+      publish, with filler.
+    - Extraction returned five claims each citing all five lines. Under quoting they are
+      identical; reconciliation marked four as duplicates.
+    - **Reading.** Withdrawing the split didn't stop loan-renewal's records inflation, so
+      claim count isn't its only driver. The records cardinality bound (B9) is the open
+      owner. Identical citation sets are a new, computable duplicate (decision open).
+  - **Open, found in review (predates the withdrawal).** A fenced block whose first or
+    last interior line is blank can escape the exact-value duty: citing every other
+    line quotes the block without that blank line, so the token's bytes aren't in the
+    quote. Whether ADR 0036's "cites in full" means every citable interior line needs a
+    decision.
+- **Next:** the user decides on the commit, and on B9's cardinality bound.
 
 **Approved 25 October 2026: source-quoted claim wording.** The user answered "YES" to
 the recommended option. It needs an ADR amending the §16 extraction contract, written
@@ -797,7 +999,7 @@ the same pattern to exact values.
   downstream, which is every observed case.
 - **What it doesn't fix.**
   - List collapse: citations are whole lines, so a merged selection stays merged, though
-    its wording is correct. The native list-item split below handles it.
+    its wording is correct. The native list-item split below was tried and withdrawn.
   - Repetition across record kinds. B5's cross-kind duplicate rule handles that.
   - Defects introduced at generation.
 - **Design points for the ADR.**
@@ -822,8 +1024,10 @@ the same pattern to exact values.
     unrelated sources.
   - Then repeated live runs of both cases, counting every attempt.
 
-**Approved 25 October 2026: one claim per source requirement, by native list-item
-split.** The user directed "apply the best option" for B7's list-collapse half.
+**Approved 25 October 2026, implemented and withdrawn the same day: one claim per source
+requirement, by native list-item split.** The user directed "apply the best option" for
+B7's list-collapse half, then "make the changes as suggested" to withdraw it (see "Split
+withdrawn" above). The approved text follows as history.
 
 - **Change.** When a claim's citation spans more than one top-level Markdown list item,
   the engine splits it into one claim per item. Each new claim:
@@ -1304,8 +1508,8 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
      independent of the others (done: ADR 0035);
    - the configurable workflow budget at 125,000 tokens (B4), which gives the later
      changes room in loan-renewal's live runs;
-   - then B7's source-quoted claim wording with the native list-item split, under one ADR
-     amending §16.
+   - then B7's source-quoted claim wording, under one ADR amending §16 (done,
+     uncommitted: ADR 0036). Its native list-item split was implemented and withdrawn.
 
    Quality over cost, but never waste (user, 25 October): token cost is not a reason to
    drop a check, and spending that buys no quality is removed at its owner.
@@ -1546,3 +1750,60 @@ bounded approval, and each E2E run needs its own explicit approval
     tests cover the story, superset evidence, ordering and uncovered cases.
   - **Status:** `zig build verify` passes. The integration scenario for a records-batch
     delete remains a follow-up.
+- **25 October 2026, B5 live pair on `47723fd`:** both cases published, at advisory 82.14%
+  each.
+  - **Hello-world:** 24 calls and 63,479 tokens. Its score fell from 89.29% because the
+    story wrote "should output" and invented an entity.
+  - **Loan-renewal:** 25 calls and 80,195 tokens. It used fewer review calls because the
+    model wrote fewer records.
+  - **ADR 0035 didn't fire.** Neither records call produced a restating business rule,
+    assumption, non-goal, prohibition or user-visible outcome. The pair is therefore
+    run-to-run variation, not evidence about B5. B5's effect needs repetitions that
+    produce restatements.
+  - **Persisting defects:**
+    - obligation weakening in the story and entity: "may renew", "should output" (B7);
+    - an entity that copies the story or is invented (outside ADR 0035; B6, R6);
+    - a paragraph title;
+    - no refusal acceptance criterion (B5 collection proposal).
+- **25 October 2026, B7 implemented (ADR 0036):** the user directed "implement B7 with
+  option 1". Claims are a category and admission-bounded line IDs; one pure function
+  quotes their wording and, until its withdrawal below, split them at top-level list
+  items. Claim-text and citation repair are deleted.
+  - Implementation found and fixed two defects: the citation bound's scope at handoff,
+    and the omission merge dropping split claims. A contract review then found four
+    major issues and a second review four more. Claims now quote the cited source bytes
+    as written, with list structure from one Markdown owner built once per source. The
+    reader rejects C1 controls, and the split follows "one claim per item" when a
+    heading is cited. The omission bound gained rejected cases. Re-quoting at readback
+    stays open.
+  - **Documents:** ADR 0036 and the design.md §32 row, ADR 0016's amended-by note,
+    F0100 §§3.7–3.8, contracts §§12.7, 13, 16.3–16.4 and 22, text-field composition,
+    diagrams 05 and 21, and known-work.
+  - **Status:** uncommitted at the user's direction. Unit, integration, lint,
+    architecture and full `verify` checks pass.
+- **25 October 2026, B7 live pair on the uncommitted ADR 0036 tree:** by user direction,
+  before deciding on the commit.
+  - **Hello-world** published, advisory 82.14%, with a new escaped-backtick defect.
+  - **Loan-renewal** ran out of budget after a runaway on a preserved-token subject.
+    Its records now cover each requirement, but generation still weakens "must be able
+    to renew".
+  - The B7 block records the details.
+- **25 October 2026, B7 kept and backtick fix:** the user asked whether to fix or
+  abandon B7, and then directed "apply recommendations as per above". B7 is kept. ADR 0036
+  Decision 6 makes admission drop the Markdown code delimiters directly around a
+  recognised exact value. The text-field composition contract and the §32 row record
+  it. The open items that affect no outcome stay open.
+- **25 October 2026, second B7 live pair (with Decision 6):** by user direction.
+  - **Hello-world** published at advisory 71.43%, with a critical failure from filler
+    records; the backtick defect is fixed.
+  - **Loan-renewal** failed on budget after a records runaway of 294 edge cases, a new
+    B9 form.
+  - The B7 block records the details.
+- **25 October 2026, list-item split withdrawn:** the user directed "make the changes as
+  suggested". Source quoting and Decision 6 stay; one proposal is one claim again, and the
+  extraction `citations` guidance again asks for the complete claim. ADR 0036 Decision 3
+  records the withdrawal and its evidence. Unit, integration, lint, architecture and full
+  `verify` checks pass. The B7 block records the details.
+- **25 October 2026, live pair after the split's withdrawal:** by user direction.
+  Hello-world published at advisory 85.71% with no filler records; loan-renewal failed on
+  budget after a 40-record batch with repeats. The B7 block records the details.

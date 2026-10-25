@@ -73,7 +73,7 @@ test "source preservation reviews the corpus before fields exist and reuses boun
         .{ "# Startup display\nStart successfully and display the current UTC date and time.\n", "Display the time." },
         .{ "# Loan renewal\nRenew eligible loans; keep the deadline when renewal is refused.\n", "Renew loans." },
     }) |example| {
-        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 1);
+        var fixture = try Fixture.initContent(a, example[0], null, true, 1);
         defer fixture.deinit();
         const inputs = try projector.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, fixture.context.inputs);
         const identity = @import("domain/model_request_identity.zig");
@@ -215,7 +215,7 @@ test "draft generation and selected repair retain original source meaning withou
         .{ "# Startup display\nStart successfully. Display the current time in UTC.\n", "Display the current time." },
         .{ "# Loan renewal\nRenew eligible loans. Keep the original deadline when renewal is refused.\n", "Renew loans." },
     }) |example| {
-        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 1);
+        var fixture = try Fixture.initContent(a, example[0], null, true, 1);
         defer fixture.deinit();
         const current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
         const original = try sessions.packet(std.testing.allocator, current, fixture.context);
@@ -276,18 +276,20 @@ test "authoring assignments retain field purpose bound meaning and exact choices
     // Retained call 9's lost title, an unrelated business domain, a legitimate
     // exact name, and an undecided source. These are packet/shape regressions;
     // the exported requests permit separate live semantic comparison.
-    const cases = [_]struct { name: []const u8, source: []const u8, claim: []const u8 }{
-        .{ .name = "hello", .source = "# MOCK Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `MOCK Hello, World!`.\n- Must also output date and time in UTC\n", .claim = "The application must start successfully.When started, the application must display `MOCK Hello, World!`.The application must also output date and time in UTC." },
-        .{ .name = "renewal", .source = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.\n", .claim = "Borrowers renew eligible loans for fourteen days and see confirmation and the new due date. Refused renewals retain the old due date." },
-        .{ .name = "exact-name", .source = "The feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.\n", .claim = "The feature is named Ready! and lets an operator confirm readiness, then displays the required readiness message." },
-        .{ .name = "missing-choice", .source = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.\n", .claim = "Borrowers renew eligible loans and see the new due date; the owner has not decided the renewal duration." },
+    // Each claim cites its whole chunk and quotes it (ADR 0036). `authored` is the
+    // generated value.
+    const cases = [_]struct { name: []const u8, source: []const u8, quoted: []const u8, authored: []const u8 }{
+        .{ .name = "hello", .source = "# MOCK Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `MOCK Hello, World!`.\n- Must also output date and time in UTC\n", .quoted = "# MOCK Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `MOCK Hello, World!`.\n- Must also output date and time in UTC", .authored = "The application must start successfully.When started, the application must display `MOCK Hello, World!`.The application must also output date and time in UTC." },
+        .{ .name = "renewal", .source = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.\n", .quoted = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.", .authored = "Borrowers renew eligible loans for fourteen days and see confirmation and the new due date. Refused renewals retain the old due date." },
+        .{ .name = "exact-name", .source = "The feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.\n", .quoted = "The feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.", .authored = "The feature is named Ready! and lets an operator confirm readiness, then displays the required readiness message." },
+        .{ .name = "missing-choice", .source = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.\n", .quoted = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.", .authored = "Borrowers renew eligible loans and see the new due date; the owner has not decided the renewal duration." },
     };
     try std.Io.Dir.cwd().createDirPath(std.testing.io, ".zig-cache/authoring-comparison");
     for (cases) |example| {
-        var fixture = try Fixture.initContent(a, example.source, .business_exact_string, true, example.claim, 1);
+        var fixture = try Fixture.initContent(a, example.source, .business_exact_string, true, 1);
         defer fixture.deinit();
         var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
-        const good = try fixture.proposal(example.claim);
+        const good = try fixture.proposal(example.authored);
         for (0..sessions.unit_count) |index| {
             current.completed = index;
             if (index != 0) current.units[0] = (try g.validate(a, text.validator, fixture.context, .brief, .{ .content = .{ .brief = .{ .title = good, .description = good, .primary_goal = good } } })).valid;
@@ -301,12 +303,12 @@ test "authoring assignments retain field purpose bound meaning and exact choices
             try std.testing.expectEqual(index == sessions.records_index, body.contains("entities"));
             if (body.get("brief")) |brief| {
                 try std.testing.expectEqual(@as(usize, 3), brief.object.count());
-                for ([_][]const u8{ "title", "description", "primary_goal" }) |field| try std.testing.expectEqualStrings(example.claim, brief.object.get(field).?.string);
+                for ([_][]const u8{ "title", "description", "primary_goal" }) |field| try std.testing.expectEqualStrings(example.authored, brief.object.get(field).?.string);
             }
             if (body.get("entities")) |entities| {
                 try std.testing.expectEqual(@as(usize, 2), entities.object.count());
                 try std.testing.expectEqualStrings("not_applicable", entities.object.get("disposition").?.string);
-                try std.testing.expectEqualStrings(example.claim, entities.object.get("basis").?.string);
+                try std.testing.expectEqualStrings(example.authored, entities.object.get("basis").?.string);
             }
             if (index >= 2) try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(generationPacketAllocationCase, .{ current, fixture.context });
             const assigned = try codec.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_assignment").?, .{}));
@@ -317,7 +319,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
             try std.testing.expect(!body.contains("citations"));
             try std.testing.expect(!body.contains("unit"));
             const selected_requirements = if (assigned == .records) assigned.records.requirements else (try codec.decode([]const binding.GroupGuidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_groups").?, .{})))[0].requirements;
-            try std.testing.expectEqualStrings(example.claim, selected_requirements[0].meaning);
+            try std.testing.expectEqualStrings(example.quoted, selected_requirements[0].meaning);
             for (body.get("context_requirements").?.array.items) |requirement| try std.testing.expect(!binding.assigns(assigned, .{ .ordinal = @intCast(requirement.object.get("claim_id").?.integer) }));
             switch (assigned) {
                 .brief => |brief| {
@@ -590,7 +592,7 @@ test "authoring group catalogue rejects empty stale foreign and unauthorized sel
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "MOCK Startup behavior.", "MOCK Renew a loan." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         const records = refs.records(fixture.context.references);
         const groups = try binding.catalogue(a, records, .content);
@@ -648,8 +650,8 @@ test "authoring schema reuse keeps positive support separate from open question 
         .{ .behavior = "MOCK Renew an eligible loan.", .question = "MOCK Which renewal period applies?" },
     }) |case| {
         const claims = [_]extraction_contract.Proposal{
-            .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = case.behavior } }} } }, .citations = &.{.{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } }} },
-            .{ .content = .{ .open_question = .{ .nodes = &.{.{ .literal = .{ .value = case.question } }} } }, .citations = &.{.{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 2 } }} },
+            .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+            .{ .category = .open_question, .citations = &.{.{ .ordinal = 2 }} },
         };
         var fixture = try Fixture.initClaims(a, try std.fmt.allocPrint(a, "{s}\n{s}\n", .{ case.behavior, case.question }), null, .{ .selected = &claims });
         defer fixture.deinit();
@@ -694,7 +696,7 @@ test "record authoring excludes only complete preserved-token groups and keeps s
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, case.source, .business_exact_string, true, "The user receives the requested result.", 3);
+        var fixture = try Fixture.initContent(a, case.source, .business_exact_string, true, 3);
         defer fixture.deinit();
         const original = fixture.context.references.records.assignments.checked.prior.prior;
         const items = original.input.items;
@@ -773,8 +775,7 @@ test "record authoring retains every non-token claim class and rejects a token-o
     const a = arena.allocator();
     inline for (comptime std.meta.tags(contract.Kind)) |kind| {
         const prose = "The source describes the requested behavior.";
-        const content: contract.ProposalContent = @unionInit(contract.ProposalContent, @tagName(kind), if (kind == .business or kind == .scope_guard) .{ .segments = &.{.{ .literal = .{ .value = prose } }} } else .{ .nodes = &.{.{ .literal = .{ .value = prose } }} });
-        var fixture = try Fixture.initClaims(a, prose, null, .{ .selected = &.{.{ .content = content, .citations = &.{.{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } }} }} });
+        var fixture = try Fixture.initClaims(a, prose, null, .{ .selected = &.{.{ .category = kind, .citations = &.{.{ .ordinal = 1 }} }} });
         defer fixture.deinit();
         const records = refs.records(fixture.context.references);
         try std.testing.expectEqual(@as(usize, 1), try binding.recordCount(records));
@@ -817,7 +818,7 @@ test "registered authoring iteration covers narratives and every group through o
     try std.testing.expectEqualDeep(native.Initialize.iteration, begin_entry.contract.iteration.?);
     try std.testing.expectEqualDeep(native.Advance.iteration, advance_entry.contract.iteration.?);
     for ([_]usize{ 1, 37 }) |groups| {
-        var fixture = try Fixture.initContent(a, "MOCK Display the current status.", null, true, "MOCK The current status is visible.", groups);
+        var fixture = try Fixture.initContent(a, "MOCK Display the current status.", null, true, groups);
         defer fixture.deinit();
         var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
         var state: iteration.State = .{};
@@ -1185,7 +1186,7 @@ test "record requirements apply across bound groups while native assembled famil
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         const value = try fixture.proposal(source);
         const fr: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance };
@@ -1296,7 +1297,7 @@ test "feature entity membership repair preserves fixed support origins and retry
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "MOCK Track equipment and annual inspections.", "MOCK Track borrowers and loan renewals." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.entities_index;
@@ -1371,7 +1372,7 @@ test "feature entities keep independent support and record batches reject every 
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical_schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
     for ([_][]const u8{ "MOCK Track equipment and maintenance records.", "MOCK Register borrowers and their loans." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         const basis = try fixture.proposal("MOCK Business data is required.");
@@ -1451,7 +1452,7 @@ test "record packets project current family presence without exposing prior draf
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "MOCK Inspect registered equipment.", "MOCK Renew an eligible library loan." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 3);
+        var fixture = try Fixture.initContent(a, source, null, true, 3);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
@@ -1523,7 +1524,7 @@ test "native record dispatch keeps clarifications bound without treating them as
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "MOCK Display the startup clock.", "MOCK Renew an eligible loan." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
@@ -1557,7 +1558,7 @@ test "record assembly requirements and narrowed packets exclude feature-owned en
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
-    var fixture = try Fixture.initContent(a, "Renew a loan and display `MOCK Loan renewed!` with its new deadline.", .business_exact_string, true, "The requested action completes successfully.", 2);
+    var fixture = try Fixture.initContent(a, "Renew a loan and display `MOCK Loan renewed!` with its new deadline.", .business_exact_string, true, 2);
     defer fixture.deinit();
     var current = try completedFixture(&fixture, false);
     current.completed = sessions.records_index;
@@ -1613,7 +1614,7 @@ test "native record batch assembly preserves corrected field and unchanged sibli
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "A visitor receives a startup greeting.", "A borrower receives a renewal receipt." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
@@ -1702,7 +1703,7 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "Display a startup greeting. Remote synchronization is excluded.", "Renew library loans. Assume an existing borrower account; purchases are excluded." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
@@ -1780,7 +1781,7 @@ test "completed repair packets retire authoring assignments while pending record
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "Display the startup time in UTC.", "Renew a loan and issue a receipt." }, 1..) |source, group_count| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, group_count);
+        var fixture = try Fixture.initContent(a, source, null, true, group_count);
         defer fixture.deinit();
         var current = try completedFixture(&fixture, true);
         try std.testing.expectEqual(group_count, current.record_group_count);
@@ -1815,7 +1816,7 @@ test "source-bound record batches reject duplicates without merging their eviden
     defer arena.deinit();
     const a = arena.allocator();
     const source = "Display a startup greeting. Show the current UTC date and time.";
-    var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+    var fixture = try Fixture.initContent(a, source, null, true, 2);
     defer fixture.deinit();
     var current = try completedFixture(&fixture, false);
     current.completed = sessions.records_index;
@@ -1992,6 +1993,19 @@ test "native exact recognition shares equal bytes but rejects distinct overlappi
     var inspection: provenance.Inspection = .{};
     try std.testing.expectError(error.InvalidTypedText, provenance.inspectAttributed(.model, a, text.validator, ambiguous.context, try ambiguous.proposal("Display ACTIVE VALUE."), .spec_story, &inspection));
     try std.testing.expectEqual(.ambiguous_exact, inspection.text_issue.?.reason);
+
+    // ADR 0036: a repair bound to ACTIVE alone still keeps delimiters whose removal
+    // would join ACTIVE VALUE, so the full re-check admits what the repair admitted.
+    const active = for ((try provenance.items(ambiguous.context)).entries) |item| {
+        if (item.claim.content == .preserved_token and std.mem.eql(u8, item.claim.content.preserved_token.value.raw_value.bytes, "ACTIVE")) break item.claim.id;
+    } else return error.MissingTestToken;
+    const wrapped: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Display `ACTIVE` VALUE." } }} };
+    const repaired = try provenance.checkValueInUnit(a, text.validator, ambiguous.context, .{ .claim_ids = &.{active}, .clarification_response_ids = &.{} }, &.{}, wrapped, .functional_requirement);
+    try std.testing.expectEqual(@as(usize, 3), repaired.segments.len);
+    try std.testing.expectEqualStrings("Display `", repaired.segments[0].literal.value);
+    try std.testing.expectEqualDeep(active, repaired.segments[1].exact_copy.claim_id);
+    try std.testing.expectEqualStrings("` VALUE.", repaired.segments[2].literal.value);
+    try std.testing.expectEqualDeep(repaired, try provenance.recognizeValue(a, @import("domain/reference_support.zig").records(ambiguous.context.references), repaired, .functional_requirement, null));
 
     var unique = try Fixture.init(a, "Display `ACTIVE` to the visitor.");
     defer unique.deinit();
@@ -2223,7 +2237,8 @@ test "code samples remain reference evidence and cannot be copied into business 
     defer arena.deinit();
     const a = arena.allocator();
     const raw = "print(\"sample\")\n``` inside the example\n";
-    var fixture = try Fixture.initClassified(a, "Example:\n~~~~text\n" ++ raw ++ "~~~~\n", .code_sample);
+    // The business claim quotes only line 1; quoting the code would make it an exact obligation (ADR 0024).
+    var fixture = try Fixture.initClaims(a, "Example:\n~~~~text\n" ++ raw ++ "~~~~\n", .code_sample, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 1 }} }} });
     defer fixture.deinit();
     const all = try provenance.items(fixture.context);
     const claim = for (all.entries) |item| {
@@ -2302,16 +2317,17 @@ const Fixture = struct {
         return initExtraction(a, bytes, kind, true);
     }
     fn initExtraction(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool) !Fixture {
-        return initContent(a, bytes, kind, has_claims, "An extracted business claim.", 1);
+        return initContent(a, bytes, kind, has_claims, 1);
     }
-    fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, claim_text: []const u8, model_claim_count: usize) !Fixture {
-        return initContentKinds(a, bytes, kind, has_claims, claim_text, model_claim_count, false);
+    /// Each model claim quotes every line of its chunk (ADR 0036).
+    fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize) !Fixture {
+        return initContentKinds(a, bytes, kind, has_claims, model_claim_count, false);
     }
-    fn initContentKinds(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, claim_text: []const u8, model_claim_count: usize, include_technical: bool) !Fixture {
-        return initClaims(a, bytes, kind, .{ .repeated = .{ .has_claims = has_claims, .text = claim_text, .count = model_claim_count, .technical = include_technical } });
+    fn initContentKinds(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize, include_technical: bool) !Fixture {
+        return initClaims(a, bytes, kind, .{ .repeated = .{ .has_claims = has_claims, .count = model_claim_count, .technical = include_technical } });
     }
     const Claims = union(enum) {
-        repeated: struct { has_claims: bool, text: []const u8, count: usize, technical: bool },
+        repeated: struct { has_claims: bool, count: usize, technical: bool },
         selected: []const @import("domain/reference_extraction.zig").Proposal,
     };
     fn initClaims(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, supplied: Claims) !Fixture {
@@ -2332,12 +2348,12 @@ const Fixture = struct {
                     break :selected try json.encode(Response, a, .{ .claims = .{ .claims = claims, .token_classifications = choices.items } });
                 },
                 .repeated => |options| repeated: {
-                    const initial = try tokens.wire(a, if (options.has_claims) try extraction.reply(a, chunk, options.text) else extraction.no_claim, choices.items);
+                    const initial = try tokens.wire(a, if (options.has_claims) try extraction.reply(a, inputs, chunk) else extraction.no_claim, choices.items);
                     if (!options.has_claims or options.count == 1) break :repeated initial;
                     var response = try json.decode(Response, a, initial);
                     const claims = try a.alloc(@import("domain/reference_extraction.zig").Proposal, options.count);
                     @memset(claims, response.claims.claims[0]);
-                    if (options.technical) claims[1].content = .{ .technical = .{ .nodes = &.{.{ .literal = .{ .value = options.text } }} } };
+                    if (options.technical) claims[1].category = .technical;
                     response.claims.claims = claims;
                     break :repeated try json.encode(Response, a, response);
                 },
@@ -2554,7 +2570,7 @@ test "ADR 0035 restatement keeps functional requirements and needs covered evide
     defer arena.deinit();
     const a = arena.allocator();
     const source = "Display a startup greeting. Show the current UTC date and time.";
-    var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+    var fixture = try Fixture.initContent(a, source, null, true, 2);
     defer fixture.deinit();
     const story = try fixture.value("The visitor sees a greeting.");
     const other = try fixture.value("The visitor sees the time.");
@@ -2654,7 +2670,7 @@ test "ADR 0035 restatements use production evidence shapes and keep uncovered wo
     const a = arena.allocator();
     const source = "Display a startup greeting. Show the current UTC date and time.";
     const wording = "The visitor sees a greeting with the time.";
-    var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+    var fixture = try Fixture.initContent(a, source, null, true, 2);
     defer fixture.deinit();
     const other = try fixture.proposal("The visitor sees the time.");
     const fr: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = other.value } }, .source_group_ids = other.source_group_ids, .provenance = other.provenance };
@@ -2771,7 +2787,7 @@ test "meaningful requirements and observable criteria preserve exact output thro
             .recommended = "After a successful loan renewal the service SHOULD show the new due date.",
         },
     }) |example| {
-        var fixture = try Fixture.initContent(a, example.source, .business_exact_string, true, example.source, 1);
+        var fixture = try Fixture.initContent(a, example.source, .business_exact_string, true, 1);
         defer fixture.deinit();
         const items = try provenance.items(fixture.context);
         const token_claim = items.entries[items.entries.len - 1].claim;
@@ -3832,7 +3848,7 @@ test "source review retains candidate-loss and gap judgments as advice without n
         defer arena.deinit();
         const a = arena.allocator();
         const source = if (mode == .genuine_gap) case.incomplete else case.complete;
-        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, if (mode == .lost_meaning) case.partial else source, 1);
+        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, 1);
         defer fixture.deinit();
         const inputs = try completedSupportInputs(&fixture);
         const ledger = try @import("domain/required_authority.zig").build(a, inputs);
@@ -3909,7 +3925,7 @@ test "candidate review retains semantic roles and contradiction advice without u
         defer arena.deinit();
         const a = arena.allocator();
         const source = try std.fmt.allocPrint(a, "{s}\n{s}\n", .{ case.required, case.exclusion });
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         const required = try fixture.value(case.required);
         const value = try fixture.value(if (mode == .excluded or mode == .prohibited) case.exclusion else case.required);
@@ -4099,7 +4115,7 @@ test "readiness source-purpose positives select original sources through product
     const positive = "{\"kind\":\"supported\",\"source_ids\":[1],\"detail\":\"The selected original source establishes this purpose before authoring.\"}";
     for ([_][]const u8{ "Display the current UTC time on startup.", "A borrower may renew an eligible loan and see the new deadline." }) |source| {
         for ([_]usize{ 0, 1, 3 }) |count| {
-            var fixture = try Fixture.initContent(a, source, null, count != 0, source, @max(count, 1));
+            var fixture = try Fixture.initContent(a, source, null, count != 0, @max(count, 1));
             defer fixture.deinit();
             const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
             const ledger = try authority.build(a, inputs);
@@ -4735,6 +4751,38 @@ fn checkNativeGenerationStart(view: @import("domain/pipeline_data.zig").View, ac
     }
 }
 
+test "source omission repair inserts one claim quoting every line its proposal cites" {
+    const repair = @import("domain/reference_extraction_repair.zig").Omission;
+    const packets = @import("domain/model_input_packet.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_]struct { source: []const u8, items: [2]u32, quote: []const u8 }{
+        .{ .source = "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n", .items = .{ 3, 4 }, .quote = "- Renew a loan.\n- Refuse overdue loans." },
+        .{ .source = "Startup:\n1. Show the greeting.\n2. Show the UTC time.\n", .items = .{ 2, 3 }, .quote = "1. Show the greeting.\n2. Show the UTC time." },
+    }) |case| {
+        var fixture = try Fixture.initClaims(a, case.source, null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 1 }} }} });
+        defer fixture.deinit();
+        const inputs = fixture.context.inputs;
+        const chunk = inputs.chunks.entries[0];
+        const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = try tokens.candidates(a, inputs), .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, .{ .extraction_claim = chunk.id }, case.source) };
+        const auth = try repair.authorize(a, facts);
+        try std.testing.expect(auth.operation == .insert and auth.target.claim == 1);
+        const proposal: @import("domain/reference_extraction.zig").Proposal = .{ .category = .business, .citations = &.{ .{ .ordinal = case.items[0] }, .{ .ordinal = case.items[1] } } };
+        const packet = try repair.packet(std.testing.allocator, facts, fixture.context.registry, auth);
+        defer packets.release(packet);
+        try checkPreparedExtractionOmission(a, packet, try @import("domain/model_candidate_json.zig").encode(@import("domain/reference_extraction.zig").Proposal, a, proposal));
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, .{ .claim = proposal }, null);
+        // ADR 0036: a proposal spanning two list items is one quoted claim.
+        const claims = merged.entries[0].outcome.claims;
+        try std.testing.expectEqual(@as(usize, 2), claims.len);
+        try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].outcome.claims[0], claims[0]);
+        try std.testing.expectEqualDeep(&[_]@import("domain/source_selections.zig").Selection{.{ .first = .{ .ordinal = case.items[0] }, .last = .{ .ordinal = case.items[1] } }}, claims[1].citations);
+        try std.testing.expectEqualStrings(case.quote, claims[1].content.business.value.segments[0].literal.value);
+        try std.testing.expectEqual(@as(usize, 2), (try extraction.finishText(a, inputs, merged)).ledger.claims.len);
+    }
+}
+
 test "source omission repair preserves sibling claims and rebuilds canonical identities" {
     const repair = @import("domain/reference_extraction_repair.zig").Omission;
     const e = @import("domain/reference_extraction.zig");
@@ -4757,7 +4805,7 @@ test "source omission repair preserves sibling claims and rebuilds canonical ide
         const packet = try repair.packet(std.testing.allocator, facts, fixture.context.registry, auth);
         defer packets.release(packet);
         try std.testing.expectEqualStrings("claim", packet.resultDefinition().?.bytes);
-        const proposal: e.Proposal = .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Show the required date and time." } }} } }, .citations = &.{extraction.wholeChunk(chunk)} };
+        const proposal: e.Proposal = .{ .category = .business, .citations = try extraction.citableLines(a, inputs, chunk) };
         const wire = try @import("domain/model_candidate_json.zig").encode(e.Proposal, a, proposal);
         try checkPreparedExtractionOmission(a, packet, wire);
         const replacement = try repair.parse(a, auth, packet, wire);
@@ -4783,9 +4831,9 @@ test "source omission repair preserves sibling claims and rebuilds canonical ide
         stale.extraction.candidate.revision += 1;
         try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, stale, fixture.context.registry, auth));
         var bad = replacement;
-        bad.claim.citations = &.{.{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } }};
-        const invalid = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (facts).extraction.inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, bad, origin);
-        try std.testing.expectError(error.InvalidSourceCitation, extraction.finishText(a, inputs, invalid));
+        // Admission restricts citations to supplied lines; an unknown one is a defect.
+        bad.claim.citations = &.{.{ .ordinal = 999 }};
+        try std.testing.expectError(error.InvalidReferenceExtraction, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (facts).extraction.inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, bad, origin));
         var unlocalized = facts;
         unlocalized.support = try omissionSupport(&fixture, .{ .unlocalized = .{} }, source);
         try std.testing.expectError(error.UnlocalizedSourceOmission, repair.authorize(a, unlocalized));
@@ -4910,7 +4958,7 @@ test "pre-generation localized disposition evidence replaces source review linea
     const schema = @import("domain/model_result_schema.zig");
     const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
     for ([_][]const u8{ "MOCK Display the greeting and current UTC date.", "MOCK Renew an eligible loan and retain its deadline on refusal." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         const original = fixture.context.references.records.assignments.checked.prior.prior;
         var proposal = original.proposal;
@@ -5013,9 +5061,10 @@ test "loss comparison keeps multi-source producers visible without authorizing u
             signal_count += 1;
             try std.testing.expectEqualDeep(&ids, supporting.output.signal.result.value.claim_ids);
             try std.testing.expectEqual(@as(usize, 2), supporting.output.signal.claims.claims.len);
-            for (supporting.output.signal.claims.claims, source_ids) |claim, source_id| {
+            for (supporting.output.signal.claims.claims, source_ids, sources) |claim, source_id, bytes| {
                 try std.testing.expectEqualDeep(source_id, claim.source_id);
-                try std.testing.expectEqualStrings("The user can confirm the request.", claim.meaning);
+                // Each claim quotes its own source line (ADR 0036).
+                try std.testing.expectEqualStrings(std.mem.trimEnd(u8, bytes, "\n"), claim.meaning);
                 try std.testing.expect(claim.citation_ids.len != 0);
             }
         }
@@ -5033,7 +5082,7 @@ test "loss producer comparison resolves passive and source references while pres
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContentKinds(a, source, .business_exact_string, true, "MOCK Read the supplied source.", 2, true);
+        var fixture = try Fixture.initContentKinds(a, source, .business_exact_string, true, 2, true);
         defer fixture.deinit();
         var records = @import("domain/reference_support.zig").records(fixture.context.references);
         const items = try a.dupe(r.Item, records.items.entries);
@@ -5171,7 +5220,7 @@ test "source omission repairs a false empty outcome and reclassifies its exact t
         const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = candidates, .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, .{ .extraction_claim = chunk.id }, "MOCK Display the new deadline.") };
         const auth = try repair.authorize(a, facts);
         try std.testing.expect(auth.operation == .replace);
-        const replacement: repair.Replacement = .{ .outcome = .{ .claim = .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the new deadline." } }} } }, .citations = &.{extraction.wholeChunk(chunk)} } } };
+        const replacement: repair.Replacement = .{ .outcome = .{ .claim = .{ .category = .business, .citations = try extraction.citableLines(a, inputs, chunk) } } };
         try std.testing.expect(auth.target == .outcome and auth.operation.replace.outcome == .no_feature_claim);
         const atomic = @import("domain/atomic_repair.zig");
         const before = try atomic.snapshot(repair.Authorization, a, auth);
@@ -5204,7 +5253,6 @@ test "source omission repairs a false empty outcome and reclassifies its exact t
         {
             try std.testing.expectEqual(@as(usize, 2), classified.entries[0].token_classifications.len);
             try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].origin.?);
-            try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].citations_origin.?);
         }
     }
 }
@@ -5479,7 +5527,7 @@ test "native reference reviews retain pre-generation attribution and generated a
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, example[0], .business_exact_string, true, example[1], 3);
+        var fixture = try Fixture.initContent(a, example[0], .business_exact_string, true, 3);
         defer fixture.deinit();
         _ = try introduceConflict(&fixture);
         const records = @import("domain/reference_support.zig").records(fixture.context.references);
@@ -6046,7 +6094,7 @@ test "record association preserves accepted multi-claim order and rejects unboun
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "Renew the loan and retain its deadline.", "Confirm the booking and retain its arrival date." }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        var fixture = try Fixture.initContent(a, source, null, true, 2);
         defer fixture.deinit();
         const original = fixture.context.references.records.assignments.checked.prior.prior;
         var proposed = original.proposal;
@@ -6078,9 +6126,10 @@ test "support reviews retain original sources and discarded or misclassified tok
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    for ([_][]const u8{ "Display `Renewal accepted!` and provide a return deadline.", "Display `MOCK Booking confirmed!` and provide the arrival date." }) |source| {
+    // The claim quotes line 2 only (ADR 0036), so line 1's token may be discarded.
+    for ([_][]const u8{ "Display `Renewal accepted!`.\nProvide a return deadline.\n", "Display `MOCK Booking confirmed!`.\nProvide the arrival date.\n" }) |source| {
         for ([_]?@import("domain/structured_tokens.zig").Kind{ null, .visual_typography, .business_exact_string }) |kind| {
-            var fixture = try Fixture.initClassified(a, source, kind);
+            var fixture = try Fixture.initClaims(a, source, kind, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 2 }} }} });
             defer fixture.deinit();
             const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
             const packet = try reviewPacketAt(support, a, inputs, fixture.context, 0);
@@ -6338,7 +6387,7 @@ test "source review scopes distinguish field coverage and joint record condition
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 1);
+        var fixture = try Fixture.initContent(a, example[0], null, true, 1);
         defer fixture.deinit();
         const local = try fixture.value(example[1]);
         const given = try fixture.value(example[2]);
@@ -6537,7 +6586,7 @@ test "record source review admits complete native membership with shared origins
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, example[0], null, true, example[0], 1);
+        var fixture = try Fixture.initContent(a, example[0], null, true, 1);
         defer fixture.deinit();
         const value = try fixture.value(example[0]);
         const records = [_]spec.IdentifiedRecord{
@@ -6699,7 +6748,7 @@ test "record families group every record of one kind for unrelated kinds and kee
     defer arena.deinit();
     const a = arena.allocator();
     const source = "MOCK Register each borrower and record which loans each borrower holds.";
-    var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+    var fixture = try Fixture.initContent(a, source, null, true, 1);
     defer fixture.deinit();
     const value = try fixture.value(source);
     const relationships = [_]spec.BusinessValue{ value.value, value.value };
@@ -6752,7 +6801,7 @@ test "a record family above the member choice bound rejects before invocation wi
     defer arena.deinit();
     const a = arena.allocator();
     const source = "MOCK Record every relationship of the borrower.";
-    var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+    var fixture = try Fixture.initContent(a, source, null, true, 1);
     defer fixture.deinit();
     const value = try fixture.value(source);
     // A name, a business meaning and 1,023 relationships: 1,025 members.
@@ -6808,7 +6857,7 @@ test "an assignment withholds positive verdicts no claim set can bind, so one in
         .{ .source = "MOCK Display the greeting and the current date.", .kind = .acceptance_criterion, .empty = &.{.functional_requirements}, .backed = &.{ .acceptance_criteria, .scenario_coverage } },
     }) |shape| {
         const source = shape.source;
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         const value = try fixture.value(source);
         const content: spec.Content(spec.BusinessValue) = if (shape.kind == .functional_requirement) .{ .functional_requirement = .{ .text = value.value } } else .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } };
@@ -6902,7 +6951,7 @@ test "source and policy collections expose selected members despite matching tex
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, source, 5);
+        var fixture = try Fixture.initContent(a, source, null, true, 5);
         defer fixture.deinit();
         const value = try fixture.value(source);
         const all = try provenance.items(fixture.context);
@@ -7881,7 +7930,7 @@ test "incomplete specifications publish supported business evidence and bound qu
     defer arena.deinit();
     const a = arena.allocator();
     for ([_][]const u8{ "When started, display MOCK Hello, World! and the UTC date and time.", "The borrower receives a renewal receipt." }) |source| {
-        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, 1);
         defer fixture.deinit();
         const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
         const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.context.inputs.chunks.partition);
@@ -8196,7 +8245,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, "Retain the supported behavior and its date information.", 3);
+        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, 3);
         defer fixture.deinit();
         const token = for ((try provenance.items(fixture.context)).entries) |item| {
             if (item.claim.content == .preserved_token) break item.claim.id;
@@ -8460,7 +8509,7 @@ test "FIX002 false cross-kind conflict and nine question repairs cannot publish 
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContentKinds(a, source, .business_exact_string, true, "Preserve the action, message and date.", 2, true);
+        var fixture = try Fixture.initContentKinds(a, source, .business_exact_string, true, 2, true);
         defer fixture.deinit();
         _ = try introduceConflict(&fixture);
         const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
@@ -8619,6 +8668,39 @@ test "identical exact originals share native recognition without rewriting selec
     try std.testing.expectEqual(.native_token_disposition, rejected.issue.expected.constraint);
 }
 
+test "admitted prose loses the code delimiters around a recognised exact value" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "MOCK Display `MOCK Hello, World!` on start.", "MOCK Show `MOCK Renewed!` after renewal." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const records = @import("domain/reference_support.zig").records(fixture.context.references);
+        const token = for ((try provenance.items(fixture.context)).entries) |item| {
+            if (item.claim.content == .preserved_token) break item.claim;
+        } else return error.MissingTestToken;
+        const bytes = token.content.preserved_token.value.raw_value.bytes;
+        const wrapped: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = try std.fmt.allocPrint(a, "It must display `{s}` and stop.", .{bytes}) } }} };
+        // ADR 0036: an obligation field holds the value once, as an exact copy.
+        const recognized = try provenance.recognizeValue(a, records, wrapped, .functional_requirement, null);
+        try std.testing.expectEqual(@as(usize, 3), recognized.segments.len);
+        try std.testing.expectEqualStrings("It must display ", recognized.segments[0].literal.value);
+        try std.testing.expectEqualDeep(token.id, recognized.segments[1].exact_copy.claim_id);
+        try std.testing.expectEqualStrings(" and stop.", recognized.segments[2].literal.value);
+        try std.testing.expectEqualDeep(recognized, try provenance.recognizeValue(a, records, recognized, .functional_requirement, null));
+        // A field that can't hold exact copies keeps the value as text.
+        const meaning = try provenance.recognizeValue(a, records, wrapped, .entity_meaning, null);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "It must display {s} and stop.", .{bytes}), meaning.segments[0].literal.value);
+        try std.testing.expectEqualDeep(meaning, try provenance.recognizeValue(a, records, meaning, .entity_meaning, null));
+        // A code-wrapped value alone becomes the exact copy alone.
+        const alone: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = try std.fmt.allocPrint(a, "`{s}`", .{bytes}) } }} };
+        try std.testing.expectEqualDeep(&[_]@import("domain/typed_text.zig").BusinessSegment{.{ .exact_copy = .{ .claim_id = token.id } }}, (try provenance.recognizeValue(a, records, alone, .functional_requirement, null)).segments);
+        // Unequal backtick runs are not a code span; the text stays as written.
+        const uneven: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = try std.fmt.allocPrint(a, "It must display ``{s}` and stop.", .{bytes}) } }} };
+        try std.testing.expectEqualDeep(uneven, try provenance.recognizeValue(a, records, uneven, .functional_requirement, null));
+    }
+}
+
 test "empty display choices reject invented and misbound references and permit bounded prose recovery" {
     const repair = @import("domain/specification_repair.zig");
     const candidates = @import("domain/specification_candidate.zig");
@@ -8743,7 +8825,7 @@ test "completed requirement links keep separate source sets and many-to-many lin
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "Display `Done!` after the operation.", .business_exact_string, true, "The operation has an observable result.", 2);
+    var fixture = try Fixture.initContent(a, "Display `Done!` after the operation.", .business_exact_string, true, 2);
     defer fixture.deinit();
     const all = try provenance.items(fixture.context);
     try std.testing.expectEqual(@as(usize, 3), all.entries.len);
@@ -9028,7 +9110,7 @@ test "fixed repair packet offers only passive choices from its bound claims" {
         "Export stories.md with the specification.",
         "Read stories.md while planning the release.",
     }) |source| {
-        var fixture = try Fixture.initContent(a, source, null, true, "The application handles the named file.", 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         const current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
         const initial = try sessions.packetFor(a, current, fixture.context, 0);
@@ -9116,7 +9198,7 @@ test "bound preservation rejects missing duplicate foreign evidence and empty pr
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "MOCK Required behavior.", null, true, "MOCK Required behavior.", 2);
+    var fixture = try Fixture.initContent(a, "MOCK Required behavior.", null, true, 2);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Required behavior.");
     const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
@@ -9159,7 +9241,7 @@ test "reported lost obligations admit against complete nonempty native collectio
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 2);
+        var fixture = try Fixture.initContent(a, example[0], null, true, 2);
         defer fixture.deinit();
         const state = try preservationTest(a, &fixture, .source_preservation, example[0]);
         const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
@@ -9206,9 +9288,9 @@ test "native preservation collection retains equal literal occurrences under dif
     const a = arena.allocator();
     const source = "MOCK On startup display `MOCK Ready`.\nMOCK After recovery display `MOCK Ready`.\n";
     var claims: [2]@import("domain/reference_extraction.zig").Proposal = undefined;
-    for (&claims, [_][]const u8{ "MOCK On startup display `MOCK Ready`.", "MOCK After recovery display `MOCK Ready`." }, 1..) |*claim, value, line| claim.* = .{
-        .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = value } }} } },
-        .citations = try a.dupe(@import("domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = @intCast(line) }, .last = .{ .ordinal = @intCast(line) } }}),
+    for (&claims, 1..) |*claim, line| claim.* = .{
+        .category = .business,
+        .citations = try a.dupe(@import("domain/source_selections.zig").Id, &.{.{ .ordinal = @intCast(line) }}),
     };
     var fixture = try Fixture.initClaims(a, source, .business_exact_string, .{ .selected = &claims });
     defer fixture.deinit();
@@ -9253,7 +9335,7 @@ test "bound preservation packet owns evidence after preparation arena teardown" 
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, "MOCK Keep an audit record.", null, true, "MOCK Keep an audit record.", 1);
+        var fixture = try Fixture.initContent(a, "MOCK Keep an audit record.", null, true, 1);
         defer fixture.deinit();
         const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Keep an audit record.");
         break :blk try support.packetForLoss(std.testing.allocator, state.inputs, fixture.context, state.pending);
@@ -9274,7 +9356,7 @@ test "bound preservation shared schema and codec exclude culprit and verdict rea
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "MOCK Close the valve on alarm.", null, true, "MOCK Close the valve on alarm.", 1);
+    var fixture = try Fixture.initContent(a, "MOCK Close the valve on alarm.", null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Close the valve on alarm.");
     const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
@@ -9311,7 +9393,7 @@ test "bound preservation shared schema and codec exclude culprit and verdict rea
 fn preservationAllocationCheck(a: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
-    var fixture = try Fixture.initContent(arena.allocator(), "MOCK Retain a receipt.", null, true, "MOCK Retain a receipt.", 1);
+    var fixture = try Fixture.initContent(arena.allocator(), "MOCK Retain a receipt.", null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(arena.allocator(), &fixture, .source_readiness, "MOCK Retain a receipt.");
     const packet = try @import("domain/specification_support.zig").Source.packetForLoss(a, state.inputs, fixture.context, state.pending);
@@ -9326,7 +9408,8 @@ test "bound preservation does not attribute composite classification loss to cla
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initExtraction(a, "MOCK Display `MOCK Ready` after approval.", null, true);
+    // The claim quotes line 2 only (ADR 0036), so line 1's token is discarded separately.
+    var fixture = try Fixture.initClaims(a, "MOCK Display `MOCK Ready` after approval.\nMOCK Approval comes first.\n", null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = 2 }} }} });
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_preservation, "MOCK Display `MOCK Ready` after approval.");
     const assigned = try @import("domain/specification_support.zig").Source.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
@@ -9367,7 +9450,7 @@ test "preservation lifecycle retains distinct origins and rederives attribution 
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         var state = try preservationTest(a, &fixture, .source_readiness, source);
         const native = try authority.build(a, state.inputs);
@@ -9436,7 +9519,7 @@ test "invalid preservation response reports comparison call and cannot enter sem
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "MOCK Preserve receipt.", null, true, "MOCK Preserve receipt.", 1);
+    var fixture = try Fixture.initContent(a, "MOCK Preserve receipt.", null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Preserve receipt.");
     const packet = try support.packetForLoss(a, state.inputs, fixture.context, state.pending);
@@ -9451,14 +9534,17 @@ test "invalid preservation response reports comparison call and cannot enter sem
 }
 
 test "multi-chunk and separately classified loss cannot fabricate a unique upstream repair owner" {
-    for ([_][2][]const u8{ .{ "MOCK Preserve all conditions.\n" ** 70, "MOCK Preserve all conditions." }, .{ "MOCK Display `MOCK Approved` after confirmation.", "MOCK Display `MOCK Approved` after confirmation." } }) |example| {
-        const source = example[0];
+    for ([_]struct { source: []const u8, obligation: []const u8, cited: ?u32 }{
+        .{ .source = "MOCK Preserve all conditions.\n" ** 70, .obligation = "MOCK Preserve all conditions.", .cited = null },
+        // The claim quotes line 2 only (ADR 0036), so line 1's token is discarded separately.
+        .{ .source = "MOCK Display `MOCK Approved` after confirmation.\nMOCK Confirmation comes first.\n", .obligation = "MOCK Display `MOCK Approved` after confirmation.", .cited = 2 },
+    }) |example| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, "MOCK Partial meaning.", 1);
+        var fixture = if (example.cited) |line| try Fixture.initClaims(a, example.source, null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = line }} }} }) else try Fixture.initContent(a, example.source, null, true, 1);
         defer fixture.deinit();
-        const state = try preservationTest(a, &fixture, .source_preservation, example[1]);
+        const state = try preservationTest(a, &fixture, .source_preservation, example.obligation);
         const accepted = (try collectedPreservation(a, &fixture, state, .{ .unlocalized = .{} }, null)).accepted;
         try @import("domain/specification_support.zig").Source.validateStored(a, accepted.inputs, fixture.context.inputs);
         const assignment = accepted.inputs.evidence[0].review.?.preservation.?.assignment;
@@ -9474,7 +9560,7 @@ test "collecting a second comparison preserves independent admitted evidence" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "MOCK Keep both receipt and deadline.", null, true, "MOCK Keep both receipt and deadline.", 1);
+    var fixture = try Fixture.initContent(a, "MOCK Keep both receipt and deadline.", null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Keep both receipt and deadline.");
     const first = (try collectedPreservation(a, &fixture, state, .{ .reconciliation_signal = fixture.context.references.records.signals[0].id }, null)).accepted;
@@ -9510,7 +9596,7 @@ test "omission admission requires its source premise before preparing comparison
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "MOCK Retain the delivery deadline.", null, true, "MOCK Retain the delivery deadline.", 1);
+    var fixture = try Fixture.initContent(a, "MOCK Retain the delivery deadline.", null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_readiness, "MOCK Retain the delivery deadline.");
     var missing = state.pending;
@@ -9553,7 +9639,7 @@ test "source reviewer supplies one obligation and loss review carries it without
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, obligation, null, true, obligation, 1);
+        var fixture = try Fixture.initContent(a, obligation, null, true, 1);
         defer fixture.deinit();
         const state = try preservationTest(a, &fixture, .source_preservation, obligation);
         const id = state.inputs.seeds[0].id;
@@ -9692,7 +9778,7 @@ test "loss request correction preserves canonical citation guidance and the comp
     defer arena.deinit();
     const a = arena.allocator();
     const obligation = "MOCK After refusal do not change the deadline; retain the receipt for thirty days.";
-    var source_fixture = try Fixture.initContent(a, obligation, null, true, obligation, 2);
+    var source_fixture = try Fixture.initContent(a, obligation, null, true, 2);
     defer source_fixture.deinit();
     const state = try preservationTest(a, &source_fixture, .source_preservation, obligation);
     const assigned = try support.comparisonAssignment(a, state.inputs, source_fixture.context, state.pending);
@@ -9718,7 +9804,7 @@ test "supported and source-gap findings never create loss or upstream repair aut
         defer arena.deinit();
         const a = arena.allocator();
         const requirement = "MOCK After approval notify the patient.";
-        var fixture = try Fixture.initContent(a, requirement, null, true, requirement, 1);
+        var fixture = try Fixture.initContent(a, requirement, null, true, 1);
         defer fixture.deinit();
         const inputs = try completedSupportInputs(&fixture);
         const ledger = try @import("domain/required_authority.zig").build(a, inputs);
@@ -9768,7 +9854,7 @@ test "invalid advisory finding metadata requires bounded native correction and c
         const mixed = failure != .defect_sources;
         var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         const inputs = try completedSupportInputs(&fixture);
         const ledger = try authority.build(a, inputs);
@@ -9859,7 +9945,7 @@ test "omission obligation correction is closed atomic and retained through admis
     defer arena.deinit();
     const a = arena.allocator();
     const obligation = "MOCK After cancellation the service must notify the patient.";
-    var fixture = try Fixture.initContent(a, obligation, null, true, obligation, 1);
+    var fixture = try Fixture.initContent(a, obligation, null, true, 1);
     defer fixture.deinit();
     const state = try preservationTest(a, &fixture, .source_preservation, obligation);
     for ([_]?[]const u8{ null, "", " \t\n", "\x00" }) |invalid| {
@@ -10550,7 +10636,7 @@ test "native source question syntax bypass cannot grant support unit repair" {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        var fixture = try Fixture.initContent(a, source, null, true, 1);
         defer fixture.deinit();
         const inputs = try completedSupportInputs(&fixture);
         const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
@@ -10571,12 +10657,31 @@ fn checkPreparedExtractionOmission(a: std.mem.Allocator, packet: *const @import(
     const codec = @import("domain/model_candidate_json.zig");
     const bindings = try codec.fieldBindings(@import("domain/reference_extraction.zig").Proposal, a, .{ .reference_phase = .extraction });
     try std.testing.expect(@import("domain/model_text_field.zig").same(bindings, packet.fieldPolicies()));
-    try std.testing.expectEqual(@as(usize, 7), bindings.len);
+    // ADR 0036: a claim proposal carries no model wording, only its category and lines.
+    try std.testing.expectEqual(@as(usize, 0), bindings.len);
     var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .limited(1_048_576)));
     // The old no-feature outcome is an exact native CAS witness, never an
     // alternative answer for the selected claim-repair response contract.
-    try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema, wire, extraction.no_claim);
+    try @import("test_fixtures/prepared_model_repair.zig").checkWithoutText(a, packet, schema, wire, extraction.no_claim);
+    // The repaired claim cites only supplied, nonblank lines, no more of them than exist.
+    const restricted = try @import("domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer restricted.release();
+    const contract = restricted.selected().modelBytes();
+    const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    var supplied: usize = 0;
+    for (body.value.object.get("input").?.object.get("source_lines").?.array.items) |line| {
+        if (@import("domain/source_selections.zig").citable(line.object.get("text").?.string)) {
+            supplied += 1;
+        } else try check(contract, .{ .bytes = try std.fmt.allocPrint(a, "{{\"category\":\"business\",\"citations\":[{d}]}}", .{line.object.get("id").?.integer}), .rejection = .enum_mismatch, .path = "/citations/0" });
+    }
+    try check(contract, .{ .bytes = "{\"category\":\"business\",\"citations\":[999]}", .rejection = .enum_mismatch, .path = "/citations/0" });
+    var excess: std.ArrayList(u8) = .empty;
+    try excess.appendSlice(a, "{\"category\":\"business\",\"citations\":[1");
+    for (0..supplied) |_| try excess.appendSlice(a, ",1");
+    try excess.appendSlice(a, "]}");
+    try check(contract, .{ .bytes = excess.items, .rejection = .array_length, .path = "/citations" });
 }
 
 test "post-generation semantic judgments remain admitted advice without content repair or clarification authority" {
@@ -10690,7 +10795,7 @@ test "native literal obligations survive code-sample classification and token-on
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, example[0], .code_sample, true, example[1], 1);
+        var fixture = try Fixture.initContent(a, example[0], .code_sample, true, 1);
         defer fixture.deinit();
         const all = try provenance.items(fixture.context);
         const current = try completedFixtureValue(&fixture, false, try fixture.proposal(example[2]));
@@ -10739,7 +10844,7 @@ test "equal-byte originals retain mixed-kind exact duties through one representa
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "Display `ACTIVE` beside `ACTIVE` and `ACTIVE`.", .code_sample, true, "The application displays its status.", 1);
+    var fixture = try Fixture.initContent(a, "Display `ACTIVE` beside `ACTIVE` and `ACTIVE`.", .code_sample, true, 1);
     defer fixture.deinit();
     var changed = fixture.extracted_text;
     const entries = try a.dupe(ex.TextValidatedResult, changed.entries);

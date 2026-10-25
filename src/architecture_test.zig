@@ -1806,8 +1806,9 @@ test "extraction candidates reuse citation and identity owners without gaining c
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
     for (operations.schemas) |schema| try std.testing.expect(schema.maximum_bytes == null);
-    try std.testing.expect(@FieldType(extraction.Proposal, "citations") == []const @import("domain/source_selections.zig").Selection);
-    for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition" }) |field| {
+    try std.testing.expect(@FieldType(extraction.Proposal, "citations") == []const @import("domain/source_selections.zig").Id);
+    // ADR 0036: a model proposal carries no wording; it is quoted from the cited lines.
+    for ([_][]const u8{ "state_id", "chunk_id", "claim_id", "citation_id", "disposition", "content" }) |field| {
         inline for (@typeInfo(extraction.Proposal).@"struct".fields) |proposal_field| try std.testing.expect(!std.mem.eql(u8, field, proposal_field.name));
     }
     inline for (.{ @embedFile("actions/reference/validate_source_citations.zig"), @embedFile("actions/reference/validate_reference_claims.zig") }) |source| {
@@ -2011,7 +2012,7 @@ test "candidate repairs share authority and expose only native scoped operations
     const coverage = @import("application/specification_coverage_repair_workflow.zig");
     const support = @import("application/specification_support_repair_workflow.zig");
     const source_omission = @import("application/source_omission_repair_workflow.zig");
-    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, tokens.RetainClaimRejection, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
+    inline for (.{ tokens.Authorize, tokens.BuildInput, tokens.Parse, tokens.Merge, spec.Authorize, spec.BuildInput, spec.Parse, spec.Merge, lexical.Authorize, lexical.BuildInput, lexical.Parse, lexical.Merge, reconciliation.Authorize(.summary), reconciliation.Authorize(.dispositions), reconciliation.Authorize(.signals), reconciliation.Authorize(.conflicts), reconciliation.BuildInput, reconciliation.Parse, reconciliation.Merge, coverage.Authorize, support.Authorize, support.BuildInput, support.Parse, support.Merge, source_omission.Authorize, source_omission.BuildInput, source_omission.Parse, source_omission.Merge(.extraction), source_omission.Merge(.reconciliation) }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }

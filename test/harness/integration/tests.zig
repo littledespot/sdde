@@ -796,7 +796,7 @@ test "composition reports retain every field across retirement rendering and lat
     try std.testing.expectEqualStrings("/records/0/given", later.last_protocol_rejection.?.composition_error.?.fields[0].path);
 }
 
-test "source selection reports retain the producing call separately from the last call" {
+test "candidate rejection reports retain the producing call separately from the last call" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -804,12 +804,12 @@ test "source selection reports retain the producing call separately from the las
         .schema = .@"spec-e2e-report/v9",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .status = .workflow_failed,
-        .candidate_error = .{ .source_selections = .{
+        .candidate_error = .{ .token_classifications = .{
+            .choices = .{ .outcome = .claims, .decisions = &.{ .preserve, .irrelevant } },
             .observed = &.{},
             .scope = .{ .state_id = .{ .bytes = "current-state" }, .chunk_id = .{ .bytes = "chunk-2" } },
             .revision = 3,
-            .claim_index = 2,
-            .issue = .{ .reason = .unknown_selection, .index = 1, .rejected = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 99 } }, .available = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 4 } } },
+            .issues = .{ .missing = &.{}, .duplicate = &.{}, .unknown = &.{.{ .source_id = .{ .ordinal = 2 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 99 }}, .forbidden = &.{} },
             .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } },
         } },
         .candidate_model_call = 2,
@@ -1169,13 +1169,13 @@ test "step events keep the newer exchange usage separate from an older rejected 
         .status = .workflow_failed,
         .last_model_origin = repair,
         .last_model_usage = Usage.init(300, 40, 340).?,
-        .candidate_error = .{ .source_selections = .{
+        .candidate_error = .{ .token_classifications = .{
+            .choices = .{ .outcome = .claims, .decisions = &.{ .preserve, .irrelevant } },
             .observed = &.{},
             .scope = .{ .state_id = .{ .bytes = "state" }, .chunk_id = .{ .bytes = "chunk" } },
             .revision = 1,
-            .claim_index = 0,
             .origin = original,
-            .issue = .{ .reason = .unknown_selection, .index = 0, .rejected = .{ .first = .{ .ordinal = 99 }, .last = .{ .ordinal = 99 } }, .available = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 7 } } },
+            .issues = .{ .missing = &.{}, .duplicate = &.{}, .unknown = &.{.{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 99 }}, .forbidden = &.{} },
         } },
     };
     try obs.correlate(a, &calls, &report);
@@ -1208,9 +1208,9 @@ test "step events keep the newer exchange usage separate from an older rejected 
     calls[0].output = .not_projected;
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
     calls[0].output = .available;
-    report.candidate_error.?.source_selections.origin.?.attempt.value = 9;
+    report.candidate_error.?.token_classifications.origin.?.attempt.value = 9;
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
-    report.candidate_error.?.source_selections.origin = null;
+    report.candidate_error.?.token_classifications.origin = null;
     try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
     // A correlation failure does not erase a successfully captured response.

@@ -258,8 +258,8 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     defer environment.deinit();
     const assessed = try inspection.inspect(io, a, &environment, temporary.dir, "run", selected.workflow_id, probe, report);
     const expected_status: inspection.Status = switch (scenario) {
-        .complete, .empty_server_tool_usage_prefix => .compatible,
-        .schema_invalid, .malformed_candidate, .noncandidate_stop => .incompatible,
+        .complete => .compatible,
+        .empty_server_tool_usage_prefix, .schema_invalid, .malformed_candidate, .noncandidate_stop => .incompatible,
         .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .missing_usage, .malformed_provider, .capture_failed => .inconclusive,
     };
     try std.testing.expectEqual(expected_status, assessed.status);
@@ -302,9 +302,10 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try checkTampering(io, a, &environment, temporary.dir, run, selected.workflow_id, probe, report, readback.call);
         },
         .empty_server_tool_usage_prefix => {
+            // The retained claims carry model wording, which ADR 0036 removed.
             try std.testing.expectEqual(.valid, assessed.validation.extraction);
             try std.testing.expectEqual(.valid, assessed.validation.json);
-            try std.testing.expectEqual(.valid, assessed.validation.schema);
+            try std.testing.expectEqual(.invalid, assessed.validation.schema);
             try std.testing.expectEqual(.removed_leading_brace_quote, assessed.validation.normalization);
             try std.testing.expect(std.mem.startsWith(u8, assessed.validation.model_text.?, "{\"{ "));
             try std.testing.expectEqualStrings("claims", assessed.validation.parsed.?.object.get("kind").?.string);
@@ -484,8 +485,8 @@ test "test.integration.provider_compatibility drifted slot controls cannot subst
 }
 
 test "test.integration.provider_compatibility empty server tool metadata retains exact usage and shared prefix normalization in unrelated domains" {
-    // This retained provider body exercises structural compatibility only. Its
-    // claims do not acquire meaning or publication authority in either domain.
+    // This retained provider body exercises usage and prefix normalization only.
+    // Its claims predate ADR 0036, so the current schema rejects them.
     for (cases) |case_path| try runScenario(case_path, .empty_server_tool_usage_prefix);
 }
 

@@ -283,8 +283,8 @@ explicit in the selected YAML:
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
-| `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations or typed `invalid` selection diagnostics. Exact-token citations retain §3.4 validation. |
+| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
+| `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations; an invalid selection is a failure. Exact-token citations retain §3.4 validation. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
 | `validate-reference-extraction-accounting` | Citable inputs, preserved-token assignments and ledger → exact total chunk/claim/citation/token coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
@@ -293,14 +293,17 @@ explicit in the selected YAML:
   claims, claims: [...], token_classifications: [...]}` or `{kind: no_feature_claim,
   reason: ReferenceSemanticText, token_classifications: [...]}`.
 - These are shape descriptions, not literal JSON examples.
-- Each claim has only typed `content` and a `citations` collection of inclusive `{first,
-  last}` source-line IDs supplied in the request.
-- Missing citations are a typed repairable rejection.
+- Each claim has only a `category` and a `citations` set of source-line IDs
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md)). Admission restricts the IDs to
+  the chunk's citable (non-blank) lines.
+- The model supplies no wording. The engine quotes each claim's cited lines as written,
+  Markdown included, trimming each run only at its ends (never inside fenced code) and
+  joining separate runs with an ellipsis line. One proposal is one claim.
 - The engine reconstructs exact bytes and coordinates; no quotation or coordinate echo
   is accepted.
-- Content kinds are `business`, `design`, `technical`, `validation`,
+- Categories are `business`, `design`, `technical`, `validation`,
   `implementation_assumption`, `open_question` and `scope_guard`.
-- `business` and `scope_guard` use `BusinessText`; other kinds use
+- `business` and `scope_guard` claims are quoted as `BusinessText`; other categories as
   `ReferenceSemanticText`.
 - Text validation establishes syntax and permitted references, **not accepted meaning or
   requirements**.
@@ -435,7 +438,7 @@ file/network access, output write, clarification change or completion transition
 | --- | --- |
 | `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
 | `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
-| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications and valid scoped citation selections, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
+| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
 
@@ -506,16 +509,13 @@ Retry allowances and the workflow token budget are unchanged.
   `token_classifications` field and all missing, duplicate, unknown or forbidden
   candidate IDs.
 - Invalid source authority remains a failure.
-- A repair authorization selects that chunk's classification collection, one invalid
-  citation selection, or an empty claim-citation collection.
-- The model cannot change claim meaning, source bytes, other selections/chunks or the
-  target.
-- The selected replacement schema reuses the corresponding generation definition:
-  `classification_replacement`, `source_selection_replacement`, or
-  `citation_replacement`.
-- Citation requests also include the unchanged claim.
-- After compare-and-swap merge, the shared reference-selection validation runs again
-  before token and claim construction and full ledger checks.
+- A repair authorization selects that chunk's classification collection. Citations are
+  bounded at admission and are never repaired (ADR 0036).
+- The model cannot change claim meaning, source bytes, other chunks or the target.
+- The selected replacement schema reuses the `classification_replacement` generation
+  definition.
+- After compare-and-swap merge, the shared classification validation runs again before
+  token and claim construction and full ledger checks.
 - The text-validated candidate and selection result use captured retention, like
   specification repair: descendants retain candidate evidence while current
   source/policy generations remain in their authority lineage.
@@ -887,11 +887,11 @@ validators:
   rejections with the unit, rule, observed/expected constraint, revision and producing
   origin.
 - Invalid corpus/history/context and operational errors remain failures.
-- Extraction text retains its native lexical cause and content location before text
-  acceptance, including `no_feature_claim` reasons.
-- A successful text repair must still pass classification, selection and
-  constructed-claim accounting; a constructed model-selection rejection returns to its
-  original selection target and retires derived claims/tokens.
+- Extraction text retains its native lexical cause and location before text
+  acceptance. Only a `no_feature_claim` reason is model text; quoted claim text that
+  fails is an engine defect (ADR 0036).
+- A successful reason repair must still pass classification and constructed-claim
+  accounting.
 - Engine-derived corruption does not trigger a model call.
 
 - Repair authorizers consume retained rejections and verify current association, exact

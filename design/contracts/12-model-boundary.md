@@ -578,9 +578,11 @@ findings. Only complete native collection validation permits authority advanceme
   evidence.
 - A preserve classification deterministically creates a canonical token and preserved-token
   claim, so `no_feature_claim` is valid only when no model or preserved-token claim remains.
-- Each model claim contains typed content plus one or more `SourceCitationProposal` values;
-  neither proposal admits reference-state, chunk, citation, claim, token, obligation,
-  reconciliation-disposition, or related-claim IDs.
+- Each model claim contains a category plus a set of supplied source-line IDs; it has no
+  wording, which the engine quotes from the cited lines
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md)). No proposal admits
+  reference-state, chunk, citation, claim, token, obligation, reconciliation-disposition,
+  or related-claim IDs.
 - The request envelope binds the exact state/chunk and allowed sources/candidates.
 - Completeness validators reject omitted/duplicate token classifications; then distinct
   validation/ID/build actions create canonical citations, tokens, and identified claims.

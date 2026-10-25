@@ -60,6 +60,19 @@ semantic judgments.
 | Extraction and reconciliation business and scope-guard text | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive incidental; source prohibited by their business-text contract |
 | Extraction design, technical, validation, implementation-assumption and open-question text; no-feature-claim reason; reconciled versions of those meanings and conflict summary | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive and source incidental |
 
+Extraction claim text in these rows is the engine's quote of the claim's cited source
+lines, as written, in one literal ([ADR 0036](../decisions/0036-source-quoted-claims.md)); the
+same field policies validate it. The no-feature-claim reason is the only
+model-written extraction text.
+
+Generated specification fields lose the Markdown code delimiters (equal backtick runs)
+directly around a recognised exact value, because the engine formats exact values itself.
+Where an exact copy is allowed (obligation-bearing or incidental) the value becomes one;
+where it is prohibited the value stays text. Removal is checked against every eligible
+value; if it would change the recognised values, every delimiter in that text stays. Extraction and reconciliation text keep theirs. Nothing
+else in the text changes ([ADR 0036](../decisions/0036-source-quoted-claims.md)
+Decision 6).
+
 An incidental occurrence retains its exact lineage and rendering but cannot
 satisfy behavioral exact-copy coverage. Coverage credits only an occurrence in
 an obligation-bearing field whose composition validated. Display equality never

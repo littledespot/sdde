@@ -10,7 +10,15 @@ const projection = @import("model_evidence.zig");
 pub const Error = @import("strict_json.zig").Error || packets.Error || extraction.Error;
 pub const ReconciliationError = Error || reconciliation.Error;
 
+/// The initial extraction request: the shared evidence and its claim citation bound.
 pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
+    const base = try extractionBase(allocator, inputs, registry, tokens, scope);
+    defer packets.release(base);
+    return withCitationChoices(allocator, base, inputs, scope, &.{ .{ .property = "claims" }, .{ .items = {} }, .{ .property = "citations" } });
+}
+
+/// Chunk evidence shared by the initial request and every extraction repair.
+pub fn extractionBase(allocator: std.mem.Allocator, inputs: evidence.Inputs, registry: literals.Registry, tokens: extraction.tokens.Candidates, scope: evidence.Scope) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -37,6 +45,17 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const bound = try packets.withFieldPolicies(allocator, witnessed, policies);
     defer packets.release(bound);
     return withTextChoices(allocator, bound, try passiveIds(scratch, payload.passive_literals));
+}
+
+/// ADR 0036: a claim cites only the chunk's citable lines, so its quoted wording
+/// always exists. `path` locates the citations it bounds.
+pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.Packet, inputs: evidence.Inputs, scope: evidence.Scope, path: []const @import("model_result_schema.zig").ChoiceStep) Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    var lines: std.ArrayList(i64) = .empty;
+    const selections = @import("source_selections.zig");
+    for (try selections.lines(arena.allocator(), inputs, scope)) |line| if (selections.citable(line.text)) try lines.append(arena.allocator(), line.id.ordinal);
+    return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset }});
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) ReconciliationError!*packets.Packet {

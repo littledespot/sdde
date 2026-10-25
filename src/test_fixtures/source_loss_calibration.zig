@@ -397,7 +397,10 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
         const resolved = try r.evidence.resolve(sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id });
         var claims: std.ArrayList(r.extraction.Proposal) = .empty;
         for (example.claims) |claim| if (claim.source == resolved.source.id.ordinal) {
-            try claims.append(a, .{ .content = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = claim.text } }}) } }, .citations = try a.dupe(@import("../domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = claim.first }, .last = .{ .ordinal = claim.last } }}) });
+            // ADR 0036: the claim quotes its cited lines; the panel's recorded text is history.
+            const lines = try a.alloc(@import("../domain/source_selections.zig").Id, claim.last - claim.first + 1);
+            for (lines, claim.first..) |*line, ordinal| line.* = .{ .ordinal = @intCast(ordinal) };
+            try claims.append(a, .{ .category = .business, .citations = lines });
         };
         result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = claims.items, .token_classifications = try tokens.classifications(a, available, chunk) } }) } };
     }

@@ -24,7 +24,7 @@ fn run(allocator: std.mem.Allocator, inputs: evidence.Inputs, available: tokens.
     const parsed = try parse.execute(allocator, .{ .entries = entries });
     const assigned = try fixture.assign.execute(allocator, try fixture.classify.execute(allocator, inputs, available, try text.check(allocator, inputs, parsed)));
     const valid = try validate.execute(allocator, inputs, try fixture.build.execute(allocator, assigned));
-    const ledger = try build.execute(allocator, try assign.execute(allocator, valid.valid));
+    const ledger = try build.execute(allocator, try assign.execute(allocator, valid));
     _ = try account.execute(inputs, assigned, ledger);
     return .{ .assigned = assigned, .ledger = ledger };
 }
@@ -66,17 +66,17 @@ test "native business and scope token duty forbids irrelevant without choosing s
         const available = try fixture.candidates(a, inputs);
         try std.testing.expectEqual(@as(usize, 1), available.entries.len);
         const chunk = inputs.chunks.entries[0];
-        const wire = try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, chunk, case.prose), &.{.{ .irrelevant = available.entries[0].id }});
-        var parsed = try parse.execute(a, .{ .entries = &.{result(inputs, chunk, wire)} });
-        const claims = try a.dupe(extraction.Proposal, parsed.entries[0].outcome.claims);
-        claims[0].content = @unionInit(extraction.ProposalContent, @tagName(tag), if (tag == .technical)
-            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = case.prose } }} }
+        const wire = try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, inputs, chunk), &.{.{ .irrelevant = available.entries[0].id }});
+        var typed = try text.check(a, inputs, try parse.execute(a, .{ .entries = &.{result(inputs, chunk, wire)} }));
+        // The duty reads validated claim text, whatever its wording.
+        const claims = try a.dupe(extraction.TextValidatedProposal, typed.entries[0].outcome.claims);
+        claims[0].content = @unionInit(extraction.Content, @tagName(tag), if (tag == .technical)
+            extraction.text.ValidatedReferenceSemanticText{ .value = .{ .nodes = &.{.{ .literal = .{ .value = case.prose } }} } }
         else
-            extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = case.prose } }} });
-        const entries = try a.dupe(extraction.ParsedResult, parsed.entries);
+            extraction.text.ValidatedBusinessText{ .value = .{ .segments = &.{.{ .literal = .{ .value = case.prose } }} } });
+        const entries = try a.dupe(extraction.TextValidatedResult, typed.entries);
         entries[0].outcome = .{ .claims = claims };
-        parsed.entries = entries;
-        const typed = try text.check(a, inputs, parsed);
+        typed.entries = entries;
         const checked = try validation.validate(a, inputs, available, typed);
         if (case.required and tag != .technical) {
             try std.testing.expectEqualDeep(&[_]tokens.CandidateId{available.entries[0].id}, checked.invalid.issues.forbidden);
@@ -107,7 +107,7 @@ test "native token duty remains scoped to the original chunk" {
     const second = inputs.chunks.entries[1];
     const candidate = try text.check(a, inputs, try parse.execute(a, .{ .entries = &.{
         result(inputs, first, try fixture.wire(a, token_only, &.{.{ .irrelevant = available.entries[0].id }})),
-        result(inputs, second, try @import("reference_extraction_test.zig").reply(a, second, "The status is ACTIVE.")),
+        result(inputs, second, try @import("reference_extraction_test.zig").reply(a, inputs, second)),
     } }));
     try std.testing.expect((try validation.validate(a, inputs, available, candidate)) == .valid);
     var foreign = candidate.entries[1];
@@ -127,7 +127,7 @@ test "stored classification replay rejects omitted native duties and forged pres
         const inputs = try inputsFor(a, try std.fmt.allocPrint(a, "Display `{s}`.", .{bytes}));
         const available = try fixture.candidates(a, inputs);
         const chunk = inputs.chunks.entries[0];
-        const completed = try run(a, inputs, available, &.{result(inputs, chunk, try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, chunk, try std.fmt.allocPrint(a, "The displayed value is {s}.", .{bytes})), &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = .code_sample } }}))});
+        const completed = try run(a, inputs, available, &.{result(inputs, chunk, try fixture.wire(a, try @import("reference_extraction_test.zig").reply(a, inputs, chunk), &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = .code_sample } }}))});
         try validation.validateStored(a, inputs, completed.ledger);
         try std.testing.expectEqual(@as(usize, 2), completed.ledger.claims.len);
         const snapshots = @import("domain/reference_snapshot.zig");
@@ -523,7 +523,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         try std.testing.expectEqual(@as(usize, 2), inputs.chunks.entries.len);
         const first = inputs.chunks.entries[0];
         const second = inputs.chunks.entries[1];
-        const original_wire = try @import("reference_extraction_test.zig").reply(a, first, "Retain the supplied exact value.");
+        const original_wire = try @import("reference_extraction_test.zig").reply(a, inputs, first);
         const raw = [_]extraction.RawResult{
             result(inputs, first, original_wire),
             result(inputs, second, try fixture.wire(a, token_only, try fixture.classifications(a, available, second))),
