@@ -65,6 +65,13 @@ pub const Capture = struct {
             .diagnostic_code = if (reason) |value| diagnostic(&code, value) orelse return .LOG_SERIALIZATION_FAILURE else null,
         } });
     }
+    pub fn reviewIncomplete(self: Capture, node: workflow.WorkflowStepId, reason: []const u8, unassessed: usize) ?stream.FailureCode {
+        var code: [96]u8 = undefined;
+        return self.emit(.{ .event_type = .review_incomplete, .node_id = t.Identifier.validate(node.bytes) orelse return .LOG_SERIALIZATION_FAILURE, .fields = .{
+            .diagnostic_code = diagnostic(&code, reason) orelse return .LOG_SERIALIZATION_FAILURE,
+            .count = unassessed,
+        } });
+    }
     pub fn repair(self: Capture, node: workflow.WorkflowStepId, event: t.EventType, status: workflow.OutcomeTag, reason: ?[]const u8) ?stream.FailureCode {
         var code: [96]u8 = undefined;
         return self.emit(.{ .event_type = event, .node_id = .{ .bytes = node.bytes }, .fields = .{

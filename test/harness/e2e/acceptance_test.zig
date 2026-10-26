@@ -33,7 +33,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
     };
     input.case_bytes = try std.json.Stringify.valueAlloc(a, input.case, .{});
     return .{
-        .schema = .@"spec-e2e-report/v9",
+        .schema = .@"spec-e2e-report/v10",
         .started_at_utc = "2026-10-17T00:00:00Z",
         .execution_id = "MOCK-run",
         .case_id = "MOCK-workflow-case",
@@ -87,7 +87,7 @@ test "E2E publication awaits human adjudication and status or stored pass never 
     try gate.apply(a, &complete);
     try std.testing.expectEqual(.human_adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
-        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
+        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
         try std.testing.expect(!try gate.commandSucceeded(a, asserted));
     }
     complete.expected_outcome = null;
@@ -203,7 +203,7 @@ test "E2E publication requires the generated status and an unconfigured threshol
         }
     }
     // The threshold precondition stops before any workflow outcome exists.
-    report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
+    report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
     try std.testing.expectEqual(.grading_unresolved, (try gate.evaluate(a, report)).unresolved);
 }
 

@@ -10,14 +10,9 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         const value = try values.read(view, extraction.text_schema, @import("../domain/reference_candidate_value.zig").Value);
         if (value.payload().* == .text_rejected) return .{ .extraction_text = value.payload().text_rejected };
     }
-    if (view.contains(extraction.validated_schema.key)) {
-        const value = try values.read(view, extraction.validated_schema, @import("../domain/reference_candidate_value.zig").Value);
-        if (value.payload().* == .citation_rejected) return .{ .source_selections = value.payload().citation_rejected };
-    }
     if (view.contains(extraction.selections_schema.key)) {
         const value = try values.read(view, extraction.selections_schema, @import("../domain/reference_candidate_value.zig").Value);
         if (value.payload().* == .token_classification_rejected) return .{ .token_classifications = value.payload().token_classification_rejected };
-        if (value.payload().* == .citation_rejected) return .{ .source_selections = value.payload().citation_rejected };
     }
     const reconciliation = @import("reference_reconciliation_workflow.zig");
     if (try @import("reference_reconciliation_repair_workflow.zig").diagnostic(view)) |rejection| return .{ .reconciliation = rejection };

@@ -452,7 +452,7 @@ const Fixture = struct {
             .operations = entries,
             .data_schemas = &schemas,
             .gates = &.{gate_contract},
-            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .blocked }, .total_model_token_budget = .{ .value = 100 } }},
+            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .blocked } }},
         };
         var parser: parser_adapter.Adapter = .{};
         const raw = try (parse.Action{ .parser = parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
@@ -464,7 +464,7 @@ const Fixture = struct {
     }
 
     fn runner(self: *const Fixture, control: *Control) runner_module.Runner {
-        return runner_module.Runner.init(std.testing.allocator, .{ .graph = self.graph, .invocation = .{ .workflow_id = self.graph.authority.workflow_id, .arguments = &.{ "context", "WARN" } } }, &self.registry, .{ .context = control, .process_fn = Control.log }, .{ .context = control, .status_fn = Control.runtimeStatus }, null);
+        return runner_module.Runner.init(std.testing.allocator, .{ .graph = self.graph, .invocation = .{ .workflow_id = self.graph.authority.workflow_id, .arguments = &.{ "context", "WARN" } } }, &self.registry, .{ .context = control, .process_fn = Control.log }, .{ .context = control, .status_fn = Control.runtimeStatus }, null, .{ .budget = .{ .value = 100 } });
     }
 
     fn deinit(self: *Fixture) void {

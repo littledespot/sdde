@@ -165,6 +165,49 @@ test "editable grammar rejects structural drift but permits an unnumbered new re
     try testing.expectError(error.InvalidSpecification, markdown.render(a, captured));
 }
 
+test "editable grammar carries the engine-owned review status line only in its canonical form" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const scalar: spec.Scalar = .{ .bytes = "Business content" };
+    var document: spec.CapturedDocument = .{
+        .display_name = scalar,
+        .primary_user_story = scalar,
+        .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = scalar, .when = scalar, .then = scalar } } }},
+        .entity_section = .omitted,
+    };
+    const complete = try markdown.render(a, document);
+    try testing.expect(std.mem.indexOf(u8, complete, "Review status") == null);
+    document.review_status = .{ .unassessed = 3, .subjects = 12 };
+    const rendered = try markdown.render(a, document);
+    try testing.expect(std.mem.startsWith(u8, rendered, "# Feature Specification: Business content\n\n**Review status: Incomplete — 3 of 12 review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n## User Scenarios & Testing _(mandatory)_\n"));
+    const parsed = try markdown.parse(a, rendered);
+    try testing.expectEqualDeep(document, parsed);
+    try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+    for ([_]spec.ReviewStatus{ .{ .unassessed = 0, .subjects = 12 }, .{ .unassessed = 13, .subjects = 12 } }) |invalid| {
+        document.review_status = invalid;
+        try testing.expectError(error.InvalidSpecification, markdown.render(a, document));
+    }
+    inline for (.{
+        .{ "3 of 12", "03 of 12" },
+        .{ "3 of 12", "+3 of 12" },
+        .{ "3 of 12", "3 of  12" },
+        .{ "3 of 12", "0 of 12" },
+        .{ "3 of 12", "13 of 12" },
+        .{ "3 of 12", "three of 12" },
+        .{ "Incomplete — ", "Incomplete - " },
+        .{ "were not assessed.**", "were not assessed**" },
+        .{ " See reference-context.md for what was not assessed and why.", "" },
+    }) |mutation| {
+        const changed = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
+    }
+    const status_line = "**Review status: Incomplete — 3 of 12 review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n";
+    const moved = try std.mem.replaceOwned(u8, a, rendered, status_line, "");
+    const misplaced = try std.mem.replaceOwned(u8, a, moved, "### Primary User Story\n\n", "### Primary User Story\n\n" ++ status_line);
+    try testing.expectError(error.InvalidSpecification, markdown.parse(a, misplaced));
+}
+
 test "display escaping preserves whitespace Unicode delimiters and inert path spelling" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();

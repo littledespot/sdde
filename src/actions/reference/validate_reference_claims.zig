@@ -13,7 +13,7 @@ pub const Action = struct {
     };
     /// Structural validation only. Results are ordered by engine chunk order;
     /// model response arrival order cannot change canonical ID assignment.
-    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.Prepared) extraction.Error!extraction.Validation {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: evidence.Inputs, parsed: extraction.Prepared) extraction.Error!extraction.Validated {
         if (parsed.revision == 0 or parsed.entries.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
         const entries = try allocator.alloc(extraction.ValidatedResult, parsed.entries.len);
         for (inputs.chunks.entries, parsed.entries, entries) |chunk, candidate, *entry| {
@@ -27,11 +27,11 @@ pub const Action = struct {
                 .claims => |proposals| claims: {
                     if (proposals.len == 0) return error.InvalidReferenceExtraction;
                     const values = try allocator.alloc(extraction.ValidatedClaim, proposals.len);
-                    for (proposals, values, 0..) |proposal, *value, claim_index| {
+                    for (proposals, values) |proposal, *value| {
                         const checked = switch (proposal) {
                             .model => |claim| switch (try @import("../../domain/source_selections.zig").validate(allocator, inputs, candidate.scope, claim.citations)) {
                                 .valid => |result| result,
-                                .invalid => |issue| return .{ .invalid = .{ .dependencies = parsed.dependencies, .scope = candidate.scope, .revision = parsed.revision, .claim_index = claim_index, .observed = claim.citations, .issue = issue, .origin = try claim.rejectionOrigin(issue) } },
+                                .invalid => return error.InvalidReferenceExtraction,
                             },
                             .preserved_token => |token| try citations.validate(allocator, inputs, .{ .scope = candidate.scope, .entries = &.{.{ .source_id = token.citation.source_id, .block_id = token.citation.block_id, .location = token.citation.location, .verbatim = token.citation.verbatim }} }),
                         };
@@ -52,6 +52,6 @@ pub const Action = struct {
                 },
             };
         }
-        return .{ .valid = .{ .state_id = if (entries.len == 0) .{ .bytes = try allocator.dupe(u8, inputs.corpus.state_id.bytes) } else entries[0].scope.state_id, .entries = entries } };
+        return .{ .state_id = if (entries.len == 0) .{ .bytes = try allocator.dupe(u8, inputs.corpus.state_id.bytes) } else entries[0].scope.state_id, .entries = entries };
     }
 };

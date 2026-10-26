@@ -67,9 +67,9 @@ fn collectFields(comptime T: type, a: std.mem.Allocator, options: FieldOptions, 
                 if (comptime declared(T, "model_inline") and @hasField(@TypeOf(T.model_inline), field.name)) continue;
                 var selected = options;
                 selected.inherited = try declaredField(T, field.name, options);
-                try path.append(a, .{ .variant = field.name });
+                try path.append(a, .{ .variant = comptime wireTag(T, field.name) });
                 const direct = comptime @typeInfo(field.type) == .@"struct" and !@hasField(field.type, "kind");
-                if (!direct) try path.append(a, .{ .property = field.name });
+                if (!direct) try path.append(a, .{ .property = comptime wireTag(T, field.name) });
                 try collectFields(field.type, a, selected, path, result);
                 if (!direct) _ = path.pop();
                 _ = path.pop();
@@ -205,6 +205,23 @@ fn derivedNode(comptime T: type, comptime name: []const u8) bool {
     }
     return @hasField(@TypeOf(T.model_derived_nodes), name);
 }
+/// A union may declare `model_tags` to show a variant under another model-visible
+/// name (ADR 0043). Native tags, persistence and strict_json keep their names; the
+/// declared name is the only one this codec accepts or emits for that variant.
+fn wireTag(comptime T: type, comptime name: []const u8) []const u8 {
+    if (comptime !declared(T, "model_tags")) return name;
+    comptime {
+        if (@typeInfo(T) != .@"union") @compileError("Model tags require a tagged union");
+        for (@typeInfo(@TypeOf(T.model_tags)).@"struct".fields) |entry| {
+            if (!@hasField(T, entry.name)) @compileError("A model tag must name a canonical union variant");
+            const shown: []const u8 = @field(T.model_tags, entry.name);
+            for (@typeInfo(T).@"union".fields) |other| {
+                if (std.mem.eql(u8, shown, other.name)) @compileError("A model tag must not reuse a variant name");
+            }
+        }
+    }
+    return if (@hasField(@TypeOf(T.model_tags), name)) @field(T.model_tags, name) else name;
+}
 fn needsEnvelope(comptime T: type) bool {
     return declared(T, "model_scalar") or declared(T, "model_inline");
 }
@@ -334,7 +351,7 @@ fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comp
                 if (value.object.count() != 1) return error.InvalidJsonDocument;
                 break :blk value.object.keys()[0];
             };
-            inline for (u.fields) |field| if (std.mem.eql(u8, tag, field.name)) {
+            inline for (u.fields) |field| if (std.mem.eql(u8, tag, if (direction == .native) comptime wireTag(T, field.name) else field.name)) {
                 if (comptime derivedNode(T, field.name) and (direction == .native or purpose == .model_response)) return error.InvalidJsonDocument;
                 if (comptime declared(T, "model_inline")) {
                     if (comptime @hasField(@TypeOf(T.model_inline), field.name)) return error.InvalidJsonDocument;
@@ -352,13 +369,13 @@ fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comp
                         }
                     } else {
                         if (value.object.count() != 2) return error.InvalidJsonDocument;
-                        child = value.object.get(field.name) orelse return error.InvalidJsonDocument;
+                        child = value.object.get(comptime wireTag(T, field.name)) orelse return error.InvalidJsonDocument;
                     }
                     try object.put(a, field.name, if (comptime direct) try transformFields(field.type, a, child, direction, purpose) else try transform(field.type, a, child, direction, purpose));
                 } else {
                     const child = if (comptime direct) try transformFields(field.type, a, value.object.values()[0], direction, purpose) else try transform(field.type, a, value.object.values()[0], direction, purpose);
-                    if (direct) object = child.object else try object.put(a, field.name, child);
-                    try object.put(a, "kind", .{ .string = field.name });
+                    if (direct) object = child.object else try object.put(a, comptime wireTag(T, field.name), child);
+                    try object.put(a, "kind", .{ .string = comptime wireTag(T, field.name) });
                 }
                 return .{ .object = object };
             };

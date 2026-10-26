@@ -12,7 +12,7 @@ protocol correction becomes a stage of the `request-model` step, bounded by its 
 flowchart TD
     Workflow["Workflow YAML selects<br/>task prompt, result schema and model slot"]
     Config[".sddtoolkit.json<br/>repository model slots and reasoning effort"]
-    Policy["Registered workflow policy<br/>total token budget per execution"]
+    Policy[".sddtoolkit.json workflowTokenBudget<br/>total token budget per execution"]
     Prompt["Task prompt<br/>what to produce and how to use the evidence"]
     Schema["Compiled result schema<br/>fields, types, required values and allowed variants"]
     Input["Engine-prepared input<br/>current unit, source lines, citations and permitted IDs"]

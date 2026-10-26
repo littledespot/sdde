@@ -260,7 +260,11 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Schema-valid evidence closes this request as `accepted` with `ok`; this accepts only a
   candidate, not semantics, user approval, commit or workflow success.
 - Protocol/schema rejection closes as `failed` with `invalid`; provider stops or
-  failures close as `failed` with `failed`; cancellation stays `cancelled`.
+  failures close as `failed` with `failed`; cancellation stays `cancelled`. An
+  `output_limit` stop first admits as `invalid` and takes its one re-send through
+  `check-model-runaway` and `build-model-runaway-resend`
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)); only a
+  runaway on the re-send closes as `failed`.
 - The original detailed evidence is retained.
 - Explicitly closing invalid content does not assert retry exhaustion; YAML may instead
   select permitted retry work before closure.

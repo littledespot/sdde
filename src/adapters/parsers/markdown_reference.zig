@@ -18,8 +18,8 @@ pub const Adapter = struct {
         for ([_][]const u8{ "%PDF-", "\x89PNG\r\n", "PK\x03\x04", "\xff\xd8\xff", "GIF87a", "GIF89a" }) |magic| {
             if (std.mem.startsWith(u8, bytes, magic)) return error.UnsupportedMedia;
         }
-        if (!std.unicode.utf8ValidateSlice(bytes)) return error.MalformedText;
-        for (bytes) |byte| if ((byte < 32 and byte != '\t' and byte != '\r' and byte != '\n') or byte == 127) return error.MalformedText;
+        // The shared typed-text scalar rule: quoted claims must pass it (ADR 0036).
+        if (!@import("../../domain/typed_text.zig").validScalar(bytes)) return error.MalformedText;
         const started: std.Io.Clock.Timestamp = .now(self.io, .boot);
         const exact_spans = try @import("../../domain/markdown_code_spans.zig").scanAll(allocator, bytes);
         defer allocator.free(exact_spans);

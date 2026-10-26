@@ -17,6 +17,8 @@ pub const Status = enum { assigned, invoked, terminal };
 pub const Assignment = struct {
     binding_id: binding.ProviderModelBindingId,
     model_visible_input_id: provider.ModelVisibleInputId,
+    /// Which configured temperature this operation sends (ADR 0039).
+    sampling: @import("model_controls.zig").Sampling,
 };
 pub const Invocation = struct {
     deadline_monotonic_ms: u64,
@@ -64,6 +66,7 @@ pub const Record = struct {
     id: provider.ProviderOperationId,
     binding_id: binding.ProviderModelBindingId,
     model_visible_input_id: provider.ModelVisibleInputId,
+    sampling: @import("model_controls.zig").Sampling,
     revision: Revision,
     state: State,
 };
@@ -301,7 +304,7 @@ fn nextRecord(current: *const Ledger, authority: Authority, transition: Transiti
 }
 
 fn assignedRecord(id: provider.ProviderOperationId, facts: Assignment) Record {
-    return .{ .id = id, .binding_id = facts.binding_id, .model_visible_input_id = facts.model_visible_input_id, .revision = .{ .value = 1 }, .state = .assigned };
+    return .{ .id = id, .binding_id = facts.binding_id, .model_visible_input_id = facts.model_visible_input_id, .sampling = facts.sampling, .revision = .{ .value = 1 }, .state = .assigned };
 }
 
 fn terminalFact(record: Record, terminal: Terminal) ValidationError!TerminalFact {

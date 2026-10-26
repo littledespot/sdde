@@ -65,7 +65,10 @@ pub fn rebind(
         .reasoningEffort = requested_effort,
     });
     const allowlist_contract = @import("../../src/domain/repository_model_allowlist.zig");
-    const allowlist_owner = allowlist_contract.createValidated(allocator, &models, registry) catch return error.InvalidEvaluationContract;
+    // The captured binding names its configured temperatures. A model that
+    // takes none carries none, whichever values the allowlist is given.
+    const temperatures = captured.controls.temperatures orelse @import("../../src/domain/model_controls.zig").Temperatures{ .configured = .{ .value = 0 }, .runaway_retry = .{ .value = 0 } };
+    const allowlist_owner = allowlist_contract.createValidated(allocator, &models, temperatures, registry) catch return error.InvalidEvaluationContract;
     defer allowlist_contract.deinitOwner(allowlist_owner);
     const allowed = allowlist_contract.allowlist(allowlist_owner).resolveSlot(slot) orelse return error.InvalidEvaluationContract;
     const entry = registry.resolveId(allowed.registry_entry_id) orelse return error.InvalidEvaluationContract;

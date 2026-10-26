@@ -153,7 +153,7 @@ test "protocol corrections retain static context dynamic input and registered co
         const model = fixture.services.registry().resolveId(.{ .ordinal = 1 }).?;
         try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes });
         const allowlist = @import("domain/repository_model_allowlist.zig");
-        const owner = try allowlist.createValidated(std.testing.allocator, &models, fixture.services.registry());
+        const owner = try allowlist.createValidated(std.testing.allocator, &models, @import("test_fixtures/model_temperatures.zig").temperatures, fixture.services.registry());
         allowlist.deinitOwner(fixture.services.allowlist_owner);
         fixture.services.allowlist_owner = owner;
         const graph = try fixture.compileWithContext(try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture)), true);
@@ -165,7 +165,7 @@ test "protocol corrections retain static context dynamic input and registered co
         try prepareProtocolAttempt(&runner, false);
         const original = (try currentRequest(&runner)).id();
         const original_controls = (try currentRequest(&runner)).prepared().?.controls;
-        try std.testing.expectEqualDeep(model.capabilities.inferenceControls(), original_controls);
+        try std.testing.expectEqualDeep(model.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures), original_controls);
         try rejectProtocolResponse(&runner, false);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
         const corrected = try currentRequest(&runner);
@@ -1053,7 +1053,7 @@ const FaultyAssignment = struct {
         const prepared = request.prepared().?;
         const evidence = attempt_values.readAttempt(&input.step.data) catch return error.OperationExecutionFailed;
         const facts = input.step.provider_operation.?;
-        var delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{ .model_request_id = request.id(), .model_attempt_ordinal = evidence.ordinal(), .kind = .inference }, null, .{ .assign_inference = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id } }) catch return error.OperationExecutionFailed;
+        var delta = self.action.execute(facts.ledger, facts.authority, facts.ledger.revision(), .{ .model_request_id = request.id(), .model_attempt_ordinal = evidence.ordinal(), .kind = .inference }, null, .{ .assign_inference = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id, .sampling = prepared.sampling } }) catch return error.OperationExecutionFailed;
         const transition = &delta.runner_accounting_transition.?.advance_provider_operation;
         switch (self.fault) {
             .missing_transition => delta.runner_accounting_transition = null,
@@ -1263,7 +1263,7 @@ fn deadlineServices(allocator: std.mem.Allocator, selections: []const DeadlineSe
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(allocator);
     for (selections) |selection| try models.slots.map.put(allocator, selection.slot, .{ .provider = "test-provider", .model = selection.model });
-    const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
+    const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, @import("test_fixtures/model_temperatures.zig").temperatures, registry.registry(owner));
     return .init(.init(owner), allowlist);
 }
 
@@ -1866,7 +1866,7 @@ fn openRetryOperation(runner: *runner_module.Runner, invoke: bool) !void {
     state.attempts = reserved;
     const id: provider.ProviderOperationId = .{ .model_request_id = request, .model_attempt_ordinal = .{ .value = 2 }, .kind = .inference };
     const authority = state.operationAuthority(ledger);
-    const assigned = try lifecycle.propose(state.current_operations, authority, state.current_operations.revision(), id, null, .{ .assign_inference = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id } });
+    const assigned = try lifecycle.propose(state.current_operations, authority, state.current_operations.revision(), id, null, .{ .assign_inference = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id, .sampling = prepared.sampling } });
     state.current_operations = try lifecycle.apply(state.current_operations, authority, assigned);
     if (invoke) {
         const invoked = try lifecycle.propose(state.current_operations, authority, state.current_operations.revision(), id, state.current_operations.record(id).?.revision, .{ .invoke = .{ .deadline_monotonic_ms = 1000 } });
@@ -2987,7 +2987,7 @@ const FaultyOperationLifecycle = struct {
             .stale_ledger => transition.expected_ledger = lifecycle.apply(input.step.provider_operation.?.ledger, input.step.provider_operation.?.authority, transition.*) catch return error.OperationExecutionFailed,
             .assignment => {
                 const request = (try requests.readCurrent(&input.step.data, requests.prepared_schema)).prepared().?;
-                transition.command = .{ .assign_inference = .{ .binding_id = request.binding_id, .model_visible_input_id = request.model_visible_input_id } };
+                transition.command = .{ .assign_inference = .{ .binding_id = request.binding_id, .model_visible_input_id = request.model_visible_input_id, .sampling = request.sampling } };
             },
             .terminal => transition.command = .{ .terminate = .{ .cancelled = .not_sent } },
             .failed_outcome => candidate.outcome = .failed,
@@ -3194,7 +3194,7 @@ test "YAML invocation accounts exact budget exhaustion and overshoot before bloc
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 + overshoot } };
+        fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 + overshoot } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         const first = runner.bindings().invokeStep(.{ .bytes = "call" });
         if (overshoot == 0) {
@@ -3205,7 +3205,7 @@ test "YAML invocation accounts exact budget exhaustion and overshoot before bloc
             try std.testing.expectEqual(.exceeded, runner.tokenLedger().status());
             try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
         }
-        try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + overshoot, runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + overshoot, runner.tokenLedger().committed());
         try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
     }
@@ -3271,14 +3271,14 @@ test "workflow result retains the exact budget rejection and does not follow a Y
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value, .output_tokens = 1 } };
+    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = fixture.token_budget.value, .output_tokens = 1 } };
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.result();
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
     try std.testing.expectEqualStrings("WorkflowTokenBudgetExceeded", outcome.execution_rejected.diagnostic());
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + 1, runner.tokenLedger().committed());
 }
 
 test "YAML call guards cancellation expiry and absent adapters before effects" {
@@ -3793,8 +3793,11 @@ fn requestCompletionYaml(fixture: *Fixture) ![]const u8 {
     const allocator = fixture.arena.allocator();
     const source = try completionYaml(fixture);
     fixture.observer.expected_request_status = .terminal;
-    const routed = try std.mem.replaceOwned(u8, allocator, source, "use: validate-model-payload-schema, on: {ok: observe, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled, more: fail-advice}", "use: validate-model-payload-schema, on: {ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request, more: fail-advice}");
-    return std.fmt.allocPrint(allocator, "{s}\n  close-request: {{ use: complete-model-request, on: {{ok: observe, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}} }}\n", .{routed});
+    // A continuing admission takes the runaway router, and its re-send passes
+    // the request-phase check (ADR 0039).
+    var routed = try std.mem.replaceOwned(u8, allocator, source, "use: validate-model-payload-schema, on: {ok: observe, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled, more: fail-advice}", "use: validate-model-payload-schema, on: {ok: close-request, invalid: runaway, failed: close-request, cancelled: close-request, more: fail-advice}");
+    routed = try std.mem.replaceOwned(u8, allocator, routed, "ok: advance-request, failed: end.failed", "ok: phase, failed: end.failed");
+    return std.fmt.allocPrint(allocator, "{s}\n  close-request: {{ use: complete-model-request, on: {{ok: observe, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}} }}\n  phase: {{ use: check-model-request-phase, on: {{ok: advance-request, more: advance-operation, failed: end.failed}} }}\n  runaway: {{ use: check-model-runaway, on: {{ok: close-request, more: resend}} }}\n  resend: {{ use: build-model-runaway-resend, on: {{ok: account, failed: end.failed}} }}\n", .{routed});
 }
 
 fn prepareRequestClosure(runner: *runner_module.Runner, outcome: workflow.OutcomeTag) !void {
@@ -3998,9 +4001,7 @@ test "bounded protocol assignments continue many valid units and stop repeated o
             .binding = bindings.bind(ProtocolUnits, &owner, ProtocolUnits.select),
         }};
         fixture.registry.operations = &entries;
-        var profiles = core.profiles;
-        for (&profiles) |*profile| profile.total_model_token_budget.value = 10000;
-        fixture.registry.policies = &profiles;
+        fixture.token_budget = .{ .value = 10000 };
         const graph = try fixture.compileWithAssets(source, example.schema, false);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -4083,12 +4084,10 @@ fn protocolRetryYaml(fixture: *Fixture) ![]const u8 {
     for ([_][2][]const u8{
         .{ "prompt: prompt, result-schema:", "prompt: prompt, protocol-prompt: prompt, result-schema:" },
         .{ "retry-limit: 0", "retry-limit: 2" },
-        .{ "ok: close-request, invalid: close-request", "ok: close-request, invalid: retry" },
-        .{ "ok: advance-request, failed: end.failed", "ok: phase, failed: end.failed" },
+        .{ "use: check-model-runaway, on: {ok: close-request, more: resend}", "use: check-model-runaway, on: {ok: retry, more: resend}" },
     }) |change| source = try std.mem.replaceOwned(u8, allocator, source, change[0], change[1]);
     return std.fmt.allocPrint(allocator,
         \\{s}
-        \\  phase: {{ use: check-model-request-phase, on: {{ok: advance-request, more: advance-operation, failed: end.failed}} }}
         \\  retry: {{ use: build-model-protocol-retry, on: {{ok: account, failed: end.failed}} }}
         \\
     , .{source});
@@ -4145,9 +4144,7 @@ test "native repair progress permits independent requests while retaining the gl
         .binding = bindings.bind(RepairSequence, &owner, RepairSequence.authorize),
     }};
     fixture.registry.operations = &entries;
-    var profiles = core.profiles;
-    for (&profiles) |*profile| profile.total_model_token_budget.value = 21;
-    fixture.registry.policies = &profiles;
+    fixture.token_budget = .{ .value = 21 };
     const graph = try fixture.compileWithAssets(source, schema_bytes, false);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
@@ -4240,9 +4237,7 @@ test "dependent reviews retain parent allowances through initial protocol correc
             .{ .contract = .{ .id = "test.merge-dependent", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none, .repair_role = .merge }, .binding = bindings.bind(DependentReviewSequence, &owner, DependentReviewSequence.merge) },
         };
         fixture.registry.operations = &entries;
-        var profiles = core.profiles;
-        for (&profiles) |*profile| profile.total_model_token_budget.value = if (recurring) 1000 else 28;
-        fixture.registry.policies = &profiles;
+        fixture.token_budget = .{ .value = if (recurring) 1000 else 28 };
         const graph = try fixture.compile(source);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
@@ -4620,6 +4615,387 @@ test "metadata and diagnostic echoes exhaust protocol retries without acceptance
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
 }
 
+/// ADR 0039: the shared request body routes a first runaway to its one re-send
+/// and every other correctable rejection to protocol correction.
+fn runawayYaml(fixture: *Fixture, retry_limit: []const u8) ![]const u8 {
+    const allocator = fixture.arena.allocator();
+    const source = try protocolRetryYaml(fixture);
+    return std.mem.replaceOwned(u8, allocator, source, "retry-limit: 2", try std.fmt.allocPrint(allocator, "retry-limit: {s}", .{retry_limit}));
+}
+
+const runaway_plan: fake_provider.InvocationPlan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2048 } };
+
+/// Runs one attempt from its call through admission and returns the admission outcome.
+fn admitAttempt(runner: *runner_module.Runner, provider_outcome: workflow.OutcomeTag) !workflow.OutcomeTag {
+    for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
+        try std.testing.expectEqual(provider_outcome, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    _ = runner.bindings().invokeStep(.{ .bytes = "decode" });
+    return runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome;
+}
+
+test "a first runaway is re-sent once, even at retry-limit 0, and its admitted response closes the request" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "0"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan = runaway_plan;
+    try prepareProtocolAttempt(&runner, false);
+    const original = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), (try currentRequest(&runner)).prepared().?.content, .{});
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+    const resent = try currentRequest(&runner);
+    // The identical request: same content and binding, only the sampling changes.
+    try std.testing.expectEqual(@as(u32, 1), resent.runawayResend().?.model_attempt_ordinal.value);
+    try std.testing.expect(resent.protocolCorrection() == null);
+    try std.testing.expectEqual(.runaway_resend, resent.prepared().?.sampling);
+    try std.testing.expectEqualDeep(resent.binding().controls.temperature(.runaway_resend), resent.prepared().?.temperature());
+    try std.testing.expectEqualStrings(original, try std.json.Stringify.valueAlloc(fixture.arena.allocator(), resent.prepared().?.content, .{}));
+    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = 5, .output_tokens = 2 } };
+    // The re-send is its own attempt outside `retry-limit: 0`.
+    try prepareProtocolAttempt(&runner, true);
+    try std.testing.expectEqual(.ok, try admitAttempt(&runner, .ok));
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+    // Both attempts' usage is accounted once each.
+    try std.testing.expectEqual(@as(u128, 2053 + 7), runner.tokenLedger().committed());
+}
+
+test "every runaway re-send is logged before it is sent, and a logging rejection prevents it" {
+    const telemetry = @import("domain/telemetry.zig");
+    const Spy = struct {
+        fail: bool,
+        resent: usize = 0,
+        invalid: bool = false,
+        previous: ?telemetry.EventType = null,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            defer self.previous = fact.fact.event_type;
+            const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
+                self.invalid = true;
+                return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            };
+            if (fact.fact.event_type != .model_runaway_resent) return .dropped;
+            self.resent += 1;
+            const fields = fact.fact.fields;
+            // The runaway attempt, its stop reason and its reported usage.
+            if (definition.level != .warning or fact.fact.attempt != 1 or !std.mem.eql(u8, fields.diagnostic_code.?.bytes, "OUTPUT_LIMIT") or
+                fields.input_tokens != 5 or fields.output_tokens != 2048) self.invalid = true;
+            return if (self.fail) .{ .blocked = .LOG_FLUSH_FAILURE } else .dropped;
+        }
+    };
+    for ([_]bool{ false, true }) |fail| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+        runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+            .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+            .root_observation = .absent,
+            .observation = .absent,
+        });
+        var spy: Spy = .{ .fail = fail };
+        runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan = runaway_plan;
+        try prepareProtocolAttempt(&runner, false);
+        try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+        try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+        // Accounting, assignment and authorization admit the re-send without
+        // logging it: it is logged only at its send.
+        try prepareProtocolAttempt(&runner, true);
+        try std.testing.expectEqual(@as(usize, 0), spy.resent);
+        const call = runner.bindings().invokeStep(.{ .bytes = "call" });
+        try std.testing.expect(!spy.invalid);
+        try std.testing.expectEqual(@as(usize, 1), spy.resent);
+        if (fail) {
+            // The re-send is never sent.
+            try std.testing.expectEqual(.LOG_FLUSH_FAILURE, call.rejected.logging);
+            try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+        } else {
+            try std.testing.expectEqual(.failed, call.outcome);
+            try std.testing.expectEqual(@as(usize, 2), fake.invocation_call_count);
+        }
+    }
+}
+
+test "a re-send refused before it is sent is not logged as re-sent" {
+    const telemetry = @import("domain/telemetry.zig");
+    const Spy = struct {
+        resent: usize = 0,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            if (fact.fact.event_type == .model_runaway_resent) self.resent += 1;
+            return .dropped;
+        }
+    };
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+    runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+        .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+        .root_observation = .absent,
+        .observation = .absent,
+    });
+    var spy: Spy = .{};
+    runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    // The runaway spends the whole budget, so the re-send's send is refused.
+    fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = fixture.token_budget.value - 5 } };
+    try prepareProtocolAttempt(&runner, false);
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+    try prepareProtocolAttempt(&runner, true);
+    const call = runner.bindings().invokeStep(.{ .bytes = "call" });
+    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, call.rejected.token_budget);
+    try std.testing.expectEqual(@as(usize, 0), spy.resent);
+    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+}
+
+test "the runner refuses a second re-send of one attempt" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan = runaway_plan;
+    try prepareProtocolAttempt(&runner, false);
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+    const request = (try currentRequest(&runner)).id();
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "account" }).outcome);
+    // Accounting the same re-send again would reserve a re-send of the re-send.
+    try std.testing.expect(runner.bindings().invokeStep(.{ .bytes = "account" }) == .rejected);
+    try std.testing.expectEqual(@as(u32, 2), @import("domain/model_attempt_accounting.zig").accounting(runner.model_accounting.?.attempts).attemptsReserved(request));
+}
+
+test "a re-send keeps the full prepared identity of the attempt it repeats" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan = runaway_plan;
+    try prepareProtocolAttempt(&runner, false);
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    const resend_preparation = @import("domain/model_request_preparation.zig");
+    const current = try currentRequest(&runner);
+    const original = current.prepared().?;
+    const runaway = (try payloadResult(&runner)).source().source().outcome().validated;
+    // Accepted: the identical request with only its sampling changed.
+    handoff.destroy(try handoff.resent(current, try resend_preparation.resend(std.testing.allocator, original), runaway));
+    // Rejected: any other difference, including ones only admission reads.
+    for (0..4) |variant| {
+        var owned = try resend_preparation.resend(std.testing.allocator, original);
+        var tampered = owned.request.*;
+        switch (variant) {
+            0 => tampered.content = tampered.content[0 .. tampered.content.len - 1],
+            1 => tampered.response_guidance_mode = if (tampered.response_guidance_mode == .native_schema) .prompt_only else .native_schema,
+            2 => tampered.controls = if (tampered.controls.temperatures == null) .forTemperatureSupport(true, @import("test_fixtures/model_temperatures.zig").temperatures) else .{},
+            3 => tampered.sampling = .configured,
+            else => unreachable,
+        }
+        const replaced = try owned.arena.allocator().create(provider.IdentifiedProviderNeutralModelRequest);
+        replaced.* = tampered;
+        owned.request = replaced;
+        try std.testing.expectError(error.ModelRequestAssociationInvalid, handoff.resent(current, owned, runaway));
+        owned.deinit();
+    }
+}
+
+test "the compiler requires every continuing admission to route a runaway to its one re-send" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    // Accepted: closure-only and correcting request bodies, and an admission
+    // that ends the execution on `invalid`.
+    _ = try fixture.compile(try requestCompletionYaml(&fixture));
+    const correcting = try protocolRetryYaml(&fixture);
+    _ = try fixture.compile(correcting);
+    _ = try fixture.compile(try completionYaml(&fixture));
+    for ([_][2][]const u8{
+        // An admission that bypasses the router to closure or correction.
+        .{ "ok: close-request, invalid: runaway", "ok: close-request, invalid: close-request" },
+        .{ "ok: close-request, invalid: runaway", "ok: close-request, invalid: retry" },
+        // A router whose runaway branch skips the re-send.
+        .{ "use: check-model-runaway, on: {ok: retry, more: resend}", "use: check-model-runaway, on: {ok: retry, more: retry}" },
+        // A re-send reached other than from a router's runaway branch.
+        .{ "use: build-model-protocol-retry, on: {ok: account, failed: end.failed}", "use: build-model-protocol-retry, on: {ok: resend, failed: end.failed}" },
+    }) |change| {
+        const changed = try std.mem.replaceOwned(u8, a, correcting, change[0], change[1]);
+        try std.testing.expect(!std.mem.eql(u8, changed, correcting));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compile(changed));
+    }
+    // The rule itself, on otherwise valid compiled authority.
+    const lifecycle_rules = @import("domain/workflow_model_request_lifecycle.zig");
+    const graph = try fixture.compile(correcting);
+    try lifecycle_rules.validateRunawayRoutes(graph.authority);
+    for ([_]struct { from: []const u8, outcome: workflow.OutcomeTag, to: []const u8 }{
+        .{ .from = "validate-payload", .outcome = .invalid, .to = "close-request" },
+        .{ .from = "validate-payload", .outcome = .invalid, .to = "retry" },
+        .{ .from = "runaway", .outcome = .more, .to = "retry" },
+        .{ .from = "retry", .outcome = .ok, .to = "resend" },
+    }) |tamper| {
+        var authority = graph.authority;
+        const transitions = try a.dupe(workflow.Transition, authority.transitions);
+        var changed = false;
+        for (transitions) |*edge| if (edge.outcome == tamper.outcome and std.mem.eql(u8, edge.from.bytes, tamper.from)) {
+            edge.target = .{ .step = .{ .bytes = tamper.to } };
+            changed = true;
+        };
+        try std.testing.expect(changed);
+        authority.transitions = transitions;
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, lifecycle_rules.validateRunawayRoutes(authority));
+    }
+}
+
+test "a first runaway is not logged as a missing final answer, and a missing final answer still is" {
+    const telemetry = @import("domain/telemetry.zig");
+    const Spy = struct {
+        protocol: usize = 0,
+        validation: usize = 0,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            const code = fact.fact.fields.diagnostic_code orelse return .dropped;
+            if (!std.mem.eql(u8, code.bytes, "MISSING_FINAL_TEXT")) return .dropped;
+            switch (fact.fact.event_type) {
+                .model_protocol_failed => self.protocol += 1,
+                .validation_failed => self.validation += 1,
+                else => {},
+            }
+            return .dropped;
+        }
+    };
+    const missing_answer: fake_provider.InvocationPlan = .{ .complete = .{ .content = "", .content_diagnostic = .missing_final_text, .input_tokens = 10, .output_tokens = 2 } };
+    for ([_]fake_provider.InvocationPlan{ runaway_plan, missing_answer }, [_]usize{ 0, 1 }) |plan, logged| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+        runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+            .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+            .root_observation = .absent,
+            .observation = .absent,
+        });
+        var spy: Spy = .{};
+        runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan = plan;
+        try prepareProtocolAttempt(&runner, false);
+        try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+        try std.testing.expectEqual(logged, spy.protocol);
+        try std.testing.expectEqual(logged, spy.validation);
+    }
+}
+
+test "a runaway on the re-send fails a required request with its typed diagnostic" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan = runaway_plan;
+    try prepareProtocolAttempt(&runner, false);
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+    try prepareProtocolAttempt(&runner, true);
+    // A re-send is never re-sent: its runaway is a failed admission.
+    try std.testing.expectEqual(.failed, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
+    try std.testing.expectEqual(.failed, runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+    try std.testing.expectEqual(@as(u128, 2 * 2053), runner.tokenLedger().committed());
+}
+
+test "a re-sent response passes the same admission and its rejection takes a correction at the configured temperature" {
+    for ([_][]const u8{ "{", "{\"foreign\":true}" }) |rejected| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan = runaway_plan;
+        try prepareProtocolAttempt(&runner, false);
+        try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+        try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+        // Malformed JSON and a schema violation reject a re-sent response
+        // exactly as they reject a first response.
+        fake.invocation_plan = .{ .complete = .{ .content = rejected, .input_tokens = 5, .output_tokens = 2 } };
+        try prepareProtocolAttempt(&runner, true);
+        try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .ok));
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        const corrected = try currentRequest(&runner);
+        try std.testing.expectEqual(@as(u32, 2), corrected.protocolCorrection().?.model_attempt_ordinal.value);
+        try std.testing.expect(corrected.runawayResend() == null);
+        try std.testing.expectEqual(.configured, corrected.prepared().?.sampling);
+    }
+}
+
+test "a protocol correction that runs away is re-sent once with its correction intact" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compile(try runawayYaml(&fixture, "2"));
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan = .{ .complete = .{ .content = "{", .input_tokens = 5, .output_tokens = 2 } };
+    try prepareProtocolAttempt(&runner, false);
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .ok));
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    fake.invocation_plan = runaway_plan;
+    try prepareProtocolAttempt(&runner, true);
+    const correction = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), (try currentRequest(&runner)).prepared().?.content, .{});
+    try std.testing.expectEqual(.invalid, try admitAttempt(&runner, .failed));
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(.{ .bytes = "runaway" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "resend" }).outcome);
+    const resent = try currentRequest(&runner);
+    try std.testing.expectEqual(@as(u32, 1), resent.protocolCorrection().?.model_attempt_ordinal.value);
+    try std.testing.expectEqual(@as(u32, 2), resent.runawayResend().?.model_attempt_ordinal.value);
+    try std.testing.expectEqual(@as(u32, 2), resent.retriedAttempt().?.model_attempt_ordinal.value);
+    try std.testing.expectEqualStrings(correction, try std.json.Stringify.valueAlloc(fixture.arena.allocator(), resent.prepared().?.content, .{}));
+    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = 5, .output_tokens = 2 } };
+    try prepareProtocolAttempt(&runner, true);
+    try std.testing.expectEqual(.ok, try admitAttempt(&runner, .ok));
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "close-request" }).outcome);
+}
+
 test "protocol retry budget overshoot charges the response before decoding and blocks another call" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -4634,10 +5010,10 @@ test "protocol retry budget overshoot charges the response before decoding and b
     try rejectProtocolResponse(&runner, false);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
     try prepareProtocolAttempt(&runner, true);
-    fake.invocation_plan.complete = .{ .content = malformed_protocol_record, .input_tokens = graph.authority.total_model_token_budget.value - 7, .output_tokens = 1 };
+    fake.invocation_plan.complete = .{ .content = malformed_protocol_record, .input_tokens = fixture.token_budget.value - 7, .output_tokens = 1 };
     const rejected = runner.bindings().invokeStep(.{ .bytes = "call" });
     try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, rejected.rejected.token_budget);
-    try std.testing.expectEqual(@as(u128, graph.authority.total_model_token_budget.value) + 1, runner.tokenLedger().committed());
+    try std.testing.expectEqual(@as(u128, fixture.token_budget.value) + 1, runner.tokenLedger().committed());
     try std.testing.expectEqual(@as(u64, 2), runner.tokenLedger().revision().value);
     try std.testing.expect(runner.envelope.slots[@intFromEnum(model_invocation.schema.key)] == null);
     try std.testing.expect(runner.envelope.slots[@intFromEnum(envelope_workflow.schema.key)] == null);
@@ -4740,7 +5116,10 @@ fn checkRequestClosureOutcome(plan: fake_provider.InvocationPlan, invalid_utf8: 
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
     fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
-    const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
+    // A runaway is re-sent once with the same plan, and its repeated runaway
+    // fails the request (ADR 0039).
+    const runaway = plan == .stopped and plan.stopped.reason == .output_limit;
+    const expected: workflow.OutcomeTag = if (invalid_utf8 or runaway) .failed else admittedOutcome(plan);
     try std.testing.expectEqual(expected, harness.run());
     const record = (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?;
     try std.testing.expectEqual(.terminal, record.status);
@@ -4757,7 +5136,10 @@ fn checkRequestClosureOutcome(plan: fake_provider.InvocationPlan, invalid_utf8: 
         .complete => try std.testing.expectEqual(.response_invalid, terminal.failed.cause),
     }
     try std.testing.expectEqual(expected, payload_workflow.status(try payloadResult(&runner)));
-    try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
+    if (runaway) {
+        try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 2), fake.invocation_call_count);
+    } else try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
 }
 
 test "request closure rejects every missing input stale ledger and duplicate closure without mutation" {
@@ -4855,7 +5237,7 @@ test "request closure needs no live lease deadline or remaining token budget and
     defer if (active) runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
     fake.invocation_plan.complete.content = "{\"answer\":\"value\"}";
-    fake.invocation_plan.complete.input_tokens = graph.authority.total_model_token_budget.value - 2;
+    fake.invocation_plan.complete.input_tokens = fixture.token_budget.value - 2;
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     try prepareRequestClosure(&runner, .ok);
     const result = try payloadResult(&runner);
@@ -4869,7 +5251,7 @@ test "request closure needs no live lease deadline or remaining token budget and
     try std.testing.expect(original_operations == runner.model_accounting.?.current_operations);
     try std.testing.expect(result == try payloadResult(&runner));
     try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
-    try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+    try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
     const retained_payload = try values.retain(runner.envelope.slots[@intFromEnum(payload_workflow.schema.key)].?);
     defer values.destroy(retained_payload);
     const retained_ledger = try values.retain(runner.envelope.slots[@intFromEnum(requests.ledger_schema.key)].?);
@@ -4895,7 +5277,7 @@ test "request closure rejects forged successors suppressed outcomes and cancelle
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2 } };
+        fake.invocation_plan = .{ .stopped = .{ .reason = .content_filtered, .input_tokens = 5, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         try prepareRequestClosure(&runner, .failed);
         var spy: Spy = .{ .inner = &fixture.native.complete_request, .fault = fault };
@@ -5001,7 +5383,9 @@ fn requestClosureAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture,
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const outcome = harness.run();
-    try std.testing.expect(fake.effect_count <= 1);
+    // A runaway takes its one re-send before the request closes (ADR 0039).
+    const runaway = plan == .stopped and plan.stopped.reason == .output_limit;
+    try std.testing.expect(fake.effect_count <= @as(usize, if (runaway) 2 else 1));
     const record = if (requestLedger(&runner)) |ledger| ledger.latestRecord() else |_| null;
     if (record == null or record.?.status != .terminal) {
         try std.testing.expectEqual(.failed, outcome);
@@ -5014,7 +5398,10 @@ fn requestClosureAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture,
         .cancelled => .cancelled,
         else => unreachable,
     }), record.?.terminal_reason.?);
-    try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
+    if (runaway) {
+        try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 2), fake.invocation_call_count);
+    } else try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
 }
 
 test "request closure YAML rejects missing evidence hidden reasons and forged compiled contracts" {
@@ -5030,7 +5417,7 @@ test "request closure YAML rejects missing evidence hidden reasons and forged co
         .{ "use: complete-model-request,", "use: complete-model-request, with: {slot: selected}," },
         .{ "use: complete-model-request,", "use: complete-model-request, with: {timeout-ms: 1}," },
         .{ "use: complete-provider-operation, on: {ok: decode, failed: decode, cancelled: decode, more: decode}", "use: core.noop, on: {ok: decode}" },
-        .{ "use: validate-model-payload-schema, on: {ok: close-request, invalid: close-request, failed: close-request, cancelled: close-request, more: fail-advice}", "use: core.noop, on: {ok: close-request}" },
+        .{ "use: validate-model-payload-schema, on: {ok: close-request, invalid: runaway, failed: close-request, cancelled: close-request, more: fail-advice}", "use: core.noop, on: {ok: close-request}" },
         .{ "invalid: end.invalid", "invalid: end.ok" },
         .{ "failed: end.failed", "failed: end.ok" },
         .{ "cancelled: end.cancelled", "cancelled: end.ok" },
@@ -5121,7 +5508,7 @@ fn checkCompletionOutcome(plan: fake_provider.InvocationPlan, invalid_utf8: bool
     fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
     const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else .failed;
-    try std.testing.expectEqual(expected, harness.run());
+    try std.testing.expectEqual(if (invalid_utf8) expected else admittedOutcome(plan), harness.run());
     const terminal = (try completedOperation(&runner)).record().state.terminal;
     switch (plan) {
         .complete => {
@@ -5151,7 +5538,7 @@ test "YAML completion needs no live lease and works at exact token exhaustion" {
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     var fake = invocationProvider(&runner, std.testing.allocator);
-    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 } };
+    fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
     try prepareCompletable(&runner);
     fixture.clock.now_ms = std.math.maxInt(u64);
@@ -5159,7 +5546,7 @@ test "YAML completion needs no live lease and works at exact token exhaustion" {
     try std.testing.expectEqual(.completed, (try completedOperation(&runner)).record().state.terminal);
     try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
     try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected);
-    try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+    try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
 }
 
 test "YAML completion releases unused authorization after provider-side cancellation exactly once" {
@@ -5339,7 +5726,7 @@ test "YAML completion rejects fabricated terminal facts suppressed failures and 
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2 } };
+        fake.invocation_plan = .{ .stopped = .{ .reason = .content_filtered, .input_tokens = 5, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var spy: CompletionDeltaSpy = .{ .inner = &fixture.native.complete_operation, .fault = fault };
         for (&fixture.entries) |*entry| if (std.mem.eql(u8, entry.contract.id, completion_workflow.Complete.contract.id)) {
@@ -5431,8 +5818,7 @@ fn completionAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, gra
     }
     try std.testing.expectEqual(@as(workflow.OutcomeTag, switch (plan) {
         .complete => .ok,
-        .stopped, .failed => .failed,
-        .cancelled => .cancelled,
+        .stopped, .failed, .cancelled => admittedOutcome(plan),
     }), outcome);
     const terminal = try completedOperation(&runner);
     try runner.model_accounting.?.current_operations.validateRequestClosure(terminal.record().id.model_request_id);
@@ -5681,16 +6067,26 @@ fn checkUnvalidatedPayload(plan: fake_provider.InvocationPlan, invalid_utf8: boo
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
     fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
-    const expected: workflow.OutcomeTag = if (plan == .cancelled) .cancelled else if (plan == .complete and !invalid_utf8) .invalid else .failed;
+    const expected: workflow.OutcomeTag = if (plan == .complete and !invalid_utf8) .invalid else if (invalid_utf8) .failed else admittedOutcome(plan);
     try std.testing.expectEqual(expected, harness.run());
     const decoded = try envelopeResult(&runner);
     const result = try payloadResult(&runner);
     try std.testing.expect(result.source() == decoded);
     try std.testing.expect(result.outcome().not_validated == decoded);
     try std.testing.expectEqual(expected, runner.envelope.origins[@intFromEnum(payload_workflow.schema.key)].?.outcome);
-    if (expected == .invalid) try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected.reason) else try std.testing.expect(decoded.outcome().not_decoded == try observationResult(&runner));
+    if (plan == .complete and !invalid_utf8) try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected.reason) else try std.testing.expect(decoded.outcome().not_decoded == try observationResult(&runner));
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
     try expectResponseAccounting(&runner, &fake, if (plan == .complete or plan == .stopped) 7 else 0);
+}
+
+/// ADR 0039: a first runaway (an output-limit stop) is admitted as correctable,
+/// for its one re-send; every other stop and failure stays failed.
+fn admittedOutcome(plan: fake_provider.InvocationPlan) workflow.OutcomeTag {
+    return switch (plan) {
+        .cancelled => .cancelled,
+        .stopped => |stop| if (stop.reason == .output_limit) .invalid else .failed,
+        .complete, .failed => .failed,
+    };
 }
 
 fn expectResponseAccounting(runner: *const runner_module.Runner, fake: *const fake_provider.FakeLLMProvider, tokens: u128) !void {
@@ -5831,7 +6227,7 @@ test "YAML payload validation remains available at the token budget without anot
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = graph.authority.total_model_token_budget.value - 2, .output_tokens = 2 } };
+        fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"value\"}", .input_tokens = fixture.token_budget.value - 2, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(.ok, harness.run());
@@ -5840,7 +6236,7 @@ test "YAML payload validation remains available at the token budget without anot
         try std.testing.expectEqualStrings("{\"answer\":\"value\"}", (try observationResult(&runner)).outcome().validated.result().complete.content());
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
         try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
-        try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
+        try expectResponseAccounting(&runner, &fake, fixture.token_budget.value);
     }
 }
 
@@ -5970,7 +6366,7 @@ test "YAML decoding retains syntax-only evidence and rejected outcomes with exac
     }
 }
 
-test "YAML decoder never converts stopped failed cancelled or rejected observations into protocol invalid" {
+test "YAML decoder never converts stopped failed cancelled or rejected observations into protocol invalid, except a first runaway for its re-send" {
     for (std.enums.values(provider.ProviderNonCandidateStopReason)) |reason| {
         try checkUndecoded(.{ .stopped = .{ .reason = reason, .input_tokens = 5, .output_tokens = 2 } }, false);
     }
@@ -5993,12 +6389,13 @@ fn checkUndecoded(plan: fake_provider.InvocationPlan, invalid_utf8: bool) !void 
     var spy: InvocationSpy = .{ .fake = &fake, .clock = &fixture.clock, .fault = .utf8 };
     fixture.native.invoke_model.action = .{ .provider = if (invalid_utf8) spy.port() else fake.interface() };
     var harness: Harness = .{ .runner = &runner };
-    try std.testing.expectEqual(@as(workflow.OutcomeTag, if (plan == .cancelled) .cancelled else .failed), harness.run());
+    try std.testing.expectEqual(if (invalid_utf8) .failed else admittedOutcome(plan), harness.run());
     const observation = try observationResult(&runner);
     const decoded = try envelopeResult(&runner);
     try std.testing.expect(decoded.source() == observation);
     try std.testing.expect(decoded.outcome().not_decoded == observation);
-    try std.testing.expectEqual(observation_workflow.status(observation), runner.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.outcome);
+    try std.testing.expectEqual(envelope_workflow.status(decoded), runner.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.outcome);
+    try std.testing.expectEqual(observation_workflow.status(observation) == .failed and admittedOutcome(plan) == .invalid and !invalid_utf8, envelope_workflow.status(decoded) == .invalid);
     try std.testing.expectEqual(@as(u128, if (plan == .stopped or invalid_utf8) 7 else 0), runner.tokenLedger().committed());
     try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
     try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
@@ -6599,8 +6996,10 @@ const composition_yaml =
     \\      call: {use: invoke-model, on: {ok: observation, failed: observation, cancelled: observation}}
     \\      observation: {use: validate-provider-invocation-observation, on: {ok: complete, failed: complete, cancelled: complete, more: complete}}
     \\      complete: {use: complete-provider-operation, on: {ok: admit, failed: admit, cancelled: admit, more: admit}}
-    \\      admit: {use: admit-model-response, on: {ok: close, invalid: retry, failed: close, cancelled: close, more: fail-advice}}
+    \\      admit: {use: admit-model-response, on: {ok: close, invalid: runaway, failed: close, cancelled: close, more: fail-advice}}
+    \\      runaway: {use: check-model-runaway, on: {ok: retry, more: resend}}
     \\      retry: {use: build-model-protocol-retry, on: {ok: account, failed: end.failed}}
+    \\      resend: {use: build-model-runaway-resend, on: {ok: account, failed: end.failed}}
     \\      close: {use: complete-model-request, on: {ok: retain, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}}
     \\      retain: {use: retain-json-part, on: {ok: retire, failed: end.failed}}
     \\      retire: {use: retire-model-request, on: {ok: end.ok, failed: end.failed}}
@@ -6895,7 +7294,7 @@ test "registered non-Spec typed consumer composes references and enforces its ow
             items.state_id.bytes = "stale-reference-state";
             observer.items = items;
         }
-        var units: ProtocolUnits = .{ .input = try std.fmt.allocPrint(a, "{{\"claims\":[{d},{d}],\"preserved_tokens\":[{d}]}}", .{ business.?.ordinal, exact.?.ordinal, exact.?.ordinal }) };
+        var units: ProtocolUnits = .{ .input = try std.fmt.allocPrint(a, "{{\"claims\":[{d},{d}],\"exact_texts\":[{d}]}}", .{ business.?.ordinal, exact.?.ordinal, exact.?.ordinal }) };
         fixture.entries[fixture.entries.len - 1] = .{
             .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .assembled_json, .validated_assembled_json }, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
             .binding = bindings.bind(AuditObserver, &observer, AuditObserver.observe),
@@ -6980,6 +7379,8 @@ const Fixture = struct {
     clock: @import("provider_authorization_test_fixture.zig").TestClock,
     entries: [core.entries.len + native.count + 1]operations.Entry,
     registry: operations.Registry,
+    /// The configured workflow budget the runner starts from (ADR 0037).
+    token_budget: @import("domain/workflow_token_budget.zig").TotalTokenBudget,
 
     fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
         return self.initWithProvider(allocator, null, false);
@@ -7001,6 +7402,7 @@ const Fixture = struct {
             .binding = bindings.bind(Observer, &self.observer, Observer.invoke),
         }};
         self.registry = .{ .operations = &self.entries, .data_schemas = &native.schemas, .policies = &core.profiles, .gates = &.{} };
+        self.token_budget = .{ .value = 100_000 };
     }
 
     fn deinit(self: *Fixture) void {
@@ -7057,7 +7459,7 @@ const Fixture = struct {
     }
 
     fn runner(self: *Fixture, graph: *const compilation.CompiledWorkflow, allocator: std.mem.Allocator) runner_module.Runner {
-        var result = runner_module.Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph }, &self.registry, .{ .context = self, .process_fn = noTelemetry }, .{}, &self.services);
+        var result = runner_module.Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph }, &self.registry, .{ .context = self, .process_fn = noTelemetry }, .{}, &self.services, .{ .budget = self.token_budget });
         result.provider_clock = self.clock.port();
         return result;
     }
@@ -7100,7 +7502,7 @@ pub fn providerServices(allocator: std.mem.Allocator, production: ?ProviderChoic
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(allocator);
     for (slots) |slot| try models.slots.map.put(allocator, slot, .{ .provider = contract.provider.bytes, .model = model.bytes });
-    const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, registry.registry(owner));
+    const allowlist = try @import("domain/repository_model_allowlist.zig").createValidated(allocator, &models, @import("test_fixtures/model_temperatures.zig").temperatures, registry.registry(owner));
     return .init(.init(owner), allowlist);
 }
 
@@ -7666,7 +8068,7 @@ test "missing answers share protocol allowance through mixed failure and success
                 if (original_id == null) original_id = request.id();
                 try std.testing.expect(request.id() == original_id.?);
                 try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
-                try std.testing.expectEqualDeep(request.binding().registry_entry.capabilities.inferenceControls(), request.prepared().?.controls);
+                try std.testing.expectEqualDeep(request.binding().registry_entry.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures), request.prepared().?.controls);
                 try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
                 try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
                 for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
@@ -7884,7 +8286,7 @@ test "retained semantic assignments require complete current packet request bind
             0 => replay.prompt.content = .{ .prompt = "Different purpose." },
             1 => replay.context.?.content = .{ .prompt = "Different applicability guidance." },
             2 => replay.protocol_prompt.?.content = .{ .prompt = "Different correction guidance." },
-            3 => replay.binding.controls.temperature = if (selected.binding.controls.temperature == null) .fixed else null,
+            3 => replay.binding.controls.temperatures = if (selected.binding.controls.temperatures == null) @import("test_fixtures/model_temperatures.zig").temperatures else null,
             4 => replay.binding.reasoning_effort = "low",
             5 => replay.binding.slot_id = .{ .bytes = "foreign-slot" },
             6 => replay.binding.operation_id.workflow_id = .{ .bytes = "foreign-workflow" },
@@ -8312,7 +8714,7 @@ test "native advice shares the global budget and overshoot fails the run" {
         try prepareInvocable(&runner);
         try std.testing.expect((try currentRequest(&runner)).advisoryAssessment() != null);
         try std.testing.expectEqual(.ok, try nativeStepOutcome(&runner, "advance-operation"));
-        const limit = graph.authority.total_model_token_budget.value;
+        const limit = fixture.token_budget.value;
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan = .{ .complete = .{ .content = "{\"answer\":\"faithful response\"}", .input_tokens = limit - 2, .output_tokens = 2 + overshoot } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
@@ -8349,7 +8751,7 @@ test "global exhaustion and unknown usage block native advice before sending" {
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, try nativeStepOutcome(&runner, "advance-operation"));
         const current = try currentRequest(&runner);
-        const limit = graph.authority.total_model_token_budget.value;
+        const limit = fixture.token_budget.value;
         // Seed a prior reconciled observation; this setup grants no call authority.
         const prior: provider.ProviderOperationId = .{ .model_request_id = current.id(), .model_attempt_ordinal = .{ .value = 99 }, .kind = .inference };
         if (unknown) {
@@ -8425,7 +8827,8 @@ test "native advisory closure preserves failed logical requests through both adm
         defer runner.deinit();
         try installNativeAdvisoryPacket(&runner);
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2 } };
+        // A first runaway is re-sent, not closed (ADR 0039); any other stop is.
+        fake.invocation_plan = .{ .stopped = .{ .reason = .content_filtered, .input_tokens = 5, .output_tokens = 2 } };
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         try prepareInvocable(&runner);
         try std.testing.expectEqual(.ok, try nativeStepOutcome(&runner, "advance-operation"));
@@ -8464,7 +8867,7 @@ test "native advisory closure preserves failed logical requests through both adm
         try std.testing.expectEqual(.terminal, record.status);
         try std.testing.expectEqual(.failed, record.terminal_reason.?);
         const facts = try @import("application/advisory_request_completion_workflow.zig").read(&.{ .slots = runner.envelope.slots });
-        try std.testing.expectEqual(.provider_output_limit, facts.reason);
+        try std.testing.expectEqual(.provider_failure, facts.reason);
         try std.testing.expect(facts.origin != null);
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "close-advice" }).rejected);
         try std.testing.expectEqual(.failed, try nativeStepOutcome(&runner, "fail-advice"));

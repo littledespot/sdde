@@ -127,7 +127,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
-        .schema = .@"spec-e2e-report/v9",
+        .schema = .@"spec-e2e-report/v10",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -233,7 +233,7 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     try std.testing.expectEqualStrings(selected.workflow_id, readback.call.description.?.workflow_id);
     try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, "\"maxTokens\":16384") != null);
     try std.testing.expectEqualStrings("low", readback.call.description.?.reasoning_effort.?);
-    try std.testing.expectEqual(.fixed, readback.call.description.?.controls.temperature.?);
+    try std.testing.expectEqual(@as(f64, 0.1), readback.call.description.?.controls.temperature(.configured).?.value);
     try std.testing.expect(std.mem.indexOf(u8, readback.call.request.?, key) == null);
     try std.testing.expectEqualDeep(digest(readback.call.request.?), probe.request_sha256.?);
     const actual_response: ?[]const u8 = switch (scenario) {
@@ -258,8 +258,8 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
     defer environment.deinit();
     const assessed = try inspection.inspect(io, a, &environment, temporary.dir, "run", selected.workflow_id, probe, report);
     const expected_status: inspection.Status = switch (scenario) {
-        .complete, .empty_server_tool_usage_prefix => .compatible,
-        .schema_invalid, .malformed_candidate, .noncandidate_stop => .incompatible,
+        .complete => .compatible,
+        .empty_server_tool_usage_prefix, .schema_invalid, .malformed_candidate, .noncandidate_stop => .incompatible,
         .null_server_tool_usage, .array_server_tool_usage, .unknown_server_tool_usage, .unknown_usage, .cancelled, .partial_cancelled, .transport_failed, .partial_transport_failed, .missing_usage, .malformed_provider, .capture_failed => .inconclusive,
     };
     try std.testing.expectEqual(expected_status, assessed.status);
@@ -302,9 +302,10 @@ fn runScenarioWithBinding(case_path: []const u8, scenario: Scenario, binding: en
             try checkTampering(io, a, &environment, temporary.dir, run, selected.workflow_id, probe, report, readback.call);
         },
         .empty_server_tool_usage_prefix => {
+            // The retained claims carry model wording, which ADR 0036 removed.
             try std.testing.expectEqual(.valid, assessed.validation.extraction);
             try std.testing.expectEqual(.valid, assessed.validation.json);
-            try std.testing.expectEqual(.valid, assessed.validation.schema);
+            try std.testing.expectEqual(.invalid, assessed.validation.schema);
             try std.testing.expectEqual(.removed_leading_brace_quote, assessed.validation.normalization);
             try std.testing.expect(std.mem.startsWith(u8, assessed.validation.model_text.?, "{\"{ "));
             try std.testing.expectEqualStrings("claims", assessed.validation.parsed.?.object.get("kind").?.string);
@@ -484,8 +485,8 @@ test "test.integration.provider_compatibility drifted slot controls cannot subst
 }
 
 test "test.integration.provider_compatibility empty server tool metadata retains exact usage and shared prefix normalization in unrelated domains" {
-    // This retained provider body exercises structural compatibility only. Its
-    // claims do not acquire meaning or publication authority in either domain.
+    // This retained provider body exercises usage and prefix normalization only.
+    // Its claims predate ADR 0036, so the current schema rejects them.
     for (cases) |case_path| try runScenario(case_path, .empty_server_tool_usage_prefix);
 }
 
@@ -541,7 +542,7 @@ fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void 
         .delivery = .accepted_or_unknown,
     } } else .{ .received = .{ .status = 200, .body = response } };
     const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
-    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
     if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
     const published = invoke.run(io, a, project, selected, captured, @import("../harness/environment.zig").bedrockOnly(key), store, &report, .{
         .purpose = .whole_workflow,

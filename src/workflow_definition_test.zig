@@ -30,7 +30,7 @@ test "finite native iteration compiles registered progress without a YAML retry 
             .{ .contract = .{ .id = "finite.advance", .kind = .step, .requires = &.{ .raw_engine_config, .engine_config }, .replaces = &.{.engine_config}, .outcomes = &.{ .ok, .more }, .side_effect = .none, .iteration = .{ .kind = .advance, .scope = .raw_engine_config, .progress = .engine_config, .outcome = .more } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
         },
         .data_schemas = &.{ values.schema(.raw_engine_config, u32, 1, null), values.schema(.engine_config, u32, 1, null) },
-        .policies = &.{.{ .id = "finite.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1 } }},
+        .policies = &.{.{ .id = "finite.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} }},
         .gates = &.{},
     };
     const yaml =
@@ -132,7 +132,6 @@ test "concise resources and native parameters compile into immutable operation a
         try std.testing.expectEqualStrings(result_schema_bytes, result_schema.bytes());
         try std.testing.expectEqual(@as(u32, 64), result_schema.root().object[0].schema.string.maximum);
         try std.testing.expectEqual(@as(u32, 2), graph.authority.steps[0].retry_authority.?.limit.value);
-        try std.testing.expectEqual(@as(u64, 1000), graph.authority.total_model_token_budget.value);
         try std.testing.expectEqual(@as(usize, 6), graph.authority.maximum_step_executions);
         var slots: usize = 0;
         var resource_parameters: usize = 0;
@@ -476,7 +475,6 @@ test "compiler rejects parameter outcome gate and capability violations" {
             .id = "test.model-policy@1",
             .allowed_capabilities = &.{},
             .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-            .total_model_token_budget = .{ .value = 1000 },
         }},
         .gates = operations.gates,
         .data_schemas = operations.data_schemas,
@@ -735,8 +733,8 @@ const operation_entries = [_]operation_registry.Entry{
 const operations: operation_registry.Registry = .{
     .operations = &operation_entries,
     .policies = &.{
-        .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1000 } },
-        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled }, .total_model_token_budget = .{ .value = 1000 } },
+        .{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok} },
+        .{ .id = "test.model-policy@1", .allowed_capabilities = &.{"model-provider"}, .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled } },
     },
     .gates = &.{.{ .id = .{ .bytes = "model-ready@1" }, .issuer = .{ .bytes = "test.validate" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} }},
     .data_schemas = &.{ values.schema(.workflow_invocation, u32, 1, 32), values.schema(.workflow_operation_registry_evidence, gate_module.Decision, 1, 32) },

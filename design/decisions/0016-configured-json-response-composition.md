@@ -17,7 +17,9 @@
   operations; distinct request identities and `retain-json-part` stay visible.
   [ADR 0031](0031-stage-actions.md) (22 October 2026, not yet implemented) likewise
   removes absorbed deterministic operations instead of keeping them available beside a
-  stage action.
+  stage action. [ADR 0036](0036-source-quoted-claims.md) (25 October 2026) removes §5's
+  citation repair: claim citations are bounded at admission and claim wording is quoted
+  from the cited lines.
 
 ## 1. Problem and intended outcome
 

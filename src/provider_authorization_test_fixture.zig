@@ -73,7 +73,7 @@ pub const Fixture = struct {
             .slot_id = .{ .bytes = "generation" },
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
-            .controls = self.registry_entry.capabilities.inferenceControls(),
+            .controls = self.registry_entry.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures),
         };
         self.schema_arena = .init(allocator);
         errdefer self.schema_arena.deinit();
@@ -119,7 +119,7 @@ pub const Fixture = struct {
     }
 
     pub fn assignment(self: *Fixture) lifecycle.Assignment {
-        return .{ .binding_id = self.provider_binding.bindingId(), .model_visible_input_id = self.request.model_visible_input_id };
+        return .{ .binding_id = self.provider_binding.bindingId(), .model_visible_input_id = self.request.model_visible_input_id, .sampling = self.request.sampling };
     }
 
     pub fn change(self: *Fixture, kind: operation.ProviderOperationKind, command: lifecycle.Command) !void {

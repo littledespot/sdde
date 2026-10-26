@@ -62,6 +62,7 @@ test "reconciliation repair definitions admit only the natively selected payload
         const selected = schema.select(.{ .bytes = example[0] }).?;
         try checkDocument(selected.modelBytes(), .{ .bytes = example[1] });
         for ([_][]const u8{
+            "{\"kind\":\"exact_text\",\"token_id\":1}",
             "{\"kind\":\"preserved_token\",\"token_id\":1}",
             "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":{\"fragments\":[]}}}",
             "{\"current_value\":{}}",
@@ -248,12 +249,12 @@ test "schema diagnostics identify nested fields and array indices without relaxi
 
 test "correction schema retains nested alternatives and exact bounds without candidate examples" {
     const contract =
-        \\{"type":"object","properties":{"statements":{"type":"array","maxItems":2,"items":{"type":"object","properties":{"content":{"oneOf":[{"type":"object","properties":{"kind":{"const":"model"},"text":{"type":"string","maxLength":8}},"required":["kind","text"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"preserved_token"},"token_id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","token_id"],"additionalProperties":false}]}},"required":["content"],"additionalProperties":false}},"empty":{"type":"array","maxItems":0,"items":{"type":"boolean"}}},"required":["statements","empty"],"additionalProperties":false}
+        \\{"type":"object","properties":{"statements":{"type":"array","maxItems":2,"items":{"type":"object","properties":{"content":{"oneOf":[{"type":"object","properties":{"kind":{"const":"model"},"text":{"type":"string","maxLength":8}},"required":["kind","text"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"exact_text"},"token_id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","token_id"],"additionalProperties":false}]}},"required":["content"],"additionalProperties":false}},"empty":{"type":"array","maxItems":0,"items":{"type":"boolean"}}},"required":["statements","empty"],"additionalProperties":false}
     ;
     try checkDocument(contract, .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/statements" });
     try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{}}],\"empty\":[]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" });
-    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"preserved_token\",\"token_id\":10}}],\"empty\":[]}", .rejection = .integer_range, .path = "/statements/0/content/token_id" });
-    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"model\",\"text\":\"hello\"}},{\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"empty\":[]}" });
+    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"exact_text\",\"token_id\":10}}],\"empty\":[]}", .rejection = .integer_range, .path = "/statements/0/content/token_id" });
+    try checkDocument(contract, .{ .bytes = "{\"statements\":[{\"content\":{\"kind\":\"model\",\"text\":\"hello\"}},{\"content\":{\"kind\":\"exact_text\",\"token_id\":7}}],\"empty\":[]}" });
 }
 
 test "independent values cover unrelated closed schemas and explicit null fields" {
@@ -820,6 +821,8 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 .enum_mismatch => "allowed values",
                 .unknown_variant => "allowed kind",
                 .duplicate_member => "repeats an assigned member",
+                .uncovered_member => "covering kind",
+                .missing_required_item => "needs at least one item",
             };
             try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);
             try std.testing.expect(std.mem.indexOf(u8, wire, explanation) != null);

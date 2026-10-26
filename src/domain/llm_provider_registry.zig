@@ -180,7 +180,7 @@ fn validateCandidate(
         {
             return error.InvalidLLMProviderRegistry;
         }
-        if (entry.json and !entry.capabilities.supports(.native_schema, entry.capabilities.inferenceControls())) return error.InvalidLLMProviderRegistry;
+        if (entry.json and !entry.capabilities.supportsResponse(.native_schema)) return error.InvalidLLMProviderRegistry;
         for (entry.supported_reasoning_efforts, 0..) |effort, effort_index| {
             if (effort.len == 0) return error.InvalidLLMProviderRegistry;
             for (entry.supported_reasoning_efforts[0..effort_index]) |previous| {

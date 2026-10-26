@@ -99,6 +99,10 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
 - **Responsibility:** Admit response syntax and shape through the existing decoder
   and validator. Detailed operations remain available; no action invokes another
   action. No semantic review, provider call, retry or accounting occurs.
+- A first runaway (an `output_limit` stop with valid usage, on an attempt that isn't a
+  re-send) admits as `invalid` with no candidate, like a missing final answer; a
+  runaway on a re-send admits as `failed` with `RunawayRepeated`
+  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 
 ## Configured JSON composition responsibilities
 
@@ -188,6 +192,27 @@ bounded fragment; no tail truncation is permitted.
   ownership. It adds no history, retry accounting, model invocation, validation or
   successor selection to this action.
 
+## `CheckModelRunawayAction` (`check-model-runaway`)
+
+- **Input:** the current `invalid` admission and its sealed provider evidence.
+- **Output:** a typed route: re-send a first runaway, or correct the response.
+- **Responsibility:** Route only. It builds no request, adds no accounting, invocation
+  or validation, and never re-sends a re-send
+  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+
+## `BuildModelRunawayResendAction` (`build-model-runaway-resend`)
+
+- **Input:** sealed provider evidence that the current attempt stopped with
+  `output_limit`, the attempt's retained prepared request, and the configured
+  `temperatureRunawayRetry`
+  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- **Output:** the re-send request under the same logical request identity: the attempt's
+  prepared request with its sampling set to `runaway_resend`, so only its temperature
+  changes, or nothing changes when the registered model takes no temperature.
+- **Responsibility:** Build the one re-send of a runaway attempt. It adds no diagnostic,
+  no partial response text, no retry accounting, model invocation, validation or
+  successor selection. Evidence of any other stop, or of a stop on a re-send, rejects.
+
 ## `AdvanceModelAttemptAccountingAction`
 
 - **Input:** exact stage-run epoch/request/unit identity, current runner model-attempt
@@ -198,6 +223,9 @@ bounded fragment; no tail truncation is permitted.
 - Reserve a later attempt only after an explicit YAML retry transition and while the
   runner's operation/defect count remains within its declared limit under
   [§22.7](../22-repair.md#227-repair-retry-limit-and-escalation).
+- Reserve a runaway re-send (ADR 0039) only for an attempt that stopped with
+  `output_limit` and is not itself a re-send. It uses no `retry-limit` and leaves the
+  correction count unchanged.
 - Assign monotonic ordinals for execution-local identity; impose no workflow-global attempt
   ceiling.
 
@@ -206,7 +234,9 @@ bounded fragment; no tail truncation is permitted.
 - **Input:** current workflow-execution actual-usage ledger
 - **Output:** read-only budget check
 - **Responsibility:** Reject a subsequent provider call when actual usage is at or above the
-  selected policy budget; reserve no tokens and derive no output allowance.
+  configured `workflowTokenBudget`
+  ([ADR 0037](../../decisions/0037-configured-workflow-token-budget.md)); reserve no tokens
+  and derive no output allowance.
 
 ## `ReconcileWorkflowTokenUsageAction`
 

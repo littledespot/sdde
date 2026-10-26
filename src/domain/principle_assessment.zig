@@ -121,8 +121,21 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     return @import("specification_support.zig").Contract(.principles).classifyAdvicePacket(allocator, inputs, state, base);
 }
 pub fn rule(inputs: a.Inputs, finding: a.Finding) Error!Rule {
-    return .{ .citations_required = finding != .supported, .permitted_chunks = (inputs.principle_context orelse return error.InvalidRequiredAuthority).selection.chunks };
+    return .{ .citations_required = citationsRequired(finding), .permitted_chunks = (inputs.principle_context orelse return error.InvalidRequiredAuthority).selection.chunks };
 }
+/// A finding other than compatible must cite the principle it rests on.
+pub fn citationsRequired(finding: a.Finding) bool {
+    return finding != .supported;
+}
+/// The wire decisions `citationsRequired` covers. Response admission requires
+/// their citations natively (ADR 0042), so this rule stays the one authority.
+pub const cited_decisions: []const []const u8 = blk: {
+    var names: []const []const u8 = &.{};
+    for (std.enums.values(Decision)) |decision| if (citationsRequired(decision.finding())) {
+        names = names ++ &[_][]const u8{@tagName(decision)};
+    };
+    break :blk names;
+};
 pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id, value: Value) Error!Admission {
     const context = inputs.principle_context orelse return error.InvalidRequiredAuthority;
     try registry.validateSelection(allocator, context.registry, context.selection);

@@ -513,7 +513,7 @@ fn define(b: *std.Build) Graph {
     evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
-    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v2\",\"reasoning_effort\":\"low\",\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100,\"max_output_tokens\":16384}");
+    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v2\",\"reasoning_effort\":\"low\",\"temperature\":0.1,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100,\"max_output_tokens\":16384}");
     for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, family: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
         .{ .name = "reject missing test evaluation model", .provider = "bedrock", .region = null, .model = null, .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL, TEST_EVALUATION_REGION or TEST_EVALUATION_FAMILY. No API call made.\n" },
         .{ .name = "reject production credential as Bedrock evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .family = "gpt-oss", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },

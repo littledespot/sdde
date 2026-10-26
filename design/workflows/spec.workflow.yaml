@@ -424,10 +424,7 @@ subgraphs:
         on: {ok: validate-claims, failed: end.failed}
       validate-claims:
         use: validate-reference-claims
-        on: {ok: assign-claims, invalid: retain-claim-rejection, failed: end.failed}
-      retain-claim-rejection:
-        use: retain-reference-claim-rejection
-        on: {ok: authorize-extraction-repair, failed: end.failed}
+        on: {ok: assign-claims, failed: end.failed}
       assign-claims:
         use: assign-reference-claim-identities
         on: {ok: build-ledger, failed: end.failed}
@@ -1065,9 +1062,15 @@ subgraphs:
         on: {ok: admit, more: admit, failed: admit, cancelled: admit}
       admit:
         use: admit-model-response
-        on: {ok: close, invalid: retry, more: close-advice, failed: close, cancelled: close}
+        on: {ok: close, invalid: runaway, more: close-advice, failed: close, cancelled: close}
+      runaway:
+        use: check-model-runaway
+        on: {ok: retry, more: resend}
       retry:
         use: build-model-protocol-retry
+        on: {ok: account, failed: end.failed}
+      resend:
+        use: build-model-runaway-resend
         on: {ok: account, failed: end.failed}
       close:
         use: complete-model-request

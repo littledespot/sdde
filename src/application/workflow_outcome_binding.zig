@@ -146,6 +146,16 @@ pub fn prepare(
                     return error.InvalidOutcomeAssociation;
             }
         },
+        .request_resend => {
+            if (candidate.outcome == .ok) {
+                const previous = requests.readCurrent(&before, requests.prepared_schema) catch return error.InvalidOutcomeAssociation;
+                const next = requests.readCurrent(&after, requests.prepared_schema) catch return error.InvalidOutcomeAssociation;
+                const rejected = payload.readCurrent(&before) catch return error.InvalidOutcomeAssociation;
+                const runaway = next.runawayResend() orelse return error.InvalidOutcomeAssociation;
+                if (previous == next or previous.id() != next.id() or !runaway.eql(rejected.source().source().operationId()) or payload.status(rejected) != .invalid)
+                    return error.InvalidOutcomeAssociation;
+            }
+        },
         .advisory_request_closure => {
             const facts = @import("advisory_request_completion_workflow.zig").closing(&before) catch return error.InvalidOutcomeAssociation;
             if (!facts.operation.eql(subject.request)) return error.InvalidOutcomeAssociation;
@@ -271,8 +281,9 @@ pub fn permitsModel(envelope: *const envelope_module.PipelineEnvelope, request: 
     const current = requests.readCurrent(&.{ .slots = envelope.slots }, requests.prepared_schema) catch return false;
     if (current != request or request.prepared() == null) return false;
     if (envelope.outcomes.firstUnresolved() == null) return true;
-    const correction = request.protocolCorrection();
-    // A native protocol correction uses this exact prepared request and admits no payload.
+    const correction = request.retriedAttempt();
+    // A native protocol correction or runaway re-send (ADR 0039) uses this exact
+    // prepared request and admits no payload.
     if (correction != null and envelope.outcomes.permitsRequest(request.id(), correction, null, &.{})) return true;
     if (request.id().purpose == .atomic_repair) {
         const packet = request.packet() orelse return false;
@@ -430,10 +441,15 @@ fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request:
     return null;
 }
 
+/// A missing final answer or a first runaway (ADR 0039) is admitted as
+/// correctable, never as a failed attempt.
 fn missingFinalText(changes: *Changes, source: *const observation.Result, outcome: @import("../domain/workflow.zig").OutcomeTag) Error!void {
     if (outcome != .invalid) return;
     switch (source.outcome()) {
-        .validated => |evidence| if (evidence.missingFinalText()) try changes.add(.{ .reclassify = .{ .missing_final_text = evidence } }),
+        .validated => |evidence| if (evidence.missingFinalText())
+            try changes.add(.{ .reclassify = .{ .missing_final_text = evidence } })
+        else if (evidence.runaway() == .first)
+            try changes.add(.{ .reclassify = .{ .runaway = evidence } }),
         .rejected, .cancelled, .advisory_stopped => {},
     }
 }

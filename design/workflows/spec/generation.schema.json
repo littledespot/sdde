@@ -456,10 +456,19 @@
               "$ref": "#/$defs/record_prohibited_behavior"
             }
           ]
+        },
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "minItems": 1,
+          "maxItems": 4294967295
         }
       },
       "required": [
-        "content"
+        "content",
+        "claim_ids"
       ],
       "additionalProperties": false
     },

@@ -19,9 +19,10 @@ pub const Action = struct {
         _: Action,
         allocator: std.mem.Allocator,
         models: *const config.ModelsConfig,
+        temperatures: @import("../../domain/model_controls.zig").Temperatures,
         provider_registry: *const registry.ValidatedLLMProviderRegistry,
     ) Error!*allowlist.Owner {
-        return allowlist.createValidated(allocator, models, provider_registry) catch {
+        return allowlist.createValidated(allocator, models, temperatures, provider_registry) catch {
             return error.LLMProviderModelBindingInvalid;
         };
     }

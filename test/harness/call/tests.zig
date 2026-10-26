@@ -48,7 +48,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"answer\"],\"additionalProperties\":false}",
     .response_mode = .native_schema,
-    .controls = .{ .temperature = .fixed },
+    .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "high",
     .operation_kind = .inference,
 };

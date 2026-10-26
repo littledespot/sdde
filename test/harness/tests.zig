@@ -176,7 +176,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const rejected = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
     _ = try reports.json(a, rejected);
     _ = try reports.markdown(a, rejected);
-    const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const bedrock_config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
     _ = try bedrock.request(a, bedrock_config, inputs, null);
     var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", good) } });
     observation.identity = .{ .bedrock_target = .{ .model = bedrock_config.model, .region = bedrock_config.region.? } };
@@ -201,6 +201,18 @@ const bedrock_selection: configuration.Selection = .{ .api = .bedrock_converse, 
 const config_bytes =
     \\{"schema":"evaluation-config/v2","reasoning_effort":null,"temperature":null,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100,"max_output_tokens":16000}
 ;
+/// A Bedrock judge that takes a temperature names its own (ADR 0039).
+const bedrock_config_bytes =
+    \\{"schema":"evaluation-config/v2","reasoning_effort":null,"temperature":0.1,"timeout_ms":1000,"retry_limit":1,"retry_delay_ms":1,"total_token_budget":100,"max_output_tokens":16000}
+;
+/// The judge configuration for a Bedrock family: a temperature exactly when its
+/// compiled contract takes one.
+fn bedrockBytes(family: @import("../../src/domain/llm_provider_contracts.zig").BedrockFamily) []const u8 {
+    for (@import("../../src/composition/provider_model_contracts.zig").registry.entries) |entry| {
+        if (entry.facts.bedrockFamily() == family) return if (entry.capabilities.temperature) bedrock_config_bytes else config_bytes;
+    }
+    unreachable;
+}
 const Fake = struct {
     observations: []const provider.Observation,
     count: usize = 0,
@@ -271,7 +283,8 @@ test "grader requests send the configured judge maximum for both providers" {
         const expected = try std.fmt.parseInt(i64, maximum, 10);
         const openai_body = try c.decode(std.json.Value, a, try wire.request(a, try configuration.parse(a, bytes, test_selection), inputs, null));
         try std.testing.expectEqual(expected, openai_body.object.get("max_output_tokens").?.integer);
-        const bedrock_body = try c.decode(std.json.Value, a, try bedrock.request(a, try configuration.parse(a, bytes, bedrock_selection), inputs, null));
+        const bedrock_bytes = try std.mem.replaceOwned(u8, a, bytes, "\"temperature\":null", "\"temperature\":0.1");
+        const bedrock_body = try c.decode(std.json.Value, a, try bedrock.request(a, try configuration.parse(a, bedrock_bytes, bedrock_selection), inputs, null));
         try std.testing.expectEqual(expected, bedrock_body.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
     }
 }
@@ -334,7 +347,7 @@ test "evaluation selection is required from test environment and reaches request
         const model = tuple.model;
         try environment.put("TEST_EVALUATION_MODEL", model);
         try environment.put("TEST_EVALUATION_FAMILY", @tagName(family));
-        const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
+        const config = try configuration.parse(a, bedrockBytes(family), try test_environment.selection(&environment));
         const inputs = try capture(a);
         const request = try c.decode(std.json.Value, a, try @import("request.zig").encode(a, config, inputs, null));
         try std.testing.expect(request.object.get("outputConfig") != null);
@@ -403,7 +416,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
             } else |_| try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
             // Mechanical provider conformance accepts synthetic inputs separately
             // from the guarded live environment selection.
-            const config = try configuration.parse(a, config_bytes, selection);
+            const config = try configuration.parse(a, bedrockBytes(family), selection);
             try std.testing.expectEqual(.bedrock_converse, config.api);
             try std.testing.expectEqualStrings(raw_model, config.model);
             try std.testing.expectEqual(family, config.family.?);
@@ -424,7 +437,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
                 try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
             }
             invalid = config;
-            invalid.temperature = 1.01;
+            invalid.temperature = if (entry.capabilities.temperature) 2.5 else 0.1;
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(invalid));
         };
     }
@@ -457,7 +470,7 @@ test "live evaluator cost rejection precedes credential use and adapter construc
         config.family = family;
         for (@import("../../src/model_contract_test_fixture.zig").bedrock_model_ids) |model| {
             config.model = model;
-            config.temperature = (try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = .{ .bytes = model }, .region = config.region, .family = family })).temperature;
+            config.temperature = (try configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = .{ .bytes = model }, .region = config.region, .family = family })).temperature;
             try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
         }
     }
@@ -488,10 +501,10 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
         const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
         if (entry.capabilities.structured_response != .native_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family }));
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = model, .region = region, .family = family }));
             continue;
         }
-        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
+        var config = try configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
         const baseline = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
         switch (family) {
             .luna => {
@@ -525,8 +538,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
                     },
                     .converse, .luna => return error.TestUnexpectedResult,
                 }
-                const temperature = entry.capabilities.inferenceControls().temperature;
-                if (temperature) |fixed| try std.testing.expectEqual(fixed.wireValue(), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
+                if (entry.capabilities.temperature) try std.testing.expectEqual(@as(f64, 0.1), root.object.get("inferenceConfig").?.object.get("temperature").?.float);
                 try std.testing.expectEqual(@as(i64, config.max_output_tokens.tokens), root.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
             }
         }
@@ -574,7 +586,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         const model: c.ModelId = .{ .bytes = @import("../../src/model_contract_test_fixture.zig").bedrock_model_ids[0] };
         const region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0];
         if (entry.capabilities.structured_response != .native_json_schema) {
-            var forged = try configuration.parse(a, config_bytes, bedrock_selection);
+            var forged = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
             forged.model = model.bytes;
             forged.region = region;
             forged.family = family;
@@ -589,7 +601,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         socket.expected_host = try std.fmt.allocPrint(a, "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
         var transport = socket.adapter();
         var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = model, .region = region, .api_key = &socket.canary };
-        var config = try configuration.parse(a, config_bytes, .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
+        var config = try configuration.parse(a, bedrockBytes(family), .{ .api = .bedrock_converse, .model = model, .region = region, .family = family });
         config.timeout_ms = 100;
         const inputs = try capture(a);
         const encoded = try @import("request.zig").encode(a, config, inputs, null);
@@ -602,8 +614,8 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string);
         const inference_config = root.object.get("inferenceConfig").?.object;
         try std.testing.expectEqual(@as(i64, config.max_output_tokens.tokens), inference_config.get("maxTokens").?.integer);
-        if (entry.capabilities.inferenceControls().temperature) |temperature| {
-            try std.testing.expectEqual(temperature.wireValue(), inference_config.get("temperature").?.float);
+        if (entry.capabilities.temperature) {
+            try std.testing.expectEqual(@as(f64, 0.1), inference_config.get("temperature").?.float);
         } else try std.testing.expect(!inference_config.contains("temperature"));
         switch (family) {
             .luna => try std.testing.expect(root.object.get("additionalModelRequestFields").?.object.get("text").?.object.get("format").?.object.get("strict").?.bool),
@@ -715,7 +727,7 @@ test "Bedrock native schema output retains complete judgment validation and exac
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
     const inputs = try capture(a);
     const Reason = @FieldType(judgment.Diagnostic, "reason");
     for ([_]struct { text: []const u8, reason: ?Reason }{
@@ -763,7 +775,7 @@ test "Bedrock stop error and malformed response observations never produce a gra
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
     const inputs = try capture(a);
     for ([_]struct { stop: []const u8, failure: reports.Failure }{
         .{ .stop = "max_tokens", .failure = .incomplete },
@@ -821,7 +833,7 @@ test "Bedrock concrete HTTP cancellation and deadlines stop without retry or inv
         socket.fault = fault;
         var transport = socket.adapter();
         var adapter: bedrock.Adapter = .{ .transport = transport.port(), .clock = transport.clock, .model = bedrock_selection.model, .region = bedrock_selection.region.?, .api_key = &socket.canary };
-        var config = try configuration.parse(a, config_bytes, bedrock_selection);
+        var config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
         config.timeout_ms = 100;
         const report = try evaluator.run(std.testing.io, a, adapter.port(), config, try capture(a));
         try std.testing.expectEqual(if (fault == .cancelled) reports.Failure.cancelled else .timeout, report.outcome.evaluator_error);
@@ -835,7 +847,7 @@ test "provider identity validation rejects cross-provider and foreign Bedrock ta
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
     const inputs = try capture(a);
     for ([_]provider.Identity{
         .unavailable,
@@ -1087,7 +1099,7 @@ test "one correction of a mechanical defect resends the same request with its di
     const retained = (try std.json.parseFromSlice(struct { rejected_response: []const u8 }, a, sent[2].object.get("content").?.string, .{})).value;
     try std.testing.expectEqualStrings(missing.payload.?, retained.rejected_response);
     // The Bedrock projection carries the same correction exactly once.
-    const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
+    const bedrock_config = try configuration.parse(a, bedrock_config_bytes, bedrock_selection);
     const bedrock_body = try bedrock.request(a, bedrock_config, inputs, .{ .rejected = missing.payload.?, .diagnostic = report.attempts[0].diagnostic.? });
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bedrock_body, "rejected_response"));
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bedrock_body, "Correct only the reported error"));
@@ -1409,7 +1421,7 @@ test "correction requests carry the shared response-format framing exactly once"
     const framing = @import("../../src/domain/model_controls.zig").response_format_guidance;
     const correction: @import("correction.zig").Correction = .{ .rejected = "{\"results\":[]}", .diagnostic = .{ .reason = .criterion_count } };
     for ([_]configuration.Selection{ test_selection, bedrock_selection }) |selection| {
-        const config = try configuration.parse(a, config_bytes, selection);
+        const config = try configuration.parse(a, if (selection.api == .bedrock_converse) bedrock_config_bytes else config_bytes, selection);
         const body = try @import("request.zig").encode(a, config, inputs, correction);
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, "rejected_response"));
@@ -1885,7 +1897,7 @@ test "live generation capture requires completed identity and distinct valid mod
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
 }
 
-test "Bedrock temperature follows the registered capability and rejects configured or forged overrides" {
+test "Bedrock judge temperature is the evaluator's own value, present exactly when the family takes one" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1900,29 +1912,45 @@ test "Bedrock temperature follows the registered capability and rejects configur
             .family = family,
         };
         if (entry.capabilities.structured_response != .native_json_schema) {
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, config_bytes, selection));
+            try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bedrockBytes(family), selection));
             continue;
         }
-        const config = try configuration.parse(a, config_bytes, selection);
-        const fixed = entry.capabilities.inferenceControls().temperature;
-        const required: ?f64 = if (fixed) |temperature| temperature.wireValue() else null;
-        try std.testing.expectEqual(required, config.temperature);
-        const explicit_fixed = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", "\"temperature\":0.1");
-        if (required != null) {
-            try std.testing.expectEqualDeep(config, try configuration.parse(a, explicit_fixed, selection));
-        } else try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, explicit_fixed, selection));
-        for ([_][]const u8{ "-1", "0", "0.001", "0.25", "1", "2" }) |value| {
+        const takes = entry.capabilities.temperature;
+        // Accepted: each in-range value when the family takes one, null otherwise.
+        for ([_][]const u8{ "null", "0", "0.1", "0.25", "1", "2" }) |value| {
+            const field = try std.fmt.allocPrint(a, "\"temperature\":{s}", .{value});
+            const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", field);
+            const accepted = std.mem.eql(u8, value, "null") != takes;
+            if (!accepted) {
+                try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bytes, selection));
+                continue;
+            }
+            const config = try configuration.parse(a, bytes, selection);
+            const root = try c.decode(std.json.Value, a, try bedrock.request(a, config, inputs, null));
+            const inference_config = root.object.get("inferenceConfig").?.object;
+            if (config.temperature) |sent| {
+                const written = inference_config.get("temperature").?;
+                try std.testing.expectEqual(sent, switch (written) {
+                    .float => |number| number,
+                    .integer => |number| @as(f64, @floatFromInt(number)),
+                    else => return error.TestUnexpectedResult,
+                });
+            } else try std.testing.expect(!inference_config.contains("temperature"));
+        }
+        for ([_][]const u8{ "-1", "2.5" }) |value| {
             const field = try std.fmt.allocPrint(a, "\"temperature\":{s}", .{value});
             const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", field);
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bytes, selection));
         }
-        for ([_]?f64{ null, 0, 0.001, 0.1, 0.25, 1, 2 }) |value| {
-            if (std.meta.eql(value, required)) continue;
-            var forged = config;
-            forged.temperature = value;
-            try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(forged));
-            try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, forged, inputs, null));
-        }
+        // A forged value the family can't take, or a missing one it needs, rejects.
+        var forged = try configuration.parse(a, bedrockBytes(family), selection);
+        forged.temperature = if (takes) null else 0.1;
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(forged));
+        // Validation itself bounds the judge temperature, not only the request encoder.
+        var negative = try configuration.parse(a, bedrockBytes(family), selection);
+        negative.temperature = -0.5;
+        try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(negative));
+        try std.testing.expectError(error.InvalidEvaluationContract, bedrock.request(a, forged, inputs, null));
     }
 }
 

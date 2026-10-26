@@ -9,6 +9,7 @@ pub const Binding = struct {
         *anyopaque,
         *const execution.SelectedWorkflow,
         *const config.ModelsConfig,
+        @import("../domain/model_controls.zig").Temperatures,
         *const bootstrap_root_registry.LLMProviderConfigCapability,
     ) orchestrator.Outcome,
 
@@ -16,8 +17,9 @@ pub const Binding = struct {
         self: Binding,
         selected: *const execution.SelectedWorkflow,
         models: *const config.ModelsConfig,
+        temperatures: @import("../domain/model_controls.zig").Temperatures,
         capability: *const bootstrap_root_registry.LLMProviderConfigCapability,
     ) orchestrator.Outcome {
-        return self.invoke_fn(self.context, selected, models, capability);
+        return self.invoke_fn(self.context, selected, models, temperatures, capability);
     }
 };

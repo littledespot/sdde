@@ -80,7 +80,7 @@ The internal test environment supplies the evaluation selection:
 | --- | --- |
 | `schema` | `"evaluation-config/v2"` |
 | `reasoning_effort` | The selected GPT-OSS-20B judge uses explicit `"low"`. The closed parser retains other registered effort values for adapter conformance; reports retain the independently configured judge setting. |
-| `temperature` | The selected GPT-OSS-20B judge uses `0.1`, derived from the engine's fixed supported-temperature control. Bedrock resolves explicit `null` to the same required `0.1`; other values reject. The retained OpenAI parser supports `null` or a number from 0 through 2. |
+| `temperature` | The selected GPT-OSS-20B judge uses `0.1`. The evaluator owns this value; it no longer derives from an engine constant ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A Bedrock judge whose model takes a temperature requires a number from 0 through 2; one that takes none requires `null`. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
@@ -88,9 +88,9 @@ The internal test environment supplies the evaluation selection:
 | `max_output_tokens` | Positive integer: the judge model's documented maximum output (16,384 for GPT-OSS-20B), sent on every request so the provider cannot apply a smaller default ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)). Never a smaller allowance. |
 
 - For reasoning effort and OpenAI temperature, `null` omits the API control.
-- Bedrock temperature always resolves to `0.1` when supported and is otherwise
-  omitted (§12.5). The resolved value is retained in reports and validated before
-  request encoding; callers cannot clear or alter it.
+- Bedrock sends the configured temperature when supported and otherwise omits it.
+  The value is retained in reports and validated before request encoding; callers
+  cannot clear or alter it.
 - Unsupported model/settings combinations are configuration errors, not permission to
   choose another model.
 - Judge settings/accounting are independent of generation.

@@ -157,7 +157,7 @@ test "prepared lease cannot be reused with altered binding or controls" {
                 request.binding_id = selected.bindingId();
             },
             2 => {
-                selected.controls.temperature = null;
+                selected.controls.temperatures = null;
                 request.controls = selected.controls;
             },
             3 => {

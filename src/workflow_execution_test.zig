@@ -22,7 +22,7 @@ test "native finite iteration executes the actual population without consuming r
         var registry = batch.registry(&entries);
         var graph = try nativeBatchGraph();
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         try std.testing.expectEqual(.ok, engine.run(children.bindings()).executionStatus().?);
@@ -43,7 +43,7 @@ test "native advancement rejects absent repeated skipped enlarged and malformed 
         var registry = batch.registry(&entries);
         var graph = try nativeBatchGraph();
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
@@ -70,7 +70,7 @@ test "native progress rejects replaced authority and cannot restart the same sco
         var registry = batch.registry(&entries);
         var graph = try nativeBatchGraph();
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
@@ -88,7 +88,7 @@ test "native progress rejects replaced authority and cannot restart the same sco
     var registry = batch.registry(&entries);
     var graph = try nativeBatchGraph();
     var barrier: FakeBarrier = .{};
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
@@ -107,7 +107,7 @@ test "runner rejects undeclared native progress and bounds nonadvancing executio
     var registry = batch.registry(&entries);
     var graph = try nativeBatchGraph();
     var barrier: FakeBarrier = .{};
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
@@ -128,7 +128,7 @@ test "native iteration rejects unchanged scope whose source authority became sta
     graph.authority.data_schemas = &.{ NativeBatch.scope_schema, NativeBatch.progress_schema, source_schema };
     registry.data_schemas = graph.authority.data_schemas;
     var barrier: FakeBarrier = .{};
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
     var delta: pipeline.NodeDelta = .{};
@@ -184,7 +184,7 @@ const NativeBatch = struct {
         return .{
             .operations = entries,
             .data_schemas = &.{ scope_schema, progress_schema },
-            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes, .total_model_token_budget = .{ .value = 1000 } }},
+            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes }},
             .gates = &.{},
         };
     }
@@ -254,6 +254,7 @@ test "generic engine preserves every YAML-compiled terminal outcome" {
             barrier.port(),
             .{},
             null,
+            .{ .budget = .{ .value = 1000 } },
         );
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
@@ -269,7 +270,7 @@ test "generic engine finalizes every terminal outcome and propagates close failu
             var barrier: FakeBarrier = .{};
             var graph = try testGraph();
             var registry = testRegistry(&control);
-            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
             defer runner.deinit();
             var finalizer: FakeFinalizer = .{ .fail = fail };
             var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port() };
@@ -292,7 +293,7 @@ test "generic engine finalizes selection and preparation failures before any ope
             var barrier: FakeBarrier = .{};
             var graph = try testGraph();
             var registry = testRegistry(&control);
-            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
             defer runner.deinit();
             var finalizer: FakeFinalizer = .{};
             var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port() };
@@ -316,7 +317,7 @@ test "generic engine finalizes selection and preparation failures before any ope
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
         var registry = testRegistry(&control);
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var finalizer: FakeFinalizer = .{};
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .finalizer = finalizer.port(), .preparation_result = preparation };
@@ -363,7 +364,7 @@ test "publication effects finalize logging before the shared runner invokes any 
                 control.entries[1].contract.side_effect = effect;
                 control.entries[1].contract.requires = steps[0].requires;
                 var runtime: PublicationRuntime = .{};
-                var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null);
+                var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null, .{ .budget = .{ .value = 1000 } });
                 defer runner.deinit();
                 var finalizer: FakeFinalizer = .{ .fail = fail, .operations = &control.state, .runtime = &runtime, .runtime_after = after_finalization };
                 runner.publication_finalizer = finalizer.port();
@@ -424,7 +425,7 @@ test "pending independent prohibiting outcome prevents publication finalization 
             registry.data_schemas = graph.authority.data_schemas;
             control.entries[1].contract.side_effect = .workflow_publication;
             control.entries[1].contract.requires = steps[0].requires;
-            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
             defer runner.deinit();
             var finalizer: FakeFinalizer = .{ .operations = &control.state };
             runner.publication_finalizer = finalizer.port();
@@ -487,7 +488,7 @@ test "maximum graph validates executes every operation and rejects cycles and ov
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
@@ -538,7 +539,7 @@ test "rerunning an abandoned workflow executes every step again from compiled st
             } };
             var barrier: FakeBarrier = .{};
             var registry = testRegistry(&control);
-            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
             defer runner.deinit();
             var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
             try std.testing.expectEqual(@as(workflow.OutcomeTag, terminal), engine.run(children.bindings()).executionStatus().?);
@@ -547,7 +548,7 @@ test "rerunning an abandoned workflow executes every step again from compiled st
         var control: OperationControl = .{ .state = .{ .outcome = .ok, .expected_steps = &.{ "first", "second", "last" } } };
         var barrier: FakeBarrier = .{};
         var registry = testRegistry(&control);
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
@@ -560,7 +561,7 @@ test "runner applies an operation delta before the telemetry barrier" {
     var barrier: FakeBarrier = .{ .block = true };
     var graph = try testGraph();
     var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.blocked, engine.run(children.bindings()).executionStatus().?);
@@ -605,7 +606,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     completes.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
     completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
     completes.entries[1].contract.parameters = &retry_parameters;
-    var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
+    var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer complete_runner.deinit();
     var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).executionStatus().?);
@@ -620,7 +621,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     exhausts.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
     exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
     exhausts.entries[1].contract.parameters = &retry_parameters;
-    var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
+    var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer exhausted_runner.deinit();
     var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
     const exhausted = engine.run(exhausted_children.bindings());
@@ -646,7 +647,7 @@ test "runner follows a compiled bounded cycle and enforces its limit" {
     zero_control.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
     zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
     zero_control.entries[1].contract.parameters = &retry_parameters;
-    var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
+    var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer zero_runner.deinit();
     var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).executionStatus().?);
@@ -659,9 +660,9 @@ test "each workflow runner owns a fresh token ledger" {
     var barrier: FakeBarrier = .{};
     var graph = try testGraph();
     var registry = testRegistry(&control);
-    var first = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var first = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer first.deinit();
-    var second = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var second = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer second.deinit();
 
     try std.testing.expect(first.tokenLedger() != second.tokenLedger());
@@ -687,7 +688,7 @@ test "runner exposes only resources referenced by the active compiled step" {
     var control: OperationControl = .{ .state = .{ .outcome = .ok, .expected_resource_id = "prompt" } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(children.bindings()).executionStatus().?);
@@ -700,7 +701,7 @@ test "runner rejects an operation binding that differs from compiled authority" 
     var graph = try testGraph();
     var registry = testRegistry(&control);
     control.entries[1].contract.outcomes = &.{.ok};
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     try std.testing.expectEqual(workflow.OutcomeTag.failed, engine.run(children.bindings()).executionStatus().?);
@@ -724,7 +725,7 @@ test "unexpected binding failure never follows a declared transition to clarific
     var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1 } };
     var registry = testRegistry(&control);
     var barrier: FakeBarrier = .{};
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     const result = engine.run(children.bindings());
@@ -756,7 +757,7 @@ test "runner contract rejections cannot enter invalid or failed recovery leading
         registry.data_schemas = graph.authority.data_schemas;
         control.entries[1].contract.produces = steps[0].produces;
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         const result = engine.run(children.bindings());
@@ -816,7 +817,7 @@ test "runner rejects incomplete dependency renewal without committing repair pro
         control.entries[1].contract.invalidates = steps[0].invalidates;
         control.entries[1].contract.repair_role = .merge;
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var delta: pipeline.NodeDelta = .{};
         defer runner.envelope.discard(&delta);
@@ -909,7 +910,7 @@ test "unchanged repairs exhaust before delta application and cannot follow recov
         control.entries[1].contract.retry_limit = if (allowance_owner == .merge) .{ .maximum = 5, .scope = .repair } else null;
         control.entries[1].contract.parameters = if (allowance_owner == .merge) &retry_parameters else &.{};
         var barrier: FakeBarrier = .{};
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var delta: pipeline.NodeDelta = .{};
         defer runner.envelope.discard(&delta);
@@ -1006,7 +1007,7 @@ test "runner rejections bypass clarification transitions and preserve exact fail
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };
             var barrier: FakeBarrier = .{};
             var registry = testRegistry(&control);
-            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+            var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
             defer runner.deinit();
             var finalizer: FakeFinalizer = .{};
             var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner, .rejection = reason, .reject_invocation = invocation, .finalizer = finalizer.port() };
@@ -1154,7 +1155,7 @@ fn testRegistry(control: *OperationControl) operations.Registry {
     };
     return .{
         .operations = &control.entries,
-        .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes, .total_model_token_budget = .{ .value = 1000 } }},
+        .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes }},
         .gates = &.{},
     };
 }
@@ -1217,7 +1218,6 @@ fn testGraph() !compilation.CompiledWorkflow {
             .workflow_version = 1,
             .invocation_operation_id = .{ .bytes = "test.empty" },
             .policy_profile_id = .{ .bytes = "test.safe@1" },
-            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = .{ .bytes = "run" },
             .invocation_outputs = &.{},
             .resources = &.{},
@@ -1267,7 +1267,7 @@ test "operation failures retain unrelated native causes without applying a faile
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
         var registry = testRegistry(&control);
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         const result = engine.run(children.bindings());
@@ -1286,7 +1286,7 @@ test "expected operation rejection evidence preserves outcomes and cannot accomp
         var barrier: FakeBarrier = .{};
         var graph = try testGraph();
         var registry = testRegistry(&control);
-        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
         defer runner.deinit();
         var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
         const result = engine.run(children.bindings());
@@ -1307,7 +1307,7 @@ test "runner allocation failure crosses its boundary without allocating diagnost
     var barrier: FakeBarrier = .{};
     var graph = try testGraph();
     var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(failing.allocator(), selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(failing.allocator(), selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     const result = engine.run(children.bindings());
@@ -1322,7 +1322,7 @@ test "allocation failure cannot be disguised as an expected candidate rejection"
     var barrier: FakeBarrier = .{};
     var graph = try testGraph();
     var registry = testRegistry(&control);
-    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null, .{ .budget = .{ .value = 1000 } });
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
     const result = engine.run(children.bindings());

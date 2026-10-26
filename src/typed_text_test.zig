@@ -180,11 +180,16 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
     const parser = @import("actions/reference/parse_reference_extraction_results.zig").Action{};
     const scope = context(prepared, inputs, 0).scope;
     for ([_][]const u8{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
-        const field = if (std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
-        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":\"A statement\"}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
+        // ADR 0036: each category's wording is quoted from its cited line.
+        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"category\":\"{s}\",\"citations\":[1]}}],\"token_classifications\":[]}}", .{kind});
         const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = bytes } }} });
         const checked = (try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)).valid;
-        try std.testing.expectEqualStrings(kind, @tagName(checked.entries[0].outcome.claims[0].content));
+        const content = checked.entries[0].outcome.claims[0].content;
+        try std.testing.expectEqualStrings(kind, @tagName(content));
+        try std.testing.expectEqualStrings("A supported statement.", switch (content) {
+            inline .business, .scope_guard => |value| value.value.segments[0].literal.value,
+            inline else => |value| value.value.nodes[0].literal.value,
+        });
     }
     const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read source.md\"},\"token_classifications\":[]}";
     const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = reason } }} });

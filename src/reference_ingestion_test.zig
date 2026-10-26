@@ -152,6 +152,9 @@ test "unsupported and malformed content is retained as explicit failure and cann
         .{ .path = "disguised.md", .bytes = "%PDF-1.0", .failure = .unsupported_media },
         .{ .path = "invalid.md", .bytes = "\xff", .failure = .malformed_text },
         .{ .path = "control.md", .bytes = "a\x00b", .failure = .malformed_text },
+        // C1 controls fail the shared typed-text scalar rule, so no claim could quote them.
+        .{ .path = "mojibake.md", .bytes = "Renew\u{85} a loan.", .failure = .malformed_text },
+        .{ .path = "delete.md", .bytes = "a\x7fb", .failure = .malformed_text },
     }) |case| {
         const result = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(arena.allocator(), try captured(arena.allocator(), case.path, case.bytes));
         try std.testing.expectEqual(case.failure, result.entries[0].result.blocked);

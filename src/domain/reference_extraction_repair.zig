@@ -6,25 +6,22 @@ const evidence = @import("reference_evidence.zig");
 const validation = @import("token_classification_validation.zig");
 const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
-const selections = @import("source_selections.zig");
-pub const Target = union(enum) { token_classifications, citation: struct { claim_index: usize, citation_index: usize }, missing_citations: struct { claim_index: usize } };
-pub const Replacement = union(enum) { classifications: struct { token_classifications: []const extraction.tokens.Classification }, citation: selections.Selection, citations: struct { citations: []const selections.Selection } };
-pub const Rule = union(enum) { token_classifications: struct { issues: validation.Issues, choices: validation.Choices }, source_selection: selections.Issue };
+pub const Target = union(enum) { token_classifications };
+pub const Replacement = union(enum) { classifications: struct { token_classifications: []const extraction.tokens.Classification } };
+pub const Rule = union(enum) { token_classifications: struct { issues: validation.Issues, choices: validation.Choices } };
 pub const Facts = @import("reference_extraction_context.zig").Facts;
 const shared = @import("atomic_repair.zig");
 const atomic = shared.Contract(Target, Replacement, Facts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = atomic.Error || extraction.Error;
-const Family = enum { classifications, source_selection };
+const Family = enum { classifications };
 
+/// Claims cite admitted source lines (ADR 0036), so a chunk's classification
+/// collection is its only native repair target.
 pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@import("workflow_retry.zig").Permit {
     const candidate = authorization.dependencies.candidate;
     const entry = try entryAt(candidate, try scopeOf(authorization));
-    var count: usize = 1;
-    if (entry.outcome == .claims) for (entry.outcome.claims) |claim| {
-        count = std.math.add(usize, count, @max(1, claim.citations.len)) catch return error.InvalidAtomicRepair;
-    };
-    var permit = try shared.permit(Target, Family, a, authorization.owner, authorization.target, if (authorization.target == .token_classifications) .classifications else .source_selection, authorization.id, authorization.revision, std.math.cast(u32, count) orelse return error.InvalidAtomicRepair);
+    var permit = try shared.permit(Target, Family, a, authorization.owner, authorization.target, .classifications, authorization.id, authorization.revision, 1);
     const scope = .{ .boundary = permit.key.scope, .origin = entry.origin };
     permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
     if (candidate.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
@@ -33,53 +30,30 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
     return permit;
 }
 
-pub const Rejection = union(enum) { token_classifications: validation.Rejection, source_selections: @import("reference_selection_validation.zig").Rejection };
+pub const Rejection = union(enum) { token_classifications: validation.Rejection };
 
 pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: Rejection) Error!Authorization {
     const current = facts.candidate;
-    const stamp = switch (rejection) {
-        inline else => |value| value.dependencies orelse return error.InvalidAtomicRepair,
-    };
+    const diagnostic = rejection.token_classifications;
+    const stamp = diagnostic.dependencies orelse return error.InvalidAtomicRepair;
     if (!std.meta.eql(stamp, try @import("reference_extraction_context.zig").snapshot(a, facts))) return error.InvalidAtomicRepair;
-    switch (rejection) {
-        .token_classifications => |diagnostic| {
-            const entry = try entryAt(current, diagnostic.scope);
-            if (current.revision != diagnostic.revision or !std.meta.eql(try validation.rejectionOrigin(entry, diagnostic.issues), diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
-            var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope, .token_classifications), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
-            result.retry = try retryPermit(a, result);
-            return result;
-        },
-        .source_selections => |diagnostic| {
-            const claim = try claimAt(current, diagnostic.scope, diagnostic.claim_index);
-            if (current.revision != diagnostic.revision or !std.meta.eql(try claim.rejectionOrigin(diagnostic.issue), diagnostic.origin) or !try atomic.equal(a, .{ .citations = .{ .citations = claim.citations } }, .{ .citations = .{ .citations = diagnostic.observed } })) return error.InvalidAtomicRepair;
-            const retained_collection = if (current.pending_repair) |pending| pending.target == .missing_citations and pending.target.missing_citations.claim_index == diagnostic.claim_index else false;
-            const target: Target = if (diagnostic.issue.reason == .missing_selection or retained_collection) .{ .missing_citations = .{ .claim_index = diagnostic.claim_index } } else .{ .citation = .{ .claim_index = diagnostic.claim_index, .citation_index = diagnostic.issue.index } };
-            var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, target, try select(current, diagnostic.scope, target), facts, .{ .source_selection = diagnostic.issue });
-            result.retry = try retryPermit(a, result);
-            return result;
-        },
-    }
+    const entry = try entryAt(current, diagnostic.scope);
+    if (current.revision != diagnostic.revision or !std.meta.eql(try validation.rejectionOrigin(entry, diagnostic.issues), diagnostic.origin) or !try atomic.equal(a, .{ .classifications = .{ .token_classifications = entry.token_classifications } }, .{ .classifications = .{ .token_classifications = diagnostic.observed } })) return error.InvalidAtomicRepair;
+    var result = try atomic.authorize(a, unit(diagnostic.scope), current.revision, .token_classifications, try select(current, diagnostic.scope), facts, .{ .token_classifications = .{ .issues = diagnostic.issues, .choices = diagnostic.choices } });
+    result.retry = try retryPermit(a, result);
+    return result;
 }
 pub fn packet(a: std.mem.Allocator, inputs: evidence.Inputs, literals: @import("passive_literals.zig").Registry, candidates: extraction.tokens.Candidates, current: extraction.TextValidated, authorization: Authorization) Error!*packets.Packet {
     const scope = try scopeOf(authorization);
     try atomic.checkDependencies(a, authorization, .{ .inputs = inputs, .candidates = candidates, .candidate = current });
     if (current.revision != authorization.revision) return error.InvalidAtomicRepair;
-    _ = try select(current, scope, authorization.target);
-    const base = try @import("reference_model_input.zig").extractionPacket(a, inputs, literals, candidates, scope);
+    _ = try select(current, scope);
+    const base = try @import("reference_model_input.zig").extractionBase(a, inputs, literals, candidates, scope);
     defer packets.release(base);
-    if (authorization.target == .token_classifications) {
-        const entry = try entryAt(current, scope);
-        const rejected_origin = try validation.rejectionOrigin(entry, authorization.rule.token_classifications.issues);
-        const producing_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
-        return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin, .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
-    }
-    // Citation repair needs the unchanged claim's meaning as well as source
-    // choices. This is a projection of the retained candidate, not new authority.
-    const claim = try claimAt(current, scope, claimIndex(authorization.target));
-    const content = @import("model_evidence.zig").modelContent(claim.content);
-    const contextual = try packets.withContext(@TypeOf(content), a, base, "claim", content);
-    defer packets.release(contextual);
-    return atomic.packet(a, authorization, contextual, .{ .bytes = if (authorization.target == .citation) "source_selection_replacement" else "citation_replacement" }, try claim.rejectionOrigin(authorization.rule.source_selection), .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
+    const entry = try entryAt(current, scope);
+    const rejected_origin = try validation.rejectionOrigin(entry, authorization.rule.token_classifications.issues);
+    const producing_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
+    return atomic.packet(a, authorization, base, .{ .bytes = "classification_replacement" }, rejected_origin orelse producing_origin, .{ .fields = .{ .replacement = .{ .reference_phase = .extraction } } });
 }
 
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
@@ -91,41 +65,14 @@ pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canonica
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const current = facts.candidate;
     const scope = try scopeOf(authorization);
-    const merged = try atomic.checkMerge(a, canonical, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, unit(scope), current.revision, try select(current, scope), facts, authorization, replacement, origin);
     const entries = try a.dupe(extraction.TextValidatedResult, current.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
-        switch (authorization.target) {
-            .token_classifications => {
-                entry.token_classifications = try a.dupe(extraction.tokens.Classification, replacement.classifications.token_classifications);
-                const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, entry.token_classifications.len);
-                @memset(origins, origin);
-                entry.classification_origins = origins;
-                if (entry.producers) |*producers| producers.classifications = origin;
-            },
-            .citation, .missing_citations => {
-                const index = claimIndex(authorization.target);
-                const claims = try a.dupe(extraction.TextValidatedProposal, entry.outcome.claims);
-                claims[index].citations = switch (authorization.target) {
-                    .citation => |target| citations: {
-                        const copied = try a.dupe(selections.Selection, claims[index].citations);
-                        copied[target.citation_index] = replacement.citation;
-                        const origins = try a.dupe(?@import("model_candidate_origin.zig").Origin, claims[index].citation_origins);
-                        origins[target.citation_index] = origin;
-                        claims[index].citation_origins = origins;
-                        break :citations copied;
-                    },
-                    .missing_citations => citations: {
-                        const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, replacement.citations.citations.len);
-                        @memset(origins, origin);
-                        claims[index].citation_origins = origins;
-                        claims[index].citations_origin = origin;
-                        break :citations try a.dupe(selections.Selection, replacement.citations.citations);
-                    },
-                    .token_classifications => unreachable,
-                };
-                entry.outcome = .{ .claims = claims };
-            },
-        }
+        entry.token_classifications = try a.dupe(extraction.tokens.Classification, replacement.classifications.token_classifications);
+        const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, entry.token_classifications.len);
+        @memset(origins, origin);
+        entry.classification_origins = origins;
+        if (entry.producers) |*producers| producers.classifications = origin;
     };
     var result = current;
     result.revision = merged.revision_after;
@@ -140,15 +87,7 @@ pub fn progress(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: extra
     const merged = candidate.last_repair orelse return error.InvalidAtomicRepair;
     if (merged.owner != .reference_chunk) return error.InvalidAtomicRepair;
     const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = .{ .bytes = merged.owner.reference_chunk.chunk_id.bytes } };
-    const valid = switch (pending.target) {
-        .token_classifications => try validation.validScope(a, inputs, candidates, candidate, scope),
-        .citation => |target| blk: {
-            const claim = try claimAt(candidate, scope, target.claim_index);
-            if (target.citation_index >= claim.citations.len) return error.InvalidAtomicRepair;
-            break :blk (try selections.validate(a, inputs, scope, claim.citations[target.citation_index .. target.citation_index + 1])) == .valid;
-        },
-        .missing_citations => |target| (try selections.validate(a, inputs, scope, (try claimAt(candidate, scope, target.claim_index)).citations)) == .valid,
-    };
+    const valid = try validation.validScope(a, inputs, candidates, candidate, scope);
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (valid) .resolved else .recurring } };
 }
 
@@ -169,29 +108,8 @@ fn entryAt(current: extraction.TextValidated, scope: evidence.Scope) Error!extra
     }
     return result orelse error.InvalidAtomicRepair;
 }
-fn claimAt(current: extraction.TextValidated, scope: evidence.Scope, index: usize) Error!extraction.TextValidatedProposal {
-    const entry = try entryAt(current, scope);
-    if (entry.outcome != .claims or index >= entry.outcome.claims.len) return error.InvalidAtomicRepair;
-    return entry.outcome.claims[index];
-}
-fn claimIndex(target: Target) usize {
-    return switch (target) {
-        .citation => |value| value.claim_index,
-        .missing_citations => |value| value.claim_index,
-        .token_classifications => unreachable,
-    };
-}
-fn select(current: extraction.TextValidated, scope: evidence.Scope, target: Target) Error!Replacement {
-    if (target == .token_classifications) return .{ .classifications = .{ .token_classifications = (try entryAt(current, scope)).token_classifications } };
-    const claim = try claimAt(current, scope, claimIndex(target));
-    if (claim.citations.len != claim.citation_origins.len) return error.InvalidAtomicRepair;
-    return switch (target) {
-        .citation => |value| if (value.citation_index < claim.citations.len) .{ .citation = claim.citations[value.citation_index] } else error.InvalidAtomicRepair,
-        // A failed collection insertion retains its authorized collection target
-        // until all supplied selections pass the same source validator.
-        .missing_citations => .{ .citations = .{ .citations = claim.citations } },
-        .token_classifications => unreachable,
-    };
+fn select(current: extraction.TextValidated, scope: evidence.Scope) Error!Replacement {
+    return .{ .classifications = .{ .token_classifications = (try entryAt(current, scope)).token_classifications } };
 }
 
 /// Source-backed loss uses the same CAS algebra and canonical extraction
@@ -256,9 +174,14 @@ pub const Omission = struct {
             .classification => json.fieldBindings(extraction.tokens.Classification, arena.allocator(), .{}),
             .claim, .outcome => json.fieldBindings(extraction.Proposal, arena.allocator(), .{ .reference_phase = .extraction }),
         } catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair;
-        const base = try @import("reference_model_input.zig").extractionPacket(a, facts.extraction.inputs, literals, facts.extraction.candidates, try Omission.scopeOf(auth));
+        const input = @import("reference_model_input.zig");
+        const scope = try Omission.scopeOf(auth);
+        const base = try input.extractionBase(a, facts.extraction.inputs, literals, facts.extraction.candidates, scope);
         defer packets.release(base);
-        return Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
+        const result = try Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
+        if (auth.target == .classification) return result;
+        defer packets.release(result);
+        return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }});
     }
     fn sourceOrigin(facts: OmissionFacts, auth: OmissionAuthorization) OmissionError!?@import("model_candidate_origin.zig").Origin {
         const entry = try entryAt(facts.extraction.candidate, try Omission.scopeOf(auth));
@@ -301,7 +224,8 @@ pub const Omission = struct {
                 if (checked != .valid) return error.InvalidAtomicRepair;
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
-                try claims.append(a, checked.valid.entries[0].outcome.claims[0]);
+                // A proposal spanning several list items quotes one claim per item (ADR 0036, ADR 0038).
+                try claims.appendSlice(a, checked.valid.entries[0].outcome.claims);
                 changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
                 if (entry.outcome == .no_feature_claim) {
                     // Forced irrelevant choices depended on the retired outcome.

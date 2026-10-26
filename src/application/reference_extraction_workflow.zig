@@ -75,8 +75,7 @@ pub const ValidateSelections = struct {
         const result = self.action.execute(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch |operation_error| return operation_error;
         owner.payload = switch (result) {
             .valid => |accepted| .{ .selections_validated = accepted },
-            .token_classifications => |diagnostic| .{ .token_classification_rejected = diagnostic },
-            .source_selections => |diagnostic| .{ .citation_rejected = diagnostic },
+            .invalid => |diagnostic| .{ .token_classification_rejected = diagnostic },
         };
         const progress = @import("../domain/reference_extraction_repair.zig").progress(owner.arena.allocator(), source.*, candidates.*, prior.payload().text_validated) catch |operation_error| return operation_error;
         var published = try publish(self.allocator, selections_schema, owner, if (result == .valid) .ok else .invalid);
@@ -86,7 +85,7 @@ pub const ValidateSelections = struct {
 };
 pub const Validate = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .candidate, .subject = .prepared_reference_claims, .evidence = .validated_reference_claims, .result = .validated_reference_claims } };
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .failed };
     pub const Action = @import("../actions/reference/validate_reference_claims.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -97,11 +96,8 @@ pub const Validate = struct {
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const result = self.action.execute(owner.arena.allocator(), source.*, prior.payload().prepared) catch |operation_error| return operation_error;
-        owner.payload = switch (result) {
-            .valid => |value| .{ .validated = value },
-            .invalid => |diagnostic| .{ .citation_rejected = diagnostic },
-        };
-        return publish(self.allocator, validated_schema, owner, if (result == .valid) .ok else .invalid);
+        owner.payload = .{ .validated = result };
+        return publish(self.allocator, validated_schema, owner, .ok);
     }
 };
 pub const Assign = struct {

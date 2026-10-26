@@ -59,7 +59,9 @@ pub fn validateDescription(a: std.mem.Allocator, description: Description, wire:
     try validateGeneration(frozen, expected_models);
     const slot = @import("../../src/domain/llm_provider_identity.zig").ModelSlotId.parse(description.model_slot) orelse return error.FrozenBindingRejected;
     const expected = expected_models.slots.map.get(slot.bytes) orelse return error.FrozenBindingRejected;
-    const temperature = if (description.controls.temperature) |value| value.wireValue() else null;
+    // A frozen protocol binds the configured temperature it recorded; a
+    // runaway re-send's temperature is not part of it (ADR 0039).
+    const temperature = if (description.sampling == .configured) if (description.controls.temperature(.configured)) |value| value.wireValue() else null else return error.FrozenBindingRejected;
     if (!std.mem.eql(u8, @tagName(description.response_mode), @tagName(frozen.response_mode)) or
         !@import("../../src/domain/request_debugger.zig").sameOptional(description.reasoning_effort, expected.reasoningEffort) or
         !std.mem.eql(u8, description.provider, expected.provider) or !std.mem.eql(u8, description.model, expected.model) or
@@ -95,7 +97,7 @@ test "frozen slot controls retain each role's effort without substituting genera
             .protocol_prompt = @import("../../src/domain/model_controls.zig").response_format_guidance,
             .schema = "{}",
             .response_mode = .native_schema,
-            .controls = .{ .temperature = .fixed },
+            .controls = .{ .temperatures = @import("../../src/test_fixtures/model_temperatures.zig").temperatures },
             .reasoning_effort = example.effort,
             .operation_kind = .inference,
         };
@@ -108,7 +110,7 @@ test "frozen slot controls retain each role's effort without substituting genera
         changed.model_slot = "unconfigured_slot";
         try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
         changed = description;
-        changed.controls.temperature = null;
+        changed.controls.temperatures = null;
         try std.testing.expectError(error.FrozenBindingRejected, validateDescription(a, changed, wire, &models));
         // A drifted maximum, recorded or sent, is rejected before transport.
         changed = description;

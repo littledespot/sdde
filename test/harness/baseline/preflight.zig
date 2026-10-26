@@ -1,4 +1,5 @@
-//! Read the actual compiled policy without invoking a project workflow or provider.
+//! Read the project's configured workflow budget (ADR 0037) after a complete
+//! bootstrap, without invoking a project workflow or provider.
 const std = @import("std");
 
 pub fn workflowBudget(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, workflow: []const u8) !u64 {
@@ -7,6 +8,6 @@ pub fn workflowBudget(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, wor
     defer runtime.deinit();
     if (runtime.boot != .ready) return error.BaselineTemplateBootstrapFailed;
     const id = @import("../../../src/domain/workflow.zig").WorkflowId.parse(workflow) orelse return error.InvalidBaselineWorkflow;
-    const graph = runtime.boot.ready.workflows.registry().resolve(id) orelse return error.InvalidBaselineWorkflow;
-    return graph.authority.total_model_token_budget.value;
+    _ = runtime.boot.ready.workflows.registry().resolve(id) orelse return error.InvalidBaselineWorkflow;
+    return runtime.boot.ready.config.config().workflowTokenBudget.budget.value;
 }

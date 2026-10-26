@@ -33,8 +33,8 @@ pub const Adapter = struct {
         const family = key.Family.of(description.provider_config) orelse return error.InvalidReplay;
         if (std.meta.activeTag(facts) != family.configSchema() or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
-        const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, schema, description.members) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
-        members.release();
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, schema, description.members, description.coverages, description.required_items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
+        recorded.release();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
         if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
@@ -50,7 +50,7 @@ pub const Adapter = struct {
                 .content = description.content,
                 .schema = text_schema,
                 .schema_name = "sdde_model_envelope_v1",
-                .temperature = description.controls.temperature,
+                .temperature = description.controls.temperature(description.sampling),
                 .reasoning_effort = effort,
                 .family = config.family,
                 .max_output_tokens = config.max_output_tokens,
@@ -59,7 +59,7 @@ pub const Adapter = struct {
                 .model = description.model,
                 .content = description.content,
                 .schema = text_schema,
-                .temperature = description.controls.temperature,
+                .temperature = description.controls.temperature(description.sampling),
                 .reasoning_effort = effort,
                 .max_output_tokens = config.max_output_tokens,
             }),
@@ -188,14 +188,14 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
-        // Admission validates the restricted schema, including native membership.
-        const members = @import("../../domain/model_result_schema.zig").restrictMembers(a, compiled, description.members) catch |err| {
+        // Admission validates the restricted schema, including native membership, coverage and required items.
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, compiled, description.members, description.coverages, description.required_items) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
-            result.reason = "Captured schema and native membership disagree";
+            result.reason = "Captured schema and native membership, coverage or required items disagree";
             return result;
         };
-        defer members.release();
-        const schema = members.selected();
+        defer recorded.release();
+        const schema = recorded.selected();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null) or (description.exact_scope != null and !@import("../../domain/model_exact_values.zig").valid(description.exact_scope.?))) {
             result.reason = "Captured schema and native field policies disagree";

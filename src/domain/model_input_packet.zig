@@ -57,6 +57,9 @@ pub const Packet = opaque {
     pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
         return storage(self).integer_choices;
     }
+    pub fn requiredItems(self: *const Packet) []const schema.RequiredItems {
+        return storage(self).required_items;
+    }
     pub fn proseFields(self: *const Packet) []const @import("model_text_wire.zig").ProseField {
         return storage(self).prose_fields;
     }
@@ -91,6 +94,7 @@ const Storage = struct {
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
+    required_items: []const schema.RequiredItems = &.{},
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     exact_scope: ?@import("model_exact_values.zig").Scope = null,
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
@@ -202,6 +206,17 @@ pub fn withIntegerChoices(allocator: std.mem.Allocator, base: *const Packet, add
     @memcpy(choices[base.integerChoices().len..], added);
     return withRestrictions(allocator, base, base.excludedVariants(), choices);
 }
+/// Add one owner's required-items rules (ADR 0042) beside every existing restriction.
+pub fn withRequiredItems(allocator: std.mem.Allocator, base: *const Packet, added: []const schema.RequiredItems) Error!*Packet {
+    const result = try cloneWith(allocator, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    const a = storage(result).arena.allocator();
+    const required = try a.alloc(schema.RequiredItems, base.requiredItems().len + added.len);
+    for (base.requiredItems(), required[0..base.requiredItems().len]) |entry, *destination| destination.* = try entry.clone(a);
+    for (added, required[base.requiredItems().len..]) |entry, *destination| destination.* = try entry.clone(a);
+    storage(result).required_items = required;
+    return result;
+}
 /// All projections copy native metadata once, into the resulting packet's owner.
 fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice, contexts: []const AssignmentContext) Error!*Packet {
     const result = try createBound(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
@@ -234,9 +249,13 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
             .allowed = try a.dupe(i64, entry.allowed),
             .singleton = entry.singleton,
             .collection = entry.collection,
+            .coverage = if (entry.coverage) |rule| try rule.clone(a) else null,
         };
     }
     storage(result).integer_choices = selected;
+    const required = try a.alloc(schema.RequiredItems, base.requiredItems().len);
+    for (base.requiredItems(), required) |entry, *destination| destination.* = try entry.clone(a);
+    storage(result).required_items = required;
     const copied_contexts = try a.alloc(AssignmentContext, contexts.len);
     for (contexts, copied_contexts) |context, *destination| destination.* = .{
         .id = .{ .bytes = try a.dupe(u8, context.id.bytes) },

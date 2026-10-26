@@ -31,6 +31,7 @@ text was written: §1, §6, §8 and §§9–17 are reproduced here under the sam
   [§15](#15-grader-one-shot-correction--18-october-2026),
   [§16](#16-model-maximum-output--18-october-2026) and
   [§17](#17-e2e-grader-removal-and-assistant-evaluation-skill--19-october-2026)
+- [§18 Offline test performance P1 and P9, 24 October 2026](#18-offline-test-performance-p1-and-p9--24-october-2026)
 
 ## 1. Live diagnostics, 16–18 October 2026
 
@@ -2603,3 +2604,57 @@ provider calls.
   reports round-trip the captured inputs. Compatibility and baseline reports carry
   no adjudication capture. The launcher test forwards the generation credential.
 - The standalone evaluator's tests and smoke are unchanged and pass.
+
+## 18. Offline test performance P1 and P9 — 24 October 2026
+
+These proposals come from the investigation note
+[improve_test_performance.md](improve_test_performance.md) (findings T2, T10 and T12), and
+the user implemented them on 24 October 2026. The note requires a proposal to be recorded
+in FIX05 before it is adopted; they were committed without that record, and this entry,
+added on 25 October 2026, closes the gap. Only test and build code changed; no engine
+contract changed.
+
+**P1, untraced leak-checking allocator** (`bf8a297` and `2bafdb0`).
+
+- One owning helper, `src/test_fixtures/untraced_allocator.zig`: a `DebugAllocator`
+  without stack-trace capture that still fails the test on a leak.
+- `bf8a297` uses it for the integration sweep (`test/integration/workflow_tests.zig`) and
+  for the driver's arena backings (`spec_generation_driver.zig`,
+  `global_protocol_sequence.zig`).
+- `2bafdb0` moves the exhaustive allocation-failure sweeps onto it: 108 call sites in
+  46 files. One sweep still uses the traced `std.testing.allocator`:
+  `src/adapters/text/unicode_normalization.zig:68`.
+- The helper's six regression tests prove that:
+  - a scope that frees everything passes, and a live allocation is reported as a leak;
+  - a body that keeps an allocation is rejected;
+  - a sweep runs every failure index;
+  - the helper rejects a counting-pass leak that the standard sweep accepts.
+- The note's second phase, replacing every `std.testing.allocator` reference, is not
+  adopted.
+
+**P9, opt-in test-run reuse** (`269410b`).
+
+- Default builds still rerun every test. With `-Dreuse-test-runs`, a test run that
+  already passed is skipped when nothing in its key changed:
+  - the binary, its arguments and its working directory;
+  - every Git-listed file, by content and executable bit;
+  - the ignored locations listed in `build/test_run_inputs.zig`;
+  - the Git revision and the `git` version;
+  - `PATH` and `HOME`.
+- Each keyed run is confirmed against edits made while it ran. Credential-like paths are
+  keyed by size and modification time and are never read. The README documents the
+  option.
+- `zig build verify` and `./scripts/test-integration.sh` refuse the option, so
+  verification evidence always comes from fresh runs. This settles the note's open
+  condition on how `/verify` reports cached runs.
+- `zig build test-build-reuse` proves these rules in a throwaway repository.
+
+**Effect.** Not re-measured. The note's estimates (its §4) were:
+
+- for P1, about 44% of the unit run and 36% of the integration run;
+- for P9, seconds instead of about a minute for an unchanged opt-in rerun.
+
+Re-measure by the note's §5 before relying on them.
+
+**Not adopted.** P2–P4, P6–P8, P10 and P12 remain proposals in the note. P5 and P11 are
+withdrawn there.

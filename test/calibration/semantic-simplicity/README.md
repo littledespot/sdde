@@ -230,7 +230,7 @@ panel or qualification claim is established by the offline tests.
 
 Before freezing, copy [budget-plan.example.json](budget-plan.example.json) to an
 explicitly selected plan. Record which phases share the experiment stops, the
-compiled workflow budget, native E2E evidence directories and the user's budget
+configured workflow budget, native E2E evidence directories and the user's budget
 decision. The example deliberately has no evidence and an unresolved decision.
 The feasibility check reads actual selected-binding requests/responses/usage,
 includes review and repair, and projects the worst observed complete workflow

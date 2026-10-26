@@ -25,10 +25,10 @@ flowchart LR
     ROOT --> EX["extract-references<br/>Repeat for each reference chunk"]
     EX --> CONTENT["content-request<br/>extraction-content-prompt<br/>1 call per chunk"]
     EX --> CLASSIFICATIONS["classifications<br/>extraction-classifications-prompt<br/>Conditional call after content"]
-    EX -. "Invalid extracted text" .-> TEXT_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized text repair"]
+    EX -. "Invalid no_feature_claim reason" .-> TEXT_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized text repair"]
 
     ROOT --> VALIDATE_EX["validate-extraction"]
-    VALIDATE_EX -. "Invalid selections or claims" .-> EX_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized extraction repair"]
+    VALIDATE_EX -. "Invalid token classifications" .-> EX_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized extraction repair"]
 
     ROOT --> RC["reconcile-references"]
     RC --> SUMMARY_ROUTE["Check summary reuse<br/>Non-final partitions"]

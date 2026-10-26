@@ -11,10 +11,10 @@ flowchart TD
     NAMING["Compile every selected toolchain naming rule"] --> GRAMMAR["Build shared path-token grammar;<br/>include every captured reference basename"]
     CHUNKS --> GRAMMAR
     GRAMMAR --> LITERALS["Scan source-backed display literals;<br/>assign IDs and validate exact origins"]
-    LITERALS --> TEXT["Validate typed extraction text;<br/>reject inline paths and out-of-scope IDs"]
-    CHUNKS --> FACTS["Extract eligible exact facts;<br/>Markdown inline code only, not prose, quotes or fenced code"]
+    LITERALS --> TEXT["Quote each claim's cited lines as written,<br/>one claim per top-level list item;<br/>validate typed text: reject inline paths and out-of-scope IDs"]
+    CHUNKS --> FACTS["Extract eligible exact facts;<br/>Markdown inline code, fenced code and link destinations,<br/>not prose or quotes"]
     FACTS --> TOKENIDS["Assign source/extractor-local candidate IDs;<br/>retain exact source bytes and citations"]
-    TOKENIDS --> EXTRACT["Configured content request:<br/>claims with citations or no_feature_claim"]
+    TOKENIDS --> EXTRACT["Configured content request:<br/>claims as a category and supplied line IDs,<br/>or no_feature_claim with its reason"]
     EXTRACT --> PARTS["Configured dependent request:<br/>classify supplied exact-token candidates"]
     TOKENIDS --> PARTS
     PARTS --> ASSEMBLE["Generic native assembly with each producer's provenance;<br/>no LLM prompt or call; validate complete JSON shape"]
@@ -41,7 +41,7 @@ flowchart TD
     INVENTORY -->|Unsafe, unreadable or unsupported| FAILED["End failed;<br/>publish no partial workflow output"]
     CAPTURE -->|Failed| FAILED
     DECODE -->|Incomplete or invalid| FAILED
-    ACCOUNT -->|Invalid| DIAGNOSTIC
+    ACCOUNT -->|Invalid| FAILED
     TEXT -->|Invalid candidate| DIAGNOSTIC
     FACTS -->|Uncitable or over-limit value| FAILED
     CLASSIFY -->|Invalid candidate| DIAGNOSTIC
@@ -57,5 +57,6 @@ Candidates remain execution-local; permitted clarification state survives reruns
 
 Contracts and implementation evidence: [Design §16](../design.md#16-reference-ingestion-and-normalization)
 and [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary),
-as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md).
+as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md) and
+[ADR 0036](../decisions/0036-source-quoted-claims.md).
 Scripted verification does not establish live completion or semantic quality.

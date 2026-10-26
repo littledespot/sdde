@@ -15,7 +15,9 @@
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
   (post-generation findings are advice) and
   [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
-  record task; native exact duties are independent of semantic kind).
+  record task; native exact duties are independent of semantic kind), and
+  [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
+  claims, a subset of its one group; the group stays its association).
 
 ## Native exact-value recognition
 
@@ -138,13 +140,15 @@ group occurrences; they do not assert that any group semantically supports a fie
 Native admission constructs canonical `source_group_ids`, resolves complete members
 in catalogue order, deduplicates legitimate overlaps into `S` and then derives
 exact lineage and citations. Several groups may jointly support one field and one
-group may support several fields. The model supplies no claim list or provenance.
+group may support several fields. The model supplies no claim list or provenance,
+except that a non-entity record names its supporting claims from its group
+([ADR 0038](0038-record-claims-and-scenario-coverage.md)).
 
 Each record task binds exactly one group containing a non-token member natively
 and may return several records
-or an empty array. Its response remains content-only; canonical records inherit
-that group's complete ordered selection and retain exactly one `source_group_ids`
-occurrence. Empty output supplies no positive coverage and cannot bypass aggregate
+or an empty array. Since [ADR 0038](0038-record-claims-and-scenario-coverage.md) each record names its supporting claims, a nonempty
+subset of that group's claims kept in the group's order, and retains exactly one
+`source_group_ids` occurrence. Empty output supplies no positive coverage and cannot bypass aggregate
 record families, entity membership, business mapping, exact coverage or review.
 All-preserved-token groups receive no record task under ADR 0024; their original
 identities and exact obligations remain. Current appearance-based duties and

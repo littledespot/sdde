@@ -176,7 +176,6 @@ test "one registry rejects duplicate and structurally invalid operations" {
             .id = "core.safe@1",
             .allowed_capabilities = &.{},
             .allowed_terminal_outcomes = &.{.ok},
-            .total_model_token_budget = .{ .value = 1 },
         }},
         .gates = &.{},
     };
@@ -204,15 +203,6 @@ test "one registry rejects duplicate and structurally invalid operations" {
     var invalid_model_registry = valid;
     invalid_model_registry.operations = &.{model_without_slot};
     try std.testing.expect(!invalid_model_registry.validate());
-
-    var zero_budget = valid;
-    zero_budget.policies = &.{.{
-        .id = "core.safe@1",
-        .allowed_capabilities = &.{},
-        .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 0 },
-    }};
-    try std.testing.expect(!zero_budget.validate());
 
     const hidden_retry: Entry = .{
         .contract = .{

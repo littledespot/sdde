@@ -118,6 +118,22 @@ fn appendSpan(a: std.mem.Allocator, spans: *std.ArrayList(spec.CodeSpan), start:
     } else try spans.append(a, .{ .start = start, .end = end });
 }
 
+/// ADR 0040: the review status shown in `spec.md`, from the stored advice stops of
+/// post-generation source and principle review; null when both are complete.
+pub fn reviewStatus(source_subjects: usize, source: ?@import("required_authority.zig").AdviceStop, principle: @import("principle_assessment.zig").Canonical) Error!?spec.ReviewStatus {
+    if (source == null and principle.advice_stop == null) return null;
+    var unassessed: usize = 0;
+    if (source) |stop| {
+        if (stop.requirements.len != source_subjects) return error.InvalidSpecification;
+        unassessed += stop.unassessed.len;
+    }
+    if (principle.advice_stop) |stop| unassessed += stop.unassessed.len;
+    return .{
+        .unassessed = std.math.cast(u32, unassessed) orelse return error.InvalidSpecification,
+        .subjects = std.math.cast(u32, source_subjects + principle.requirements.len) orelse return error.InvalidSpecification,
+    };
+}
+
 /// Caller owns an arena; input canonical content and reference context outlive it.
 pub fn project(allocator: std.mem.Allocator, context: provenance.Context, content: spec.IdentifiedContent) Error!spec.CapturedDocument {
     const records = try allocator.alloc(spec.CapturedRecord, content.records.len);

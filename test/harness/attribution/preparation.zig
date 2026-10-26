@@ -16,7 +16,9 @@ pub const Source = enum { records, extraction };
 /// removal of the output-token allowance. The field is read only to describe the
 /// retained evidence; no request is ever encoded with it.
 pub const HistoricalControls = struct {
-    temperature: ?@import("../../../src/domain/model_controls.zig").Temperature = null,
+    /// The retired engine-fixed control, which sent 0.1; ADR 0039 configures
+    /// current temperatures instead.
+    temperature: ?enum { fixed } = null,
     max_output_tokens: ?struct { value: u32 } = null,
 };
 /// v5 provider configuration, retained as captured: it predates the recorded
@@ -154,7 +156,7 @@ pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
         .content = value.content,
         .schema = .{ .native = .{ .guidance = value.schema, .structure = try @import("../../../src/domain/model_schema_projection.zig").render(a, compiled, .native) } },
         .schema_name = "sdde_model_envelope_v1",
-        .temperature = value.controls.temperature,
+        .temperature = if (value.controls.temperature) |_| @import("../../../src/domain/model_controls.zig").Temperature.init(@import("../../../src/test_fixtures/calibration_temperature_policy.zig").temperature).? else null,
         .reasoning_effort = try @import("../../../src/adapters/provider/model_text_request.zig").reasoningEffort(value.reasoning_effort),
         .family = .@"gpt-oss",
         .max_output_tokens = try frozen.maximumOutput(a),

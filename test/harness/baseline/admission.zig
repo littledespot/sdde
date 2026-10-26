@@ -159,9 +159,9 @@ pub const Tracker = struct {
         if (view.contains(native_extraction.text_schema.key)) {
             const owned = try values.read(view, native_extraction.text_schema, @import("../../../src/domain/reference_candidate_value.zig").Value);
             if (owned.payload().* == .text_validated) for (owned.payload().text_validated.entries) |entry| switch (entry.outcome) {
-                .claims => |claims| for (claims, 0..) |proposal, index| try self.claim(.extraction, sequence, after_call, proposal.origin, .{ .extraction = .{ .scope = entry.scope, .target = .{ .claim = index } } }, proposal.content),
+                // Claim wording is quoted from the source, not model text (ADR 0036).
+                .claims, .blocked => {},
                 .no_feature_claim => |reason| try self.inspect(sequence, after_call, if (entry.producers) |producers| producers.content else entry.origin, .{ .extraction = .{ .scope = entry.scope, .target = .reason } }, .extraction_reason, .{ .reference = reason.value }),
-                .blocked => {},
             };
         }
         if (view.contains(native_reconciliation.summary_schema.key)) {
@@ -436,10 +436,7 @@ fn referenceSubject(comptime phase: policy.ReferencePhase, field: policy.Field, 
 /// relabel a prose field as the optional entity-name identity exception.
 fn validSubject(subject: Subject, field: policy.Field, value: Value) bool {
     return switch (subject) {
-        .extraction => |selected| if (selected.scope.state_id.bytes.len == 0 or selected.scope.chunk_id.bytes.len == 0) false else switch (selected.target) {
-            .reason => field == .extraction_reason and value == .reference,
-            .claim => referenceSubject(.extraction, field, value),
-        },
+        .extraction => |selected| if (selected.scope.state_id.bytes.len == 0 or selected.scope.chunk_id.bytes.len == 0) false else field == .extraction_reason and value == .reference,
         .reconciliation => |selected| if (selected.partition.ordinal == 0) false else switch (selected.unit) {
             .statement, .signal => referenceSubject(.reconciliation, field, value),
             .conflict => field == .reconciliation_conflict and value == .reference,

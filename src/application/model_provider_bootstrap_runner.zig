@@ -41,6 +41,7 @@ pub const Runner = struct {
     runtime: pipeline.NodeRuntime,
     selected: *const execution.SelectedWorkflow,
     models: *const config.ModelsConfig,
+    temperatures: @import("../domain/model_controls.zig").Temperatures,
     config_runner: *config_runner.Runner,
     derive_requirement_action: derive_requirement.Action,
     decode_provider_config_action: decode_provider_config.Action,
@@ -61,6 +62,7 @@ pub const Runner = struct {
         runtime: pipeline.NodeRuntime,
         selected: *const execution.SelectedWorkflow,
         models: *const config.ModelsConfig,
+        temperatures: @import("../domain/model_controls.zig").Temperatures,
         provider_config_runner: *config_runner.Runner,
         registered_contracts: *const contracts.Registry,
     ) Runner {
@@ -69,6 +71,7 @@ pub const Runner = struct {
             .runtime = runtime,
             .selected = selected,
             .models = models,
+            .temperatures = temperatures,
             .config_runner = provider_config_runner,
             .derive_requirement_action = .{},
             .decode_provider_config_action = .{},
@@ -194,6 +197,7 @@ pub const Runner = struct {
         self.allowlist_owner = self.validate_allowlist_action.execute(
             self.allocator,
             self.models,
+            self.temperatures,
             provider_registry.registry(self.registry_owner.?),
         ) catch return .{ .failed = .LLM_PROVIDER_MODEL_BINDING_INVALID };
         return self.finishProviderNode(

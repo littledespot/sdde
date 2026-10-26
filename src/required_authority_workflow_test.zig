@@ -105,7 +105,7 @@ const Fixture = struct {
         return &graphs[0];
     }
     fn runner(self: *Fixture, graph: *const compilation.CompiledWorkflow) runner_module.Runner {
-        return runner_module.Runner.init(self.script.allocator, .{ .graph = graph, .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} } }, &self.registry, .{ .context = &self.script, .process_fn = log }, .{}, null);
+        return runner_module.Runner.init(self.script.allocator, .{ .graph = graph, .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} } }, &self.registry, .{ .context = &self.script, .process_fn = log }, .{}, null, .{ .budget = .{ .value = 100_000 } });
     }
     fn log(_: *anyopaque, _: @import("domain/telemetry.zig").WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
         return .dropped;

@@ -17,13 +17,14 @@ pub const Issue = struct {
 };
 pub const Result = union(enum) { valid: evidence.ValidatedCitations, invalid: Issue };
 
-const Unit = struct { id: Id, span: source.Span, text: []const u8 };
+/// One supplied line: its ID, exact source span and bytes, line ending included.
+pub const Line = struct { id: Id, span: source.Span, text: []const u8 };
 const Iterator = struct {
     view: evidence.ChunkView,
     position: source.Position,
     ordinal: u32 = 0,
 
-    fn next(self: *Iterator) evidence.Error!?Unit {
+    fn next(self: *Iterator) evidence.Error!?Line {
         if (self.position.byte == self.view.chunk.span.end.byte) return null;
         const start = self.position;
         while (self.position.byte < self.view.chunk.span.end.byte) {
@@ -36,23 +37,34 @@ const Iterator = struct {
     }
 };
 
-pub fn project(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope) evidence.Error![]const Choice {
+pub fn lines(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope) evidence.Error![]const Line {
     const view = try evidence.resolve(inputs, scope);
     var iterator: Iterator = .{ .view = view, .position = view.chunk.span.start };
-    var choices: std.ArrayList(Choice) = .empty;
-    errdefer choices.deinit(a);
-    while (try iterator.next()) |unit| try choices.append(a, .{ .id = unit.id, .text = unit.text });
-    return choices.toOwnedSlice(a);
+    var result: std.ArrayList(Line) = .empty;
+    errdefer result.deinit(a);
+    while (try iterator.next()) |line| try result.append(a, line);
+    return result.toOwnedSlice(a);
+}
+
+pub fn project(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope) evidence.Error![]const Choice {
+    const supplied = try lines(a, inputs, scope);
+    defer a.free(supplied);
+    const choices = try a.alloc(Choice, supplied.len);
+    for (supplied, choices) |line, *choice| choice.* = .{ .id = line.id, .text = line.text };
+    return choices;
+}
+
+/// A model may cite a line only when it carries text (ADR 0036).
+pub fn citable(text: []const u8) bool {
+    return std.mem.trim(u8, text, " \t\r\n").len != 0;
 }
 
 pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.Scope, selections: []const Selection) evidence.Error!Result {
     const view = try evidence.resolve(inputs, scope);
-    var iterator: Iterator = .{ .view = view, .position = view.chunk.span.start };
-    var units: std.ArrayList(Unit) = .empty;
-    defer units.deinit(a);
-    while (try iterator.next()) |unit| try units.append(a, unit);
-    if (units.items.len == 0) return error.InvalidSourceCitation;
-    const available: Selection = .{ .first = units.items[0].id, .last = units.items[units.items.len - 1].id };
+    const units = try lines(a, inputs, scope);
+    defer a.free(units);
+    if (units.len == 0) return error.InvalidSourceCitation;
+    const available: Selection = .{ .first = units[0].id, .last = units[units.len - 1].id };
     if (selections.len == 0) return .{ .invalid = .{ .reason = .missing_selection, .index = 0, .rejected = null, .available = available } };
     const proposals = try a.alloc(evidence.CitationProposal, selections.len);
     defer a.free(proposals);
@@ -64,7 +76,7 @@ pub fn validate(a: std.mem.Allocator, inputs: evidence.Inputs, scope: evidence.S
         else
             null;
         if (reason) |value| return .{ .invalid = .{ .reason = value, .index = index, .rejected = selection, .available = available } };
-        const span: source.Span = .{ .start = units.items[selection.first.ordinal - 1].span.start, .end = units.items[selection.last.ordinal - 1].span.end };
+        const span: source.Span = .{ .start = units[selection.first.ordinal - 1].span.start, .end = units[selection.last.ordinal - 1].span.end };
         proposal.* = .{ .source_id = view.source.id, .block_id = view.chunk.block_id, .location = span, .verbatim = view.source.bytes[span.start.byte..span.end.byte] };
     }
     return .{ .valid = try @import("source_citations.zig").validate(a, inputs, .{ .scope = scope, .entries = proposals }) };

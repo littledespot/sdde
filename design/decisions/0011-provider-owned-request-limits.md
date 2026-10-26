@@ -32,6 +32,21 @@
   counting, so the CountTokens text below no longer applies, and its required
   `requestTimeoutMs` beside `maxOutputTokens` in every catalogue entry (see "Model
   maximum output"). Actual-usage accounting is unchanged.
+- **Amended by:** [ADR 0037](0037-configured-workflow-token-budget.md) (25 October
+  2026): the project configuration's required `workflowTokenBudget` supplies the one
+  total limit; workflow policy no longer owns it. Accounting is unchanged.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): a provider `output_limit` stop is re-sent once with the identical
+  request at the configured `temperatureRunawayRetry`. A runaway on the re-send stops
+  the workflow in required work; in advisory work it ends that advice as incomplete,
+  published, marked and logged ([ADR 0040](0040-incomplete-review-published-marked-logged.md)).
+  This supersedes the B9 amendment's "no `output_limit` correction" and the stop rules
+  below.
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
+  2026): a required failure of model work, including a budget failure, still fails the
+  run but publishes its validated content as a failed incomplete specification, marked
+  and logged. Partial text is still discarded,
+  and both attempts' usage is accounted.
 
 ## Decision
 
@@ -70,8 +85,9 @@ maximum (see "Model maximum output").
 - The model's own maximum is the only output ceiling. When a provider stops a
   response for any non-candidate reason, including that maximum, the runner logs
   `model.provider_stopped` at warning level with the exact stop reason. Actual usage
-  is still accounted, and the typed outcome is unchanged. SDDE does not retry,
-  clamp, truncate or invent a fallback because of a stop.
+  is still accounted, and the typed outcome is unchanged. SDDE does not clamp,
+  truncate or invent a fallback because of a stop. Its one retry is ADR 0039's
+  re-send after an `output_limit` stop; other stops are never retried.
 
 ### Model maximum output
 
@@ -104,9 +120,9 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
 
 ### Workflow token accounting
 
-There is one total limit: the native workflow policy's positive
-`totalModelTokenBudget`, currently **100,000 tokens**, initialized freshly for every
-execution. It covers all model work, including post-generation source and principle
+There is one total limit: the project configuration's positive
+`workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)), initialized
+freshly for every execution. It covers all model work, including post-generation source and principle
 advice, which has no pool or allowance of its own. Native advisory classification
 controls only the permitted non-budget incomplete-assessment outcome; it does not
 partition token usage.
@@ -148,14 +164,19 @@ No per-family record cardinality cap is added. Under §17, entity records are
 instead authored once by the feature-wide entities unit, with independent support
 selections and native ownership checks. Other record batches cannot emit entities.
 A provider `output_limit` remains a typed non-candidate stop: partial text never
-becomes a candidate, is never salvaged, and receives no extra protocol correction.
-Mandatory work fails; advisory work records incomplete advice under its native
-assessment policy. The model binding and existing explicit protocol retry rules
-otherwise remain unchanged.
+becomes a candidate, is never salvaged, and receives no protocol correction. Under
+[ADR 0039](0039-configured-temperatures-and-runaway-resend.md) the identical request is
+re-sent once at the configured `temperatureRunawayRetry`. A runaway on the re-send
+fails mandatory work; advisory work records incomplete advice under its native
+assessment policy, published and marked as incomplete and logged (ADR 0040). The model
+binding and existing
+explicit protocol retry rules otherwise remain unchanged.
 
 ### Retry and safety boundaries
 
-- Retries remain explicit YAML transitions with operation-local `retry-limit`.
+- Retries remain explicit YAML transitions with operation-local `retry-limit`. The one
+  engine-owned exception is ADR 0039's runaway re-send: it uses no `retry-limit`, and
+  its bound is fixed at one per attempt.
 - Provider adapters do not retry, truncate, repartition or select fallback calls on
   their own.
 - Only complete responses can become untrusted candidates.

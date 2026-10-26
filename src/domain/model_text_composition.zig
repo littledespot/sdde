@@ -139,18 +139,20 @@ fn checkRecognized(a: std.mem.Allocator, nodes: []const typed.CompositionNode, f
         const first = index;
         var bytes: std.ArrayList(u8) = .empty;
         while (index < nodes.len and nodes[index] == .literal) : (index += 1) try bytes.appendSlice(temporary, nodes[index].literal.value);
-        const result = try recognition.recognize(a, bytes.items, scope.occurrences, .{ .left = if (first == 0) .field_edge else .reference_boundary, .right = if (index == nodes.len) .field_edge else .reference_boundary });
+        const edges: @import("exact_value_boundary.zig").Edges = .{ .left = if (first == 0) .field_edge else .reference_boundary, .right = if (index == nodes.len) .field_edge else .reference_boundary };
+        const result = try recognition.recognize(a, bytes.items, scope.occurrences, edges);
         defer result.deinit(a);
         switch (result) {
             .rejected => try append(a, field, path, .{ .reason = .invalid_scalar, .first_node = first, .last_node = index - 1, .field = field }, issues),
             .ambiguous => try append(a, field, path, .{ .reason = .ambiguous_exact, .first_node = first, .last_node = index - 1, .field = field }, issues),
             .no_match => try projected.append(a, .{ .literal = .{ .value = bytes.items } }),
-            .matched => |matches| {
+            .matched => |found| {
+                const matches = try recognition.delimited(temporary, bytes.items, found, scope.occurrences, edges);
                 var copied: usize = 0;
                 for (matches) |match| {
-                    if (copied < match.start_byte) try projected.append(a, .{ .literal = .{ .value = bytes.items[copied..match.start_byte] } });
+                    if (copied < match.outerStart()) try projected.append(a, .{ .literal = .{ .value = bytes.items[copied..match.outerStart()] } });
                     try projected.append(a, .exact_copy);
-                    copied = match.end_byte;
+                    copied = match.outerEnd();
                 }
                 if (copied < bytes.items.len) try projected.append(a, .{ .literal = .{ .value = bytes.items[copied..] } });
             },

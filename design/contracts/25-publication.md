@@ -35,8 +35,11 @@ create intermediate publication or restart checkpoints.
   before any output write. A failed stream close prevents publication.
 - Every compiled successor of a publication operation is the corresponding terminal
   outcome. No later node may perform work, emit telemetry or fail after publication.
-  Preparation selects a closed `ok` or `needs_user` outcome from validated state;
-  the publisher returns it only after all writes succeed. A blocked clarification
+  Preparation selects a closed `ok`, `needs_user` or failed-incomplete outcome from
+  validated state; the publisher returns it only after all writes succeed. A
+  failed-incomplete publication
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) still ends the
+  workflow `failed` and records no successful completion. A blocked clarification
   refresh is rejected before writing. Pure progress checks also precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.

@@ -44,7 +44,7 @@ pub fn projectSignal(a: std.mem.Allocator, records: Records, context: Context, s
                 const claim = (try r.item(records.items, id)).claim;
                 if (claim.content != .preserved_token) continue;
                 const token = claim.content.preserved_token.value;
-                if (std.meta.eql(token.id, reference.token_id)) break :selected .{ .kind = "preserved_token", .meaning = token.raw_value.bytes };
+                if (std.meta.eql(token.id, reference.token_id)) break :selected .{ .kind = evidence.exact_text_kind, .meaning = token.raw_value.bytes };
             }
             return error.InvalidReferenceReconciliation;
         },

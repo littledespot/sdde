@@ -6,15 +6,17 @@ const operation = @import("domain/workflow_operation.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
 const provider_registry = @import("domain/llm_provider_registry.zig");
 
-test "temperature policy requires 0.1 exactly when the registered model supports it" {
+test "a model that takes a temperature carries the configured pair, and one that takes none carries none" {
+    const temperatures = @import("test_fixtures/model_temperatures.zig").temperatures;
     for ([_]bool{ false, true }) |supported| {
         var capabilities = fixture.capabilities;
         capabilities.temperature = supported;
-        const selected = capabilities.inferenceControls();
-        try std.testing.expectEqual(supported, selected.temperature != null);
-        if (selected.temperature) |temperature| try std.testing.expectEqual(@as(f64, 0.1), temperature.wireValue());
+        const selected = capabilities.inferenceControls(temperatures);
+        try std.testing.expectEqual(supported, selected.temperatures != null);
+        if (selected.temperature(.configured)) |temperature| try std.testing.expectEqual(@as(f64, 0.1), temperature.wireValue());
+        if (selected.temperature(.runaway_resend)) |temperature| try std.testing.expectEqual(@as(f64, 1), temperature.wireValue());
         try std.testing.expect(capabilities.supports(.prompt_only, selected));
-        try std.testing.expect(!capabilities.supports(.prompt_only, .forTemperatureSupport(!supported)));
+        try std.testing.expect(!capabilities.supports(.prompt_only, .forTemperatureSupport(!supported, temperatures)));
     }
 }
 
@@ -50,15 +52,15 @@ test "request result selection keeps exactly one canonical schema or configured 
 test "model contracts validate capabilities without granting unsupported operations" {
     var contract = provider_contract;
     try (contracts.Registry{ .entries = &.{contract} }).validate();
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
+    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
     contract = provider_contract;
     contract.capabilities.inference = false;
     try std.testing.expectError(error.InvalidProviderModelContracts, (contracts.Registry{ .entries = &.{contract} }).validate());
     contract = provider_contract;
     contract.capabilities.temperature = false;
-    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
-    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{ .temperature = .fixed }));
-    try std.testing.expect(!fixture.capabilities.supports(.native_schema, fixture.capabilities.inferenceControls()));
+    try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
+    try std.testing.expect(!contract.capabilities.supports(.prompt_only, @import("test_fixtures/model_temperatures.zig").supported));
+    try std.testing.expect(!fixture.capabilities.supports(.native_schema, fixture.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures)));
 }
 
 test "catalogue candidate cannot substitute compiled capability facts" {
@@ -118,7 +120,7 @@ test "provider operations retain binding control mode and deadline checks" {
     const provider = @import("domain/llm_provider_operation.zig");
     try std.testing.expect(provider.validateInferenceInvocation(&authorization.provider_binding, &authorization.request, inference.invoked));
     var request = authorization.request;
-    request.controls.temperature = null;
+    request.controls.temperatures = null;
     try std.testing.expect(!provider.validateInferenceInvocation(&authorization.provider_binding, &request, inference.invoked));
     request = authorization.request;
     request.response_guidance_mode = .native_schema;

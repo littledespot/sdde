@@ -53,7 +53,7 @@ pub const Validate = struct {
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
         const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
-        return .{ .outcome = status(result), .delta = delta };
+        return .{ .outcome = status(result), .delta = delta, .diagnostic = runawayDiagnostic(result) };
     }
 };
 
@@ -91,7 +91,7 @@ pub const Admit = struct {
         delta.data_writes[@intFromEnum(envelope.schema.key)] = envelope_value;
         delta.data_writes[@intFromEnum(schema.key)] = payload_value;
         const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
-        return .{ .outcome = status(result), .delta = delta };
+        return .{ .outcome = status(result), .delta = delta, .diagnostic = runawayDiagnostic(result) };
     }
 };
 
@@ -120,6 +120,20 @@ pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
     const result = values.read(view, schema, Result) catch |operation_error| return operation_error;
     try observation.requireCurrent(view, result.source().source());
     return result;
+}
+
+/// A request whose re-send also ran away fails with its typed diagnostic
+/// (ADR 0039); an advisory one instead ends its advice incomplete.
+pub fn runawayDiagnostic(result: *const Result) ?operations.Error {
+    if (status(result) != .failed) return null;
+    const original = switch (result.outcome()) {
+        .not_validated => |source| source,
+        .valid, .schema_rejected => return null,
+    };
+    return switch (original.source().outcome()) {
+        .validated => |evidence| if (evidence.runaway() == .repeated) error.RunawayRepeated else null,
+        .rejected, .cancelled, .advisory_stopped => null,
+    };
 }
 
 pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTag {

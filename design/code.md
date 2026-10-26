@@ -245,7 +245,7 @@ PipelineEnvelope {
       noInventionReplacementUsedByUnitId: Set<ImmutableUnitOwnerId>
     },
     workflowTokenAccounting: {
-      totalModelTokenBudget,
+      workflowTokenBudget,
       committedTokens,
       usageUnavailable,
       accountedProviderOperationIds
@@ -1482,6 +1482,7 @@ an earlier extended sample whose fields F0001 rejects.
 SDDToolKitConfig {
   logs: { level, console },
   models: { slots: map<slotName, { provider, model, reasoningEffort? }> },
+  workflowTokenBudget: positive integer, // ADR 0037; no default
   paths: {
     specs, references, specsArchive, workflows,
     toolchainPreset, principles, templates, providers

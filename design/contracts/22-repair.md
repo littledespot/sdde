@@ -48,12 +48,12 @@ its question text cannot grant clarification publication. Optional verdict
 reassessment is not approved.
 
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
-  token-classification collection, one invalid source selection, or an empty claim-citation
-  collection.
-- Citation repair includes the unchanged claim and scoped source choices.
-- Both selection checks run before derived claims are built.
-- Merge invalidates the selection result; the same checks run again before token/claim
-  construction, ledger validation and full-candidate publication.
+  token-classification collection. Claim citations are bounded at admission and claim
+  wording is quoted natively, so neither is repaired
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md)).
+- The classification check runs before derived claims are built.
+- Merge invalidates the classification result; the same check runs again before
+  token/claim construction, ledger validation and full-candidate publication.
 - Missing semantic support remains an authority gap, not a selection repair.
 
 **Reference handoffs ([ADR 0022](../decisions/0022-native-reference-phase-handoffs.md)):** use native
@@ -597,7 +597,8 @@ defined response-level correction containing:
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; `exact_members` uniqueness stays
   native and is reported as `duplicate_member` with parent scope on the enclosing
-  array. Correction does not repeat schema subtrees. Syntax correction uses that
+  array. ADR 0038's coverage (`uncovered_member`) and ADR 0042's required items
+  (`missing_required_item`, at the array that needs an item) are native the same way. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.
@@ -623,6 +624,14 @@ child-object descriptors only.
   and corrected as a malformed response, not a finding-evidence defect (ADR 0023,
   20 October 2026).
 - Request IDs cannot reset either authority.
+- A runaway is not a malformed response. A provider `output_limit` stop gets no
+  correction: its partial text is discarded and the identical request is re-sent once at
+  the configured `temperatureRunawayRetry`, outside this allowance
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A
+  re-sent response that fails admission takes an ordinary correction at the configured
+  `temperature`. A runaway on the re-send is terminal in required work. In advice it
+  ends that advice incomplete, published, marked and logged
+  ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.
 - All attempts remain available as execution evidence.
@@ -636,7 +645,7 @@ recorded; explicit request closure remains failed/invalid unless a later respons
 passes ordinary admission. Missing answers, JSON and schema failures share one
 assignment allowance, including selected native-repair parents. Charge every exchange
 before continuation; unknown usage or an exhausted global budget prohibits a new
-call. All inference and corrections share the same `totalModelTokenBudget` and
+call. All inference and corrections share the same `workflowTokenBudget` and
 aggregate usage ledger. Global-budget rejection remains fatal during advisory repair and cannot be
 converted into incomplete advice.
 
@@ -648,7 +657,9 @@ is the explicit exception described above: only its sealed current stop receipt
 may record incomplete advice, without another attempt or provider call. Otherwise,
 if JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the workflow reports an error and exits nonzero; it cannot publish
-either a completed or incomplete specification. Native finding-evidence or repair
+a completed specification or a clarification pause. It publishes only the failed
+incomplete specification of its validated content
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)), marked and logged. Native finding-evidence or repair
 exhaustion and global-budget rejection remain terminal. Existing open
 clarifications do not override that failure. A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
@@ -839,7 +850,10 @@ permitted choices derive from the bound evidence under ADR 0020. Literal punctua
 repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
 full validation, retry identities and token accounting with their existing owners.
 Mechanical coverage defects have no independently supported repair target and
-block; nothing guesses substrings or rewrites meaning.
+block; nothing guesses substrings or rewrites meaning. The one exception is a records
+response whose functional-requirement claim no acceptance criterion or edge case
+names: it is a response-admission defect that takes the request's existing protocol
+correction, and exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 
 ### Meaning and repair ownership
 

@@ -1,6 +1,6 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 24 October 2026. It mirrors the repository's active fix
+Dated snapshot, last updated 26 October 2026. It mirrors the repository's active fix
 record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
 [Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
@@ -24,8 +24,27 @@ already made.
   also lacks a refusal acceptance criterion. Extraction also returns one claim for a
   whole Markdown list. *Tried and reverted, 21 October 2026:* list-item extraction
   (ADR 0027, `2bf5ca6`) gave one claim per item but no better output and higher cost,
-  and the user directed its revert (`527f870`, ADR 0027 deleted). The weakening has no
-  current proposal; measure whether it recurs with another permitted model first.
+  and the user directed its revert (`527f870`, ADR 0027 deleted).
+  - On 24 October every later call received both the cited source text and the weakened
+    claim, and followed the claim.
+  - *Approved 25 October 2026 (user: "YES"):* source-quoted claim wording. The engine
+    takes each claim's wording from its cited source lines, so a paraphrase can't change
+    obligation strength.
+  - *Implemented 25 October 2026, uncommitted ([ADR 0036](../design/decisions/0036-source-quoted-claims.md)):*
+    source-quoted wording.
+    - A claim is a category and admission-bounded line IDs. The engine quotes the cited
+      source lines as written, one claim per top-level list item (ADR 0038).
+    - Claim-text and citation repair are deleted. The Markdown reader now rejects C1
+      control characters.
+    - Re-quoting at stored readback is open.
+    - Quoted claims carry Markdown into generation, which wrapped exact values in
+      backticks in the first live pair. ADR 0036 Decision 6 now drops those delimiters at
+      admission (25 October, uncommitted).
+  - *Implemented, withdrawn and reinstated 25 October 2026 (ADR 0038):* a native split
+    into one claim per top-level list item. It was withdrawn after records inflated, but
+    the same five-claim input later produced 2 records, so claim count wasn't the
+    driver; B5's scenario rule needs it. ADR 0027's per-item chunking stays withdrawn.
+  - Details are in FIX05 B7.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
   `candidate_omission`, has judged byte-identical text both supported and omitted,
@@ -35,13 +54,32 @@ already made.
   source review assigns one record family per call (ADR 0023 "Record families",
   `specification-state/v19`). Its effect on cost is not yet measured live, and
   loan-renewal still ran out of budget in review twice on 21–22 October.
+  - On 25 October the user kept source review and chose a larger budget instead (B4).
+    Under "quality over cost, but never waste", the open problems are review's accuracy
+    and any spending that buys no quality. In the 24 October clean runs, all 46
+    source-review findings were "supported".
 - **Record authoring duplicates.** A record batch can re-author the whole feature.
   Groups holding only preserved tokens no longer get a batch (ADR 0024). The native
-  duplicate rule compares whole typed content, including the record kind, so
-  identical text in two record kinds passes. *Proposed:* compare per-group records
-  with one complete collection, only if generation-boundary failures remain. Add an
-  acceptance-criterion diagnostic or per-family collections only where measured
-  failures justify them.
+  duplicate rule compares whole typed content, including the record kind, and only
+  records with records. So identical text in two record kinds passes, and so does a
+  record repeating the user story: BR-001 equals the story in both cases on `8a600d7`.
+  - *Implemented 25 October 2026 (ADR 0035), for identical text across kinds (FIX05
+    B5):*
+    - widen the native `duplicate_record` rule to compare statement text across
+      single-statement record kinds and against the user story;
+    - keep its native delete, which makes no model call.
+    - A covered restatement is deleted; an uncovered one is left as today. The
+      functional requirement is kept, and same-kind checks run first.
+    - It doesn't catch paraphrases, and an entity description that copies the story
+      needs a separate remedy.
+  - *Implemented 25 October 2026, uncommitted (ADR 0038, FIX05 B5):* each record names
+    the claims it supports within its group, and every claim a functional requirement
+    names must also be named by an acceptance criterion or edge case. A gap is a
+    response-admission defect that takes the records step's protocol correction. One
+    records call per feature was not adopted.
+  - It checks links, not meaning; prose requirements in one sentence stay one claim.
+  - Loan-renewal had no refusal scenario in every evaluated publication; the live
+    effect of ADR 0038 is unmeasured.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
   `required`.
@@ -61,12 +99,36 @@ already made.
   catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
   cover that model. *Implemented 24 October 2026 (ADR 0030 slice 3):* each catalogue
   entry declares its own `requestTimeoutMs`; Haiku starts at the shared 180,000 ms until
-  its measured maximum-output time replaces it. Lower allowances, bounded correction and
-  cardinality bounds each need a decision; don't tune sampling or add retries.
+  its measured maximum-output time replaces it. *Decided and implemented 26 October 2026 (ADR 0039,
+  uncommitted):* a runaway re-sends the identical request once at the configured
+  `temperatureRunawayRetry`, logged as `model.runaway_resent`. A runaway on the re-send
+  fails required work; in review it ends that advice incomplete, which ADR 0040 publishes
+  marked as incomplete and logs as `review.incomplete`; under ADR 0041 a failed required
+  step still fails the run but publishes its validated content marked incomplete and
+  logged as `run.incomplete_published`. It's the user's exception to
+  "don't tune sampling or add retries", for `output_limit` only. Lower allowances and cardinality bounds still need a decision.
+  - On 25 October 21:20 (B5 tree) source review ran away again, on `Loan renewed!`
+    (19,270 tokens): the fourth runaway on a loan-renewal exact-value subject.
+  - On 25 October (step 0, `269410b`) a source-review runaway on `Renewal refused.` cost
+    19,404 tokens and the run failed on budget.
+  - On 25 October 14:31 (uncommitted B7 tree) a records call ran away instead: 294 edge
+    cases (9,318 output tokens) enumerating loan-state combinations. Source review of
+    them exhausted the budget. A native cardinality bound per records batch is the
+    open choice that would stop it before review.
+  - It's the second completed runaway on that same subject, so the subject-linked
+    trigger has more support but isn't established.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
-  (most recently 22 October, at 100,763 tokens) and published at 76,501–99,098 tokens
-  (the 24 October run finished 902 tokens under budget).
-  Raising the budget doesn't fix reliability.
+  (most recently 25 October, at 109,327 tokens, after a runaway) and published at
+  76,501–99,098 tokens (the 24 October run finished 902 tokens under budget).
+  - *Approved and implemented 25 October 2026, uncommitted
+    ([ADR 0037](../design/decisions/0037-configured-workflow-token-budget.md)):* the
+    budget is `.sddtoolkit.json`'s required `workflowTokenBudget`, 125,000 in the E2E
+    configuration. The user's rule is "quality over cost, but never waste".
+    - Spend more tokens where it buys quality.
+    - Never drop a check to save tokens.
+    - Remove spending that buys no quality, at its owner.
+  - On its own, a larger budget doesn't make review cheaper or runs more reliable.
+  - Experiment stops and qualified scope stay open before any baseline freeze (FIX05 B4).
 
 ## Other open work
 
@@ -138,6 +200,8 @@ already made.
   - Quality means R8 human adjudication; stability means repeated runs, counting every
     attempt.
   - There is no fixed run threshold. The user decides when Plan is actioned; don't ask.
-  - It isn't met: no run has been adjudicated, only two pairs (one run of each case, on
-    `7a88804` and `8a600d7`) used an unmodified committed build, and loan-renewal published
-    in 3 of 7 attempts since 21 October.
+  - It isn't met:
+    - no run has been adjudicated;
+    - only three pairs (one run of each case, on `7a88804`, `8a600d7` and `269410b`) used
+      an unmodified committed build;
+    - loan-renewal published in 3 of 8 attempts since 21 October.

@@ -78,7 +78,6 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
             .workflow_version = 1,
             .invocation_operation_id = workflow.OperationId.parse("test.empty").?,
             .policy_profile_id = workflow.RegisteredRef.parse("test.safe@1").?,
-            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = step.id,
             .invocation_outputs = &.{},
             .resources = &.{},

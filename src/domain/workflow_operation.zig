@@ -1,7 +1,6 @@
 const std = @import("std");
 const pipeline = @import("pipeline.zig");
 const workflow = @import("workflow.zig");
-const workflow_token_budget = @import("workflow_token_budget.zig");
 
 pub const Kind = enum { invocation, step };
 pub const ParameterKind = enum { boolean, integer, string, enumeration, registered_ref, resource, model_slot };
@@ -69,7 +68,6 @@ pub const PolicyProfile = struct {
     id: []const u8,
     allowed_capabilities: []const []const u8,
     allowed_terminal_outcomes: []const workflow.OutcomeTag,
-    total_model_token_budget: workflow_token_budget.TotalTokenBudget,
 };
 
 pub fn validAccounting(capability: pipeline.RunnerAccountingCapability, requires: []const pipeline.DataKey, produces: []const pipeline.DataKey, effect: pipeline.SideEffect, retry: bool) bool {

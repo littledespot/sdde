@@ -77,6 +77,9 @@ pub const Runner = struct {
         barrier: telemetry_barrier.Barrier,
         runtime: pipeline.NodeRuntime,
         model_provider_services: ?*const provider_services.ModelProviderBootstrapServices,
+        /// The project's decoded budget (ADR 0037); its closed decoder admits only
+        /// positive values, so the execution ledger always initializes.
+        token_budget: @import("../domain/config.zig").WorkflowTokenBudget,
     ) Runner {
         return .{
             .allocator = allocator,
@@ -87,10 +90,7 @@ pub const Runner = struct {
             .runtime = runtime,
             .model_provider_services = model_provider_services,
             .envelope = .init(allocator, selected.graph.authority.data_schemas),
-            .token_accounting = workflow_token_runner.Runner.init(
-                allocator,
-                selected.graph.authority.total_model_token_budget,
-            ),
+            .token_accounting = workflow_token_runner.Runner.init(allocator, token_budget.budget),
             .repair_retry = retry.State.init(allocator),
             .remaining_step_executions = selected.graph.authority.maximum_step_executions,
         };
@@ -319,6 +319,8 @@ pub const Runner = struct {
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
         var expected: ExpectedAccounting = .none;
         var model_attempt_exhaustion: ?retry.Exhaustion = null;
+        // ADR 0039: a runaway's one re-send is its own attempt, outside `retry-limit`.
+        var runaway_resend: ?provider.ProviderOperationId = null;
         if (step.runner_accounting == .increment_model_attempt) {
             const current_requests = values.read(&input_data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return .{ .rejected = .authority };
             if (self.model_accounting == null) self.model_accounting = model_accounting.State.init(self.allocator, current_requests) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
@@ -327,10 +329,15 @@ pub const Runner = struct {
             if (!current.stageRunEpochId().eql(current_requests.stageRunEpochId())) return .{ .rejected = .authority };
             const authority = step.retry_authority orelse return .{ .rejected = .authority };
             const executions = if (request_assignment) |assignment| self.repair_retry.completedAssignmentAttempts(step.id, assignment) else if (repair_permit) |permit| self.repair_retry.completedAttempts(step.id, permit.key) else self.retry_execution_counts[index];
+            const request = retained_request orelse return .{ .rejected = .authority };
+            const reserved = current.attemptsReserved(request.id());
+            // A re-send directly follows the runaway it repeats, so it is reserved once.
+            runaway_resend = if (reserved == 0) null else request.runawayResend();
+            if (runaway_resend) |repeated| if (repeated.model_attempt_ordinal.value != reserved) return .{ .rejected = .authority };
             attempt_input = .{
                 .accounting = current,
                 .operations = state.current_operations,
-                .attempt = if (current.attemptsReserved((retained_request orelse return .{ .rejected = .authority }).id()) == 0) .initial else .{ .retry = .{ .authority = authority, .completed_retries = if (executions == 0) 0 else executions - 1 } },
+                .attempt = if (reserved == 0) .initial else if (runaway_resend != null) .runaway_resend else .{ .retry = .{ .authority = authority, .completed_retries = if (executions == 0) 0 else executions - 1 } },
             };
             expected = .{ .attempt = attempt_input.?.attempt };
         }
@@ -349,7 +356,7 @@ pub const Runner = struct {
                 expected = .assignment;
             }
         }
-        if (step.retry_authority) |authority| {
+        if (step.retry_authority) |authority| if (runaway_resend == null) {
             var admitted_count: u64 = 0;
             if (request_assignment) |assignment| {
                 const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
@@ -378,7 +385,7 @@ pub const Runner = struct {
                 admitted_count = self.retry_execution_counts[index];
             }
             if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, model_attempt_exhaustion != null)) |failure| return .{ .rejected = .{ .logging = failure } };
-        }
+        };
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
         if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
@@ -399,6 +406,11 @@ pub const Runner = struct {
         const occurrence = self.envelope.beginOccurrence(step.operation_id.bytes) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         if (calls_model) {
             const invoked = call.?;
+            // ADR 0039: a re-send is logged only once every send check has
+            // passed, immediately before it is sent; a logging rejection stops it.
+            if (retained_request.?.runawayResend()) |repeated| if (invoked.operation_id.model_attempt_ordinal.value == repeated.model_attempt_ordinal.value + 1) {
+                if (self.logRunawayResend(id, retained_request.?, repeated)) |failure| return .{ .rejected = .{ .logging = failure } };
+            };
             const ledger = identity.ledger(self.model_accounting.?.requests);
             const origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, invoked.operation_id) orelse return .{ .rejected = .authority };
             self.model_capture.begin(.{
@@ -512,6 +524,18 @@ pub const Runner = struct {
         return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_completed, status, null, usage);
     }
 
+    /// ADR 0039: logged after the runaway's stop and before its one re-send is
+    /// sent, with the runaway attempt's reported usage.
+    fn logRunawayResend(self: *Runner, id: workflow.WorkflowStepId, request: *const @import("../domain/model_request_handoff.zig").Request, runaway: provider.ProviderOperationId) ?@import("../domain/feature_log_stream.zig").FailureCode {
+        if (!self.eventsActive()) return null;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), runaway) orelse return .LOG_SERIALIZATION_FAILURE;
+        var usage: ?provider.ProviderUsage = null;
+        for (self.tokenLedger().accounted_operations.items) |accounted| {
+            if (accounted.id.eql(runaway) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
+        }
+        return self.events().model(id, .{ .origin = origin, .binding = request.binding().* }, .model_runaway_resent, null, @tagName(provider.ProviderNonCandidateStopReason.output_limit), usage);
+    }
+
     const ProviderStop = struct { reason: provider.ProviderNonCandidateStopReason, usage: provider.ProviderUsage };
 
     fn providerStop(result: *const @import("../domain/model_invocation_result.zig").Result) ?ProviderStop {
@@ -566,7 +590,13 @@ pub const Runner = struct {
             var event: @import("../domain/telemetry.zig").EventType = .model_protocol_failed;
             if (produces_decode) switch (evidence.outcome()) {
                 .protocol_rejected => |rejected| reason = rejected.diagnostic.label(),
-                .not_decoded => if (candidate.outcome == .invalid) {
+                .not_decoded => |stopped| if (candidate.outcome == .invalid) {
+                    // A first runaway is no protocol failure: its stop and re-send
+                    // events record it (ADR 0039).
+                    switch (stopped.outcome()) {
+                        .validated => |observed| if (observed.runaway() == .first) return null,
+                        .rejected, .cancelled, .advisory_stopped => {},
+                    }
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,
                 .decoded => |value| if (value.normalization() != .none) {
@@ -589,6 +619,11 @@ pub const Runner = struct {
         inline for (.{ step.produces, step.replaces }) |keys| for (keys) |key| {
             produced.slots[@intFromEnum(key)] = view.slots[@intFromEnum(key)];
         };
+        // ADR 0040: advice that closed incomplete is logged once, by its stop operation.
+        if (step.outcome_association == .advisory_completion and candidate.outcome == .ok) {
+            const stopped = @import("specification_advice_stop_workflow.zig").closedAdvice(&produced) catch return .LOG_SERIALIZATION_FAILURE;
+            if (self.events().reviewIncomplete(step.id, @tagName(stopped.reason), stopped.unassessed.len)) |failure| return failure;
+        }
         const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .LOG_SERIALIZATION_FAILURE;
         if (diagnostic) |value| {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
@@ -688,8 +723,7 @@ pub const Runner = struct {
         if (!self.operation_registry.validate()) return false;
         const authority = self.selected.graph.authority;
         const policy = self.operation_registry.resolvePolicy(authority.policy_profile_id) orelse return false;
-        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities) or
-            policy.total_model_token_budget.value != authority.total_model_token_budget.value) return false;
+        if (!equalStrings(policy.allowed_capabilities, authority.allowed_capabilities)) return false;
         for (self.selected.graph.authority.data_schemas) |schema| {
             const current = data.find(self.operation_registry.data_schemas, schema.key) orelse return false;
             if (!schema.eql(current)) return false;

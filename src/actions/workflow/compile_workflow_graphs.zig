@@ -98,7 +98,6 @@ pub const Action = struct {
                     .workflow_version = item.workflow_version,
                     .invocation_operation_id = item.invocation_operation_id,
                     .policy_profile_id = item.policy_profile_id,
-                    .total_model_token_budget = policy.total_model_token_budget,
                     .start_step_id = item.start_step_id,
                     .invocation_outputs = invocation.contract.produces,
                     .resources = resources,
@@ -108,6 +107,7 @@ pub const Action = struct {
                 },
             };
             @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
+            @import("../../domain/workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
         }
         return graphs;
     }

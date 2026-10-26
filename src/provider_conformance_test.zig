@@ -114,7 +114,7 @@ const Fixture = struct {
         self.base.registry_entry.config = config;
         self.base.registry_entry.supported_reasoning_efforts = &.{};
         self.base.provider_binding.reasoning_effort = null;
-        self.base.provider_binding.controls = test_contracts.capabilities.inferenceControls();
+        self.base.provider_binding.controls = test_contracts.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
         self.base.request.controls = self.base.provider_binding.controls;
         self.base.request.binding_id = self.base.provider_binding.bindingId();
         self.auth = .{ .allocator = allocator };
@@ -138,7 +138,7 @@ const Fixture = struct {
         self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = contract.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
         self.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
         self.base.provider_binding.reasoning_effort = effort;
-        self.base.provider_binding.controls = contract.capabilities.inferenceControls();
+        self.base.provider_binding.controls = contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
         self.base.request.controls = self.base.provider_binding.controls;
         self.base.request.binding_id = self.base.provider_binding.bindingId();
     }
@@ -660,7 +660,7 @@ test "Bedrock serializes exactly the configured model maximum and no smaller all
             defer fixture.deinit();
             fixture.base.registry_entry.capabilities = contract.capabilities;
             fixture.base.registry_entry.json = mode == .native_schema;
-            fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
+            fixture.base.provider_binding.controls = contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
             fixture.base.request.controls = fixture.base.provider_binding.controls;
             fixture.base.request.response_guidance_mode = mode;
@@ -674,7 +674,7 @@ test "Bedrock serializes exactly the configured model maximum and no smaller all
             defer parsed.deinit();
             const inference_config = parsed.value.object.get("inferenceConfig").?.object;
             try std.testing.expectEqualStrings("16000", inference_config.get("maxTokens").?.number_string);
-            try std.testing.expectEqual(@as(usize, if (fixture.base.request.controls.temperature != null) 2 else 1), inference_config.count());
+            try std.testing.expectEqual(@as(usize, if (fixture.base.request.controls.temperatures != null) 2 else 1), inference_config.count());
             for ([_][]const u8{ "max_output_tokens", "max_tokens" }) |field| try std.testing.expect(std.mem.indexOf(u8, encoded, field) == null);
         }
     }
@@ -852,7 +852,7 @@ test "Bedrock reasoning controls follow the exact registered policy" {
             .content = &.{.{ .user = "input" }},
             .schema = .{ .prompt_only = "{}" },
             .schema_name = "test",
-            .temperature = .fixed,
+            .temperature = @import("domain/model_controls.zig").Temperature.init(0.1).?,
             .reasoning_effort = effort,
             .family = .claude,
             .max_output_tokens = .{ .tokens = 16000 },
@@ -1311,7 +1311,7 @@ test "Bedrock inference serializes 0.1 for every registered model and omits unsu
             fixture.bindBedrockContract(contract, null);
             // The unsupported variant is a synthetic registered capability contract.
             fixture.base.registry_entry.capabilities.temperature = temperature_supported;
-            fixture.base.provider_binding.controls = fixture.base.registry_entry.capabilities.inferenceControls();
+            fixture.base.provider_binding.controls = fixture.base.registry_entry.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
             fixture.base.request.controls = fixture.base.provider_binding.controls;
             try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
@@ -1325,7 +1325,7 @@ test "Bedrock inference serializes 0.1 for every registered model and omits unsu
                 try std.testing.expectEqualStrings("0.1", inference_config.get("temperature").?.number_string);
             } else try std.testing.expect(!inference_config.contains("temperature"));
             var altered = fixture.base.request;
-            altered.controls = .forTemperatureSupport(!temperature_supported);
+            altered.controls = .forTemperatureSupport(!temperature_supported, @import("test_fixtures/model_temperatures.zig").temperatures);
             var altered_binding = fixture.base.provider_binding;
             altered_binding.controls = altered.controls;
             try std.testing.expect(!altered.matchesBinding(fixture.base.provider_binding));
@@ -1560,6 +1560,6 @@ test "Luna request profile rejects unverified reasoning and temperature override
         try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, value));
     }
     var temperature = base;
-    temperature.temperature = .fixed;
+    temperature.temperature = @import("domain/model_controls.zig").Temperature.init(0.1).?;
     try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, temperature));
 }

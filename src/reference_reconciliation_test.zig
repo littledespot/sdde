@@ -718,7 +718,7 @@ pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixtu
     const candidates = try tokens.candidates(allocator, citable);
     const results = try allocator.alloc(r.extraction.RawResult, citable.chunks.entries.len);
     for (citable.chunks.entries, results) |chunk, *result| {
-        result.* = .{ .scope = .{ .state_id = citable.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try tokens.wire(allocator, try extraction.reply(allocator, chunk, "The user can confirm the request."), try tokens.classifications(allocator, candidates, chunk)) } };
+        result.* = .{ .scope = .{ .state_id = citable.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try tokens.wire(allocator, try extraction.reply(allocator, citable, chunk), try tokens.classifications(allocator, candidates, chunk)) } };
     }
     return .{ .inputs = citable, .extracted = try extraction.finish(allocator, citable, results), .text = try text.prepare(allocator, citable) };
 }
@@ -1174,9 +1174,9 @@ test "authorized content payloads cover every kind across statement and signal i
             const repair_input = body.value.object.get("repair").?.object;
             try std.testing.expect(!repair_input.contains("expected"));
             try std.testing.expectEqual(!insert, repair_input.contains("current_value"));
-            if (!insert) try std.testing.expectEqualStrings("preserved_token", repair_input.get("current_value").?.object.get("kind").?.string);
+            if (!insert) try std.testing.expectEqualStrings("exact_text", repair_input.get("current_value").?.object.get("kind").?.string);
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "exact_selected_token") == null);
-            for ([_][]const u8{ "{\"kind\":\"preserved_token\",\"token_id\":1}", "{\"token_id\":1}", "{}", "{\"current_value\":{}}" }) |wire|
+            for ([_][]const u8{ "{\"kind\":\"exact_text\",\"token_id\":1}", "{\"kind\":\"preserved_token\",\"token_id\":1}", "{\"token_id\":1}", "{}", "{\"current_value\":{}}" }) |wire|
                 try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, auth, packet, wire));
             const replacement = try repair.parse(a, auth, packet, try f.repairResponse(a, good));
             try std.testing.expectEqualDeep(good, replacement);
@@ -2295,7 +2295,8 @@ test "canonical summary redundancy normalizes while signal redundancy retains re
         const progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
         const input = if (global) try f.summaries(a, progress, fixture.context()) else try f.build_input.execute(a, progress);
         var parsed: r.Parsed = .{ .input = input, .proposal = if (global) .{ .global = try f.global(a, input) } else .{ .summary = try f.summary(a, input) } };
-        const segmented: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "The user can " } }, .{ .literal = .{ .value = "confirm the request." } } } } } };
+        // Claims quote their source (ADR 0036); this restates the first one in two fragments.
+        const segmented: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "Confirm a " } }, .{ .literal = .{ .value = "renewal." } } } } } };
         if (global) {
             const old = parsed.proposal.global.signals;
             const values = try a.alloc(r.SignalProposal, old.len + 1);
@@ -3162,7 +3163,7 @@ test "prepared reconciliation content repairs bind every selected wire member fo
         const results = try a.alloc(r.extraction.RawResult, fixture.inputs.chunks.entries.len);
         for (fixture.inputs.chunks.entries, results) |chunk, *result| result.* = .{
             .scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = chunk.id },
-            .result = .{ .response = try codec.encode(@import("domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = &.{.{ .content = good, .citations = &.{extraction.wholeChunk(chunk)} }}, .token_classifications = &.{} } }) },
+            .result = .{ .response = try codec.encode(@import("domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = &.{.{ .category = kind, .citations = try extraction.citableLines(a, fixture.inputs, chunk) }}, .token_classifications = &.{} } }) },
         };
         const extracted = try extraction.finish(a, fixture.inputs, results);
         const progress = try f.initialize(a, fixture.inputs, extracted, 2);

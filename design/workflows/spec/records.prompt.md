@@ -6,6 +6,8 @@ have been fulfilled.
 Include only supported records; optional families need no filler. Preserve each
 statement's role and obligation strength. Do not relabel positive requirements as
 assumptions or non-goals, invent conditions, or repeat records to fill sections.
-Acceptance criteria may test behavior stated by functional requirements.
+Each record's claim_ids name the assigned requirements it states. Every claim a
+functional requirement names must also be named by an acceptance criterion or edge
+case that tests it.
 Entity records are authored by the feature-wide entities unit. This batch
 authors only the other record families.

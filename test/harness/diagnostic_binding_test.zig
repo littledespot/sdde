@@ -20,7 +20,7 @@ const captured: debug.Description = .{
     .protocol_prompt = @import("../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "MOCK captured schema",
     .response_mode = .native_schema,
-    .controls = .{ .temperature = .fixed },
+    .controls = .{ .temperatures = @import("../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "medium",
     .operation_kind = .inference,
 };
@@ -62,7 +62,7 @@ test "diagnostic binding rejects unknown model effort and incompatible provider 
         switch (mode) {
             0 => rejected.provider = "unknown-provider",
             1 => rejected.provider_config = .{ .deadline_only = .{ .request_timeout = .{ .milliseconds = 1000 } } },
-            2 => rejected.controls.temperature = null,
+            2 => rejected.controls.temperatures = null,
             3 => rejected.model_slot = "",
             else => unreachable,
         }
@@ -111,7 +111,7 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
             1 => rejected.model = "MOCK.vendor.model-v1:0",
             2 => rejected.provider_config = .{ .aws_bedrock = .{ .region = .@"us-west-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
             3 => rejected.reasoning_effort = "high",
-            4 => rejected.controls.temperature = null,
+            4 => rejected.controls.temperatures = null,
             5 => rejected.response_mode = .prompt_only,
             else => unreachable,
         }
@@ -129,7 +129,7 @@ test "diagnostic authorization derives the family from each validated registered
             selected.provider = entry.provider.bytes;
             selected.model = model;
             selected.provider_config = .{ .aws_bedrock = .{ .region = std.enums.values(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion)[0], .family = entry.facts.bedrockFamily().?, .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } };
-            selected.controls = entry.capabilities.inferenceControls();
+            selected.controls = entry.capabilities.inferenceControls(@import("../../src/test_fixtures/model_temperatures.zig").temperatures);
             selected.response_mode = if (entry.capabilities.structured_response == .native_json_schema) .native_schema else .prompt_only;
             selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];
             var authority: binding.Authorization = .{ .binding = selected };

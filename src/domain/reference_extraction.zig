@@ -27,18 +27,13 @@ fn ContentOf(comptime Business: type, comptime Reference: type) type {
         scope_guard: Business,
     };
 }
-pub const Proposal = struct { content: ProposalContent, citations: []const @import("source_selections.zig").Selection };
+/// ADR 0036: a model claim is a category and the supplied source lines that
+/// state it. Its wording is quoted natively from those lines.
+pub const Proposal = struct { category: Kind, citations: []const @import("source_selections.zig").Id };
 pub const TextValidatedProposal = struct {
     content: Content,
     citations: []const @import("source_selections.zig").Selection,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
-    citations_origin: ?Origin = null,
-    citation_origins: []const ?@import("model_candidate_origin.zig").Origin,
-
-    pub fn rejectionOrigin(self: TextValidatedProposal, issue: @import("source_selections.zig").Issue) Error!?@import("model_candidate_origin.zig").Origin {
-        if (self.citations.len != self.citation_origins.len) return error.InvalidReferenceExtraction;
-        return if (issue.rejected == null) self.citations_origin else if (issue.index < self.citation_origins.len) self.citation_origins[issue.index] else error.InvalidReferenceExtraction;
-    }
 };
 pub const PreparedContent = union(enum) { model: Content, preserved_token: tokens.Value };
 pub const PreparedClaim = union(enum) { model: TextValidatedProposal, preserved_token: struct { value: tokens.Value, citation: evidence.ValidatedCitation } };
@@ -61,7 +56,8 @@ pub const ParsedResult = struct {
     token_classifications: []const tokens.Classification,
     outcome: union(enum) { claims: []const Proposal, no_feature_claim: text.ReferenceSemanticText, blocked: BlockReason },
 };
-pub const TextTarget = union(enum) { claim: usize, reason };
+/// Only a no-feature-claim reason is model text (ADR 0036).
+pub const TextTarget = union(enum) { reason };
 pub const TextOrigin = struct { target: TextTarget, origin: ?@import("model_candidate_origin.zig").Origin };
 pub fn textOrigin(entry: ParsedResult, target: TextTarget) ?@import("model_candidate_origin.zig").Origin {
     for (entry.text_origins) |value| if (std.meta.eql(value.target, target)) return value.origin;
@@ -79,7 +75,7 @@ pub const TextRejection = struct {
     target: TextTarget,
     origin: ?@import("model_candidate_origin.zig").Origin,
     issue: text.Issue,
-    observed: union(enum) { content: ProposalContent, reason: text.ReferenceSemanticText },
+    observed: union(enum) { reason: text.ReferenceSemanticText },
     dependencies: @import("atomic_repair.zig").Snapshot,
 };
 pub const TextResult = union(enum) { valid: TextValidated, invalid: TextRejection };
@@ -113,7 +109,6 @@ pub const ValidatedResult = struct {
     outcome: union(enum) { claims: []const ValidatedClaim, no_feature_claim: text.ValidatedReferenceSemanticText, blocked: BlockReason },
 };
 pub const Validated = struct { state_id: identity.StateId, entries: []const ValidatedResult };
-pub const Validation = union(enum) { valid: Validated, invalid: @import("reference_selection_validation.zig").Rejection };
 pub const ClaimId = identity.ClaimId;
 pub const CitationId = identity.CitationId;
 pub const Assignment = struct { claim_id: ClaimId, citation_ids: []const CitationId };

@@ -99,12 +99,12 @@ pub const Constraint = enum {
         };
         if (scope == .assignment) switch (scope.assignment) {
             .summary, .signals => {
-                if (scope.assignment == .summary and self == .nonempty_unique_allowed_claims) return "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds preserved-token statements.";
+                if (scope.assignment == .summary and self == .nonempty_unique_allowed_claims) return "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds exact-text statements.";
                 if (self == .nonempty_unique_allowed_claims) return "Select a nonempty, unique subset of assignment.claim_ids. Other claims are supporting evidence and cannot be selected.";
                 if (scope.assignment == .signals) return switch (self) {
                     .retained_claim_covered => "Cover every retained claim in assignment.claim_ids that is not already covered by accepted.signals.",
                     .unique_members => "Do not repeat a complete member set from accepted.signals or another returned signal. Different sets may overlap.",
-                    .token_projected => "Preserved-token claims are evidence only; native code supplies their signals.",
+                    .token_projected => "Exact-text claims are evidence only; native code supplies their signals.",
                     else => self.description(),
                 };
             },
@@ -117,7 +117,7 @@ pub const Constraint = enum {
             .unique_nonzero => "IDs must be nonzero and unique within their collection.",
             .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of the supplied claim IDs.",
             .matching_claim_content => "Authored content must match each selected claim's content.kind (representation) and, for model content, content.model.kind (semantic category).",
-            .exact_selected_token => "Preserved-token identity and exact content must match the source; native code supplies them.",
+            .exact_selected_token => "Exact-text identity and content must match the source; native code supplies them.",
             .no_self_relation => "A claim cannot relate to itself.",
             .same_content_kind => "Duplicate and superseded targets must match the original claim's content.kind (representation) and, for model content, content.model.kind (semantic category).",
             .native_token_disposition => "Native code retains each first exact byte value and marks later equal-byte original tokens as direct duplicates, independently of token kind. Token dispositions and relationships cannot be authored or repaired by the model.",
@@ -130,7 +130,7 @@ pub const Constraint = enum {
             .conflicting_related_claims => "Conflict membership must match the accepted incompatible claim groups.",
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
-            .token_projected => "Native code projects every preserved-token original, including equal-byte duplicates.",
+            .token_projected => "Native code projects every exact-text original, including equal-byte duplicates.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Explain every accepted conflict group; native code attaches its membership.",
         };

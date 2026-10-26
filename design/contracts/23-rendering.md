@@ -146,6 +146,12 @@ Renderers own:
   links from validated canonical lineage. Each citation retains its captured
   reference-state identity, source ID, block and span. Pending views have no
   generated-record links. The editable `spec.md` grammar is unchanged.
+- When any post-generation review is incomplete, `spec.md` renders one engine-owned
+  status line under its title, `**Review status: Incomplete — N of M review subjects
+  were not assessed.**`, pointing to `reference-context.md`, whose "Review status"
+  section lists each incomplete source or principle review's reason and unassessed
+  subjects ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
+  A fully reviewed specification renders neither.
 - The engine loads their canonical IR, renders the expected bytes, and checks the view for exact
   equality.
 - A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the
@@ -178,8 +184,14 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   output-exists failure, or separate overwrite approval.
 - Specify therefore overwrites `spec.md` and `reference-context.md`, including prior user edits
   to `spec.md`; it does not delete and recreate the feature directory.
-- Validation and predecessor/review gates still apply before commit; blocked or failed
-  executions publish no new specification. A clarification pause (`needs_user`)
+- Validation and predecessor/review gates still apply before commit. A Specify run that
+  fails because model work couldn't be completed, or ends `blocked`, publishes an
+  incomplete specification of its validated content: `spec.md` starts with
+  `**Status: Incomplete — the run failed.**` or `**Status: Incomplete — the run was
+  blocked.**` and names the step and diagnostic, each section not produced is marked not generated, and
+  `reference-context.md` has a "Run status" section
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Other failed
+  executions publish nothing. A clarification pause (`needs_user`)
   publishes the validated incomplete projection authorized by
   [ADR 0017](../decisions/0017-incomplete-specification-publication.md), together with
   current reference context, forms/registry and pending state. It cannot publish

@@ -147,7 +147,7 @@ pub const Table = struct {
             !facts.request.matchesBinding(facts.provider_binding.*)) return error.AuthorizationDenied;
         const record = self.operations.record(facts.operation_id) orelse return error.AuthorizationDenied;
         if (record.state != .assigned or !record.binding_id.eql(facts.request.binding_id) or
-            !record.model_visible_input_id.eql(facts.request.model_visible_input_id)) return error.AuthorizationDenied;
+            !record.model_visible_input_id.eql(facts.request.model_visible_input_id) or record.sampling != facts.request.sampling) return error.AuthorizationDenied;
     }
 
     fn findSlot(self: *Table, slot: preparation.Slot) ?*Entry {

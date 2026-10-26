@@ -397,5 +397,6 @@ fn facts() lifecycle.Assignment {
             .controls = .{},
         },
         .model_visible_input_id = .{ .bytes = "input" },
+        .sampling = .configured,
     };
 }

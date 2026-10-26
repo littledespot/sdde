@@ -7,8 +7,9 @@ const requests = @import("../application/model_request_workflow.zig");
 pub const Fault = struct {
     /// `principle_review` selects only post-generation principle assignments;
     /// `loss_review` selects only source-loss preservation comparisons.
-    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review, principle_review, loss_review },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member },
+    /// `records` selects only record-authoring generation requests.
+    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review, principle_review, loss_review, records },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, uncited_verdict, runaway, runaway_uncovered, runaway_partial_assignment },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -66,12 +67,7 @@ pub const Driver = struct {
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
     support_merges: usize = 0,
-    text_fault: bool = false,
-    failed_text_repair: bool = false,
-    text_repair_calls: usize = 0,
-    text_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     classification_original_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
-    classification_text_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     classification_failure_origin: ?@import("../domain/model_candidate_origin.zig").Origin = null,
     reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
@@ -90,9 +86,6 @@ pub const Driver = struct {
     repair_across_units: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
-    citation_fault: @FieldType(@import("spec_generation_responses.zig").Options, "citation_fault") = null,
-    failed_citation_repair: bool = false,
-    citation_repair_calls: usize = 0,
     missing_classifications: bool = false,
     failed_classification_repair: bool = false,
     malformed_classification_repair_once: bool = false,
@@ -106,6 +99,8 @@ pub const Driver = struct {
     calls: usize = 0,
     fault: ?Fault = null,
     fault_calls: usize = 0,
+    /// The complete plan a scripted runaway displaced, restored for the next call.
+    runaway_displaced: ?@import("../adapters/provider/fake_llm_provider.zig").CompletePlan = null,
     fault_requests: usize = 0,
     fault_request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null,
     rejected_operation: ?[]const u8 = null,
@@ -229,7 +224,11 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            if (self.runaway_displaced) |plan| {
+                self.fake.invocation_plan = .{ .complete = plan };
+                self.runaway_displaced = null;
+            }
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             std.testing.expectEqualStrings(if (current_request.id().purpose == .atomic_repair) "repair" else "spec_generation", current_request.prepared().?.binding_id.slot_id.bytes) catch unreachable;
@@ -268,7 +267,9 @@ pub const Driver = struct {
             var base_buffer: @import("../domain/model_request_handoff.zig").ContentBuffer = undefined;
             const base = validated.content(&base_buffer);
             const content = current_request.prepared().?.content;
-            std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
+            // A correction adds its guidance and evidence; a runaway re-send (ADR 0039)
+            // repeats its attempt's content unchanged.
+            std.testing.expectEqual(base.len + @as(usize, if (current_request.protocolCorrection() != null) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
             if (std.mem.eql(u8, current_request.prepared().?.result_schema_id.bytes, "extraction-schema")) {
                 const prose = if (current_request.part()) |part| std.mem.eql(u8, part.plan.parts()[part.part].id.bytes, "content") else true;
@@ -278,7 +279,7 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(guide, content[0].guidance) catch unreachable;
                 }
             }
-            if (attempt > 1) {
+            if (current_request.protocolCorrection() != null) {
                 const prompt = current_request.protocolPrompt().?;
                 if (!std.mem.eql(u8, prompt, content[base.len].guidance)) {
                     const repeated = std.fmt.allocPrint(arena.allocator(), "{s}\nThe previous correction still failed this validation.", .{prompt}) catch unreachable;
@@ -389,7 +390,7 @@ pub const Driver = struct {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 if (self.reconciliation_protocol_fault) |fault| {
                     if (fault == .foreign_content_once or fault == .foreign_content_always) {
-                        if (self.reconciliation_repair_calls == 0 or fault == .foreign_content_always) self.fake.invocation_plan.complete.content = "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}";
+                        if (self.reconciliation_repair_calls == 0 or fault == .foreign_content_always) self.fake.invocation_plan.complete.content = "{\"kind\":\"exact_text\",\"token_id\":{\"ordinal\":1}}";
                     } else if (self.reconciliation_repair_calls == 0 or fault == .envelope_then_json) {
                         const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
                         const echoed = std.json.Stringify.valueAlloc(arena.allocator(), input.value.object.get("repair").?, .{}) catch unreachable;
@@ -402,7 +403,7 @@ pub const Driver = struct {
                 if (self.malformed_classification_repair_once and self.classification_repair_calls == 0) self.fake.invocation_plan.complete.content = "{}";
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const definition = packet.resultDefinition().?.bytes;
-                if (std.mem.eql(u8, definition, "business_text_replacement")) self.text_repair_calls += 1 else if (self.citation_fault != null) self.citation_repair_calls += 1 else if (std.mem.eql(u8, definition, "classification_replacement")) self.classification_repair_calls += 1;
+                if (std.mem.eql(u8, definition, "classification_replacement")) self.classification_repair_calls += 1;
             }
             if (self.fault) |fault| {
                 const request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
@@ -414,7 +415,8 @@ pub const Driver = struct {
                     else => unreachable,
                 };
                 const definition = if (stage == .support) (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes else "";
-                const matches_stage = stage == fault.stage or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null) or
+                const records_request = stage == .generation and fault.stage == .records and std.mem.eql(u8, (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes, "records");
+                const matches_stage = stage == fault.stage or records_request or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null) or
                     (fault.stage == .principle_review and std.mem.eql(u8, definition, "principle_assignment_findings")) or (fault.stage == .loss_review and std.mem.eql(u8, definition, "preservation_comparisons"));
                 if (matches_stage and fault.shape == .forbidden_provenance) {
                     const references = view.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)].?;
@@ -479,6 +481,64 @@ pub const Driver = struct {
                     const repeated = attempt > 2 and fault.shape != .review_moving;
                     std.testing.expectEqual(@as(usize, @intFromBool(repeated)), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch unreachable;
                 }
+                if (matches_stage and fault.shape == .uncovered_scenario and attempt > 1) {
+                    // ADR 0038: an uncovered functional-requirement claim is a response-admission
+                    // defect; the bounded protocol correction names its exact location.
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                    std.testing.expectEqualStrings("uncovered_member", diagnostic.get("reason").?.string) catch unreachable;
+                    const path = diagnostic.get("path").?.string;
+                    std.testing.expect(std.mem.startsWith(u8, path, "/records/") and std.mem.indexOf(u8, path, "/claim_ids/") != null) catch unreachable;
+                    std.testing.expectEqualStrings(path, correction.value.object.get("expected").?.object.get("path").?.string) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, correction.value.object.get("explanation").?.string, "covering kind") != null) catch unreachable;
+                }
+                if (matches_stage and fault.shape == .uncited_verdict and attempt > 1) {
+                    // ADR 0042: a verdict the domain rule requires citations for,
+                    // returned without any, is a response-admission defect; the
+                    // bounded protocol correction resubmits the whole response.
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                    std.testing.expectEqualStrings("missing_required_item", diagnostic.get("reason").?.string) catch unreachable;
+                    std.testing.expectEqualStrings("/findings/0/value/citations", diagnostic.get("path").?.string) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, correction.value.object.get("explanation").?.string, "needs at least one item") != null) catch unreachable;
+                    const required = request.prepared().?.response_schema.requiredItems();
+                    std.testing.expectEqual(@as(usize, 1), required.len) catch unreachable;
+                    std.testing.expectEqualDeep(@as([]const []const u8, &.{ "conflicting", "uncertain" }), required[0].when.values) catch unreachable;
+                }
+                if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
+                    // ADR 0039: the re-send of a first runaway repeats its request at
+                    // the runaway-retry temperature, with no correction guidance.
+                    if (fault.shape == .runaway or attempt == 2) {
+                        std.testing.expect(request.runawayResend() != null) catch unreachable;
+                        std.testing.expectEqual(.runaway_resend, request.prepared().?.sampling) catch unreachable;
+                        for (content) |part| std.testing.expect(std.mem.indexOf(u8, part.bytes(), "rejected_response") == null) catch unreachable;
+                    }
+                }
+                if (matches_stage and fault.shape == .runaway_partial_assignment and attempt == 3) {
+                    // A re-sent response missing an assignment member is rejected
+                    // at admission and corrected exactly as a first response is.
+                    std.testing.expectEqual(.configured, request.prepared().?.sampling) catch unreachable;
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, .review_partial_assignment, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                    std.testing.expectEqualStrings("array_length", diagnostic.get("reason").?.string) catch unreachable;
+                    const collection = memberCollection((std.json.parseFromSlice(std.json.Value, arena.allocator(), body, .{}) catch unreachable).value);
+                    std.testing.expectEqualStrings(std.fmt.allocPrint(arena.allocator(), "/{s}", .{collection.array}) catch unreachable, diagnostic.get("path").?.string) catch unreachable;
+                }
+                if (matches_stage and fault.shape == .runaway_uncovered and attempt == 3) {
+                    // The re-sent response passed the same admission and its uncovered
+                    // claim takes the ordinary correction at the configured temperature.
+                    std.testing.expectEqual(.configured, request.prepared().?.sampling) catch unreachable;
+                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
+                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, .uncovered_scenario, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
+                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                    std.testing.expectEqualStrings("uncovered_member", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("reason").?.string) catch unreachable;
+                }
                 if (matches_stage and fault.shape == .alternating_protocol and attempt > 1) {
                     const evidence = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                     std.testing.expectEqualStrings(if (attempt % 2 == 0) "{" else "{}", evidence.value.rejected_response) catch unreachable;
@@ -501,7 +561,14 @@ pub const Driver = struct {
                         self.fault_request = request.id();
                         self.fault_requests += 1;
                     }
-                    if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {
+                    if (fault.shape == .runaway or ((fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt == 1)) {
+                        self.runaway_displaced = self.fake.invocation_plan.complete;
+                        self.fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2048 } };
+                    } else if (fault.shape == .runaway_uncovered) {
+                        self.fake.invocation_plan.complete.content = corrupt(arena.allocator(), body, .uncovered_scenario, attempt) catch unreachable;
+                    } else if (fault.shape == .runaway_partial_assignment) {
+                        self.fake.invocation_plan.complete.content = corrupt(arena.allocator(), body, .review_partial_assignment, attempt) catch unreachable;
+                    } else if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {
                         self.fake.invocation_plan.complete.content_diagnostic = .missing_final_text;
                     } else self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol or fault.shape == .alternating_missing) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape, attempt) catch unreachable;
                     self.fault_calls += 1;
@@ -689,16 +756,12 @@ pub const Driver = struct {
         };
         const diagnostic = @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = self.runner.envelope.slots }) catch unreachable;
         if (diagnostic) |value| switch (value) {
-            .extraction_text => |rejection| if (self.text_failure_origin == null) {
-                self.text_failure_origin = rejection.origin;
-            },
             .token_classifications => |rejection| if (self.classification_failure_origin == null) {
                 self.classification_failure_origin = rejection.origin;
                 const extraction = @import("../application/reference_extraction_workflow.zig");
                 const parsed = extraction.read(&.{ .slots = self.runner.envelope.slots }, extraction.parsed_schema, .parsed) catch unreachable;
                 for (parsed.payload().parsed.entries) |entry| if (entry.scope.chunk_id.eql(rejection.scope.chunk_id)) {
                     self.classification_original_origin = if (entry.producers) |producers| producers.classifications else entry.origin;
-                    if (entry.text_origins.len != 0) self.classification_text_origin = entry.text_origins[0].origin;
                 };
             },
             else => {},
@@ -1049,6 +1112,31 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
             try selected.put(allocator, "claim_ids", .{ .array = .init(allocator) });
             try value.put(allocator, "provenance", .{ .object = selected });
         }
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .uncovered_scenario) {
+        // Keep the functional requirements and drop every scenario that names their claims.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        var kept: usize = 0;
+        var requirements: usize = 0;
+        for (items.items) |item| {
+            const kind = item.object.get("content").?.object.get("kind").?.string;
+            if (std.mem.eql(u8, kind, "acceptance_criterion") or std.mem.eql(u8, kind, "edge_case")) continue;
+            if (std.mem.eql(u8, kind, "functional_requirement")) requirements += 1;
+            items.items[kept] = item;
+            kept += 1;
+        }
+        if (requirements == 0 or kept == items.items.len) return error.InvalidFixture;
+        items.shrinkRetainingCapacity(kept);
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .uncited_verdict) {
+        // The first finding becomes an uncertain verdict that cites nothing.
+        const items = &(parsed.value.object.getPtr("findings") orelse return error.InvalidFixture).array;
+        if (items.items.len == 0) return error.InvalidFixture;
+        const value = items.items[0].object.getPtr("value").?;
+        try value.object.put(allocator, "decision", .{ .string = "uncertain" });
+        value.object.getPtr("citations").?.array.clearRetainingCapacity();
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if (shape == .review_partial_assignment or shape == .review_repeated_member) {

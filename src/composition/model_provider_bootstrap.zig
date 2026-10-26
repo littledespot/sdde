@@ -43,6 +43,7 @@ pub const Assembly = struct {
         context: *anyopaque,
         selected: *const execution.SelectedWorkflow,
         models: *const config.ModelsConfig,
+        temperatures: @import("../domain/model_controls.zig").Temperatures,
         capability: *const bootstrap_root_registry.LLMProviderConfigCapability,
     ) orchestrator.Outcome {
         const self: *Assembly = @ptrCast(@alignCast(context));
@@ -61,6 +62,7 @@ pub const Assembly = struct {
             self.runtime,
             selected,
             models,
+            temperatures,
             &config_runner,
             self.registered_contracts,
         );

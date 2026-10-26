@@ -164,7 +164,7 @@ fn projectReference(a: std.mem.Allocator, inputs: authority.Inputs, context: pro
         },
         .token => |token| found: {
             const view = try @import("model_evidence.zig").project(a, records.items.entries);
-            for (view.preserved_tokens) |selected| if (std.meta.eql(selected.id, token)) break :found .{ .token = selected };
+            for (view.exact_texts) |selected| if (std.meta.eql(selected.id, token)) break :found .{ .token = selected };
             return error.InvalidRequiredAuthority;
         },
         .conflict => |conflict_id| found: {

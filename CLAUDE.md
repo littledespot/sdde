@@ -50,7 +50,11 @@ toward smaller semantic decisions hasn't been accepted.
   work around it with case-, field- or model-specific rules, sampling changes, extra
   retries, a second model or a weaker admission rule. The standalone evaluator's one
   mechanical correction is an explicit harness exception (user decision, 18 October
-  2026), not engine policy.
+  2026), not engine policy. The one engine exception is the runaway re-send of
+  [ADR 0039](design/decisions/0039-configured-temperatures-and-runaway-resend.md) (user
+  decision, 26 October 2026): an `output_limit` stop is re-sent once at the configured
+  `temperatureRunawayRetry`. It covers no other failure. Report runaways and re-sends
+  separately.
 - Count budget-stopped, malformed and exhausted runs as attempted workloads.
 - Report each of these separately: implementation complete, mechanical checks
   passed, semantic benefit demonstrated, brittleness reduced, scope qualified.

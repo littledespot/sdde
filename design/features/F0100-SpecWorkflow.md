@@ -11,8 +11,9 @@ extraction and reconciliation response parts with prompt-free native assembly;
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) own exact lineage,
 reconciliation phases and token authority; and
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md) keeps every
-post-generation source and principle finding as advice. One 100,000-token budget
-covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md)).
+post-generation source and principle finding as advice. One configured token budget
+covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md),
+[ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 [Implementation status](#implementation-status) and [FIX05](../../fixes/FIX05.md)
 record what is built and what remains.
 
@@ -283,8 +284,8 @@ explicit in the selected YAML:
 | Operation | Contract |
 | --- | --- |
 | `parse-reference-extraction-results` | Engine-scoped raw observations → closed parsed candidates. |
-| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates (§3.7). |
-| `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations or typed `invalid` selection diagnostics. Exact-token citations retain §3.4 validation. |
+| `validate-reference-extraction-text` | Parsed candidates, current toolchain, citable inputs and source-backed literal registry → text-validated candidates whose claim wording is quoted from their cited lines (§3.7, ADR 0036). |
+| `validate-reference-claims` | Citable inputs and prepared claims → validated canonical citations; an invalid selection is a failure. Exact-token citations retain §3.4 validation. |
 | `assign-reference-claim-identities` | Validated candidates → state-local claim/citation ordinals; no model-selected IDs. |
 | `build-reference-extraction-ledger` | Assigned identities → in-memory claims, citations and chunk outcomes; binds preserved tokens to their assigned citation IDs. |
 | `validate-reference-extraction-accounting` | Citable inputs, preserved-token assignments and ledger → exact total chunk/claim/citation/token coverage, with explicit `ok` or `blocked`; malformed coverage fails. |
@@ -293,14 +294,20 @@ explicit in the selected YAML:
   claims, claims: [...], token_classifications: [...]}` or `{kind: no_feature_claim,
   reason: ReferenceSemanticText, token_classifications: [...]}`.
 - These are shape descriptions, not literal JSON examples.
-- Each claim has only typed `content` and a `citations` collection of inclusive `{first,
-  last}` source-line IDs supplied in the request.
-- Missing citations are a typed repairable rejection.
+- Each claim has only a `category` and a `citations` set of source-line IDs
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md)). Admission restricts the IDs to
+  the chunk's citable (non-blank) lines.
+- The model supplies no wording. The engine quotes each claim's cited lines as written,
+  Markdown included, trimming each run only at its ends (never inside fenced code) and
+  joining separate runs with an ellipsis line. A claim spanning several top-level list
+  items becomes one claim per item, with the same category; cited lines outside the
+  items become their own claims ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  reinstated this split).
 - The engine reconstructs exact bytes and coordinates; no quotation or coordinate echo
   is accepted.
-- Content kinds are `business`, `design`, `technical`, `validation`,
+- Categories are `business`, `design`, `technical`, `validation`,
   `implementation_assumption`, `open_question` and `scope_guard`.
-- `business` and `scope_guard` use `BusinessText`; other kinds use
+- `business` and `scope_guard` claims are quoted as `BusinessText`; other categories as
   `ReferenceSemanticText`.
 - Text validation establishes syntax and permitted references, **not accepted meaning or
   requirements**.
@@ -435,7 +442,7 @@ file/network access, output write, clarification change or completion transition
 | --- | --- |
 | `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
 | `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
-| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications and valid scoped citation selections, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
+| `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
 
@@ -506,16 +513,13 @@ Retry allowances and the workflow token budget are unchanged.
   `token_classifications` field and all missing, duplicate, unknown or forbidden
   candidate IDs.
 - Invalid source authority remains a failure.
-- A repair authorization selects that chunk's classification collection, one invalid
-  citation selection, or an empty claim-citation collection.
-- The model cannot change claim meaning, source bytes, other selections/chunks or the
-  target.
-- The selected replacement schema reuses the corresponding generation definition:
-  `classification_replacement`, `source_selection_replacement`, or
-  `citation_replacement`.
-- Citation requests also include the unchanged claim.
-- After compare-and-swap merge, the shared reference-selection validation runs again
-  before token and claim construction and full ledger checks.
+- A repair authorization selects that chunk's classification collection. Citations are
+  bounded at admission and are never repaired (ADR 0036).
+- The model cannot change claim meaning, source bytes, other chunks or the target.
+- The selected replacement schema reuses the `classification_replacement` generation
+  definition.
+- After compare-and-swap merge, the shared classification validation runs again before
+  token and claim construction and full ledger checks.
 - The text-validated candidate and selection result use captured retention, like
   specification repair: descendants retain candidate evidence while current
   source/policy generations remain in their authority lineage.
@@ -887,11 +891,11 @@ validators:
   rejections with the unit, rule, observed/expected constraint, revision and producing
   origin.
 - Invalid corpus/history/context and operational errors remain failures.
-- Extraction text retains its native lexical cause and content location before text
-  acceptance, including `no_feature_claim` reasons.
-- A successful text repair must still pass classification, selection and
-  constructed-claim accounting; a constructed model-selection rejection returns to its
-  original selection target and retires derived claims/tokens.
+- Extraction text retains its native lexical cause and location before text
+  acceptance. Only a `no_feature_claim` reason is model text; quoted claim text that
+  fails is an engine defect (ADR 0036).
+- A successful reason repair must still pass classification and constructed-claim
+  accounting.
 - Engine-derived corruption does not trigger a model call.
 
 - Repair authorizers consume retained rejections and verify current association, exact
@@ -1152,6 +1156,23 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
+When a Specify run fails because model work couldn't be completed (a failed request,
+exhausted correction or repair, or the token budget), or ends `blocked`, after the
+reference snapshot validated, it publishes an incomplete specification
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)):
+
+1. only content that passed every check that applies to it on its own: the validated
+   reference snapshot's cited source requirements and each generated unit admitted and
+   validated before the failure;
+2. `spec.md` starting `**Status: Incomplete — the run failed.**` or
+   `**Status: Incomplete — the run was blocked.**`, naming the step
+   and diagnostic, with each section not produced marked not generated, and a "Run
+   status" section in `reference-context.md`;
+3. one warning `run.incomplete_published`, then the `spec_incomplete` workflow
+   state, written last;
+4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
+   next run starts at `start`.
+
 - On a Specify rerun, the engine MUST overwrite existing `spec.md` and
   `reference-context.md` with the newly validated output at the same paths, including
   prior edits to `spec.md`.
@@ -1213,7 +1234,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
     gaps through the shared authority gate even if model evidence says `supported`.
   - The scenario-coverage obligation requires model-assisted comparison of the complete
     candidate with source claims/citations, including distinct observable flows and
-    their triggers/results.
+    their triggers/results. Natively, each claim a functional requirement names must
+    also be named by an acceptance criterion or edge case in the same records response
+    ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
   - Missing behavior cannot be satisfied by citation presence or a title.
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
@@ -1239,9 +1262,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - The native generation candidate is a closed content/clarification/inconclusive union.
 - Content units are a feature brief (title, description, primary goal), primary story,
   feature-wide entity applicability plus entity records, or a source-group batch
-  of non-entity records (§17.3). Each entity independently selects its support.
-- Native validation normalizes typed text, checks closed record variants and identical
-  normalized records, and keeps questions outside specification content.
+  of non-entity records (§17.3). Each entity independently selects its support; each
+  non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
+- Native validation normalizes typed text, checks closed record variants, identical
+  normalized records and covered restatements (ADR 0035), and keeps questions outside
+  specification content.
 
 - The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`
@@ -1298,7 +1323,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   stable diagnostic order.
 - Record-field and relationship locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
-  blocked. Closed variant/schema correction handles malformed record shapes; there
+  blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
+  single-statement record that restates the primary user story or another
+  single-statement kind is deleted only when the kept occurrence covers its evidence. A
+  functional requirement and the story are always kept, and an uncovered restatement is
+  not flagged. Closed variant/schema correction handles malformed record shapes; there
   is no whole-record kind replacement. The feature-wide entities unit can delete one contradictory entity or insert one missing required entity,
   bound to the unchanged applicability decision and fixed feature-basis selection.
   Record batches cannot author or insert entities.
@@ -1367,6 +1396,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   acceptance.
 - Protocol corrections remain separate provider attempts.
 
+- A records response whose functional-requirement claim no acceptance criterion or edge
+  case names is rejected at admission as `uncovered_member` and takes the request's
+  existing protocol correction; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+  each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or
   change another owning association, so no destination family, invented statement or
@@ -1441,7 +1474,15 @@ YAML definition.
     accounting, valid `reference-context.md`, no open `SNN`, and workflow state
     `specified`. ADR 0015 additionally requires current policy-assessment bindings,
     complete or explicitly incomplete under ADR 0023; findings are advice and do not
-    assert that policy decisions are resolved.
+    assert that policy decisions are resolved. A provider `output_limit` stop is first
+    re-sent once ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+    Incomplete review is published with a review-status line in `spec.md`, its
+    reasons and unassessed subjects in `reference-context.md`, and a
+    `review.incomplete` log event
+    ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). A
+    `conflicting` or `uncertain` principle verdict without citations is rejected at
+    response admission and corrected with the whole response
+    ([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)).
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.

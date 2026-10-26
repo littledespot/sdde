@@ -1,4 +1,3 @@
-//! Fixed current temperature used by offline diagnostic metadata.
-const controls = @import("../domain/model_controls.zig");
-
-pub const temperature = controls.Temperature.fixed.wireValue();
+//! The temperature frozen calibration protocols recorded. It is frozen evidence,
+//! independent of any configured temperature; ADR 0039 keeps it.
+pub const temperature: f64 = 0.1;

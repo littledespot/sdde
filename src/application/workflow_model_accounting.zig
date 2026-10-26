@@ -123,7 +123,7 @@ pub const State = struct {
             .assign_inference => |facts| facts,
             .invoke, .terminate => return error.InvalidAccountingTransition,
         };
-        if (!facts.binding_id.eql(request.binding_id) or !facts.model_visible_input_id.eql(request.model_visible_input_id)) return error.InvalidAccountingTransition;
+        if (!facts.binding_id.eql(request.binding_id) or !facts.model_visible_input_id.eql(request.model_visible_input_id) or facts.sampling != request.sampling) return error.InvalidAccountingTransition;
         const successor = try lifecycle.apply(self.current_operations, self.operationAuthority(requests), transition);
         return self.retainOperation(lifecycle.AssignedOperation, operation_schema, requests, successor, try successor.requireAssigned(id));
     }
@@ -181,7 +181,7 @@ pub const State = struct {
 
     fn validateOperation(self: *const State, record: *const lifecycle.Record, request: *const provider.IdentifiedProviderNeutralModelRequest) Error!void {
         if (record.id.model_request_id != request.model_request_id or
-            !record.binding_id.eql(request.binding_id) or !record.model_visible_input_id.eql(request.model_visible_input_id) or
+            !record.binding_id.eql(request.binding_id) or !record.model_visible_input_id.eql(request.model_visible_input_id) or record.sampling != request.sampling or
             record.id.model_attempt_ordinal.value != accounting.accounting(self.attempts).attemptsReserved(request.model_request_id)) return error.InvalidAccountingTransition;
     }
 

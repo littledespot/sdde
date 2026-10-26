@@ -224,9 +224,18 @@ pub fn recognizeValue(a: std.mem.Allocator, references: refs.Records, value: spe
 }
 
 fn recognizeValueDetailed(a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue, field: text.field_policy.Field, fixed: ?[]const r.ClaimId) (Error || error{AmbiguousExactValue})!spec.BusinessValue {
-    if (text.field_policy.get(field).exact_copy == .prohibited) return value;
-    const occurrences = try exactOccurrences(a, references, fixed);
+    // A field that can't hold exact copies keeps a recognised value as text, but
+    // still loses the code delimiters around it (ADR 0036).
+    const prohibited = text.field_policy.get(field).exact_copy == .prohibited;
+    if (prohibited) for (value.segments) |segment| if (segment == .exact_copy) return value;
+    // Removing delimiters there needs no lineage, so every eligible value counts.
+    const occurrences = try exactOccurrences(a, references, if (prohibited) null else fixed);
     defer a.free(occurrences);
+    // Later checks match every eligible value, so delimiter removal is decided
+    // against all of them, whatever this unit's lineage (ADR 0036).
+    const shared = prohibited or fixed == null;
+    const eligible = if (shared) occurrences else try exactOccurrences(a, references, null);
+    defer if (!shared) a.free(eligible);
     var segments: std.ArrayList(text.BusinessSegment) = .empty;
     errdefer {
         for (segments.items) |segment| if (segment == .literal) a.free(segment.literal.value);
@@ -264,24 +273,48 @@ fn recognizeValueDetailed(a: std.mem.Allocator, references: refs.Records, value:
             };
             continue;
         }
-        var found = try recognition.recognize(a, run.items, occurrences, .{ .left = if (run_start == 0) .field_edge else .reference_boundary, .right = if (index == value.segments.len) .field_edge else .reference_boundary });
+        const edges: @import("exact_value_boundary.zig").Edges = .{ .left = if (run_start == 0) .field_edge else .reference_boundary, .right = if (index == value.segments.len) .field_edge else .reference_boundary };
+        var found = try recognition.recognize(a, run.items, occurrences, edges);
         defer found.deinit(a);
+        const cuts: []const recognition.Witness = if (found == .matched) try recognition.delimited(a, run.items, found.matched, eligible, edges) else &.{};
+        defer if (found == .matched) a.free(cuts);
+        if (prohibited) {
+            try appendWithoutDelimiters(a, &segments, run.items, cuts);
+            continue;
+        }
         switch (found) {
             .rejected => return error.InvalidTypedText,
             .ambiguous => return error.AmbiguousExactValue,
             .no_match => if (run.items.len != 0) try appendLiteral(a, &segments, run.items),
-            .matched => |witnesses| {
+            .matched => {
                 var cursor: usize = 0;
-                for (witnesses) |witness| {
-                    if (witness.start_byte > cursor) try appendLiteral(a, &segments, run.items[cursor..witness.start_byte]);
+                for (cuts) |witness| {
+                    // The engine formats exact values; their code delimiters go (ADR 0036).
+                    if (witness.outerStart() > cursor) try appendLiteral(a, &segments, run.items[cursor..witness.outerStart()]);
                     try segments.append(a, .{ .exact_copy = .{ .claim_id = witness.claim_id } });
-                    cursor = witness.end_byte;
+                    cursor = witness.outerEnd();
                 }
                 if (cursor < run.items.len) try appendLiteral(a, &segments, run.items[cursor..]);
             },
         }
     }
     return .{ .segments = try segments.toOwnedSlice(a) };
+}
+
+/// A field that can't hold exact copies keeps each value's bytes as text.
+fn appendWithoutDelimiters(a: std.mem.Allocator, segments: *std.ArrayList(text.BusinessSegment), bytes: []const u8, witnesses: []const recognition.Witness) std.mem.Allocator.Error!void {
+    var value: std.ArrayList(u8) = .empty;
+    errdefer value.deinit(a);
+    var cursor: usize = 0;
+    for (witnesses) |witness| {
+        try value.appendSlice(a, bytes[cursor..witness.outerStart()]);
+        try value.appendSlice(a, bytes[witness.start_byte..witness.end_byte]);
+        cursor = witness.outerEnd();
+    }
+    try value.appendSlice(a, bytes[cursor..]);
+    const owned = try value.toOwnedSlice(a);
+    errdefer a.free(owned);
+    try segments.append(a, .{ .literal = .{ .value = owned } });
 }
 
 fn appendLiteral(a: std.mem.Allocator, segments: *std.ArrayList(text.BusinessSegment), bytes: []const u8) std.mem.Allocator.Error!void {
@@ -457,11 +490,8 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
     }
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
-    const recognized = try recognizeValue(arena.allocator(), refs.records(context.references), accepted, field, null);
-    if (!try sameValue(arena.allocator(), accepted, recognized)) {
-        inspection.text_issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = if (accepted.segments.len == 0) 0 else accepted.segments.len - 1, .field = field };
-        return error.InvalidTypedText;
-    }
+    // Admission is idempotent; a re-check failure is a typed candidate issue.
+    _ = try recognizeInspected(.canonical, arena.allocator(), refs.records(context.references), accepted, field, inspection);
     return accepted;
 }
 
@@ -483,7 +513,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
     }
     for (candidate.records) |record| {
         if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(record.proposal.content), record.proposal.source_group_ids.len)) return error.InvalidSpecification;
-        const groups = try validateAssociation(.canonical, a, inputs, references, record.proposal.source_group_ids, record.proposal.provenance, .content);
+        const groups = try validateRecordAssociation(.canonical, a, inputs, references, record.proposal);
         defer a.free(groups);
         const values = try recordValues(a, record.proposal.content);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
@@ -525,6 +555,26 @@ pub fn validateAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocato
     }
     return selected.source_group_ids;
 }
+/// An entity selects whole groups. Any other record binds its batch's one group
+/// and names the claims it supports from it (ADR 0038): a nonempty subset of the
+/// group's claims, in the group's accepted order.
+fn validateRecordAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocator, inputs: evidence.Inputs, references: refs.Records, record: spec.Values(boundary).RecordProposal) Error![]const r.SignalId {
+    if (record.content == .entity) return validateAssociation(boundary, a, inputs, references, record.source_group_ids, record.provenance, .content);
+    const selected = @import("specification_source_binding.zig").resolveGroups(a, references, inputs, record.source_group_ids, .content) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecification;
+    defer a.free(selected.selection.claim_ids);
+    errdefer a.free(selected.source_group_ids);
+    if (record.provenance.claim_ids.len == 0) return error.InvalidSpecification;
+    var next: usize = 0;
+    for (record.provenance.claim_ids) |id| {
+        while (next < selected.selection.claim_ids.len and selected.selection.claim_ids[next].ordinal != id.ordinal) next += 1;
+        if (next == selected.selection.claim_ids.len) return error.InvalidSpecification;
+        next += 1;
+    }
+    if (boundary == .canonical) {
+        for (selected.source_group_ids, record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
+    }
+    return selected.source_group_ids;
+}
 pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.AttributedValue {
     return inspectAttributedFor(boundary, allocator, validator, context, candidate, field, .content, inspection);
 }
@@ -547,7 +597,7 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
     defer scratch.deinit();
     inspection.* = .{};
     if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(candidate.content), candidate.source_group_ids.len)) return error.InvalidSpecification;
-    const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, .content);
+    const groups = try validateRecordAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate);
     errdefer allocator.free(groups);
     var recognized_content = candidate.content;
     switch (candidate.content) {

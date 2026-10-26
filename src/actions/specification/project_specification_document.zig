@@ -14,6 +14,8 @@ pub const Action = struct {
         if (authority.projection != .specification or authority.specification == null or authority.brief == null or
             !std.mem.eql(u8, authority.feature.bytes, context.inputs.corpus.feature_id.bytes) or
             !try spec.sameContent(allocator, authority.specification.?, content)) return error.InvalidSpecification;
-        return projection.project(allocator, context, content);
+        var document = try projection.project(allocator, context, content);
+        document.review_status = try projection.reviewStatus(authority.seeds.len, authority.advice_stop, authority.principle_assessment orelse return error.InvalidSpecification);
+        return document;
     }
 };

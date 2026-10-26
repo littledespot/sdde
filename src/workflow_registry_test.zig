@@ -294,7 +294,6 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     try std.testing.expectEqual(@as(usize, 1), content_schema.root().object.len);
     try std.testing.expectEqualStrings("answer", content_schema.root().object[0].name);
     try std.testing.expectEqual(@as(u32, 64), content_schema.root().object[0].schema.string.maximum);
-    try std.testing.expectEqual(@as(u64, 1000), resolved.authority.total_model_token_budget.value);
     const retry_authority = resolved.authority.steps[0].retry_authority.?;
     try std.testing.expectEqualStrings("hello", retry_authority.workflow_id.bytes);
     try std.testing.expectEqualStrings("run", retry_authority.operation_instance_id.bytes);
@@ -384,7 +383,6 @@ fn validGraph(declared: definition.Definition) compilation.CompiledWorkflow {
             .workflow_version = declared.workflow_version,
             .invocation_operation_id = declared.invocation_operation_id,
             .policy_profile_id = declared.policy_profile_id,
-            .total_model_token_budget = .{ .value = 1000 },
             .start_step_id = declared.start_step_id,
             .invocation_outputs = &.{},
             .resources = &.{},

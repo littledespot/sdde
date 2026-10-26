@@ -5,14 +5,23 @@ const snapshot = @import("reference_snapshot.zig");
 const r = @import("reference_reconciliation.zig");
 const markdown = @import("specification_markdown.zig");
 const principles = @import("principle_assessment.zig");
+const authority = @import("required_authority.zig");
 pub const Error = snapshot.Error || markdown.Error || principles.Error;
 
-pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment: ?principles.Canonical, traces: ?[]const @import("specification_projection.zig").RequirementTrace) Error![]const u8 {
+/// `source_review` is the stored source-review advice stop; `assessment` holds
+/// principle review with its own stop (ADR 0040).
+pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, source_review: ?authority.AdviceStop, assessment: ?principles.Canonical, traces: ?[]const @import("specification_projection.zig").RequirementTrace) Error![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
     const w = &out.writer;
     try write(w, "# Reference Context\n\nReference state: ");
     try markdown.code(w, value.inputs.corpus.state_id.bytes);
+    const principle_review = if (assessment) |review| review.advice_stop else null;
+    if (source_review != null or principle_review != null) {
+        try write(w, "\n\n## Review Status\n\nPost-generation review is incomplete. A subject that was not assessed has no finding; it did not pass.");
+        if (source_review) |stopped| try incompleteReview(w, "Source Review", stopped, null);
+        if (principle_review) |stopped| try incompleteReview(w, "Principle Review", stopped, assessment.?.requirements);
+    }
     try write(w, "\n\n## Referenced Files\n\n");
     for (value.inputs.corpus.sources) |source| {
         w.print("- **SRC-{d}** ", .{source.id.ordinal}) catch return error.OutOfMemory;
@@ -89,9 +98,6 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
         w.print("Registry {d}, revision {d}. Selected chunks:", .{ review.registry.id.ordinal, review.registry.id.revision }) catch return error.OutOfMemory;
         for (review.selection.chunks) |id| w.print(" POL-{d}", .{id.ordinal}) catch return error.OutOfMemory;
         try write(w, "\n\n### Advisory Principle Findings\n\n");
-        if (review.advice_stop) |stopped| {
-            w.print("Assessment incomplete ({s}): {d} of {d} subjects were not assessed. Missing advice is not a compatible finding.\n\n", .{ @tagName(stopped.reason), stopped.unassessed.len, review.requirements.len }) catch return error.OutOfMemory;
-        }
         var findings: usize = 0;
         for (review.evidence) |finding| {
             if (finding.finding == .supported) continue;
@@ -117,6 +123,35 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
         if (findings == 0) try write(w, "No adverse principle findings recorded.\n");
     }
     return out.toOwnedSlice();
+}
+
+/// Principle subjects are named by their decision ordinal and reviewed slot, as
+/// findings are; source subjects by the unit the view already names.
+fn incompleteReview(w: *std.Io.Writer, comptime title: []const u8, stopped: authority.AdviceStop, principle_subjects: ?[]const authority.Id) Error!void {
+    w.print("\n\n### " ++ title ++ ": Incomplete ({s})\n\n{d} of {d} subjects were not assessed:\n", .{ @tagName(stopped.reason), stopped.unassessed.len, stopped.requirements.len }) catch return error.OutOfMemory;
+    for (stopped.unassessed) |id| {
+        try write(w, "\n- **");
+        if (principle_subjects) |subjects| {
+            if (id.unit != .decision) return error.InvalidRequiredAuthority;
+            const ordinal = id.unit.decision.ordinal;
+            if (ordinal == 0 or ordinal > subjects.len) return error.InvalidRequiredAuthority;
+            const subject = subjects[ordinal - 1];
+            w.print("REVIEW-{d}** ({s}/{s})", .{ ordinal, @tagName(subject.kind), @tagName(subject.slot) }) catch return error.OutOfMemory;
+            continue;
+        }
+        switch (id.unit) {
+            .feature => try write(w, "Feature"),
+            .record => |record| w.print("{s}-{d:0>3}", .{ record.kind.prefix(), record.ordinal }) catch return error.OutOfMemory,
+            .source => |source| w.print("SRC-{d}", .{source.ordinal}) catch return error.OutOfMemory,
+            .signal => |signal| w.print("SIG-{d}", .{signal.ordinal}) catch return error.OutOfMemory,
+            .conflict => |conflict| w.print("CON-{d}", .{conflict.ordinal}) catch return error.OutOfMemory,
+            .token => |token| w.print("TOK-{d}", .{token.ordinal}) catch return error.OutOfMemory,
+            .decision => return error.InvalidRequiredAuthority,
+        }
+        w.print("** ({s}", .{@tagName(id.slot)}) catch return error.OutOfMemory;
+        if (id.member != 0) w.print(", member {d}", .{id.member}) catch return error.OutOfMemory;
+        try write(w, ")");
+    }
 }
 
 fn write(w: *std.Io.Writer, bytes: []const u8) Error!void {

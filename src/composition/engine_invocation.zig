@@ -74,6 +74,7 @@ pub const Assembly = struct {
         self.provider_outcome = self.provider_bootstrap.invoke(
             selected,
             &self.services.config.config().models,
+            self.services.config.config().temperatures(),
             self.services.roots.registry().llmProviderConfig(),
         );
         return switch (self.provider_outcome.?) {
@@ -85,6 +86,7 @@ pub const Assembly = struct {
                     self.services.logs.barrier(),
                     self.selection.runtime,
                     self.preparedProviderServices(),
+                    self.services.config.config().workflowTokenBudget,
                 );
                 self.pipeline_runner.?.provider_clock = self.provider_clock;
                 self.pipeline_runner.?.publication_finalizer = self.finalizer;

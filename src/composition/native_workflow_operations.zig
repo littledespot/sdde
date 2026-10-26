@@ -108,7 +108,6 @@ pub const Assembly = struct {
     extract_structured_facts: structured_tokens.Extract,
     assign_token_candidates: structured_tokens.AssignCandidates,
     validate_token_classifications: extraction.ValidateSelections,
-    retain_claim_rejection: extraction_repair.RetainClaimRejection,
     authorize_summary_repair: reconciliation_repair.Authorize(.summary),
     authorize_dispositions_repair: reconciliation_repair.Authorize(.dispositions),
     authorize_signals_repair: reconciliation_repair.Authorize(.signals),
@@ -227,7 +226,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 171 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 170 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -290,7 +289,6 @@ pub const Assembly = struct {
             .extract_structured_facts = .{ .allocator = allocator },
             .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
-            .retain_claim_rejection = .{ .allocator = allocator },
             .authorize_summary_repair = .{ .allocator = allocator },
             .authorize_dispositions_repair = .{ .allocator = allocator },
             .authorize_signals_repair = .{ .allocator = allocator },
@@ -509,7 +507,6 @@ pub const Assembly = struct {
             entry(structured_tokens.Extract, &self.extract_structured_facts),
             entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(extraction.ValidateSelections, &self.validate_token_classifications),
-            entry(extraction_repair.RetainClaimRejection, &self.retain_claim_rejection),
             entry(reconciliation_repair.Authorize(.summary), &self.authorize_summary_repair),
             entry(reconciliation_repair.Authorize(.dispositions), &self.authorize_dispositions_repair),
             entry(reconciliation_repair.Authorize(.signals), &self.authorize_signals_repair),
@@ -626,32 +623,26 @@ const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig")
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .needs_user, .blocked, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.toolchain@1",
     .allowed_capabilities = &.{ capabilities.toolchain_read, capabilities.toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.reference-read@1",
     .allowed_capabilities = &.{capabilities.reference_read},
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.directory-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.feature-input-read@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read },
     .allowed_terminal_outcomes = &.{ .ok, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 }, .{
     .id = "core.reference-ingestion@1",
     .allowed_capabilities = &.{ capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser },
     .allowed_terminal_outcomes = &.{ .ok, .invalid, .blocked, .failed, .cancelled },
-    .total_model_token_budget = .{ .value = 100_000 },
 } };
 
 fn invocationEntry(comptime T: type, context: *T) operations.Entry {

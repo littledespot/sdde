@@ -31,7 +31,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .content = content,
         .schema = .{ .native = .{ .guidance = schema, .structure = schema } },
         .schema_name = "rubric_judgment",
-        .temperature = if (config.temperature != null) .fixed else null,
+        .temperature = if (config.temperature) |value| @import("../../src/domain/model_controls.zig").Temperature.init(value) orelse return error.InvalidEvaluationContract else null,
         .reasoning_effort = @import("../../src/adapters/provider/model_text_request.zig").reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
         .family = config.family.?,
         .max_output_tokens = config.max_output_tokens,

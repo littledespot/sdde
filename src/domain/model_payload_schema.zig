@@ -33,6 +33,29 @@ fn memberKey(item: envelope.Value, property: []const u8) ?i64 {
     return exactInteger(key.number) catch null;
 }
 
+fn hasKind(item: envelope.Value, kind_property: []const u8, kinds: []const []const u8) bool {
+    if (item != .object) return false;
+    const tagged = item.object.get(kind_property) orelse return false;
+    if (tagged != .object) return false;
+    const kind = tagged.object.get("kind") orelse return false;
+    if (kind != .string) return false;
+    for (kinds) |name| if (std.mem.eql(u8, kind.string, name)) return true;
+    return false;
+}
+fn listedValue(value: envelope.Value) ?i64 {
+    if (value != .number) return null;
+    return exactInteger(value.number) catch null;
+}
+fn covered(items: *const envelope.Array, coverage: schema.Coverage, wanted: i64) bool {
+    for (0..items.count()) |index| {
+        const item = items.at(index).?;
+        if (!hasKind(item, coverage.rule.kind_property, coverage.rule.covering)) continue;
+        const values = item.object.get(coverage.property).?.array;
+        for (0..values.count()) |position| if (listedValue(values.at(position).?) == wanted) return true;
+    }
+    return false;
+}
+
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.
 pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnostic {
@@ -50,6 +73,17 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     continue;
                 };
                 if (validateValue(child, property.schema)) |diagnostic| return diagnostic.within(.{ .property = property.name });
+            }
+            // ADR 0042: an array needs an item when its sibling takes a listed
+            // value. The location names the empty array.
+            for (properties) |property| {
+                if (property.schema.* != .array) continue;
+                const rule = property.schema.array.required_when orelse continue;
+                const list = object.get(property.name) orelse continue;
+                if (list.array.count() != 0) continue;
+                const sibling = object.get(rule.property) orelse continue;
+                if (sibling != .string) continue;
+                for (rule.values) |listed| if (std.mem.eql(u8, sibling.string, listed)) return (reject(.missing_required_item, property.schema)).within(.{ .property = property.name });
             }
         },
         .string => |bounds| {
@@ -107,6 +141,20 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                 for (1..count) |index| {
                     const key = memberKey(value.array.at(index).?, members.property);
                     for (0..index) |prior| if (memberKey(value.array.at(prior).?, members.property) == key) return (reject(.duplicate_member, node)).item(index);
+                }
+            }
+            // ADR 0038: every value a covered item names needs a covering item
+            // that names it too. The location names the uncovered value.
+            if (contract.coverage) |coverage| {
+                const listed = schema.findProperty(contract.items.object, coverage.property).?.schema.array.items;
+                for (0..count) |index| {
+                    const item = value.array.at(index).?;
+                    if (!hasKind(item, coverage.rule.kind_property, coverage.rule.covered)) continue;
+                    const values = item.object.get(coverage.property).?.array;
+                    for (0..values.count()) |position| {
+                        const wanted = listedValue(values.at(position).?) orelse continue;
+                        if (!covered(value.array, coverage, wanted)) return (reject(.uncovered_member, listed)).within(.{ .index = position }).within(.{ .property = coverage.property }).within(.{ .index = index });
+                    }
                 }
             }
         },

@@ -4,6 +4,13 @@
 const std = @import("std");
 
 pub fn check(a: std.mem.Allocator, packet: *const @import("../domain/model_input_packet.zig").Packet, schema: *const @import("../domain/model_result_schema.zig").Schema, selected_output: []const u8, wrapped_output: ?[]const u8) !void {
+    return prepared(a, packet, schema, selected_output, wrapped_output, .model_text);
+}
+/// A response with no model text, such as an ADR 0036 claim proposal.
+pub fn checkWithoutText(a: std.mem.Allocator, packet: *const @import("../domain/model_input_packet.zig").Packet, schema: *const @import("../domain/model_result_schema.zig").Schema, selected_output: []const u8, wrapped_output: ?[]const u8) !void {
+    return prepared(a, packet, schema, selected_output, wrapped_output, .none);
+}
+fn prepared(a: std.mem.Allocator, packet: *const @import("../domain/model_input_packet.zig").Packet, schema: *const @import("../domain/model_result_schema.zig").Schema, selected_output: []const u8, wrapped_output: ?[]const u8, text: enum { model_text, none }) !void {
     const handoff = @import("../domain/model_request_handoff.zig");
     const fields = @import("../domain/model_text_field.zig");
     const strict = @import("../domain/strict_json.zig");
@@ -46,7 +53,10 @@ pub fn check(a: std.mem.Allocator, packet: *const @import("../domain/model_input
         try std.testing.expect(!body.object.contains("field_rules"));
     } else try std.testing.expectEqual(active_count, body.object.get("field_rules").?.array.items.len);
     try std.testing.expectEqualStrings(original, packet.body());
-    try checkCompositionCorrection(a, &base, checked, request, packet, selected_output);
+    switch (text) {
+        .model_text => try checkCompositionCorrection(a, &base, checked, request, packet, selected_output),
+        .none => try std.testing.expect(active_count == 0 and actual.prose_fields.len == 0),
+    }
 }
 
 fn checkCompositionCorrection(a: std.mem.Allocator, base: *@import("../provider_authorization_test_fixture.zig").Fixture, checked: *const @import("../domain/model_request_handoff.zig").Request, request: *const @import("../domain/model_request_handoff.zig").Request, packet: *const @import("../domain/model_input_packet.zig").Packet, selected_output: []const u8) !void {

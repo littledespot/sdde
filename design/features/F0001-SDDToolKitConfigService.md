@@ -56,6 +56,9 @@ The reader-facing contract mirrors the repository fixture:
 SDDToolKitConfig {
   logs: LogsConfig,
   models: ModelsConfig,
+  workflowTokenBudget: integer, // 1..4,294,967,295; no default (ADR 0037)
+  temperature: number,             // >= 0; no default (ADR 0039)
+  temperatureRunawayRetry: number, // >= 0; no default (ADR 0039)
   paths: PathsConfig,
   principles?: PrinciplesConfig | null,
   validation?: { sourcePreservationCheck?: boolean } // omitted = disabled
@@ -99,6 +102,14 @@ PathsConfig {
   collisions, scopes and category coverage before any consuming operation. An absent
   section supplies no default policy. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution) owns the rules.
 - Model slot names are data, but every slot value has the same closed shape.
+- `workflowTokenBudget` decodes into the typed total-token budget through the shared
+  positive-integer rule; a missing, zero, negative, fractional, exponent, quoted or
+  out-of-range value rejects as `ENGINE_CONFIG_PARSE_ERROR`
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
+- `temperature` and `temperatureRunawayRetry` each decode into a typed temperature: a
+  JSON number, zero or greater. A missing, negative, quoted, null or duplicate value
+  rejects as `ENGINE_CONFIG_PARSE_ERROR`
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 - A slot has no output-token allowance; `maxOutputTokens` is an unknown member and
   rejects as `ENGINE_CONFIG_PARSE_ERROR` under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance).
 - Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), the shared
@@ -146,6 +157,8 @@ Semantic ownership remains outside F0001:
 | Consumer | Owned semantic work |
 | --- | --- |
 | Logging-policy compiler | Canonicalize `config.logs.level` once, validate the console choice, inject every F0002 operational constant, and produce the persisted logging-policy fragment; shared policy derives capture from the canonical level. |
+| Workflow execution composition | Pass `config.workflowTokenBudget` to the workflow pipeline runner, which starts each execution's single token ledger from it ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). |
+| Model binding and runaway re-send | Bind `config.temperature` into every inference binding whose registered model takes a temperature, and supply `config.temperatureRunawayRetry` to the runaway re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). |
 | F0006 repository-model allowlist boundary | Validate every `config.models.slots` tuple against the complete provider catalogue, publish immutable slot-to-catalogue-entry references without copying provider configuration, and resolve the slot selected by each originating YAML request step; consumers retain that binding under ADR 0012. |
 | [F0004 bootstrap-root path-policy boundary](F0004-BootstrapRootRegistryService.md) | Validate the seven configured directory roots plus `config.paths.providers`, reserve their distinct typed roles, and construct the `BootstrapRootRegistry`; F0001 does not resolve a path itself. |
 | [F0008 provider-config reader](F0008-LLMProviderConfigService.md) | Consume only F0004's opaque provider-document capability and capture its bytes; it does not reread F0001 or resolve the raw string. |

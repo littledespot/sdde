@@ -36,7 +36,7 @@ pub fn verifyToolchain(a: std.mem.Allocator, expected: Toolchain) !void {
         !std.mem.eql(u8, current.cpu, expected.cpu) or !std.mem.eql(usize, current.features, expected.features) or current.optimize != expected.optimize) return error.BaselineBuildChanged;
 }
 pub const Freeze = struct {
-    schema: enum { @"baseline-freeze/v2" },
+    schema: enum { @"baseline-freeze/v3" },
     acquisition_scope: enum { full_workflow } = .full_workflow,
     build: @import("../../../build/provenance.zig").Identity,
     toolchain: Toolchain,
@@ -90,7 +90,7 @@ pub fn create(a: std.mem.Allocator, build: @import("../../../build/provenance.zi
         try cases.append(a, .{ .id = example.id, .feature_id = example.feature_id, .variant = example.variant, .sources = example.sources });
     };
     return .{
-        .schema = .@"baseline-freeze/v2",
+        .schema = .@"baseline-freeze/v3",
         .build = build,
         .toolchain = try toolchain(a),
         .path_policy = path_policy,
@@ -150,7 +150,7 @@ pub fn requireExecutable(a: std.mem.Allocator, frozen: Freeze) !void {
     try evaluation.path(admitted.budget_plan_source);
     const report = admitted.feasibility;
     if (report.status != .feasible or report.user_decision_required or report.workflow_authority or
-        report.plan.decision != .retain_existing_scope or report.compiled_workflow_budget != report.plan.workflow_token_budget or
+        report.plan.decision != .retain_existing_scope or report.configured_workflow_budget != report.plan.workflow_token_budget or
         report.plan.maximum_sends != frozen.protocol.limits.maximum_sends or report.plan.maximum_actual_tokens != frozen.protocol.limits.maximum_actual_tokens) return error.BaselineBudgetNotAdmitted;
     try verifyBuild(frozen.build, report.baseline_build);
     _ = a;
@@ -181,7 +181,7 @@ pub fn verifySources(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, f
         try requireExecutable(a, frozen);
         const admission = frozen.admission.frozen;
         const plan = try @import("feasibility.zig").parse(a, try files.read(io, a, repository, admission.budget_plan_source));
-        const checked = try @import("feasibility.zig").evaluate(io, a, repository, plan, frozen.protocol, frozen.build, admission.feasibility.compiled_workflow_budget);
+        const checked = try @import("feasibility.zig").evaluate(io, a, repository, plan, frozen.protocol, frozen.build, admission.feasibility.configured_workflow_budget);
         if (!std.mem.eql(u8, try std.json.Stringify.valueAlloc(a, checked, .{}), try std.json.Stringify.valueAlloc(a, admission.feasibility, .{}))) return error.BaselineBudgetChanged;
     }
 }

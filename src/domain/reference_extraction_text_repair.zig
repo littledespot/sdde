@@ -1,4 +1,5 @@
-//! One parsed extraction content field, before text acceptance. Atomic repair
+//! A no-feature-claim reason, before text acceptance; claim wording is quoted
+//! from the source and never repaired (ADR 0036). Atomic repair
 //! owns CAS; the shared text validator and workflow own acceptance/repetition.
 const std = @import("std");
 const e = @import("reference_extraction.zig");
@@ -12,7 +13,7 @@ pub const Target = struct {
         return self.field;
     }
 };
-pub const Replacement = union(enum) { business: e.text.BusinessText, reference: e.text.ReferenceSemanticText };
+pub const Replacement = union(enum) { reference: e.text.ReferenceSemanticText };
 pub const Rule = struct {
     issue: e.text.Issue,
     requirement: []const u8,
@@ -27,12 +28,9 @@ const Family = enum { typed_text };
 pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@import("workflow_retry.zig").Permit {
     const candidate = authorization.dependencies.candidate;
     const entry = try entryAt(candidate, authorization.target);
-    const count: usize = switch (entry.outcome) {
-        .claims => |claims| claims.len,
-        .no_feature_claim => 1,
-        .blocked => return error.InvalidAtomicRepair,
-    };
-    var permit = try shared.permit(e.TextTarget, Family, a, authorization.owner, authorization.target.field, .typed_text, authorization.id, authorization.revision, std.math.cast(u32, count) orelse return error.InvalidAtomicRepair);
+    // The reason is the outcome's only model text.
+    if (entry.outcome != .no_feature_claim) return error.InvalidAtomicRepair;
+    var permit = try shared.permit(e.TextTarget, Family, a, authorization.owner, authorization.target.field, .typed_text, authorization.id, authorization.revision, 1);
     const scope = .{ .boundary = permit.key.scope, .origin = entry.origin };
     permit.key.scope = (try shared.snapshot(@TypeOf(scope), a, scope)).bytes;
     if (candidate.last_repair) |prior| if (prior.retry) |previous| if (std.mem.eql(u8, &previous.key.scope, &permit.key.scope)) {
@@ -50,13 +48,7 @@ pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection)
     const entry = try entryAt(parsed, target);
     if (!std.meta.eql(e.textOrigin(entry, target.field), rejection.origin)) return error.InvalidAtomicRepair;
     const expected = try select(parsed, target);
-    const observed: Replacement = switch (rejection.observed) {
-        .reason => |value| .{ .reference = value },
-        .content => |content| switch (content) {
-            .business, .scope_guard => |value| .{ .business = value },
-            inline else => |value| .{ .reference = value },
-        },
-    };
+    const observed: Replacement = .{ .reference = rejection.observed.reason };
     if (!try atomic.equal(a, expected, observed)) return error.InvalidAtomicRepair;
     var result = try atomic.authorize(a, unit(rejection.scope), parsed.revision, target, expected, facts, .{ .issue = rejection.issue, .requirement = rejection.issue.description() });
     result.retry = try retryPermit(a, result);
@@ -66,20 +58,11 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
     try atomic.checkDependencies(a, authorization, facts);
     try atomic.checkDependencies(a, authorization, try context.textFacts(facts.text.inputs, registry, current, facts.candidate));
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = authorization.target.scope };
-    const base = try @import("reference_model_input.zig").extractionPacket(a, facts.text.inputs, registry, candidates, scope);
+    const base = try @import("reference_model_input.zig").extractionBase(a, facts.text.inputs, registry, candidates, scope);
     defer packets.release(base);
     const entry = try entryAt(facts.candidate, authorization.target);
-    const field: e.text.field_policy.Field = switch (authorization.target.field) {
-        .reason => .extraction_reason,
-        .claim => |index| switch (entry.outcome.claims[index].content) {
-            inline else => |_, tag| e.text.field_policy.referenceField(.extraction, @tagName(tag)),
-        },
-    };
-    const options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .inherited = field, .reference_phase = .extraction } } };
-    return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
-        .business => "business_text_replacement",
-        .reference => "reference_text_replacement",
-    } }, e.textOrigin(entry, authorization.target.field), options);
+    const options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .inherited = .extraction_reason, .reference_phase = .extraction } } };
+    return atomic.packet(a, authorization, base, .{ .bytes = "reference_text_replacement" }, e.textOrigin(entry, authorization.target.field), options);
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);
@@ -92,17 +75,7 @@ pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canonica
     const merged = try atomic.checkMerge(a, canonical, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
     const entries = try a.dupe(e.ParsedResult, facts.candidate.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(target.scope)) {
-        switch (target.field) {
-            .reason => entry.outcome.no_feature_claim = replacement.reference,
-            .claim => |index| {
-                const claims = try a.dupe(e.Proposal, entry.outcome.claims);
-                claims[index].content = switch (claims[index].content) {
-                    inline .business, .scope_guard => |_, tag| @unionInit(e.ProposalContent, @tagName(tag), replacement.business),
-                    inline else => |_, tag| @unionInit(e.ProposalContent, @tagName(tag), replacement.reference),
-                };
-                entry.outcome = .{ .claims = claims };
-            },
-        }
+        entry.outcome.no_feature_claim = replacement.reference;
         var origins: std.ArrayList(e.TextOrigin) = .empty;
         for (entry.text_origins) |value| if (!std.meta.eql(value.target, target.field)) try origins.append(a, value);
         try origins.append(a, .{ .target = target.field, .origin = origin });
@@ -127,13 +100,7 @@ fn entryAt(parsed: e.Parsed, target: Target) Error!e.ParsedResult {
 }
 fn select(parsed: e.Parsed, target: Target) Error!Replacement {
     const entry = try entryAt(parsed, target);
-    return switch (target.field) {
-        .reason => if (entry.outcome == .no_feature_claim) .{ .reference = entry.outcome.no_feature_claim } else error.InvalidAtomicRepair,
-        .claim => |index| if (entry.outcome == .claims and index < entry.outcome.claims.len) switch (entry.outcome.claims[index].content) {
-            .business, .scope_guard => |value| .{ .business = value },
-            inline else => |value| .{ .reference = value },
-        } else error.InvalidAtomicRepair,
-    };
+    return if (entry.outcome == .no_feature_claim) .{ .reference = entry.outcome.no_feature_claim } else error.InvalidAtomicRepair;
 }
 fn unit(scope: @import("reference_evidence.zig").Scope) identity.ImmutableUnitOwnerId {
     return .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } };

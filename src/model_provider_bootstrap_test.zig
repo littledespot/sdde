@@ -45,7 +45,6 @@ test "compiled binding requirements activate bootstrap without granting provider
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }};
     try std.testing.expectError(
         error.WorkflowGraphCompileInvalid,
@@ -77,6 +76,7 @@ test "conditional runner skips F0008 for a capability-free selected workflow" {
         .{},
         &selected,
         &toolkit.value().models,
+        toolkit.value().temperatures(),
         &config_child_runner,
         &compiled_provider_contracts,
     );
@@ -114,6 +114,7 @@ test "conditional runner captures once and publishes one immutable run authority
             .{},
             &selected,
             &toolkit.value().models,
+            toolkit.value().temperatures(),
             &config_child_runner,
             &compiled_provider_contracts,
         );
@@ -233,6 +234,7 @@ fn expectPreparationFailure(
             .{},
             &selected,
             &toolkit.value().models,
+            toolkit.value().temperatures(),
             &config_child_runner,
             &compiled_provider_contracts,
         );
@@ -388,7 +390,6 @@ const operation_registry: operations.Registry = .{
         .id = "test.safe@1",
         .allowed_capabilities = &.{requirement.capability_id},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
 };
@@ -404,7 +405,6 @@ const binding_only_registry: operations.Registry = .{
         .id = "test.safe@1",
         .allowed_capabilities = &.{},
         .allowed_terminal_outcomes = &.{.ok},
-        .total_model_token_budget = .{ .value = 1000 },
     }},
     .gates = &.{},
 };
@@ -441,7 +441,7 @@ const missing_model_config = toolkitPrefix() ++
 
 fn toolkitPrefix() []const u8 {
     return
-    \\{"logs":{"level":"info","console":false},"models":{"slots":
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":
     ;
 }
 
