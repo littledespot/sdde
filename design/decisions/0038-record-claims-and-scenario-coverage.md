@@ -86,6 +86,14 @@ only block.
     - a narrative field that selects a group still maps every claim in it, so a
       corrected response that drops the functional requirement naming a claim passes
       coverage without a scenario.
+  - **Business rules restating requirements (amended 26 October 2026).** With one claim
+    per list item, every run of both cases from the first live pair on wrote business
+    rules that restate a functional requirement claim by claim, and organization scores
+    fell. By the user's direction to "make the changes to address the two area that
+    resulted in lower quality", the records prompt now says: "A business rule states a
+    constraint that no functional requirement in this response already states; never
+    restate a requirement claim by claim." The list split stays: it is what gives a
+    refusal requirement its own claim and scenario.
   - **Identical records naming different claims** are not evidence-equivalent, so the
     native duplicate rule blocks them as `competing_records` instead of deleting one
     (ADR 0035 Decision 3).

@@ -288,6 +288,44 @@ test "compact acceptance criteria preserve exact label text and reject malformed
     for ([_][]const u8{ "\n### Business Rules\n", "\n### Assumptions & Scope Boundaries\n", "\n#### Explicit Non-Goals\n\n- **NG-001**: An excluded behavior.\n" }) |extra| try testing.expectError(error.InvalidSpecification, markdown.parse(a, try std.mem.concat(a, u8, &.{ valid, extra })));
 }
 
+test "acceptance clauses that end a sentence join without a comma and keep their bytes" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prose = "The system displays ";
+    const exact = "Renewal refused.";
+    const refused: spec.Scalar = .{ .bytes = prose ++ exact, .code_spans = &.{.{ .start = prose.len, .end = prose.len + exact.len }} };
+    const plain: spec.Scalar = .{ .bytes = "the loan is active" };
+    const cases = [_]struct { given: spec.Scalar, when: spec.Scalar, joins: []const []const u8 }{
+        .{ .given = .{ .bytes = "The loan is active." }, .when = plain, .joins = &.{ "active\\. **When** ", "active, **Then** " } },
+        .{ .given = plain, .when = .{ .bytes = "The borrower asks!" }, .joins = &.{ "active, **When** ", "asks\\! **Then** " } },
+        .{ .given = plain, .when = .{ .bytes = "Is the loan due?" }, .joins = &.{ "active, **When** ", "due\\? **Then** " } },
+        .{ .given = refused, .when = plain, .joins = &.{ "`Renewal refused.` **When** ", "active, **Then** " } },
+    };
+    for (cases) |case| {
+        const document: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = case.given, .when = case.when, .then = refused } } }} };
+        const rendered = try markdown.render(a, document);
+        for (case.joins) |join| try testing.expect(std.mem.indexOf(u8, rendered, join) != null);
+        for ([_][]const u8{ "., **", "!, **", "?, **", ".`, **" }) |doubled| try testing.expect(std.mem.indexOf(u8, rendered, doubled) == null);
+        const parsed = try markdown.parse(a, rendered);
+        try testing.expectEqualDeep(document, parsed);
+        try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
+        try testing.expectEqualStrings(rendered, try markdown.render(a, document));
+        try testing.expectEqualStrings(prose ++ exact, parsed.records[0].content.acceptance_criterion.then.bytes);
+    }
+    const document: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = .{ .bytes = "The loan is active." }, .when = plain, .then = refused } } }} };
+    const rendered = try markdown.render(a, document);
+    inline for (.{
+        .{ "active\\. **When** ", "active\\., **When** " },
+        .{ "active, **Then** ", "active **Then** " },
+        .{ "**Given** The loan is active\\. **When** ", "**Given** **When** " },
+    }) |mutation| {
+        const changed = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
+        try testing.expect(!std.mem.eql(u8, changed, rendered));
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
+    }
+}
+
 fn parseAllocated(allocator: std.mem.Allocator) !void {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();

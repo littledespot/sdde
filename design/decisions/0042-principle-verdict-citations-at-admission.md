@@ -60,9 +60,18 @@ only uncited non-compatible verdict among 489 findings (481 `compatible`; 4
    review ends incomplete and is published, marked and logged
    ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). Invalid, foreign
    and duplicate citations keep their current native validation and repair.
-4. **The prompt defines `uncertain`.** The principle prompt gains: "Use uncertain only
-   when a supplied principle applies but compliance can't be decided; if no principle
-   addresses the subject, it is compatible."
+4. **The prompt defines `uncertain` and keeps citations.** Amended 26 October 2026 by the
+   user's direction to "make the changes to address the two area that resulted in lower
+   quality". The first wording ("if no principle addresses the subject, it is
+   compatible") stopped the title failure, but citations on `compatible` findings fell
+   from 481 of 481 to 17 of 76 in the four runs that followed, and one finding claimed no
+   principle governed a subject the supplied user-interface principle covers. The prompt
+   now says: "Use compatible, conflicting or uncertain, and cite the principle text each
+   verdict rests on. Check every supplied principle before deciding none applies. Use
+   uncertain only when a cited principle applies but compliance can't be decided; only a
+   subject that no supplied principle addresses is compatible without citations." The
+   admission constraint is unchanged: it still requires citations only for `conflicting`
+   and `uncertain`.
 
 ## Consequences
 

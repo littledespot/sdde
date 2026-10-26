@@ -376,9 +376,40 @@ review stays. On 26 October review took 41–58% of each run's tokens and:
 - filed unsupported additions as `candidate_omission`, a harmful diagnosis under §7;
 - in loan-renewal returned `supported` for every source-review subject.
 
-**Next:** label retained 26 October findings offline against frozen, source-based labels
-(finding-type accuracy, §7) before any change that lets review alter output or removes a
-review call. Under "quality over cost, but never waste", spending that buys no quality is
+**Measured 26 October 2026 (offline, advisory labels;
+[summary](../evaluations/b2-review-accuracy/2026-10-26/summary.md)).** All 240 review
+findings from the six published 26 October runs were labelled against the source:
+- **Source review:** 132 findings; 77% finding-type accuracy, but it caught 1 of 28
+  defective subjects with the right type (4% recall), missed 26, raised 4 false positives
+  and wrote 26 false statements. Loan-renewal's source review never reported a real
+  defect: "may renew" passed in 8 subjects.
+- **Principle review:** 108 findings; verdicts 97% right, but no citation names the rule
+  that governs the subject (31 blanket, 77 none, with a rule applying in 71), and 4 false
+  "no principle applies" statements.
+- **Cost:** review was 79% of loan-renewal's tokens over the three runs; 26% of its review
+  tokens went to subjects whose defect it then approved.
+- **Uncovered:** no review subject checks repetition across records or rendering.
+
+**Implemented 26 October 2026 (prompt only, by the user's direction "make suggested
+changes"):** `support.prompt.md`, shared by pre-generation readiness and post-generation
+source review, now says: "Before choosing supported, check each statement in the subject
+against the supplied source text: it must be supported there with the same obligation
+strength (must never becomes may), conditions and negation. A statement the sources don't
+support is an invented assertion; a weakened obligation leaves the source obligation
+missing. Base each detail only on supplied text; never say a source states something it
+doesn't." Its effect is measured by labelling the next approved pair the same way.
+**Measured on one pair (26 October 10:23; [hello-world](../evaluations/b2-review-accuracy/2026-10-26-after-support-prompt/hello-world/notes.md),
+[loan-renewal](../evaluations/b2-review-accuracy/2026-10-26-after-support-prompt/loan-renewal/notes.md)):
+no improvement.** Source review caught 0 of 6 defective subjects; it approved "may renew"
+although the new line names that case, and raised a new false positive claiming the source
+omits UTC. The principle review wrote a templated "No supplied principle addresses …" for
+every subject in both runs (20 false statements).
+
+**Next:** a human confirms or corrects the labels so they become frozen evidence (§7).
+Then decide how source review should buy quality. It catches almost nothing today, but
+dropping a check to save tokens is not allowed. The bounded option below (the former R6
+direction) is the candidate, compared offline on these labelled failures plus clean
+controls before any live call. Under "quality over cost, but never waste", spending that buys no quality is
 removed at its owner, never by keyword or truncation. A separately configured assessment
 model (the original option 3, not approved) is a model choice and stays the user's
 decision (R7).
@@ -436,9 +467,10 @@ Open:
 - **Business rules restate functional requirements** (every 26 October run of both cases;
   loan-renewal states one requirement up to five times across the story, FR-001, business
   rules and the entity). ADR 0035 deletes only exact, covered restatements.
-  **Decision:** add records guidance that a business rule holds only a constraint not
-  already stated by a functional requirement (recommended), or extend the duplicate rule
-  to partial restatements, which needs meaning, not text, and so isn't computable natively.
+  **Implemented 26 October 2026 (prompt only, ADR 0038 amended):** the records prompt says
+  "A business rule states a constraint that no functional requirement in this response
+  already states; never restate a requirement claim by claim." Next: confirm on an
+  approved pair that organization recovers without losing the refusal scenario.
 - **Records inflation.** On 25 October one loan-renewal batch wrote 40 records and another
   304. The 26 October batches were normal. It has no owner: B9's cardinality bound
   conflicts with the user's no-caps rule. Measure it on repetitions.
@@ -545,11 +577,12 @@ prompt, and the 25 October `uncertain` title verdict didn't recur. But citations
 false reason, "No principle governs user-visible behavior descriptions", although the
 supplied user-interface principle covers them.
 
-**Decision:** reword the line so a verdict cites the principle text it rests on whenever
-one applies, for example: "Cite the principle text behind every verdict. Use uncertain only
-when a cited principle applies but compliance can't be decided; a subject no supplied
-principle addresses is compatible, and only then without citations." It amends ADR 0042
-Decision 4.
+**Implemented 26 October 2026 (prompt only, ADR 0042 Decision 4 amended):** "Use
+compatible, conflicting or uncertain, and cite the principle text each verdict rests on.
+Check every supplied principle before deciding none applies. Use uncertain only when a
+cited principle applies but compliance can't be decided; only a subject that no supplied
+principle addresses is compatible without citations." Next: confirm on an approved pair
+that citations return and the title verdict stays `compatible`.
 
 ### B12. Renderer artefacts in published specifications
 
