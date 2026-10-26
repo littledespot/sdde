@@ -150,7 +150,7 @@ fn pairedAssignment(a: std.mem.Allocator, member: usize, single: *const packets.
     try std.testing.expectEqual(@as(usize, 1), singleton.len);
     for ([_][]const u8{ "ordinal", "task", "evidence" }) |field| try sameJson(a, singleton[0].object.get(field).?, selected.object.get(field).?);
     for ([_][]const u8{ "assessment_scope", "evidence_rules" }) |field| try sameJson(a, left.object.get(field).?, selected.object.get(field).?);
-    for ([_][]const u8{ "sources", "claims", "citations", "preserved_tokens" }) |field| try sameJson(a, left.object.get(field).?, right.object.get(field).?);
+    for ([_][]const u8{ "sources", "claims", "citations", "exact_texts" }) |field| try sameJson(a, left.object.get(field).?, right.object.get(field).?);
     const subject = selected.object.get("subject").?.object;
     const slots = [_][]const u8{ "given", "when", "then" };
     try std.testing.expectEqualStrings(slots[member], subject.get("slot").?.string);

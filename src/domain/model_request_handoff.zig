@@ -126,6 +126,17 @@ pub const Request = opaque {
         return if (storage(self).protocol_rejection) |rejected| rejected.operation_id else null;
     }
 
+    /// The exact runaway attempt this prepared re-send repeats (ADR 0039).
+    pub fn runawayResend(self: *const Request) ?provider.ProviderOperationId {
+        return storage(self).runaway;
+    }
+
+    /// The latest rejected attempt this prepared request answers: the runaway
+    /// a re-send repeats, otherwise the response a correction corrects.
+    pub fn retriedAttempt(self: *const Request) ?provider.ProviderOperationId {
+        return self.runawayResend() orelse self.protocolCorrection();
+    }
+
     /// Only a response to this exact prepared correction can confirm recurrence.
     pub fn protocolRepetition(self: *const Request, rejected: *const @import("provider_invocation_validation.zig").Evidence, diagnostic: retry.Diagnostic) Error!retry.Repetition {
         const request = self.prepared() orelse return error.ModelRequestAssociationInvalid;
@@ -165,6 +176,8 @@ const Storage = struct {
     composition: ?composition.Binding = null,
     restriction: ?*@import("model_result_schema.zig").Restricted = null,
     protocol_rejection: ?struct { diagnostic: retry.Diagnostic, operation_id: provider.ProviderOperationId } = null,
+    /// Set only on a runaway re-send; a correction or new request clears it.
+    runaway: ?provider.ProviderOperationId = null,
     phase: union(enum) {
         assigned,
         validated: *const identity.ModelRequestBindingEvidence,
@@ -215,7 +228,7 @@ pub const Selection = struct {
         const record = ledger.record(request.id()) orelse return false;
         if (record.status != .terminal or record.terminal_reason != .accepted or
             origin.request.value != (ledger.indexOf(request.id()) orelse return false).value) return false;
-        const accepted_attempt: u32 = if (request.protocolCorrection()) |previous|
+        const accepted_attempt: u32 = if (request.retriedAttempt()) |previous|
             std.math.add(u32, previous.model_attempt_ordinal.value, 1) catch return false
         else
             1;
@@ -241,17 +254,18 @@ pub const Selection = struct {
         const Restrictions = struct {
             excluded: []const @import("model_result_schema.zig").ExcludedVariant,
             choices: []const @import("model_result_schema.zig").IntegerChoice,
+            required: []const @import("model_result_schema.zig").RequiredItems,
             fields: []const @import("model_text_field.zig").Binding,
             omissions: []const @import("model_field_presentation.zig").Omission,
         };
         const codec = @import("canonical_json.zig");
-        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .required = current.packet.requiredItems(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(current_restrictions);
-        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .required = old.packet.requiredItems(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(old_restrictions);
         if (!std.mem.eql(u8, current_restrictions, old_restrictions)) return false;
-        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0)
-            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
+        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0 or current.packet.requiredItems().len != 0)
+            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies(), current.packet.requiredItems()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
         else
             null;
         defer if (effective) |restricted| restricted.release();
@@ -340,8 +354,9 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     const excluded = if (input != null and input.? == .packet) input.?.packet.excludedVariants() else &.{};
     const integer_choices = if (input != null and input.? == .packet) input.?.packet.integerChoices() else &.{};
     const field_policies = if (input != null and input.? == .packet) input.?.packet.fieldPolicies() else &.{};
-    const restriction = if (excluded.len != 0 or integer_choices.len != 0 or field_policies.len != 0)
-        @import("model_result_schema.zig").restrictFieldPolicies(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices, field_policies) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
+    const required_items = if (input != null and input.? == .packet) input.?.packet.requiredItems() else &.{};
+    const restriction = if (excluded.len != 0 or integer_choices.len != 0 or field_policies.len != 0 or required_items.len != 0)
+        @import("model_result_schema.zig").restrictFieldPolicies(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices, field_policies, required_items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
     else
         null;
     defer if (restriction) |owned| owned.release();
@@ -401,6 +416,46 @@ pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?
     }
     next.phase = .{ .prepared = owned };
     return create(next);
+}
+
+/// ADR 0039: the one re-send of a first runaway keeps every association of the
+/// prepared attempt it repeats, including any correction it carried, and
+/// differs from it only in sampling.
+pub fn resent(current: *const Request, owned: preparation.Owned, runaway: *const @import("provider_invocation_validation.zig").Evidence) Error!*Request {
+    const original = current.prepared() orelse return error.ModelRequestAssociationInvalid;
+    const operation_id = runaway.operationId();
+    if (runaway.request() != original or runaway.runaway() != .first or storage(current).runaway != null or
+        operation_id.model_request_id != current.id() or operation_id.kind != .inference or operation_id.model_attempt_ordinal.value == 0 or
+        original.sampling != .configured or owned.request.sampling != .runaway_resend) return error.ModelRequestAssociationInvalid;
+    // The repeated attempt was validated against its selected authorities when
+    // it was prepared; the re-send equals it in everything but sampling.
+    owned.request.validate() catch return error.ModelRequestAssociationInvalid;
+    if (!sameExceptSampling(owned.request, original)) return error.ModelRequestAssociationInvalid;
+    var next = storage(current).*;
+    next.runaway = operation_id;
+    next.phase = .{ .prepared = owned };
+    return create(next);
+}
+
+fn sameExceptSampling(sent: *const provider.IdentifiedProviderNeutralModelRequest, repeated: *const provider.IdentifiedProviderNeutralModelRequest) bool {
+    // Every field below is compared; a new request field must join them.
+    comptime std.debug.assert(@typeInfo(provider.IdentifiedProviderNeutralModelRequest).@"struct".fields.len == 15);
+    if (sent.model_request_id != repeated.model_request_id or !sent.model_operation_id.eql(repeated.model_operation_id) or
+        !sent.binding_id.eql(repeated.binding_id) or !std.mem.eql(u8, sent.request_schema_id.bytes, repeated.request_schema_id.bytes) or
+        !std.mem.eql(u8, sent.result_schema_id.bytes, repeated.result_schema_id.bytes) or !sent.model_visible_input_id.eql(repeated.model_visible_input_id) or
+        sent.response_schema != repeated.response_schema or sent.response_guidance_mode != repeated.response_guidance_mode or
+        !std.meta.eql(sent.controls, repeated.controls) or sent.content.len != repeated.content.len or
+        sent.original_sources.len != repeated.original_sources.len or
+        !@import("model_text_wire.zig").sameProseFields(sent.prose_fields, repeated.prose_fields) or
+        !@import("model_text_field.zig").same(sent.field_policies, repeated.field_policies) or
+        !@import("model_exact_values.zig").same(sent.exact_scope, repeated.exact_scope)) return false;
+    for (sent.content, repeated.content) |left, right| {
+        if (std.meta.activeTag(left) != std.meta.activeTag(right) or !std.mem.eql(u8, left.bytes(), right.bytes())) return false;
+    }
+    for (sent.original_sources, repeated.original_sources) |left, right| {
+        if (left.source_id.ordinal != right.source_id.ordinal or !std.mem.eql(u8, left.bytes, right.bytes)) return false;
+    }
+    return true;
 }
 
 pub fn destroy(request: *Request) void {

@@ -23,7 +23,7 @@ const request_termination = @import("../application/model_request_termination_wo
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
 const composition = @import("../application/json_composition_workflow.zig");
-pub const count = 32;
+pub const count = 34;
 pub const schemas = requests.schemas ++ composition.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -54,6 +54,8 @@ pub const Assembly = struct {
     retire_advisory_protocol: transport.RetireAdvisoryProtocol,
     protocol_retry: protocol.Build,
     check_phase: protocol.Check,
+    check_runaway: protocol.Runaway,
+    runaway_resend: protocol.Resend,
     retire_input: transport.Retire(.input),
     retire_transport: transport.Retire(.request_and_input),
     initialize_composition: composition.Initialize,
@@ -90,6 +92,8 @@ pub const Assembly = struct {
             .retire_advisory_protocol = .{},
             .protocol_retry = .{ .allocator = allocator },
             .check_phase = .{},
+            .check_runaway = .{},
+            .runaway_resend = .{ .allocator = allocator },
             .retire_input = .{},
             .retire_transport = .{},
             .initialize_composition = .{ .allocator = allocator },
@@ -125,6 +129,8 @@ pub const Assembly = struct {
             entry(transport.RetireAdvisoryProtocol, &self.retire_advisory_protocol),
             entry(protocol.Build, &self.protocol_retry),
             entry(protocol.Check, &self.check_phase),
+            entry(protocol.Runaway, &self.check_runaway),
+            entry(protocol.Resend, &self.runaway_resend),
             entry(transport.Retire(.input), &self.retire_input),
             entry(transport.Retire(.request_and_input), &self.retire_transport),
             entry(composition.Initialize, &self.initialize_composition),

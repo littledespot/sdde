@@ -27,6 +27,10 @@
   catalogue entry, which settles "Per-family request deadlines". Provider token counting
   is removed, so "A family that registers CountTokens" would first need counting itself
   to return by its own decision.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): the `gpt-oss` family sends the configuration's `temperature`, and
+  `temperatureRunawayRetry` on a runaway re-send, instead of `0.1`. The other families
+  still omit temperature on every attempt.
 - **Clarified (24 October 2026, user decision):** the E2E catalogue and the live-test
   allowlist keep the AU cross-Region inference profile `au.anthropic.claude-haiku-5-5`,
   called from `ap-southeast-2`. Bedrock routes each request to `ap-southeast-2` or
@@ -62,7 +66,7 @@ the engine sends beyond common Converse input:
 | Family | Effort | Temperature | Request fields |
 | --- | --- | --- | --- |
 | `converse` | None | Omitted (provider default) | None |
-| `gpt-oss` | `low`, `medium`, `high` | `0.1` | `additionalModelRequestFields.reasoning_effort` |
+| `gpt-oss` | `low`, `medium`, `high` | Configured (ADR 0039) | `additionalModelRequestFields.reasoning_effort` |
 | `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` in native mode |
 | `claude` | `low` to `max` | Omitted | `additionalModelRequestFields.output_config.effort`; no `thinking` field |
 

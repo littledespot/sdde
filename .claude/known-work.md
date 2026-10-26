@@ -1,6 +1,6 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 25 October 2026. It mirrors the repository's active fix
+Dated snapshot, last updated 26 October 2026. It mirrors the repository's active fix
 record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
 [Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
 evidence rules for contract changes are in CLAUDE.md.
@@ -33,19 +33,17 @@ already made.
   - *Implemented 25 October 2026, uncommitted ([ADR 0036](../design/decisions/0036-source-quoted-claims.md)):*
     source-quoted wording.
     - A claim is a category and admission-bounded line IDs. The engine quotes the cited
-      source lines as written; one proposal is one claim.
+      source lines as written, one claim per top-level list item (ADR 0038).
     - Claim-text and citation repair are deleted. The Markdown reader now rejects C1
       control characters.
     - Re-quoting at stored readback is open.
     - Quoted claims carry Markdown into generation, which wrapped exact values in
       backticks in the first live pair. ADR 0036 Decision 6 now drops those delimiters at
       admission (25 October, uncommitted).
-  - *Implemented and withdrawn 25 October 2026:* a native split into one claim per
-    top-level list item (user: "apply the best option", then "make the changes as
-    suggested"). In two live pairs the records call authored 3, 12, 8 and 304 records,
-    against 2 to 4 with one claim per list, adding fillers, restatements and once a
-    runaway. List collapse is open again; ADR 0027's per-item chunking stays withdrawn.
-  - The live effect of quoting with one merged claim is unmeasured.
+  - *Implemented, withdrawn and reinstated 25 October 2026 (ADR 0038):* a native split
+    into one claim per top-level list item. It was withdrawn after records inflated, but
+    the same five-claim input later produced 2 records, so claim count wasn't the
+    driver; B5's scenario rule needs it. ADR 0027's per-item chunking stays withdrawn.
   - Details are in FIX05 B7.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
@@ -74,17 +72,14 @@ already made.
       functional requirement is kept, and same-kind checks run first.
     - It doesn't catch paraphrases, and an entity description that copies the story
       needs a separate remedy.
-  - *Proposed, 25 October 2026, as the recommended option for whole-feature
-    re-authoring (FIX05 B5):* one complete record collection per feature, each record
-    naming the claims it supports. Native coverage would require every behavioural
-    claim to be cited by an acceptance criterion or edge case.
-  - This replaces the A/C comparison, which can't discriminate while each case forms
-    one group.
-  - It needs a decision and an ADR (generation contract, ADR 0020's group binding).
-  - It pays off only with requirement-level claims, whose native split (B7) was
-    withdrawn on 25 October after it inflated records, and review budget headroom (the
-    configured 125,000-token budget, B4).
-  - Loan-renewal had no refusal acceptance criterion in all three evaluated runs.
+  - *Implemented 25 October 2026, uncommitted (ADR 0038, FIX05 B5):* each record names
+    the claims it supports within its group, and every claim a functional requirement
+    names must also be named by an acceptance criterion or edge case. A gap is a
+    response-admission defect that takes the records step's protocol correction. One
+    records call per feature was not adopted.
+  - It checks links, not meaning; prose requirements in one sentence stay one claim.
+  - Loan-renewal had no refusal scenario in every evaluated publication; the live
+    effect of ADR 0038 is unmeasured.
 - **Entity applicability is a model judgment** that no native rule can check.
   Hello-world has no data, yet it has been judged both `not_applicable` and
   `required`.
@@ -104,8 +99,16 @@ already made.
   catalogue's Claude Haiku 5.5 entries declare 128,000 output tokens, so 180 s may not
   cover that model. *Implemented 24 October 2026 (ADR 0030 slice 3):* each catalogue
   entry declares its own `requestTimeoutMs`; Haiku starts at the shared 180,000 ms until
-  its measured maximum-output time replaces it. Lower allowances, bounded correction and
-  cardinality bounds each need a decision; don't tune sampling or add retries.
+  its measured maximum-output time replaces it. *Decided and implemented 26 October 2026 (ADR 0039,
+  uncommitted):* a runaway re-sends the identical request once at the configured
+  `temperatureRunawayRetry`, logged as `model.runaway_resent`. A runaway on the re-send
+  fails required work; in review it ends that advice incomplete, which ADR 0040 publishes
+  marked as incomplete and logs as `review.incomplete`; under ADR 0041 a failed required
+  step still fails the run but publishes its validated content marked incomplete and
+  logged as `run.incomplete_published`. It's the user's exception to
+  "don't tune sampling or add retries", for `output_limit` only. Lower allowances and cardinality bounds still need a decision.
+  - On 25 October 21:20 (B5 tree) source review ran away again, on `Loan renewed!`
+    (19,270 tokens): the fourth runaway on a loan-renewal exact-value subject.
   - On 25 October (step 0, `269410b`) a source-review runaway on `Renewal refused.` cost
     19,404 tokens and the run failed on budget.
   - On 25 October 14:31 (uncommitted B7 tree) a records call ran away instead: 294 edge

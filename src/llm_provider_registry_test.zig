@@ -87,6 +87,7 @@ test "repository allowlist accepts all catalogue models" {
     const owner = try (validate_allowlist.Action{}).execute(
         std.testing.allocator,
         &toolkit.value().models,
+        toolkit.value().temperatures(),
         fixture.service.registry(),
     );
     defer allowlist_contract.deinitOwner(owner);
@@ -105,6 +106,7 @@ test "repository allowlist accepts a strict subset and leaves unused catalogue e
     const owner = try (validate_allowlist.Action{}).execute(
         std.testing.allocator,
         &toolkit.value().models,
+        toolkit.value().temperatures(),
         fixture.service.registry(),
     );
     defer allowlist_contract.deinitOwner(owner);
@@ -128,6 +130,7 @@ test "multiple slots may reference one catalogue model without duplicating autho
     const owner = try (validate_allowlist.Action{}).execute(
         std.testing.allocator,
         &toolkit.value().models,
+        toolkit.value().temperatures(),
         fixture.service.registry(),
     );
     defer allowlist_contract.deinitOwner(owner);
@@ -150,6 +153,7 @@ test "one absent or option-incompatible slot rejects the complete allowlist" {
             (validate_allowlist.Action{}).execute(
                 std.testing.allocator,
                 &toolkit.value().models,
+                toolkit.value().temperatures(),
                 fixture.service.registry(),
             ),
         );
@@ -285,7 +289,7 @@ const unsupported_option_slots_config = toolkitPrefix() ++
 
 fn toolkitPrefix() []const u8 {
     return
-    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":
     ;
 }
 

@@ -299,7 +299,10 @@ explicit in the selected YAML:
   the chunk's citable (non-blank) lines.
 - The model supplies no wording. The engine quotes each claim's cited lines as written,
   Markdown included, trimming each run only at its ends (never inside fenced code) and
-  joining separate runs with an ellipsis line. One proposal is one claim.
+  joining separate runs with an ellipsis line. A claim spanning several top-level list
+  items becomes one claim per item, with the same category; cited lines outside the
+  items become their own claims ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  reinstated this split).
 - The engine reconstructs exact bytes and coordinates; no quotation or coordinate echo
   is accepted.
 - Categories are `business`, `design`, `technical`, `validation`,
@@ -1153,6 +1156,23 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
+When a Specify run fails because model work couldn't be completed (a failed request,
+exhausted correction or repair, or the token budget), or ends `blocked`, after the
+reference snapshot validated, it publishes an incomplete specification
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)):
+
+1. only content that passed every check that applies to it on its own: the validated
+   reference snapshot's cited source requirements and each generated unit admitted and
+   validated before the failure;
+2. `spec.md` starting `**Status: Incomplete — the run failed.**` or
+   `**Status: Incomplete — the run was blocked.**`, naming the step
+   and diagnostic, with each section not produced marked not generated, and a "Run
+   status" section in `reference-context.md`;
+3. one warning `run.incomplete_published`, then the `spec_incomplete` workflow
+   state, written last;
+4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
+   next run starts at `start`.
+
 - On a Specify rerun, the engine MUST overwrite existing `spec.md` and
   `reference-context.md` with the newly validated output at the same paths, including
   prior edits to `spec.md`.
@@ -1214,7 +1234,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
     gaps through the shared authority gate even if model evidence says `supported`.
   - The scenario-coverage obligation requires model-assisted comparison of the complete
     candidate with source claims/citations, including distinct observable flows and
-    their triggers/results.
+    their triggers/results. Natively, each claim a functional requirement names must
+    also be named by an acceptance criterion or edge case in the same records response
+    ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
   - Missing behavior cannot be satisfied by citation presence or a title.
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
@@ -1240,7 +1262,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - The native generation candidate is a closed content/clarification/inconclusive union.
 - Content units are a feature brief (title, description, primary goal), primary story,
   feature-wide entity applicability plus entity records, or a source-group batch
-  of non-entity records (§17.3). Each entity independently selects its support.
+  of non-entity records (§17.3). Each entity independently selects its support; each
+  non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
   normalized records and covered restatements (ADR 0035), and keeps questions outside
   specification content.
@@ -1373,6 +1396,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   acceptance.
 - Protocol corrections remain separate provider attempts.
 
+- A records response whose functional-requirement claim no acceptance criterion or edge
+  case names is rejected at admission as `uncovered_member` and takes the request's
+  existing protocol correction; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+  each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or
   change another owning association, so no destination family, invented statement or
@@ -1447,7 +1474,15 @@ YAML definition.
     accounting, valid `reference-context.md`, no open `SNN`, and workflow state
     `specified`. ADR 0015 additionally requires current policy-assessment bindings,
     complete or explicitly incomplete under ADR 0023; findings are advice and do not
-    assert that policy decisions are resolved.
+    assert that policy decisions are resolved. A provider `output_limit` stop is first
+    re-sent once ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+    Incomplete review is published with a review-status line in `spec.md`, its
+    reasons and unassessed subjects in `reference-context.md`, and a
+    `review.incomplete` log event
+    ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). A
+    `conflicting` or `uncertain` principle verdict without citations is rejected at
+    response admission and corrected with the whole response
+    ([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)).
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.

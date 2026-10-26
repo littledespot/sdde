@@ -131,7 +131,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v9" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v10" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;
@@ -566,7 +566,7 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
         .response_mode = .native_schema,
-        .controls = .{ .temperature = .fixed },
+        .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
@@ -612,7 +612,7 @@ test "budget evidence joins physical origins independently of native unsent oper
         .{ .call = 1, .origin = first, .usage = usage },
         .{ .call = 2, .origin = second, .usage = usage },
     };
-    const report: native.Report = .{ .schema = .@"spec-e2e-report/v9", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
     const joined = try capturedAttempts(a, report);
     try std.testing.expectEqual(@as(usize, 2), joined.len);
     try std.testing.expectEqual(@as(usize, 1), joined[0].ordinal);

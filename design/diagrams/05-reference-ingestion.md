@@ -11,7 +11,7 @@ flowchart TD
     NAMING["Compile every selected toolchain naming rule"] --> GRAMMAR["Build shared path-token grammar;<br/>include every captured reference basename"]
     CHUNKS --> GRAMMAR
     GRAMMAR --> LITERALS["Scan source-backed display literals;<br/>assign IDs and validate exact origins"]
-    LITERALS --> TEXT["Quote each claim's cited lines as written;<br/>validate typed text: reject inline paths and out-of-scope IDs"]
+    LITERALS --> TEXT["Quote each claim's cited lines as written,<br/>one claim per top-level list item;<br/>validate typed text: reject inline paths and out-of-scope IDs"]
     CHUNKS --> FACTS["Extract eligible exact facts;<br/>Markdown inline code, fenced code and link destinations,<br/>not prose or quotes"]
     FACTS --> TOKENIDS["Assign source/extractor-local candidate IDs;<br/>retain exact source bytes and citations"]
     TOKENIDS --> EXTRACT["Configured content request:<br/>claims as a category and supplied line IDs,<br/>or no_feature_claim with its reason"]

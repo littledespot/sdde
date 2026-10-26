@@ -108,6 +108,8 @@ const Native = struct {
     metadata_contract: c.MetadataContract = .current,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
+    coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
+    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
     artifact: Artifact,
     exchange_key: []const u8,
 };
@@ -277,13 +279,13 @@ fn providerText(a: std.mem.Allocator, body: std.json.Value) !?[]const u8 {
     defer decoded.deinit(a);
     return if (decoded.output == .text) try a.dupe(u8, decoded.output.text) else null;
 }
-fn requestContext(a: std.mem.Allocator, packet_bytes: []const u8) !RequestContext {
+fn requestContext(a: std.mem.Allocator, packet_bytes: []const u8, contract: c.MetadataContract) !RequestContext {
     const parsed = strict.parse(a, packet_bytes, .{ .maximum_depth = 128 }, false, null) catch |err| return if (err == error.OutOfMemory) err else .{ .state = .invalid_packet };
     var packet = parsed.value;
     if (member(packet, "input")) |inner| if (inner == .object) {
         packet = inner;
     };
-    const tokens = member(packet, "preserved_tokens") orelse return .{ .state = .no_exact_values };
+    const tokens = member(packet, c.exactTextsKey(contract)) orelse return .{ .state = .no_exact_values };
     if (tokens != .array) return .{ .state = .invalid_packet };
     return .{ .state = if (tokens.array.items.len == 0) .no_exact_values else .exact_values, .occurrence_count = tokens.array.items.len };
 }
@@ -294,14 +296,16 @@ const Metadata = struct {
     sources: ?[]const @import("../../../src/domain/model_text_wire.zig").SourceText = null,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
+    coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
+    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
 };
 fn measureRow(state: *State, scratch: std.mem.Allocator, base: Row, packet: []const u8, output: []const u8, schema: ?[]const u8, metadata: Metadata) !void {
     var result = base;
     result.disposition = .measured;
-    result.request_context = try requestContext(scratch, packet);
+    result.request_context = try requestContext(scratch, packet, metadata.contract);
     if (metadata.exact_scope) |scope_facts| result.request_context = .{ .state = if (scope_facts.occurrences.len == 0) .no_exact_values else .exact_values, .occurrence_count = scope_facts.occurrences.len };
     result.payload_sha256 = try c.hash(scratch, try std.mem.concat(scratch, u8, &.{ packet, "\x00", schema orelse "", "\x00", output }));
-    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = metadata.fields, .prose_fields = metadata.prose, .original_sources = metadata.sources, .metadata_contract = metadata.contract, .exact_scope = metadata.exact_scope, .members = metadata.members }, classifier) catch |err| {
+    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = metadata.fields, .prose_fields = metadata.prose, .original_sources = metadata.sources, .metadata_contract = metadata.contract, .exact_scope = metadata.exact_scope, .members = metadata.members, .coverages = metadata.coverages, .required_items = metadata.required_items }, classifier) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.disposition = .malformed_capture;
         result.diagnostic = @errorName(err);
@@ -350,7 +354,7 @@ fn prompt(state: *State, path: []const u8) !void {
             continue;
         };
         var described = base;
-        described.request_context = try requestContext(a, packet);
+        described.request_context = try requestContext(a, packet, .current);
         const native: Native = .{
             .scope = scope(path),
             .call_id = call.id,
@@ -362,6 +366,8 @@ fn prompt(state: *State, path: []const u8) !void {
             .original_sources = description.original_sources,
             .exact_scope = description.exact_scope,
             .members = description.members,
+            .coverages = description.coverages,
+            .required_items = description.required_items,
             .artifact = source,
             .exchange_key = key,
         };
@@ -391,7 +397,7 @@ fn prompt(state: *State, path: []const u8) !void {
             try appendRow(state, unsupported);
             continue;
         };
-        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members });
+        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members, .coverages = description.coverages, .required_items = description.required_items });
     }
 }
 fn nativeFor(state: *State, a: std.mem.Allocator, path: []const u8, content: []const u8, schema: []const u8, step: []const u8, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?Native {
@@ -422,8 +428,8 @@ fn contextFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []c
         try appendRow(state, base);
         return;
     };
-    base.request_context = try requestContext(a, packet);
     const native = try nativeFor(state, a, path, content, context.response_schema, context.request_step, context.origin);
+    base.request_context = try requestContext(a, packet, if (native) |known| known.metadata_contract else .unavailable);
     if (native) |known| {
         base.exchange_key = known.exchange_key;
         base.metadata_witness = known.artifact;
@@ -433,7 +439,7 @@ fn contextFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []c
     const output = try modelOutput(state, a, response_path, text_path, false, null);
     base.response = output.raw;
     base.disposition = output.disposition;
-    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| .{ .contract = known.metadata_contract, .fields = known.field_policies, .prose = known.prose_fields, .sources = known.original_sources, .exact_scope = known.exact_scope, .members = known.members } else .{}) else try appendRow(state, base);
+    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| .{ .contract = known.metadata_contract, .fields = known.field_policies, .prose = known.prose_fields, .sources = known.original_sources, .exact_scope = known.exact_scope, .members = known.members, .coverages = known.coverages, .required_items = known.required_items } else .{}) else try appendRow(state, base);
 }
 fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []const u8, raw: std.json.Value, is_record: bool) !void {
     var base: Row = .{ .id = path, .family = if (is_record) .debugger_request else .calibration_call, .artifact = try artifact(state, path, bytes), .disposition = .malformed_capture };
@@ -446,7 +452,7 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
         try appendRow(state, base);
         return;
     };
-    base.request_context = try requestContext(a, packet);
+    base.request_context = try requestContext(a, packet, if (version(description)) |declared| metadataContract(declared) orelse .unavailable else .unavailable);
     const schema = string(member(description, "schema")) orelse {
         try appendRow(state, base);
         return;
@@ -501,7 +507,7 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
         }
     };
     const text = output.text orelse embedded_text orelse if (output.raw != null) exported else null;
-    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{} }) else try appendRow(state, base);
+    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{}, .required_items = if (current) |known| known.required_items else &.{} }) else try appendRow(state, base);
 }
 fn checkedHash(a: std.mem.Allocator, value: std.json.Value, name: []const u8, bytes: []const u8) !void {
     if (member(value, name)) |declared| {
@@ -542,7 +548,7 @@ fn embeddedChild(state: *State, a: std.mem.Allocator, source: Artifact, capture:
     if (current) |known| {
         if (!std.mem.eql(u8, schema, known.schema) or !@import("../../../src/domain/model_text_field.zig").same(policies, known.field_policies) or !@import("../../../src/domain/model_text_wire.zig").sameProseFields(prose, known.prose_fields)) return error.InvalidCaptureProjection;
     }
-    try measureRow(state, a, base, packet, output, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{} });
+    try measureRow(state, a, base, packet, output, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{}, .required_items = if (current) |known| known.required_items else &.{} });
 }
 fn embeddedChildObserved(state: *State, a: std.mem.Allocator, source: Artifact, capture: std.json.Value, sample: bool) !void {
     embeddedChild(state, a, source, capture, sample) catch |err| {
@@ -616,7 +622,7 @@ fn providerFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []
         try appendRow(state, base);
         return;
     };
-    base.request_context = try requestContext(a, packet);
+    base.request_context = try requestContext(a, packet, .unavailable);
     const response_path = if (simple) try prefix(a, path, "response.json") else try sibling(a, path, ".request.json", ".response.json");
     const text_path = if (simple) try prefix(a, path, "model_output.txt") else try sibling(a, path, ".request.json", ".model-text.txt");
     const output = try modelOutput(state, a, response_path, text_path, false, null);

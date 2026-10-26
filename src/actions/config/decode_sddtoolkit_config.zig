@@ -35,6 +35,8 @@ const valid_config =
     \\{
     \\  "logs": { "level": "debug", "console": true },
     \\  "workflowTokenBudget": 100000,
+    \\  "temperature": 0.1,
+    \\  "temperatureRunawayRetry": 1,
     \\  "models": { "slots": { "implementation": { "provider": "openai", "model": "gpt-5.4-mini" } } },
     \\  "paths": {
     \\    "specs": "specs/", "references": "references/",
@@ -88,6 +90,42 @@ test "the workflow token budget is a required positive integer within the u32 ra
     }
 }
 
+test "both temperatures are required numbers, zero or greater" {
+    // ADR 0039: the project configuration is each temperature's one source.
+    const a = std.testing.allocator;
+    const configured = "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": 1,\n";
+    for ([_]struct { raw: []const u8, temperature: f64, retry: f64 }{
+        .{ .raw = "\"temperature\": 0,\n  \"temperatureRunawayRetry\": 0,\n", .temperature = 0, .retry = 0 },
+        .{ .raw = configured, .temperature = 0.1, .retry = 1 },
+        .{ .raw = "\"temperature\": 1,\n  \"temperatureRunawayRetry\": 1.5,\n", .temperature = 1, .retry = 1.5 },
+    }) |case| {
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, configured, case.raw);
+        defer a.free(bytes);
+        var decoded = try (Action{}).execute(a, bytes);
+        defer decoded.deinit();
+        try std.testing.expectEqual(case.temperature, decoded.value().temperatures().configured.value);
+        try std.testing.expectEqual(case.retry, decoded.value().temperatures().runaway_retry.value);
+    }
+    for ([_][]const u8{
+        "\"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n",
+        "\"temperature\": -0.1,\n  \"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": -1,\n",
+        "\"temperature\": \"0.1\",\n  \"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": \"1\",\n",
+        "\"temperature\": null,\n  \"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": null,\n",
+        "\"temperature\": [],\n  \"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": true,\n",
+        "\"temperature\": 0.1,\n  \"temperature\": 0.2,\n  \"temperatureRunawayRetry\": 1,\n",
+        "\"temperature\": 0.1,\n  \"temperatureRunawayRetry\": 1,\n  \"temperatureRunawayRetry\": 2,\n",
+    }) |replacement| {
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, configured, replacement);
+        defer a.free(bytes);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
+}
+
 fn configurationWithValidation(allocator: std.mem.Allocator, section: []const u8) ![]u8 {
     const replacement = try std.fmt.allocPrint(allocator, "{{\"validation\":{s},\n  \"logs\"", .{section});
     defer allocator.free(replacement);
@@ -126,33 +164,33 @@ test "rejects malformed unknown missing duplicate and wrong-kind input" {
     const invalid = [_][]const u8{
         "{",
         valid_config ++ "\ntrue",
-        \\{"version":"legacy","logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"version":"legacy","logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"extra":true,"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"extra":true,"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}}}
         ,
-        \\{"logs":{"level":"debug","console":false},"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":"no"},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":"no"},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false,"extra":true},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false,"extra":true},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug"},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug"},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{},"extra":true},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":[]},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{"implementation":{"provider":"openai"}}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json","extra":"x"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":1,"references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x","providers":".sddproviders.json"}}
         ,
-        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
+        \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"paths":{"specs":"s","references":"r","specsArchive":"s/a","workflows":"w","toolchainPreset":"t","principles":"p","templates":"x"}}
         ,
     };
 
@@ -172,7 +210,7 @@ test "rejects the removed promptCapture configuration field" {
 
 test "accepts JSON member reordering" {
     const reordered =
-        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"workflowTokenBudget":100000,"models":{"slots":{}},"logs":{"console":false,"level":"INFO"}}
+        \\{"paths":{"providers":".sddproviders.json","templates":"x","principles":"p","toolchainPreset":"t","workflows":"w","specsArchive":"s/a","references":"r","specs":"s"},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{}},"logs":{"console":false,"level":"INFO"}}
     ;
     var decoded = try (Action{}).execute(std.testing.allocator, reordered);
     defer decoded.deinit();

@@ -21,11 +21,14 @@ pub const Attempt = union(enum) {
         // a second counter derived from this request's total attempt ordinal.
         completed_retries: u64,
     },
+    /// ADR 0039's one re-send of a runaway attempt. The prepared request names
+    /// the attempt it repeats; no `retry-limit` applies.
+    runaway_resend,
 
     pub fn eql(left: Attempt, right: Attempt) bool {
         if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
         return switch (left) {
-            .initial => true,
+            .initial, .runaway_resend => true,
             .retry => |value| value.authority.eql(right.retry.authority) and value.completed_retries == right.retry.completed_retries,
         };
     }
@@ -85,6 +88,8 @@ const Record = struct {
     previous: ?*const Record,
     model_request_id: *const request_identity.ModelRequestId,
     attempts_reserved: u32,
+    /// The latest reserved attempt is ADR 0039's re-send, which is never re-sent.
+    latest_resent: bool = false,
 };
 
 const Storage = struct {
@@ -172,11 +177,9 @@ pub fn propose(
     if (!current_storage.revision.eql(expected_revision)) {
         return error.ModelAttemptAccountingRevisionConflict;
     }
-    const reserved = if (resolveRecord(current_storage, model_request_id)) |record|
-        record.attempts_reserved
-    else
-        0;
-    try validateAttempt(model_request_id, attempt, reserved);
+    const record = resolveRecord(current_storage, model_request_id);
+    const reserved = if (record) |value| value.attempts_reserved else 0;
+    try validateAttempt(model_request_id, attempt, reserved, if (record) |value| value.latest_resent else false);
     const next = std.math.add(u32, reserved, 1) catch {
         return error.ModelAttemptOrdinalExhausted;
     };
@@ -203,12 +206,10 @@ pub fn apply(
     {
         return error.ModelAttemptAccountingEpochConflict;
     }
-    const reserved = if (resolveRecord(current_storage, transition.model_request_id)) |record|
-        record.attempts_reserved
-    else
-        0;
+    const prior = resolveRecord(current_storage, transition.model_request_id);
+    const reserved = if (prior) |value| value.attempts_reserved else 0;
     if (reserved != transition.expected_request_value) return error.ModelAttemptValueConflict;
-    try validateAttempt(transition.model_request_id, transition.attempt, reserved);
+    try validateAttempt(transition.model_request_id, transition.attempt, reserved, if (prior) |value| value.latest_resent else false);
     const expected_next = std.math.add(u32, reserved, 1) catch {
         return error.ModelAttemptOrdinalExhausted;
     };
@@ -234,6 +235,7 @@ pub fn apply(
         .previous = current_storage.latest_record,
         .model_request_id = transition.model_request_id,
         .attempts_reserved = transition.next_request_value,
+        .latest_resent = transition.attempt == .runaway_resend,
     };
     try retainOwner(previous_owner);
     value.previous_owner = previous_owner;
@@ -271,6 +273,7 @@ fn validateAttempt(
     model_request_id: *const request_identity.ModelRequestId,
     attempt: Attempt,
     reserved: u32,
+    latest_resent: bool,
 ) ProposalError!void {
     switch (attempt) {
         .initial => if (reserved != 0) return error.InvalidAttemptClassification,
@@ -284,6 +287,8 @@ fn validateAttempt(
             }
             if (retry.completed_retries >= authority.limit.value) return error.ModelRetryLimitExhausted;
         },
+        // One re-send per attempt: a re-send is never re-sent.
+        .runaway_resend => if (reserved == 0 or latest_resent) return error.InvalidAttemptClassification,
     }
 }
 
@@ -316,4 +321,32 @@ fn ownerStorage(owner: *Owner) *OwnerStorage {
 
 fn ownerStorageConst(owner: *const Owner) *const OwnerStorage {
     return @ptrCast(@alignCast(owner));
+}
+
+test "a runaway re-send is a later attempt of a reserved request, outside the retry limit" {
+    const identity = @import("model_request_identity.zig");
+    const initial = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(initial);
+    const assigned = try identity.createSuccessor(identity.ledger(initial), .initial, .workflow_step, .{ .workflow_id = .{ .bytes = "flow" }, .workflow_version = 1, .workflow_step_id = .{ .bytes = "request" } }, .initial_generation);
+    defer identity.deinitOwner(assigned.owner);
+    const owner = try createInitial(std.testing.allocator, identity.ledger(assigned.owner).stageRunEpochId());
+    defer deinitOwner(owner);
+    // A request with no reserved attempt cannot take a re-send.
+    try std.testing.expectError(error.InvalidAttemptClassification, propose(accounting(owner), .initial, assigned.model_request_id, .runaway_resend));
+    const first = try apply(accounting(owner), try propose(accounting(owner), .initial, assigned.model_request_id, .initial));
+    defer deinitOwner(first);
+    const resend = try propose(accounting(first), accounting(first).revision(), assigned.model_request_id, .runaway_resend);
+    try std.testing.expectEqual(@as(u32, 2), resend.ordinal().value);
+    try std.testing.expect(resend.attempt.eql(.runaway_resend));
+    try std.testing.expect(!resend.attempt.eql(.initial));
+    // A re-send is never re-sent: the second re-send of one attempt rejects at
+    // proposal and at application.
+    const resent = try apply(accounting(first), resend);
+    defer deinitOwner(resent);
+    try std.testing.expectError(error.InvalidAttemptClassification, propose(accounting(resent), accounting(resent).revision(), assigned.model_request_id, .runaway_resend));
+    var forged = resend;
+    forged.expected_revision = accounting(resent).revision();
+    forged.expected_request_value = 2;
+    forged.next_request_value = 3;
+    try std.testing.expectError(error.InvalidAttemptClassification, apply(accounting(resent), forged));
 }

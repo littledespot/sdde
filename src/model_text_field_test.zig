@@ -24,7 +24,7 @@ test "every declared field schema offers exactly its permitted insertion alterna
     const canonical = try compile(a, all_insertions);
     for (std.meta.tags(policy.Field)) |field| {
         const binding: []const fields.Binding = &.{.{ .field = field, .path = &.{.{ .property = "value" }} }};
-        const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding);
+        const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding, &.{});
         defer selected.release();
         const inspected = fields.inspectSchema(selected.selected().root(), binding, &.{});
         try std.testing.expect(inspected.valid);
@@ -61,7 +61,7 @@ test "native model declarations distinguish shared text types and narrowed repla
     try std.testing.expect(fields.valid(bound));
     const resource = try compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
     for ([_][]const u8{ "brief", "primary_user_story", "entities", "records" }) |name| {
-        const selected = try schema.restrictFieldPolicies(a, resource.select(.{ .bytes = name }).?, &.{}, &.{}, bound);
+        const selected = try schema.restrictFieldPolicies(a, resource.select(.{ .bytes = name }).?, &.{}, &.{}, bound, &.{});
         defer selected.release();
         const active = try fields.activeBindings(a, selected.selected().root(), bound);
         try std.testing.expect(active.len != 0);
@@ -111,7 +111,7 @@ test "captured field-policy descriptions round trip selected schema numeric boun
     const a = arena.allocator();
     const binding: []const fields.Binding = &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "value" }} }};
     const canonical = try compile(a, all_insertions);
-    const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding);
+    const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding, &.{});
     defer selected.release();
     var fixture: @import("provider_invocation_test_fixture.zig").Fixture = undefined;
     try fixture.initWithFieldPolicies(selected.selected().modelBytes(), &.{}, &.{}, binding);
@@ -149,7 +149,7 @@ test "selected field presentation intersects policy with raw prose and excluded 
     const canonical = try compile(a, all_insertions);
     const binding: []const fields.Binding = &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "value" }} }};
     {
-        const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding);
+        const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding, &.{});
         defer selected.release();
         try std.testing.expect(fields.validSchema(selected.selected().root(), binding));
         const active = try fields.activeBindings(a, selected.selected().root(), binding);
@@ -166,7 +166,7 @@ test "selected field presentation intersects policy with raw prose and excluded 
         try std.testing.expect(std.mem.indexOf(u8, instruction, "Type required exact values verbatim") != null);
         try std.testing.expectEqualStrings(policy.selectedGuidance(.functional_requirement, active[0].insertions).instruction, instruction);
     }
-    const identity = try schema.restrictFieldPolicies(a, canonical, &.{ .{ .kind = "passive" }, .{ .kind = "source" } }, &.{}, &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
+    const identity = try schema.restrictFieldPolicies(a, canonical, &.{ .{ .kind = "passive" }, .{ .kind = "source" } }, &.{}, &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }}, &.{});
     defer identity.release();
     const active_identity = try fields.activeBindings(a, identity.selected().root(), &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
     try std.testing.expectEqual(@as(usize, 0), active_identity[0].insertions.count());

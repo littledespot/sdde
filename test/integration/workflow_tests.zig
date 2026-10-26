@@ -105,6 +105,8 @@ const valid_config =
     \\{
     \\  "logs": { "level": "debug", "console": false },
     \\  "workflowTokenBudget": 100000,
+    \\  "temperature": 0.1,
+    \\  "temperatureRunawayRetry": 1,
     \\  "models": { "slots": {} },
     \\  "principles": { "filenameHints": {}, "selections": [{ "stage": "spec", "environment": null, "fileKind": null, "categories": ["core", "custom"] }] },
     \\  "paths": {
@@ -153,6 +155,8 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
         \\{
         \\  "logs": { "level": "debug", "console": false },
         \\  "workflowTokenBudget": 100000,
+        \\  "temperature": 0.1,
+        \\  "temperatureRunawayRetry": 1,
         \\  "models": { "slots": {
         \\    "implementation": { "provider": "compiled-provider", "model": "model-a" }
         \\  } },
@@ -195,6 +199,7 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
     var outcome = assembly.bind().invoke(
         &selected,
         &boot.ready.config.config().models,
+        boot.ready.config.config().temperatures(),
         boot.ready.roots.registry().llmProviderConfig(),
     );
     defer outcome.deinit();
@@ -221,6 +226,7 @@ test "provider bootstrap assembly loads only the configured F0008 path" {
     var cancelled = cancelled_assembly.bind().invoke(
         &selected,
         &boot.ready.config.config().models,
+        boot.ready.config.config().temperatures(),
         boot.ready.roots.registry().llmProviderConfig(),
     );
     defer cancelled.deinit();
@@ -1294,6 +1300,19 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .{ .stage = .principle_review, .shape = .review_partial_assignment, .repetition = .persistent },
         .{ .stage = .principle_review, .shape = .review_repeated_member, .repetition = .{ .first_request = 1 } },
         .{ .stage = .principle_review, .shape = .review_repeated_member, .repetition = .persistent },
+        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .first_request = 1 } },
+        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .persistent },
+        // ADR 0039: a records runaway is re-sent once; a re-send that runs away
+        // fails typed, and a re-sent response takes the same admission.
+        .{ .stage = .records, .shape = .runaway, .repetition = .{ .first_request = 1 } },
+        .{ .stage = .records, .shape = .runaway, .repetition = .persistent },
+        .{ .stage = .records, .shape = .runaway_uncovered, .repetition = .{ .first_request = 2 } },
+        .{ .stage = .principle_review, .shape = .runaway_partial_assignment, .repetition = .{ .first_request = 2 } },
+        // ADR 0042: an uncited non-compatible principle verdict takes the
+        // whole-response correction; repeated, it exhausts the principle step
+        // and ends that advice incomplete.
+        .{ .stage = .principle_review, .shape = .uncited_verdict, .repetition = .{ .first_request = 1 } },
+        .{ .stage = .principle_review, .shape = .uncited_verdict, .repetition = .persistent },
     };
     const classification_repair_start = 14 + faults.len;
     const reconciliation_start = classification_repair_start + 3;
@@ -2500,7 +2519,13 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             },
-            .persistent => {
+            .persistent => if (selected_fault.shape == .runaway) {
+                // The runaway and its re-send both stopped; the request fails typed.
+                try std.testing.expectEqual(@as(usize, 2), driver.fault_calls);
+                try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                try std.testing.expect(!view.contains(.published_workflow_output));
+            } else {
                 const advised: @TypeOf(driver).AdviceProjection = if (selected_fault.stage == .principle_review) .principles else .source;
                 const exhausted = if (protocol_advice) driver.protocol_advice.get(advised).?.exhaustion else result.execution_rejected.retry_limit;
                 // A principle fault leaves source review complete, and the reverse.
@@ -2962,7 +2987,7 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     try project.writeFile(io, .{ .sub_path = ".sddproviders.json", .data = provider_bytes });
     var assembly = model_provider_bootstrap.Assembly.init(io, a, project, .{}, &@import("../../src/composition/provider_model_contracts.zig").registry);
     const selected: workflow_execution.SelectedWorkflow = .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph };
-    var outcome = assembly.bind().invoke(&selected, &configuration.config.models, provider_path);
+    var outcome = assembly.bind().invoke(&selected, &configuration.config.models, configuration.config.temperatures(), provider_path);
     defer outcome.deinit();
     try std.testing.expect(outcome == .ready);
     const step = for (graph.authority.steps) |*current| {
@@ -2975,7 +3000,7 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     try std.testing.expectEqualStrings(configured.provider, binding.registry_entry.provider.bytes);
     try std.testing.expectEqualStrings(configured.model, binding.registry_entry.model.bytes);
     try std.testing.expect(@import("../../src/domain/request_debugger.zig").sameOptional(configured.reasoningEffort, binding.reasoning_effort));
-    try std.testing.expectEqualDeep(binding.registry_entry.capabilities.inferenceControls(), binding.controls);
+    try std.testing.expectEqualDeep(binding.registry_entry.capabilities.inferenceControls(configuration.config.temperatures()), binding.controls);
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(graph.source.?.content, &digest, .{});
     const observed = .{
@@ -3100,6 +3125,23 @@ fn verifyAdvisoryPublication(comptime completion: enum { complete, protocol_inco
     }
     const published = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
     try std.testing.expectEqualDeep(published, persisted.content);
+    check = "published review status (ADR 0040)";
+    const specification = try project.readFileAlloc(io, "requirements/current/chosen/spec.md", a, .limited(8_388_608));
+    const context_view = try project.readFileAlloc(io, "requirements/current/chosen/reference-context.md", a, .limited(8_388_608));
+    if (completion == .complete) {
+        try std.testing.expect(std.mem.indexOf(u8, specification, "Review status") == null);
+        try std.testing.expect(std.mem.indexOf(u8, context_view, "## Review Status") == null);
+    } else {
+        var unassessed: usize = 0;
+        inline for (.{ persisted.review.advice_stop, persisted.principle_assessment.advice_stop }, .{ "Source", "Principle" }) |stopped, title| if (stopped) |stop| {
+            unassessed += stop.unassessed.len;
+            const heading = try std.fmt.allocPrint(a, "### " ++ title ++ " Review: Incomplete ({s})\n\n{d} of {d} subjects were not assessed:\n", .{ @tagName(stop.reason), stop.unassessed.len, stop.requirements.len });
+            try std.testing.expect(std.mem.indexOf(u8, context_view, heading) != null);
+        };
+        const status = try std.fmt.allocPrint(a, "**Review status: Incomplete — {d} of {d} review subjects were not assessed.**", .{ unassessed, persisted.review.seeds.len + persisted.principle_assessment.requirements.len });
+        try std.testing.expect(std.mem.indexOf(u8, specification, status) != null);
+        try std.testing.expect(std.mem.indexOf(u8, context_view, "\n## Review Status\n") != null);
+    }
     check = "no manufactured persisted clarification";
     const clarifications = @import("../../src/domain/clarification_inputs.zig");
     const clarification_bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", a, .limited(8_388_608));
@@ -4199,6 +4241,7 @@ const InvocationPreparationProbe = struct {
         context: *anyopaque,
         selected: *const workflow_execution.SelectedWorkflow,
         models: *const config.ModelsConfig,
+        temperatures: @import("../../src/domain/model_controls.zig").Temperatures,
         _: *const bootstrap_root_registry.LLMProviderConfigCapability,
     ) model_provider_bootstrap_orchestrator.Outcome {
         const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context));
@@ -4219,6 +4262,7 @@ const InvocationPreparationProbe = struct {
                 const allowlist_owner = repository_model_allowlist.createValidated(
                     std.testing.allocator,
                     models,
+                    temperatures,
                     llm_provider_registry.registry(registry_owner),
                 ) catch {
                     llm_provider_registry.deinitOwner(registry_owner);
@@ -4328,6 +4372,8 @@ test "a complete root collision fails as a registry error" {
         \\{
         \\  "logs": { "level": "debug", "console": false },
         \\  "workflowTokenBudget": 100000,
+        \\  "temperature": 0.1,
+        \\  "temperatureRunawayRetry": 1,
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "specs", "references": "SPECS",
@@ -4360,6 +4406,8 @@ test "normalization-equivalent absent roots fail as a registry error" {
         \\{
         \\  "logs": { "level": "debug", "console": false },
         \\  "workflowTokenBudget": 100000,
+        \\  "temperature": 0.1,
+        \\  "temperatureRunawayRetry": 1,
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "shared", "references": "shared/",

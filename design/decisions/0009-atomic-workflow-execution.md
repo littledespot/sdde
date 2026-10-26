@@ -9,6 +9,14 @@
   yet implemented). A model request's own protocol correction runs inside its
   `request-model` step, bounded by that step's `retry-limit`. Every other retry still
   needs an explicit YAML transition.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): a provider `output_limit` stop is re-sent once, outside any
+  `retry-limit`. It is the one engine-owned retry besides protocol correction.
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
+  2026): a Specify run that fails because model work couldn't be completed publishes its
+  validated content as a failed incomplete specification, marked and logged, with a
+  `spec_incomplete` state. The execution stays atomic, ends `failed`, never
+  reports success and is never resumed.
 
 ## Decision
 
@@ -48,7 +56,7 @@
 - There is no cross-execution exactly-once request guarantee and no journal-derived
   replay approval gate.
 - Within one execution, only explicit YAML transitions and operation-local `retry-limit`
-  authorize retries.
+  authorize retries, apart from ADR 0039's one runaway re-send.
 
 ### Clarification exception
 

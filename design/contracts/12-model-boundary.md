@@ -256,7 +256,8 @@ Normalize cached token usage under
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
-repair and grading, registered temperature `0.1`, and its documented maximum of
+repair and grading, the configured temperature (`0.1` in the shipped E2E configuration,
+`1` for a runaway re-send; ADR 0039), and its documented maximum of
 16,384 output tokens sent on every inference request
 ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 The separately registered Luna profile retains its strict-output field and omitted
@@ -289,11 +290,12 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
 - strict JSON schema with enums and `additionalProperties: false`;
-- temperature `0.1` whenever the selected registered model supports temperature; omit
-  the control only when unsupported, without relying on it for correctness (workflow
+- the project configuration's `temperature` whenever the selected registered model
+  supports temperature, and `temperatureRunawayRetry` on a runaway re-send; omit the
+  control only when unsupported, without relying on it for correctness (workflow
   definitions cannot select or override it; prepared requests, retries and provider
-  authorization retain and validate it; Bedrock rubric evaluation uses the same policy,
-  OpenAI evaluation does not);
+  authorization retain and validate it; the standalone evaluator sets its own value;
+  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md));
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
   nested alternatives and constraints, without synthetic candidate examples;
@@ -411,6 +413,26 @@ findings. Only complete native collection validation permits authority advanceme
   output allowance below the model's own maximum: Bedrock requests send the
   catalogue's documented maximum. A provider-applied stop is logged with its reason
   under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output).
+- A runaway, a provider `output_limit` stop, discards its partial text and re-sends the
+  identical request once, changing only the temperature to the configured
+  `temperatureRunawayRetry`
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). The
+  re-send is not a protocol correction: it carries no diagnostic, uses no `retry-limit`
+  and is bounded at one per attempt, including a correction attempt. Admission takes a
+  first runaway as `invalid` with no candidate; `check-model-runaway` routes it to
+  `build-model-runaway-resend`, a route the compiler requires wherever admission's
+  `invalid` continues. The re-send must equal its attempt in every field except
+  sampling. Requests and provider operations record their sampling
+  (`configured` or `runaway_resend`), and `model-request-debug/v13` records both
+  configured temperatures and the sampling. A runaway on the
+  re-send ends the request with `RunawayRepeated`: required work fails, and advisory
+  work ends that advice incomplete
+  ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
+- Every retry response, a re-send or a protocol correction, passes exactly the checks a
+  first response does, in the same order: observation and usage validation, decoding,
+  payload-schema validation, native admission constraints, domain validation, the
+  evidence and repair rules and every publication check. None is skipped, relaxed or
+  reordered for a retry. Each re-send is logged as `model.runaway_resent` (§27).
 
 - Model-operation identity is the compiled `(workflowId, workflowVersion,
   originatingWorkflowStepId)` tuple retained across consumer steps.
@@ -552,8 +574,9 @@ findings. Only complete native collection validation permits authority advanceme
   The approved missing-final-answer case also admits as `invalid`, with no candidate:
   sealed observation evidence must establish `missing_final_text`, valid association
   and known usage. It may enter the same explicit protocol correction and attempt
-  retirement path, or close as failed. Other provider stops/failures remain `failed`
-  and cancellation remains `cancelled`.
+  retirement path, or close as failed. An `output_limit` stop takes ADR 0039's one
+  re-send instead, and a runaway on the re-send closes as `failed`. Other provider
+  stops/failures remain `failed` and cancellation remains `cancelled`.
 - No retry exhaustion or user approval is inferred.
 - The runner validates the evidence-derived reason/outcome and one direct ledger successor
   before publication; missing, foreign, stale, duplicate or unfinished operation evidence
@@ -687,7 +710,14 @@ So do missing, repeated or foreign assignment members: the packet's `exact_membe
 ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
 So does a positive verdict the assignment withholds because no claim set can be
-bound to it: it rejects as `unknown_variant`.
+bound to it: it rejects as `unknown_variant`. So does a principle verdict that requires
+citations but has none: the packet's required-items constraint, derived from the
+domain rule, rejects it as `missing_required_item` at the citations array
+([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)). The
+required-items constraint is generic: when a named property of an object has one of
+the listed values, a named array property of the same object needs at least one item.
+Like `exact_members` and coverage, it is native, recorded in request descriptions and
+reapplied by replay.
 Existing protocol correction resubmits the whole assigned review under its original
 assignment allowance, including otherwise correct siblings; insertion still corrects
 only its selected finding. No partial-response merge, new counter or verdict
@@ -807,7 +837,9 @@ authenticated answer acceptance and protected history (§23.2).
 - `assessment_incomplete`, naming the exact current advisory projection, revision,
   authority/member set, missing assignment suffix, native stop reason and origin
   when sent. Only ADR 0023's bound non-budget provider/protocol stop or eligible
-  missing usage can produce it;
+  missing usage can produce it; an `output_limit` stop does so only when its re-send
+  also runs away (ADR 0039). Publication marks it in `spec.md` and
+  `reference-context.md` and logs it as `review.incomplete` (ADR 0040);
   native requirements remain mandatory and absent findings are not evidence;
 - `clarification_required`, with a closed reason and the earliest owning `spec | plan | tasks` stage;
 - `upstream_rework_required`, when a downstream stage encounters a gap owned by an earlier stage; or
@@ -980,7 +1012,10 @@ and source-preservation/reference exact claim sets retain their existing rules.
 
 Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
-several records; overlapping or multi-claim groups preserve many-to-many links.
+several records, each naming the claims it supports from that group, and admission
+requires every claim a functional requirement names to have an acceptance criterion
+or edge case naming it too ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)); overlapping or multi-claim groups preserve
+many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
 generation evidence bounds remain independently enforced.
 
@@ -1002,11 +1037,11 @@ the source-loss owner selects targets and the runner executes declared operation
 
 | Current state | Required continuation |
 | --- | --- |
-| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; no new specification or clarification publication |
-| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; no completed specification or clarification publication. A failure of model work publishes [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)'s failed incomplete specification of the validated content, marked and logged |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass. The blocked run publishes its validated content as an incomplete specification, marked and logged ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) |
 | Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
 | One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
-| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or incomplete specification |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause. ADR 0041's failed incomplete specification publishes the validated content without the unresolved unit |
 | No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
 | All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
 
@@ -1114,6 +1149,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v11` retains native scope for diagnostic replay; request logs
+`model-request-debug/v13` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

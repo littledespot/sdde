@@ -355,6 +355,7 @@ Logging-internal nodes are not recursively observed.
 | `run.completed` | `info` | `outcome` | `duration_ms` |
 | `run.blocked` | `error` | `diagnostic_code`, `outcome` | — |
 | `run.failed` | `error` | `diagnostic_code`, `outcome` | — |
+| `run.incomplete_published` | `warning` | `diagnostic_code` | — |
 | `run.cancelled` | `info` | `outcome` | — |
 | `stage.started` | `info` | — | — |
 | `stage.completed` | `info` | `outcome` | `duration_ms` |
@@ -371,12 +372,14 @@ Logging-internal nodes are not recursively observed.
 | `model.schema_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `model.response_normalized` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | — |
 | `model.provider_stopped` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
+| `model.runaway_resent` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | `input_tokens`, `output_tokens` |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
 | `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |
 | `repair.applied` | `info` | `repair_unit_kind`, `outcome` | — |
 | `repair.rejected` | `warning` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |
 | `repair.exhausted` | `error` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |
+| `review.incomplete` | `warning` | `diagnostic_code` | `count` |
 | `review.requested` | `info` | — | — |
 | `review.approved` | `info` | `outcome` | — |
 | `review.rejected` | `warning` | `outcome` | — |

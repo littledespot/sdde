@@ -272,7 +272,7 @@ const AdapterFixture = struct {
         self.base.registry_entry.config = config;
         self.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
         self.base.provider_binding.reasoning_effort = "low";
-        self.base.provider_binding.controls = contract.capabilities.inferenceControls();
+        self.base.provider_binding.controls = contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures);
         self.base.request.controls = self.base.provider_binding.controls;
         self.base.request.binding_id = self.base.provider_binding.bindingId();
         self.auth = .{ .allocator = allocator };
@@ -362,7 +362,7 @@ test "a request altered after authorization, here adding temperature, is denied 
     // The lease binds the exact authorized request, so a changed control never
     // reaches encoding; the encoder's own test rejects temperature as well.
     var request = fixture.base.request;
-    request.controls = .{ .temperature = .fixed };
+    request.controls = .{ .temperatures = @import("test_fixtures/model_temperatures.zig").temperatures };
     var observed = try fixture.provider.port().invoke(&fixture.base.provider_binding, &request, authorized.reference, authorized.invoked);
     defer observed.deinit();
     try std.testing.expectEqual(.authorization_denied, observed.failed.cause);

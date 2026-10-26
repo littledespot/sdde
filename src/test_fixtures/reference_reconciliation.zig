@@ -130,7 +130,7 @@ pub fn modelWire(a: std.mem.Allocator, proposal: @FieldType(r.Parsed, "proposal"
     const list = parsed.value.object.getPtr(name).?;
     var retained: std.array_list.Managed(std.json.Value) = .init(a);
     for (list.array.items) |entry| {
-        if (std.mem.eql(u8, entry.object.get("content").?.object.get("kind").?.string, "preserved_token")) continue;
+        if (std.mem.eql(u8, entry.object.get("content").?.object.get("kind").?.string, "exact_text")) continue;
         try retained.append(entry);
     }
     list.* = .{ .array = retained };

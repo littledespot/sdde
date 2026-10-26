@@ -66,6 +66,8 @@ pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 /// Initial authoring owns its supporting-group choice; repair remains value-only.
 pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 pub const AuthoringEntity = struct { content: spec.Content(spec.BusinessValue), signal_ids: []const @import("reference_reconciliation.zig").SignalId };
+/// A non-entity record names the claims it supports from its batch's group (ADR 0038).
+pub const AuthoringRecord = struct { content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_identity.zig").ClaimId };
 pub const ModelResponse = union(enum) {
     pub const model_fields = .{ .primary_user_story = @import("text_field_policy.zig").Field.spec_story };
     brief: struct {
@@ -81,7 +83,7 @@ pub const ModelResponse = union(enum) {
         basis: AuthoringValue,
         records: []const AuthoringEntity,
     },
-    records: struct { records: []const spec.Wire.RecordProposal },
+    records: struct { records: []const AuthoringRecord },
     clarification: struct {
         pub const model_fields = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
         reason: NeedReason,
@@ -103,8 +105,8 @@ pub const ModelResponse = union(enum) {
                     break :entity .{ .entities = .{ .disposition = entities.disposition, .basis = try wireValue(allocator, context, entities.basis), .records = records } };
                 },
                 .records => |records| blk: {
-                    const projected = try allocator.alloc(spec.Wire.RecordProposal, records.len);
-                    for (records, projected) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content) };
+                    const projected = try allocator.alloc(AuthoringRecord, records.len);
+                    for (records, projected) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content), .claim_ids = record.provenance.claim_ids };
                     break :blk .{ .records = .{ .records = projected } };
                 },
             },
@@ -144,11 +146,22 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
             const ids = try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{bound.records.signal});
             for (batch.records, records) |wire, *record| {
                 if (wire.content == .entity) return error.InvalidSpecificationUnit;
-                record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = bound.records.selection };
+                record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = .{ .claim_ids = try groupSubset(allocator, bound.records.selection.claim_ids, wire.claim_ids), .clarification_response_ids = bound.records.selection.clarification_response_ids } };
             }
             break :records .{ .content = .{ .records = records } };
         } else error.InvalidSpecificationUnit,
     };
+}
+/// The named claims in the group's accepted order. Each must belong to the group,
+/// once; model order never becomes canonical order.
+fn groupSubset(a: std.mem.Allocator, group: []const @import("reference_identity.zig").ClaimId, named: []const @import("reference_identity.zig").ClaimId) Error![]const @import("reference_identity.zig").ClaimId {
+    if (named.len == 0) return error.InvalidSpecificationUnit;
+    @import("reference_reconciliation.zig").unique(@import("reference_identity.zig").ClaimId, named) catch return error.InvalidSpecificationUnit;
+    var selected: std.ArrayList(@import("reference_identity.zig").ClaimId) = .empty;
+    errdefer selected.deinit(a);
+    for (group) |id| if (@import("reference_reconciliation.zig").contains(@import("reference_identity.zig").ClaimId, named, id)) try selected.append(a, id);
+    if (selected.items.len != named.len) return error.InvalidSpecificationUnit;
+    return selected.toOwnedSlice(a);
 }
 fn associated(a: std.mem.Allocator, available: @import("specification_source_binding.zig").Catalogue, value: AuthoringValue, mode: @import("specification_source_binding.zig").Mode) Error!spec.Values(.model).AttributedValue {
     const selected = @import("specification_source_binding.zig").resolveGroups(a, available.records, available.inputs, value.signal_ids, mode) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;

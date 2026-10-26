@@ -105,7 +105,7 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
             if (@hasDecl(T, "ClosedJsonWire")) {
                 comptime if (!std.meta.hasFn(T, "jsonParse")) @compileError("A closed wire wrapper must own its parse hook");
                 switch (@typeInfo(T.ClosedJsonWire)) {
-                    .int, .bool, .@"enum" => {},
+                    .int, .float, .bool, .@"enum" => {},
                     else => @compileError("A closed wire wrapper names one scalar wire kind"),
                 }
                 return wireTypes(T.ClosedJsonWire, value);

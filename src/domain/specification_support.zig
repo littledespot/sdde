@@ -210,7 +210,8 @@ pub fn Contract(comptime purpose: Purpose) type {
             checkPacket(expected, packet) catch |err| return if (err == error.InvalidRequiredAuthority) false else err;
             return std.meta.eql(expected.repairPermit(), packet.repairPermit()) and
                 std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.excludedVariants(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.excludedVariants(), .{})) and
-                std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.integerChoices(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.integerChoices(), .{}));
+                std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.integerChoices(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.integerChoices(), .{})) and
+                std.mem.eql(u8, try std.json.Stringify.valueAlloc(allocator, expected.requiredItems(), .{}), try std.json.Stringify.valueAlloc(allocator, packet.requiredItems(), .{}));
         }
 
         fn assignmentDefinition() @import("model_result_schema.zig").DefinitionId {
@@ -336,7 +337,17 @@ pub fn Contract(comptime purpose: Purpose) type {
                 ordinal_choice,
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
-            }) else try packets.withIntegerChoices(allocator, base, &.{ordinal_choice});
+            }) else cited: {
+                const ordinals_bound = try packets.withIntegerChoices(allocator, base, &.{ordinal_choice});
+                defer packets.release(ordinals_bound);
+                // A finding the domain rule requires citations for, returned
+                // without any, fails response admission and takes the bounded
+                // protocol correction with its whole response (ADR 0042).
+                break :cited try packets.withRequiredItems(allocator, ordinals_bound, &.{.{
+                    .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "citations" } },
+                    .when = .{ .property = "decision", .values = principles.cited_decisions },
+                }});
+            };
             defer packets.release(selected_packet);
             return if (purpose == .source) withQuestionText(allocator, selected_packet, context.inputs, true) else packets.withBody(allocator, selected_packet, selected_packet.body());
         }
@@ -367,7 +378,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);

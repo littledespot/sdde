@@ -45,10 +45,12 @@ pub const TokenReference = struct { token_id: extraction.tokens.Id };
 pub const ContentProposal = union(enum) {
     model: extraction.ProposalContent,
     preserved_token: TokenReference,
+    pub const model_tags = .{ .preserved_token = "exact_text" };
 };
 pub const Content = union(enum) {
     model: extraction.Content,
     preserved_token: TokenReference,
+    pub const model_tags = .{ .preserved_token = "exact_text" };
 };
 pub const StatementProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
 pub fn equivalentContent(left: Content, right: Content) bool {

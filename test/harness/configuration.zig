@@ -41,7 +41,7 @@ const Settings = struct {
 /// Values borrow from the caller-owned selection and JSON decoding arena.
 pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Error!Config {
     const settings = try c.decode(Settings, a, bytes);
-    var value: Config = .{
+    const value: Config = .{
         .schema = settings.schema,
         .api = selection.api,
         .model = selection.model.bytes,
@@ -55,11 +55,6 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Er
         .total_token_budget = settings.total_token_budget,
         .max_output_tokens = settings.max_output_tokens,
     };
-    if (selection.api == .bedrock_converse) {
-        const required = try bedrockTemperature(value);
-        if (settings.temperature != null and !std.meta.eql(settings.temperature, required)) return error.InvalidEvaluationContract;
-        value.temperature = required;
-    }
     try validate(value);
     return value;
 }
@@ -72,9 +67,11 @@ pub fn validate(value: Config) c.Error!void {
         .openai_responses => if (value.region != null or value.family != null) return error.InvalidEvaluationContract,
         .bedrock_converse => {
             const model = try bedrockContract(value);
-            if (!model.capabilities.supports(.native_schema, model.capabilities.inferenceControls()) or
+            if (!model.capabilities.supportsResponse(.native_schema) or
                 !contracts.supportsReasoningEffort(model.supported_reasoning_efforts, if (value.reasoning_effort) |effort| @tagName(effort) else null)) return error.InvalidEvaluationContract;
-            if (!std.meta.eql(value.temperature, try bedrockTemperature(value))) return error.InvalidEvaluationContract;
+            // The evaluator owns its judge temperature (ADR 0039): a model that
+            // takes one requires a value, and one that takes none requires null.
+            if ((value.temperature != null) != model.capabilities.temperature) return error.InvalidEvaluationContract;
         },
     }
 }
@@ -92,9 +89,4 @@ pub fn bedrockContract(value: Config) c.Error!*const contracts.ProviderModelCont
         },
     };
     return registry.resolve(.{ .bytes = "aws-bedrock" }, model, config) orelse error.InvalidEvaluationContract;
-}
-
-fn bedrockTemperature(value: Config) c.Error!?f64 {
-    const controls = (try bedrockContract(value)).capabilities.inferenceControls();
-    return if (controls.temperature) |temperature| temperature.wireValue() else null;
 }

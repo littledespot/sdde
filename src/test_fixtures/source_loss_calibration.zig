@@ -512,7 +512,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .content = content,
         .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .native) } },
         .schema_name = "sdde_model_envelope_v1",
-        .temperature = .fixed,
+        .temperature = @import("model_temperatures.zig").temperatures.configured,
         .reasoning_effort = .low,
         .family = .@"gpt-oss",
         .max_output_tokens = try catalogueMaximum(a),

@@ -63,6 +63,10 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .model_response_normalized => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{}),
         // Provider-applied stops carry their exact closed reason, never only usage.
         .model_provider_stopped => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens }),
+        // ADR 0039: every re-send of a runaway names the attempt it repeats.
+        .model_runaway_resent => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens }),
+        // ADR 0040: advice that closed incomplete names its reason and unassessed count.
+        .review_incomplete => definition(event_type, .warning, &.{.diagnostic_code}, &.{.count}),
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),

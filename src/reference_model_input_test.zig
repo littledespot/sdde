@@ -56,7 +56,7 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
 
         for (items) |entry| if (entry.claim.content == .preserved_token) {
             const exact = try projection.requirement(a, entry, fixture.inputs, fixture.text.registry);
-            try std.testing.expectEqualStrings("preserved_token", exact.kind);
+            try std.testing.expectEqualStrings("exact_text", exact.kind);
             try std.testing.expectEqualStrings(entry.claim.content.preserved_token.value.raw_value.bytes, exact.meaning);
             try std.testing.expectEqualDeep(entry.claim.id, exact.claim_id);
         };
@@ -86,7 +86,7 @@ test "reconciliation assignments scope instructions while retaining complete sou
 test "summary purpose and union claim coverage apply across every summary level" {
     const r = reconciliation.r;
     const purpose = "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.";
-    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds preserved-token statements.";
+    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds exact-text statements.";
     for ([_][5][]const u8{
         .{ "MOCK Start the application.\n", "MOCK Display the greeting.\n", "MOCK Show the UTC time.\n", "MOCK Refresh when requested.\n", "MOCK Display `Ready!`.\n" },
         .{ "MOCK Renew eligible loans.\n", "MOCK Keep overdue loans unchanged.\n", "MOCK Show the new deadline.\n", "MOCK Notify the borrower after renewal.\n", "MOCK Display `Renewed!`.\n" },
@@ -222,7 +222,7 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
         defer parsed.deinit();
         try std.testing.expect(!parsed.value.object.contains("summary_purpose"));
         try checkProjectedPacket(a, selected.body());
-        for ([_][]const u8{ "claims", "citations", "preserved_tokens", "passive_literals" }) |field| {
+        for ([_][]const u8{ "claims", "citations", "exact_texts", "passive_literals" }) |field| {
             try std.testing.expectEqualStrings(
                 try std.json.Stringify.valueAlloc(a, full_json.value.object.get(field).?, .{}),
                 try std.json.Stringify.valueAlloc(a, parsed.value.object.get(field).?, .{}),
@@ -300,7 +300,10 @@ test "signal assignments exclude conflicting semantic members while retaining th
         const assignment = parsed.value.object.get("assignment").?.object;
         try std.testing.expectEqual(@as(usize, 1), assignment.get("claim_ids").?.array.items.len);
         try std.testing.expectEqual(global.items.len, parsed.value.object.get("claims").?.array.items.len);
-        try std.testing.expectEqual(@as(usize, 1), parsed.value.object.get("preserved_tokens").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 1), parsed.value.object.get("exact_texts").?.array.items.len);
+        // ADR 0043: exact-value claims and their catalogue use only exact-text names.
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "preserved_token") == null);
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"kind\":\"exact_text\"") != null);
     }
 }
 
@@ -326,7 +329,7 @@ test "token-only semantic assignments are empty while native construction preser
         try checkSemanticAssignment(a, selected, summary.items, null);
         const parsed = try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{});
         try std.testing.expectEqual(@as(usize, 0), parsed.value.object.get("assignment").?.object.get("claim_ids").?.array.items.len);
-        try std.testing.expectEqual(@as(usize, 2), parsed.value.object.get("preserved_tokens").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 2), parsed.value.object.get("exact_texts").?.array.items.len);
         try checkEmptySemanticSchema(a, selected, "statements");
         const native = try reconciliation.parse.execute(a, .{ .input = summary, .bytes = "{\"statements\":[]}" });
         try std.testing.expectEqual(@as(usize, 2), (try reconciliation.validate_summary.execute(a, native, fixture.context())).valid.statements.len);
@@ -451,7 +454,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
             // Membership enums do not replace native coverage or provenance checks.
             const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
             try std.testing.expectEqual(summary.items.len, body.get("claims").?.array.items.len);
-            try std.testing.expectEqual(@as(usize, 1), body.get("preserved_tokens").?.array.items.len);
+            try std.testing.expectEqual(@as(usize, 1), body.get("exact_texts").?.array.items.len);
         }
         const disposition_packet = try stage.packet(std.testing.allocator, .{ .dispositions = global }, fixture.inputs, fixture.text.registry);
         defer packets.release(disposition_packet);
@@ -634,7 +637,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
             .model => |value| try std.testing.expectEqualDeep(@import("domain/model_evidence.zig").modelContent(value), claim.content.model),
             .preserved_token => |token| {
                 try std.testing.expectEqualDeep(token.value.id, claim.content.preserved_token.token_id);
-                const copy = projected.preserved_tokens[0];
+                const copy = projected.exact_texts[0];
                 try std.testing.expectEqualStrings(token.value.raw_value.bytes, copy.value);
                 try std.testing.expectEqualDeep(token.value.id, copy.id);
             },
@@ -668,7 +671,7 @@ pub fn checkProjectedPacket(a: std.mem.Allocator, bytes: []const u8) !void {
         const content = try codec.decode(r.ContentProposal, a, raw);
         if (content == .preserved_token) {
             const id = content.preserved_token.token_id;
-            for (body.get("preserved_tokens").?.array.items) |token| {
+            for (body.get("exact_texts").?.array.items) |token| {
                 if (token.object.get("id").?.integer == id.ordinal) {
                     try std.testing.expect(token.object.get("value").?.string.len != 0);
                     break;
@@ -871,7 +874,7 @@ test "reconciliation phase recreation retains native source exceptions through r
             try std.testing.expectEqualDeep(original.id, retained.source_id);
             try std.testing.expectEqualStrings(original.bytes, retained.bytes);
         }
-        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies());
+        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies(), packet.requiredItems());
         defer selected.release();
         const response: stage.Response = if (prior == .signals)
             .{ .signals = .{ .signals = &.{.{ .claim_ids = &.{dispositions[2].claim_id}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Retain help describing " ++ encoded ++ "." } }} } } } }} } }

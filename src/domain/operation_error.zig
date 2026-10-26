@@ -74,6 +74,7 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("model_attempt_decision.zig").Error ||
     @import("provider_operation_lifecycle.zig").Error ||
     @import("provider_invocation_validation.zig").Error ||
+    @import("provider_invocation_validation.zig").RunawayError ||
     @import("provider_authorization_result.zig").Error ||
     @import("model_transport.zig").Error ||
     @import("workflow_output.zig").Error ||

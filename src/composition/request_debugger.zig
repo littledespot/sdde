@@ -47,7 +47,7 @@ const Authority = struct {
         const services = &self.runtime.boot.ready;
         const graph = services.workflows.registry().resolve(.{ .bytes = description.workflow_id }) orelse return error.ReplayUnauthorized;
         const selected: @import("../domain/workflow_execution.zig").SelectedWorkflow = .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph };
-        var outcome = self.runtime.providers.bind().invoke(&selected, &services.config.config().models, services.roots.registry().llmProviderConfig());
+        var outcome = self.runtime.providers.bind().invoke(&selected, &services.config.config().models, services.config.config().temperatures(), services.roots.registry().llmProviderConfig());
         defer outcome.deinit();
         if (outcome != .ready) return error.ReplayUnauthorized;
         const binding = (@import("../actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, .{ .bytes = description.request_step }, outcome.ready.registry(), outcome.ready.allowlist()) catch return error.ReplayUnauthorized;

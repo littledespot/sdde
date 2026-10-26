@@ -23,6 +23,8 @@ pub const Descriptor = union(enum) {
     request_decode: Binding,
     request_admission: Binding,
     request_protocol: Binding,
+    /// ADR 0039's one re-send of a first runaway, beside protocol correction.
+    request_resend: Binding,
     request_closure: Binding,
     advisory_request_closure: Binding,
     repair_authorize: Binding,
@@ -110,6 +112,8 @@ pub const Change = union(enum) {
     authorize: struct { subject: Subject, transition: retry.Transition },
     reclassify: union(enum) {
         missing_final_text: *const @import("provider_invocation_validation.zig").Evidence,
+        /// A first runaway takes its one re-send (ADR 0039), like a missing answer.
+        runaway: *const @import("provider_invocation_validation.zig").Evidence,
         authority_result: struct { subject: Subject, result: *const @import("required_authority.zig").Result },
         clarification_result: struct { subject: Subject, result: *const @import("clarification_refresh.zig").Result },
         repair_blocked: BlockedRepairEvidence,
@@ -415,8 +419,9 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                     entry.observation.outcome = .blocked;
                 };
             },
-            .missing_final_text => |evidence| {
-                if ((descriptor != .request_decode and descriptor != .request_admission) or outcome != .invalid or !evidence.missingFinalText()) return error.InvalidOutcomeAssociation;
+            .missing_final_text, .runaway => |evidence| {
+                const correctable = if (classification == .missing_final_text) evidence.missingFinalText() else evidence.runaway() == .first;
+                if ((descriptor != .request_decode and descriptor != .request_admission) or outcome != .invalid or !correctable) return error.InvalidOutcomeAssociation;
                 const operation = evidence.operationId();
                 const subject: Subject = .{ .request = operation };
                 for (entries.items) |*entry| if (entry.observation.subject.eql(subject)) {
@@ -661,7 +666,7 @@ pub fn validDescriptor(descriptor: Descriptor, requires: []const pipeline.DataKe
         !declared(binding.evidence, requires, optional, produces, replaces)) return false;
     if (binding.result) |result| if (!contains(produces, result) and !contains(replaces, result)) return false;
     return switch (descriptor) {
-        .request_decode, .request_admission, .request_protocol, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
+        .request_decode, .request_admission, .request_protocol, .request_resend, .request_closure => binding.kind == .request and binding.subject == .prepared_model_request,
         .advisory_request_closure => binding.kind == .request and binding.subject == .prepared_model_request and
             (binding.evidence == .model_payload_schema_result or binding.evidence == .accounted_model_attempt) and
             repair_role == .none and contains(requires, .prepared_model_request) and contains(requires, .model_request_identity_ledger) and

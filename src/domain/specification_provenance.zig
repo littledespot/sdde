@@ -513,7 +513,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
     }
     for (candidate.records) |record| {
         if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(record.proposal.content), record.proposal.source_group_ids.len)) return error.InvalidSpecification;
-        const groups = try validateAssociation(.canonical, a, inputs, references, record.proposal.source_group_ids, record.proposal.provenance, .content);
+        const groups = try validateRecordAssociation(.canonical, a, inputs, references, record.proposal);
         defer a.free(groups);
         const values = try recordValues(a, record.proposal.content);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
@@ -555,6 +555,26 @@ pub fn validateAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocato
     }
     return selected.source_group_ids;
 }
+/// An entity selects whole groups. Any other record binds its batch's one group
+/// and names the claims it supports from it (ADR 0038): a nonempty subset of the
+/// group's claims, in the group's accepted order.
+fn validateRecordAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocator, inputs: evidence.Inputs, references: refs.Records, record: spec.Values(boundary).RecordProposal) Error![]const r.SignalId {
+    if (record.content == .entity) return validateAssociation(boundary, a, inputs, references, record.source_group_ids, record.provenance, .content);
+    const selected = @import("specification_source_binding.zig").resolveGroups(a, references, inputs, record.source_group_ids, .content) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecification;
+    defer a.free(selected.selection.claim_ids);
+    errdefer a.free(selected.source_group_ids);
+    if (record.provenance.claim_ids.len == 0) return error.InvalidSpecification;
+    var next: usize = 0;
+    for (record.provenance.claim_ids) |id| {
+        while (next < selected.selection.claim_ids.len and selected.selection.claim_ids[next].ordinal != id.ordinal) next += 1;
+        if (next == selected.selection.claim_ids.len) return error.InvalidSpecification;
+        next += 1;
+    }
+    if (boundary == .canonical) {
+        for (selected.source_group_ids, record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
+    }
+    return selected.source_group_ids;
+}
 pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.AttributedValue {
     return inspectAttributedFor(boundary, allocator, validator, context, candidate, field, .content, inspection);
 }
@@ -577,7 +597,7 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
     defer scratch.deinit();
     inspection.* = .{};
     if (!@import("specification_source_binding.zig").validRecordGroupCount(std.meta.activeTag(candidate.content), candidate.source_group_ids.len)) return error.InvalidSpecification;
-    const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, .content);
+    const groups = try validateRecordAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate);
     errdefer allocator.free(groups);
     var recognized_content = candidate.content;
     switch (candidate.content) {

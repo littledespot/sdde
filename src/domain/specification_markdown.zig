@@ -8,6 +8,9 @@ const scenarios = "## User Scenarios & Testing _(mandatory)_";
 const story = "### Primary User Story";
 const requirements = "## Requirements _(mandatory)_";
 const scope = "### Assumptions & Scope Boundaries";
+// ADR 0040: engine-owned status line, rendered under the title only when review is incomplete.
+const review_prefix = "**Review status: Incomplete — ";
+const review_suffix = " review subjects were not assessed.** See reference-context.md for what was not assessed and why.";
 
 /// The caller has already projected typed values with exact display spans.
 /// Rendering requires assigned IDs; it has no lookup or side-effect capability.
@@ -17,6 +20,9 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
     errdefer out.deinit();
     const w = &out.writer;
     try field(w, title_prefix, document.display_name);
+    if (document.review_status) |status| {
+        w.print(review_prefix ++ "{d} of {d}" ++ review_suffix ++ "\n\n", .{ status.unassessed, status.subjects }) catch return error.OutOfMemory;
+    }
     try line(w, scenarios);
     try line(w, story);
     try field(w, "", document.primary_user_story);
@@ -71,6 +77,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
     if (!std.unicode.utf8ValidateSlice(bytes) or std.mem.startsWith(u8, bytes, "\xef\xbb\xbf")) return error.InvalidSpecification;
     var cursor: Cursor = .{ .bytes = bytes };
     const title = try readField(allocator, &cursor, title_prefix);
+    const review_status: ?spec.ReviewStatus = if (cursor.peek()) |next| if (std.mem.startsWith(u8, next, review_prefix)) try readReviewStatus(try cursor.take()) else null else null;
     try cursor.expect(scenarios);
     try cursor.expect(story);
     const primary = try readField(allocator, &cursor, "");
@@ -132,6 +139,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
         .primary_user_story = primary,
         .records = try records.toOwnedSlice(allocator),
         .entity_section = entity_section,
+        .review_status = review_status,
     };
     try spec.validateDocument(document, false);
     return document;
@@ -293,6 +301,20 @@ const Cursor = struct {
         return std.mem.eql(u8, self.peek() orelse return false, expected);
     }
 };
+fn readReviewStatus(bytes: []const u8) Error!spec.ReviewStatus {
+    if (!std.mem.startsWith(u8, bytes, review_prefix) or !std.mem.endsWith(u8, bytes, review_suffix) or bytes.len < review_prefix.len + review_suffix.len) return error.InvalidSpecification;
+    const counts = bytes[review_prefix.len .. bytes.len - review_suffix.len];
+    const split = std.mem.indexOf(u8, counts, " of ") orelse return error.InvalidSpecification;
+    const status: spec.ReviewStatus = .{
+        .unassessed = std.fmt.parseUnsigned(u32, counts[0..split], 10) catch return error.InvalidSpecification,
+        .subjects = std.fmt.parseUnsigned(u32, counts[split + 4 ..], 10) catch return error.InvalidSpecification,
+    };
+    // Only the canonical decimal form round-trips.
+    var buffer: [32]u8 = undefined;
+    const canonical = std.fmt.bufPrint(&buffer, "{d} of {d}", .{ status.unassessed, status.subjects }) catch return error.InvalidSpecification;
+    if (!std.mem.eql(u8, canonical, counts)) return error.InvalidSpecification;
+    return status;
+}
 fn readId(bytes: []const u8, kind: spec.Kind) Error!?spec.Id {
     // A new user-authored record may omit the ordinal, never forge an old ID.
     if (std.mem.eql(u8, bytes, kind.prefix())) return null;

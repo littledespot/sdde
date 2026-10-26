@@ -14,7 +14,10 @@
     delimiters directly around a recognised exact value (Decision 6), after the first
     live pair showed generation copying the quoted backticks;
   - "make the changes as suggested": keep source quoting and withdraw the list-item
-    split, after the second live pair.
+    split, after the second live pair;
+  - "APPROVED. Implement B5": reinstate the split
+    ([ADR 0038](0038-record-claims-and-scenario-coverage.md)), after the withdrawal's
+    evidence turned out to be misread.
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -76,26 +79,42 @@ could disagree with the source.
    become one literal `ReferenceSemanticText`. The shared text validator then checks it as
    before, which normalizes prose to NFC. The Markdown reader admits only scalars that
    validator accepts, so a rejection is an engine defect.
-3. **One proposal is one claim.** The engine doesn't divide a claim, however many list
-   items its lines span. The extraction guidance asks for the lines that state the
-   complete claim; how finely claims divide stays the model's choice.
-   - A native split into one claim per top-level list item was implemented and withdrawn
-     on 25 October 2026. In two live pairs, the records call then authored 3, 12, 8 and
-     304 records, against 2 to 4 for the same cases with one claim per list. The extra
-     records included unsupported assumptions, non-goals and prohibitions, and once a
-     294-entry edge-case enumeration that exhausted the token budget. ADR 0027's per-item
-     chunking likewise gave one claim per item without better output, at higher cost, on
-     21 October.
-   - The evidence is four runs and correlational. It doesn't show that requirement-level
-     claims can't help; it shows they don't help while the records call has no bound on
-     what it authors (FIX05 B9).
+3. **A claim spanning several top-level list items is split** (withdrawn and reinstated
+   on 25 October 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)).
+   - When the cited lines belong to two or more top-level list items, the engine emits one
+     claim per item. Cited lines outside every item, such as a heading before the list or
+     prose after it, become one claim per gap between items. Each claim quotes and cites
+     its own lines and keeps the proposal's category.
+   - List structure comes from the source's reader, computed once per source per
+     validation over the whole source, so a chunk boundary can't change it. For
+     Markdown, the one owner is `markdown_code_spans.listSegments`, which reuses that
+     module's line iterator, list-marker parser, fenced-code scan and heading,
+     thematic-break and HTML-block rules.
+   - An unindented list marker (`-`, `*`, `+`, `1.` or `1)` with a following space)
+     starts a top-level item, including one that opens a fence. Indented lines, fenced
+     code and continuation lines directly after an item line belong to it, so nested
+     items stay with their parent. A heading, a thematic break, an HTML block or comment,
+     or unindented text after a blank line ends it. Lines inside an HTML block or
+     comment are never items.
+   - Modelled on CommonMark's paragraph-interruption rule, an ordered marker starts an
+     item inside a paragraph only as `1.` or `1)`, or as a sibling with the open list's
+     delimiter. A wrapped line beginning `2024.` is not an item. The rule is not
+     CommonMark itself: for example, `3)` after `1.` and `2.` stays inside item 2.
+   - A claim within one item, with or without a heading or prose, stays whole. So do
+     prose-only claims and a cited line holding two facts.
+   - **Why it was withdrawn and reinstated.** The split was withdrawn after two live
+     pairs in which the records call authored 3, 12, 8 and 304 records, against 2 to 4
+     with one claim per list. A later run gave the records call the same five-claim
+     input and it authored 2 records, so claim count wasn't driving the inflation.
+     ADR 0038's scenario rule needs one claim per requirement, which the split supplies
+     for list sources.
 4. **Repair routes that served model wording are deleted.**
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
      `source_selections` diagnostic and the `retain-reference-claim-rejection` operation
      are deleted. `validate-reference-claims` now ends `ok` or `failed`.
    - Classification repair and source-omission repair are unchanged. An omission repair
-     returns the same proposal shape, and its one quoted claim is inserted.
+     returns the same proposal shape, and every claim it quotes is inserted.
 5. **Exact values keep their native authority.** ADR 0024's forcing reads the quoted text
    of `business` and `scope_guard` claims. A code span or fenced block that such a claim
    cites in full is therefore preserved, whatever its kind, and becomes an exact
@@ -131,11 +150,18 @@ could disagree with the source.
 
 - **Fixed by construction.** Obligation strength, conditions and negation are the
   source's own words at extraction, in any modality or language, with no keyword rule.
-- **Claim count unchanged.** A claim covering a whole list stays one claim, as before
-  this decision, so native checks still can't tell its duties apart.
+- **More claims.** A list cited as one claim becomes one claim per item, with no model
+  call, so ADR 0038's scenario rule can check each list requirement.
 - **Limits.**
+  - Several requirements in one prose sentence or paragraph stay one claim.
+  - Items with different meanings in one split take the proposal's single category.
+  - A cited heading, or other markup line such as a thematic break, split from its list
+    becomes a short claim of its own.
   - Claim wording keeps its Markdown, such as list markers and backticks. Later calls
     receive it as the source wrote it.
+  - A top-level marker indented by one to three spaces is treated as a continuation, so
+    such a list doesn't split. Unindented text after a fence that closes inside an item
+    stays with the item. Both err toward not splitting; neither changes wording.
   - Reconciliation statements and signals still restate claims in model text. Whether
     they must reference claim text natively needs its own evidence.
 - **Ingestion.** The Markdown reader now rejects C1 control characters (U+0080–U+009F)
@@ -164,9 +190,11 @@ could disagree with the source.
     - admission into an obligation field and a field that can't hold exact copies, with
       idempotence, including a code-wrapped value alone;
     - the composition check with a code-wrapped value alone and with prose.
-  - Quoting: lines cited out of order, a heading with a nested list, runs across blank
-    lines, spacing and trimmed indentation, fenced code, and two sources whose chunks
-    start inside and after fenced blocks. Each proposal yields exactly one claim.
+  - Quoting and splitting: top-level, ordered and nested items, continuation lines,
+    headings and prose in and out of a split, wrapped numbers, look-alike markers and a
+    thematic break, HTML blocks and comments, spacing and trimmed indentation, fenced
+    code and an item that opens a fence, a chunk that starts inside a paragraph, and two
+    sources whose chunks start inside and after fenced blocks.
   - Exact-value duty for a code span across lines and for fenced blocks: with a blank
     line, content lines only, the opening fence, indented content and an unterminated
     fence. Citing part of a block leaves it free.
@@ -174,7 +202,7 @@ could disagree with the source.
   - Allocation stays proportional to the source across 128 chunks.
   - Admission: blank, unsupplied and over-count citations are rejected, for the initial
     request and for omission repair.
-  - Omission repair inserts one claim quoting every line a list-spanning proposal cites.
+  - Omission repair inserts every claim a list-spanning proposal quotes.
   - Ingestion rejects C1 and DEL characters.
   - A proposal carrying wording is rejected as an unknown property.
   - Scripted models cite only citable lines. Scenarios that need a discarded token or

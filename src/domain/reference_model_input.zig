@@ -95,7 +95,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const common = .{
         .claims = projected.claims,
         .citations = projected.citations,
-        .preserved_tokens = projected.preserved_tokens,
+        .exact_texts = projected.exact_texts,
         .passive_literals = try passiveChoices(scratch, registry, inputs, scopes),
     };
     const hierarchy = .{
@@ -113,7 +113,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
             .member_summary_ids = hierarchy.member_summary_ids,
             .claims = common.claims,
             .citations = common.citations,
-            .preserved_tokens = common.preserved_tokens,
+            .exact_texts = common.exact_texts,
             .summaries = hierarchy.summaries,
             .constraints = try reconciliationGuidance(scratch, input.purpose, presentation.shared),
             .passive_literals = common.passive_literals,

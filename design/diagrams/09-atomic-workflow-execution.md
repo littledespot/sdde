@@ -12,8 +12,13 @@ flowchart TD
     WRITEFAIL -. Fresh invocation .-> START
     VALIDATE -->|Invalid| FAILED["End failed;<br/>discard candidate output"]
     RESULT -->|Needs user| CLARIFY["Preserve clarification questions and answers;<br/>publish no partial successful output"]
-    RESULT -->|Failed| FAILED
-    RESULT -->|Blocked| BLOCKED["End blocked;<br/>discard candidate output"]
+    RESULT -->|Failed| FAILKIND{"Model work could not be completed,<br/>after a validated reference snapshot?"}
+    FAILKIND -->|Yes| PARTIAL["Log run.incomplete_published;<br/>publish validated content marked incomplete;<br/>end failed or blocked (ADR 0041)"]
+    FAILKIND -->|No| FAILED
+    PARTIAL -. Later invocation .-> START
+    RESULT -->|Blocked| BLOCKKIND{"After a validated reference snapshot?"}
+    BLOCKKIND -->|Yes| PARTIAL
+    BLOCKKIND -->|No| BLOCKED["End blocked;<br/>discard candidate output"]
     RESULT -->|Cancelled or interrupted| ABANDON["End the execution;<br/>discard candidate output"]
     CLARIFY -. After user input: new invocation .-> START
     FAILED -. Later invocation .-> START
@@ -22,7 +27,9 @@ flowchart TD
 ```
 
 [ADR 0009](../decisions/0009-atomic-workflow-execution.md) defines fresh execution
-from `start` and whole-workflow publication. Failed writes may leave replaced
+from `start` and whole-workflow publication.
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) adds the failed
+incomplete publication of a Specify run's validated content. Failed writes may leave replaced
 files but cannot record new success. Clarification identity/answer persistence
 and user-closed byte protection follow
 [§23.2](../design.md#232-workflow-reruns-and-protected-clarification-files).

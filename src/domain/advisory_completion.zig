@@ -38,7 +38,8 @@ pub fn invocationReason(request: *const handoff.Request, result: *const invocati
                     }
                     return if (result.accountingStop() != null) .usage_unavailable else .provider_failure;
                 },
-                .stopped => |stop| return if (result.accountingStop() != null) .usage_unavailable else if (stop == .output_limit) .provider_output_limit else .provider_failure,
+                // A first runaway is re-sent before it can end advice (ADR 0039).
+                .stopped => |stop| return if (result.accountingStop() != null) .usage_unavailable else if (stop != .output_limit) .provider_failure else if (observed.runaway() == .first) null else .provider_output_limit,
                 .complete => return if (result.accountingStop() != null) .usage_unavailable else null,
             }
         },

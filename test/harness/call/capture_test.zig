@@ -17,7 +17,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .fixed },
+    .controls = .{ .temperatures = @import("../../../src/test_fixtures/model_temperatures.zig").temperatures },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
@@ -280,7 +280,7 @@ test "captured contexts dispatch on their exact schema and keep v2 and v1 as his
 }
 
 const config_bytes =
-    \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low"}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
+    \\{"logs":{"level":"debug","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{"sample-slot":{"provider":"aws-bedrock","model":"MOCK-model","reasoningEffort":"low"}}},"paths":{"specs":"documents/","references":"references","specsArchive":"documents/archive","workflows":"workflow-definitions","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":"settings/.sddproviders.json"}}
 ;
 const run_path = "runs/unrelated-run";
 const provider_bytes = "MOCK provider catalogue read without workflow execution";
@@ -366,7 +366,7 @@ test "capture loads configured feature and provider locations and preserves requ
     try std.testing.expectEqualStrings(run_path ++ "/evidence/generation/call-000009/context.json", loaded.context_path);
     try std.testing.expectEqualStrings("settings/.sddproviders.json", loaded.config.paths.providers);
     try std.testing.expectEqualStrings("low", loaded.config.models.slots.map.get("sample-slot").?.reasoningEffort.?);
-    try std.testing.expectEqual(@as(?@import("../../../src/domain/model_controls.zig").Temperature, .fixed), loaded.call.description.?.controls.temperature);
+    try std.testing.expectEqual(@as(f64, 0.1), loaded.call.description.?.controls.temperature(.configured).?.value);
     try std.testing.expectError(error.CapturedWorkflowMismatch, capture.load(std.testing.io, std.testing.allocator, root.dir, run_path, "different-workflow", 9));
     try std.testing.expectError(error.InputUnavailable, capture.load(std.testing.io, std.testing.allocator, root.dir, run_path, description.workflow_id, 1));
 }

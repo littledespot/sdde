@@ -1,4 +1,5 @@
 const std = @import("std");
+const model_controls = @import("model_controls.zig");
 
 pub const engine_config_basename = ".sddtoolkit.json";
 pub const max_engine_config_bytes: usize = 1024 * 1024;
@@ -44,9 +45,17 @@ pub const SDDToolKitConfig = struct {
     logs: LogsConfig,
     models: ModelsConfig,
     workflowTokenBudget: WorkflowTokenBudget,
+    /// Sent on every inference request whose model takes a temperature, and on
+    /// a runaway re-send respectively (ADR 0039). Required, with no default.
+    temperature: model_controls.Temperature,
+    temperatureRunawayRetry: model_controls.Temperature,
     paths: PathsConfig,
     principles: ?@import("principle_policy.zig").Config = null,
     validation: ValidationConfig = .{},
+
+    pub fn temperatures(self: *const SDDToolKitConfig) model_controls.Temperatures {
+        return .{ .configured = self.temperature, .runaway_retry = self.temperatureRunawayRetry };
+    }
 };
 
 pub const ValidationConfig = struct {

@@ -33,24 +33,40 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         .exact_scope = source.exact_scope,
     };
     try validateRequest(source, &request);
+    return own(allocator, request);
+}
+
+/// ADR 0039: the one re-send of a runaway attempt is the identical prepared
+/// request, sent at the runaway-retry temperature. A re-send is never re-sent.
+pub fn resend(allocator: std.mem.Allocator, runaway: *const provider.IdentifiedProviderNeutralModelRequest) Error!Owned {
+    if (runaway.sampling != .configured) return error.ModelRequestAssociationInvalid;
+    var request = runaway.*;
+    request.sampling = .runaway_resend;
+    try request.validate();
+    return own(allocator, request);
+}
+
+/// Copies every owned byte; identity, binding and schema stay borrowed.
+fn own(allocator: std.mem.Allocator, value: provider.IdentifiedProviderNeutralModelRequest) Error!Owned {
+    var request = value;
     var arena = std.heap.ArenaAllocator.init(allocator);
     errdefer arena.deinit();
     const owned = arena.allocator();
-    const parts = try owned.alloc(provider.ModelVisibleContent, content.len);
-    for (content, parts) |part, *copy| {
+    const parts = try owned.alloc(provider.ModelVisibleContent, value.content.len);
+    for (value.content, parts) |part, *copy| {
         copy.* = switch (part) {
             inline else => |bytes, kind| @unionInit(provider.ModelVisibleContent, @tagName(kind), try owned.dupe(u8, bytes)),
         };
     }
     request.content = parts;
-    const sources = try owned.alloc(@import("model_text_wire.zig").SourceText, source.original_sources.len);
-    for (source.original_sources, sources) |original, *copy| copy.* = .{ .source_id = original.source_id, .bytes = try owned.dupe(u8, original.bytes) };
+    const sources = try owned.alloc(@import("model_text_wire.zig").SourceText, value.original_sources.len);
+    for (value.original_sources, sources) |original, *copy| copy.* = .{ .source_id = original.source_id, .bytes = try owned.dupe(u8, original.bytes) };
     request.original_sources = sources;
-    request.prose_fields = try @import("model_text_wire.zig").cloneProseFields(owned, source.prose_fields);
-    request.field_policies = try @import("model_text_field.zig").clone(owned, source.field_policies);
-    if (source.exact_scope) |scope| request.exact_scope = try @import("model_exact_values.zig").clone(owned, scope);
-    request.request_schema_id.bytes = try owned.dupe(u8, request.request_schema_id.bytes);
-    request.model_visible_input_id.bytes = try owned.dupe(u8, request.model_visible_input_id.bytes);
+    request.prose_fields = try @import("model_text_wire.zig").cloneProseFields(owned, value.prose_fields);
+    request.field_policies = try @import("model_text_field.zig").clone(owned, value.field_policies);
+    if (value.exact_scope) |scope| request.exact_scope = try @import("model_exact_values.zig").clone(owned, scope);
+    request.request_schema_id.bytes = try owned.dupe(u8, value.request_schema_id.bytes);
+    request.model_visible_input_id.bytes = try owned.dupe(u8, value.model_visible_input_id.bytes);
     const result = try owned.create(provider.IdentifiedProviderNeutralModelRequest);
     result.* = request;
     return .{ .arena = arena, .request = result };

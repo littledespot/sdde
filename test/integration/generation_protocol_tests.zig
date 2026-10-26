@@ -2,7 +2,6 @@
 //! production candidates or publication capability.
 const std = @import("std");
 const comparison = @import("../harness/generation_comparison.zig");
-const Temperature = @import("../../src/domain/model_controls.zig").Temperature;
 const root = "test/calibration/semantic-simplicity";
 const output = ".zig-cache/semantic-simplicity/phase0";
 
@@ -76,7 +75,8 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
     try std.testing.expectEqualStrings("ap-southeast-2", protocol.region);
     try std.testing.expectEqual(.low, protocol.reasoning_effort);
     try std.testing.expectEqual(.native_schema, protocol.response_mode);
-    try std.testing.expectEqual(Temperature.fixed.wireValue(), protocol.temperature);
+    // The frozen protocol keeps its recorded 0.1 (ADR 0039).
+    try std.testing.expectEqual(@as(f64, 0.1), protocol.temperature);
     try std.testing.expectEqual(@as(usize, 72), inventory.cases.len);
     var development: u32 = 0;
     var qualification: u32 = 0;

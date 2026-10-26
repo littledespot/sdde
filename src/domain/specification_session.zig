@@ -240,7 +240,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .source_assignment = assigned,
         .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
-        .preserved_tokens = exact_choices.items,
+        .exact_texts = exact_choices.items,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
@@ -264,7 +264,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     result = policies;
     const presentation = @import("model_field_presentation.zig");
     var omissions: std.ArrayList(presentation.Omission) = .empty;
-    try omissions.append(a, .{ .requires = .exact_copy, .path = &.{.{ .property = "preserved_tokens" }} });
+    try omissions.append(a, .{ .requires = .exact_copy, .path = &.{.{ .property = "exact_texts" }} });
     for (source_groups, 0..) |group, group_index| if (try binding.tokenOnly(@import("reference_support.zig").records(context.references), group.signal_id)) {
         const path = try a.dupe(presentation.BodyStep, &.{ .{ .property = "source_groups" }, .{ .index = std.math.cast(u32, group_index) orelse return error.InvalidSpecificationUnit } });
         try omissions.append(a, .{ .requires = .exact_copy, .path = path });
@@ -313,6 +313,14 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
 }
 
+/// ADR 0038: every claim a functional requirement names needs an acceptance
+/// criterion or edge case that names it too. Response admission enforces it, so a
+/// gap takes the request's existing protocol correction.
+const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
+    .kind_property = "content",
+    .covered = &.{@tagName(g.spec.Kind.functional_requirement)},
+    .covering = &.{ @tagName(g.spec.Kind.acceptance_criterion), @tagName(g.spec.Kind.edge_case) },
+};
 fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selected: g.Unit, cursor: usize) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -327,8 +335,11 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
         if (@import("text_field_policy.zig").permits(field.field, .exact_copy)) break true;
     } else false;
     var question_ids: std.ArrayList(i64) = .empty;
+    var claim_ids: std.ArrayList(i64) = .empty;
     if (selected == .records) {
-        try question_ids.append(a, (try binding.record(a, records, context.inputs, cursor)).records.signal.ordinal);
+        const bound = (try binding.record(a, records, context.inputs, cursor)).records;
+        try question_ids.append(a, bound.signal.ordinal);
+        for (bound.selection.claim_ids) |id| try claim_ids.append(a, id.ordinal);
     } else for (questions) |group| {
         if ((!permits_exact or selected == .entities) and try binding.tokenOnly(records, group.signal_id)) continue;
         try question_ids.append(a, group.signal_id.ordinal);
@@ -347,6 +358,7 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
+    if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = scenario_coverage });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
         .brief => inline for (.{ "title", "description", "primary_goal" }) |field| {
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
@@ -397,7 +409,7 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
     if (parsed.value != .object) return error.InvalidModelInputPacket;
     for ([_]struct { name: []const u8, id: []const u8, allowed: []const i64 }{
         .{ .name = "passive_literals", .id = "id", .allowed = passive },
-        .{ .name = "preserved_tokens", .id = "claim_id", .allowed = exact },
+        .{ .name = "exact_texts", .id = "claim_id", .allowed = exact },
     }) |catalogue| {
         const list = parsed.value.object.getPtr(catalogue.name) orelse return error.InvalidModelInputPacket;
         if (list.* != .array) return error.InvalidModelInputPacket;

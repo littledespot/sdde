@@ -5,6 +5,7 @@ const models = @import("../contracts.zig");
 const values = @import("../../../src/application/pipeline_values.zig");
 const requests = @import("../../../src/application/model_request_workflow.zig");
 const authorization = @import("../../../src/application/provider_authorization_workflow.zig");
+const publication = @import("../../../src/application/specification_publication_workflow.zig");
 
 /// Diagnostic projection only: retirement may release transport before the
 /// runner rejects continuation. Protocol and provider rejections retain their own origins.
@@ -100,7 +101,14 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, id) orelse return error.MissingProviderEvidence;
             const usage = if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
-            try attempts.append(allocator, .{ .origin = origin, .step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes), .accounting = accounted.reconciliation, .usage = usage });
+            try attempts.append(allocator, .{
+                .origin = origin,
+                .step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes),
+                // A re-send directly follows the runaway attempt it repeats.
+                .resends = if (record.sampling == .runaway_resend) id.model_attempt_ordinal.value - 1 else null,
+                .accounting = accounted.reconciliation,
+                .usage = usage,
+            });
             if (accounted.reconciliation != .not_sent) {
                 report.last_model_origin = origin;
                 report.last_model_usage = usage;
@@ -183,6 +191,13 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                 .cancelled => {},
             }
         }
+    }
+    if (view.slots[@intFromEnum(publication.state_schema.key)] != null) {
+        const published = try @import("../../../src/application/specification_values.zig").storage.read(&view, publication.state_schema, .publication_state);
+        var incomplete: std.ArrayList(c.IncompleteReview) = .empty;
+        if (published.review.advice_stop) |stop| try incomplete.append(allocator, .{ .review = .source, .reason = stop.reason, .unassessed = stop.unassessed.len, .subjects = stop.requirements.len });
+        if (published.principle_assessment.advice_stop) |stop| try incomplete.append(allocator, .{ .review = .principle, .reason = stop.reason, .unassessed = stop.unassessed.len, .subjects = stop.requirements.len });
+        report.incomplete_reviews = try incomplete.toOwnedSlice(allocator);
     }
     if (view.contains(.accounted_model_attempt)) {
         if (@import("../../../src/application/workflow_model_accounting.zig").readAdvisoryStop(&view)) |receipt| {

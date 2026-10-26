@@ -4,7 +4,7 @@
   "title": "SDDToolKit configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["logs", "models", "workflowTokenBudget", "paths"],
+  "required": ["logs", "models", "workflowTokenBudget", "temperature", "temperatureRunawayRetry", "paths"],
   "properties": {
     "logs": { "$ref": "#/$defs/logs" },
     "models": { "$ref": "#/$defs/models" },
@@ -14,6 +14,16 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 4294967295
+    },
+    "temperature": {
+      "description": "Temperature sent on every inference request whose model takes one (ADR 0039).",
+      "type": "number",
+      "minimum": 0
+    },
+    "temperatureRunawayRetry": {
+      "description": "Temperature sent on the one re-send after a provider output_limit stop (ADR 0039).",
+      "type": "number",
+      "minimum": 0
     },
     "paths": { "$ref": "#/$defs/paths" },
     "validation": { "$ref": "#/$defs/validation" },

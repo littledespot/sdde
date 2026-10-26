@@ -95,7 +95,7 @@ test "provider request rejects malformed identity content and controls" {
     invalid.content = &invalid_content;
     try std.testing.expectError(error.InvalidProviderNeutralModelRequest, operation.IdentifiedProviderNeutralModelRequest.init(invalid));
     invalid = fixture.request;
-    invalid.controls.temperature = null;
+    invalid.controls.temperatures = null;
     try std.testing.expect(!invalid.matchesBinding(fixture.provider_binding));
 }
 

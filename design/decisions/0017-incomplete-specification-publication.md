@@ -4,6 +4,11 @@
 - **Date:** 2026-09-19
 - **Decision authority:** Explicit user direction to update documentation and remediate missing `spec.md` on clarification pauses.
 - **Amends:** ADR 0009's clarification persistence exception; Design §§3.3.5, 3.3.19–20, 3.3.30, 17, 23.2, 25 and 31; F0100 §5.5.
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
+  2026): an execution that fails because model work couldn't be completed now publishes
+  its own failed incomplete specification of its validated content, marked and logged,
+  instead of "no new specification publication". It is not a clarification pause: the
+  run ends `failed`, and its state is `spec_incomplete`.
 
 ## Decision
 

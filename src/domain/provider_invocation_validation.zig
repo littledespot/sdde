@@ -18,6 +18,10 @@ pub const ValidationError = error{
 };
 pub const Error = ValidationError || std.mem.Allocator.Error;
 
+pub const Runaway = enum { first, repeated };
+/// The typed diagnostic of a request whose re-send also ran away (ADR 0039).
+pub const RunawayError = error{RunawayRepeated};
+
 pub const Result = union(enum) {
     complete: *const CompleteCandidate,
     stopped: provider.ProviderNonCandidateStopReason,
@@ -54,6 +58,21 @@ pub const Evidence = opaque {
         // content rejection can establish this narrowly recoverable condition.
         return self.usage() != null and failure.cause == .response_invalid and
             failure.delivery == .response_received and failure.content == .missing_final_text;
+    }
+
+    /// ADR 0039: a provider stop at the output limit, after association and
+    /// usage validation, is a runaway. A first runaway is re-sent once at the
+    /// runaway-retry temperature; a runaway on that re-send ends the request.
+    /// This is not a candidate or call permission.
+    pub fn runaway(self: *const Evidence) ?Runaway {
+        if (self.usage() == null) return null;
+        return switch (storage(self).result) {
+            .stopped => |reason| if (reason != .output_limit) null else switch (self.request().sampling) {
+                .configured => .first,
+                .runaway_resend => .repeated,
+            },
+            .complete, .failed => null,
+        };
     }
 
     pub fn delivery(self: *const Evidence) provider.ProviderDeliveryDisposition {
@@ -120,7 +139,7 @@ pub fn validateUsage(call: Call, observation: *const provider.ProviderInvocation
     const record = call.operations.record(call.operation_id) orelse return error.InvalidProviderInvocationContext;
     if (!provider.validateInferenceInvocation(call.provider_binding, request, invoked) or
         !record.binding_id.eql(request.binding_id) or
-        !record.model_visible_input_id.eql(request.model_visible_input_id)) return error.InvalidProviderInvocationContext;
+        !record.model_visible_input_id.eql(request.model_visible_input_id) or record.sampling != request.sampling) return error.InvalidProviderInvocationContext;
     return switch (observation.*) {
         .failed => |failure| if (failure.operation_id.eql(invoked.id)) null else error.ProviderInvocationAssociationInvalid,
         .completed => |completed| usage: {

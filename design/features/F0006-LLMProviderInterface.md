@@ -516,9 +516,12 @@ outcome through runner-owned child bindings:
 Request-origin contracts declare one repository slot. Its catalogue model’s required
 `json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`)
 (ADR 0012). Unsupported native selection rejects the complete catalogue; workflow
-`response-mode` overrides reject. Temperature is engine-owned (§12.5): binding selects `0.1` when the registered
-model supports it, otherwise omission. Workflow `temperature` parameters reject,
-including `0.1`; neither request consumers nor retries can override the binding.
+`response-mode` overrides reject. Temperature is configuration-owned (§12.5,
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)): binding
+selects the configured `temperature` when the registered model supports it, otherwise
+omission. Workflow `temperature` parameters reject; neither request consumers nor
+corrections can override the binding. Only a runaway re-send changes it, to the
+configured `temperatureRunawayRetry`.
 Resources and outcomes remain in the existing concise workflow structure.
 
 - The originating step's typed slot requirements compile into the
@@ -543,6 +546,8 @@ Resources and outcomes remain in the existing concise workflow structure.
   requests send the catalogue's documented maximum. A provider stop at that maximum,
   or for any other non-candidate reason, is logged as `model.provider_stopped` with
   its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
+  An `output_limit` stop is re-sent once by the runner's request flow, never by the
+  provider adapter ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 - The runner checks identity, slot, schema, response mode and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
 - Providers report oversized requests, output stops and context errors through the

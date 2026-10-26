@@ -73,6 +73,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     try validateBoundedCycles(allocator, steps, graph.authority.transitions);
     try validateIterationResets(allocator, steps, graph.authority.transitions);
     @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
+    @import("../../domain/workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
     const flow = @import("../../domain/workflow_data_flow.zig").analyze(allocator, graph.authority) catch return invalid();
     allocator.free(flow);
 }
@@ -482,4 +483,17 @@ test "accepts a guarded cycle and rejects the same unguarded cycle" {
         error.WorkflowGraphCompileInvalid,
         (Action{}).execute(arena.allocator(), &.{unguarded_graph}),
     );
+}
+
+test "the compiled allowance gives each model attempt its one runaway re-send" {
+    // ADR 0039: a re-send runs outside `retry-limit`, so an attempt-accounting
+    // step's allowance covers one re-send for every attempt it admits.
+    var counted = [_]compilation.CompiledStep{testStep("account", 2)};
+    const ordinary = compilation.calculateExecutionLimit(&counted).?;
+    const attempt_accounting: @FieldType(compilation.CompiledStep, "runner_accounting") = .increment_model_attempt;
+    counted[0].runner_accounting = attempt_accounting;
+    const with_resends = compilation.calculateExecutionLimit(&counted).?;
+    // Operation scope: two corrections plus one re-send for each of three attempts.
+    try std.testing.expectEqual(@as(usize, 1 + 2), ordinary);
+    try std.testing.expectEqual(@as(usize, 1 + 2 + 3), with_resends);
 }

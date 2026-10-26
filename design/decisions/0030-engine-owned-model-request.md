@@ -70,6 +70,12 @@
     [E2E harness](../harness/e2e.md) step events.
 
   The overall design remains **Proposed design**.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): after a provider `output_limit` stop, the request re-sends the
+  identical request once at the configured `temperatureRunawayRetry`, without using the
+  step's `retry-limit`. A runaway on the re-send fails a required step; an advisory one
+  ends its advice incomplete ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). Until
+  `request-model` lands, the explicit request-lifecycle steps carry the re-send.
 
 ## Context
 
@@ -161,7 +167,7 @@ bindings. This is the one stage list; other documents refer to it.
 9. Observation validation.
 10. Provider-operation completion.
 11. Response admission: decoding and payload-schema validation.
-12. Protocol correction, which returns to stage 2.
+12. Protocol correction, or ADR 0039's runaway re-send, which returns to stage 2.
 13. Request closure, pre-call termination of the operation and then the request, or
     advisory completion: the protocol stop or incomplete advice.
 
@@ -184,7 +190,8 @@ bindings. This is the one stage list; other documents refer to it.
   binding against that set before invoking it. Only the composition root constructs the
   stage bindings.
 - **One narrow exception to §6.2.** The orchestrator's child graph may contain exactly
-  one retry: the request's protocol correction, bounded by the step's declared
+  two retries: the request's protocol correction, bounded by the step's declared
+  `retry-limit`, and ADR 0039's runaway re-send, bounded at one per attempt outside
   `retry-limit`. It still cannot hold workflow transitions, repair policy, slot or
   resource selection, or a domain stage. Repairs stay workflow branches; each repair is
   its own `request-model` step.

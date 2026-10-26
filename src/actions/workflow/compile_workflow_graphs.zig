@@ -107,6 +107,7 @@ pub const Action = struct {
                 },
             };
             @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
+            @import("../../domain/workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
         }
         return graphs;
     }

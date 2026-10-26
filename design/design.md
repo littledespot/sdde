@@ -205,7 +205,7 @@ engine fixes them:
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
     copied into nodes.
-30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
+30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. [ADR 0041](decisions/0041-failed-run-incomplete-publication.md) permits a Specify run that fails because model work couldn't be completed, or ends `blocked`, to publish its validated content as an incomplete specification, marked and logged; the run stays `failed` or `blocked` and gains no completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
 31. Clarification persistence and rerun replacement:
     - Clarification records and answers survive output replacement and abandoned executions.
     - One stable target/owner/subject/slot has one clarification ID. A new execution, authority
@@ -879,9 +879,23 @@ The new engine is ready for production evaluation when all of the following are 
     be used to obtain a broader capability.
 
 12. **Model results, limits, and retries.**
-    - Every engine inference request uses temperature `0.1` when its registered
-      model supports it and omits it otherwise (§12.5). Workflow overrides reject;
-      preparation, authorization and retries preserve this policy.
+    - Every engine inference request sends the project configuration's required
+      `temperature` when its registered model supports it and omits it otherwise (§12.5,
+      [ADR 0039](decisions/0039-configured-temperatures-and-runaway-resend.md)).
+      Workflow overrides reject; preparation, authorization and retries preserve this
+      policy.
+    - A provider `output_limit` stop discards its partial text and re-sends the identical
+      request once at the configured `temperatureRunawayRetry`, outside the step's
+      `retry-limit`. Every re-send is logged as a warning `model.runaway_resent`. A
+      runaway on the re-send fails required work with `RunawayRepeated`, which then
+      publishes its validated content as a failed incomplete specification (ADR 0041);
+      in advisory work it ends that advice incomplete (ADR 0039).
+    - Incomplete advice is published, marked in `spec.md` and `reference-context.md`,
+      and logged as a warning `review.incomplete`
+      ([ADR 0040](decisions/0040-incomplete-review-published-marked-logged.md)).
+    - Every retry response, a re-send or a protocol correction, passes exactly the checks
+      a first response does, in the same order; none is skipped, relaxed or reordered
+      for a retry (ADR 0039).
     - Every YAML-declared model operation—including implementation and repair—conforms with a
       nano-class model and has an ADR 0006 compact closed response schema, complete
       evidence/guidance packet, and deterministic runner-owned request identity/accounting
@@ -923,7 +937,9 @@ The new engine is ready for production evaluation when all of the following are 
     recurrence retains its own history under §22.7. Exhaustion of the selected defect's
     explicit operation retry allowance blocks/fails and never weakens policy.
     JSON/schema rejection that cannot be corrected is a terminal error under §22.6,
-    even with open clarifications; it cannot publish an incomplete specification.
+    even with open clarifications. The run still fails; it publishes only ADR 0041's
+    failed incomplete specification of its validated content, never a completed one or
+    a clarification pause.
 
 16. Unsupported references are reported and cannot be silently omitted; every selected source,
     decoded block, and bounded chunk has an exact disposition and accounting record.
@@ -1127,8 +1143,14 @@ naming) was superseded by 0010 and removed.
 | [0033](decisions/0033-generic-repair-operations.md) | Four generic repair operations (`authorize-repair`, `build-repair-input`, `parse-repair`, `merge-repair`) replace the 29 per-owner ones. Each takes a closed `owner`, which is checked against native facts and selects no policy. Owner rules stay in owner modules. Each operation's contract consists of complete per-owner variants (13 owners, 29 variants), each validated independently, through the contract-variant mechanism ADR 0030 builds; a mismatched `owner` is a terminal rejection. Retry identity is the compiled step instance. Converted after ADR 0030 and ADR 0031's first conversion. Not yet implemented. |
 | [0034](decisions/0034-spec-quality-gate.md) | No Plan, Tasks or Implement contracts, workflow definitions or code until the Spec workflow is stable and producing high-quality output on both development cases. Quality means R8 human adjudication; stability means repeated runs, counting every attempt, with no fixed threshold. The user judges the evidence and decides when Plan is actioned. |
 | [0035](decisions/0035-cross-kind-restatement.md) | The native duplicate rule compares single-statement records (functional requirement, business rule, assumption, non-goal, prohibited behavior, user-visible outcome) by typed statement across kinds and against the primary user story. A restatement is deleted natively only when the kept occurrence covers its groups, claims, citations and responses. A functional requirement and the story are always kept; otherwise the earlier record is. An uncovered restatement is not flagged. Same-kind duplicate checks run first, so a competing pair still blocks, and a restatement has its own `restatement` repair rule. Acceptance criteria, edge cases and entities keep same-kind comparison. |
-| [0036](decisions/0036-source-quoted-claims.md) | A model extraction claim is a category and a set of supplied, nonblank source-line IDs, bounded at admission; it carries no wording. The engine quotes each claim's cited lines as written, Markdown included, trimming each run only at its ends (never inside fenced code) and joining separate runs with an ellipsis line. One proposal is one claim; a native list-item split was withdrawn after live evidence. Claim-text repair, citation repair and their diagnostics are deleted; only the `no_feature_claim` reason remains model text. Generated text loses the Markdown code delimiters directly around a recognised exact value. |
+| [0036](decisions/0036-source-quoted-claims.md) | A model extraction claim is a category and a set of supplied, nonblank source-line IDs, bounded at admission; it carries no wording. The engine quotes each claim's cited lines as written, Markdown included, trimming each run only at its ends (never inside fenced code) and joining separate runs with an ellipsis line. A claim spanning several top-level list items splits into one claim per item, with the same category (withdrawn on 25 October and reinstated by ADR 0038). Claim-text repair, citation repair and their diagnostics are deleted; only the `no_feature_claim` reason remains model text. Generated text loses the Markdown code delimiters directly around a recognised exact value. |
 | [0037](decisions/0037-configured-workflow-token-budget.md) | The single workflow token budget is the project configuration's required `workflowTokenBudget` (1 to 4,294,967,295, no default), decoded at bootstrap and passed to the runner's per-execution ledger. Policy profiles and compiled graphs no longer carry it. The E2E configuration and the example set 125,000. |
+| [0038](decisions/0038-record-claims-and-scenario-coverage.md) | Each non-entity record names the claims it supports, a nonempty subset of its one group kept in group order; the group stays its association. In one records response, every claim a functional requirement names must also be named by an acceptance criterion or edge case; admission rejects a gap as `uncovered_member` for the request's existing protocol correction, recorded for replay in `model-request-debug/v12`. ADR 0036's list-item split is reinstated. |
+| [0039](decisions/0039-configured-temperatures-and-runaway-resend.md) | `.sddtoolkit.json` requires `temperature` and `temperatureRunawayRetry` (numbers, zero or greater, no default); models whose contract takes a temperature send them, others omit it. A provider `output_limit` stop re-sends the identical request once at `temperatureRunawayRetry`, outside `retry-limit`, logged as `model.runaway_resent`; every retry response passes exactly the checks a first response does. A runaway on the re-send fails required work with `RunawayRepeated` and ends advisory work's advice incomplete. Request descriptions record each attempt's temperature (`model-request-debug/v13`), and the E2E report marks re-sends (`spec-e2e-report/v10`). Recorded as the user's exception to the evidence rule against sampling changes and extra retries. |
+| [0040](decisions/0040-incomplete-review-published-marked-logged.md) | Incomplete post-generation review is still published, with every admitted finding. `spec.md` carries a review-status line, `reference-context.md` lists each incomplete source or principle review's reason and unassessed subjects, each incomplete review is logged as a warning `review.incomplete`, and the E2E report records it. Required failures still fail; ADR 0041 governs what they publish. |
+| [0041](decisions/0041-failed-run-incomplete-publication.md) | A Specify run that fails because model work couldn't be completed (a failed request, exhausted correction or repair, or the token budget), or ends `blocked`, after its reference snapshot validated, publishes only its validated content as an incomplete specification: `spec.md` starts `**Status: Incomplete — the run failed.**` or `… was blocked.**`, `reference-context.md` gains a "Run status" section, `run.incomplete_published` is logged, and the `spec_incomplete` state (`specification-state/v20`) blocks Plan. The run still ends `failed` or `blocked` and is never resumed. |
+| [0042](decisions/0042-principle-verdict-citations-at-admission.md) | A generic native admission constraint (when a property has one of the listed values, a named array needs an item) rejects a `conflicting` or `uncertain` principle verdict without citations as `missing_required_item`, for the whole-response correction; values derive from the domain rule, and replay records it in `model-request-debug/v13`. The principle prompt defines `uncertain`. |
+| [0043](decisions/0043-model-facing-exact-text-names.md) | Model-visible `preserved_token` and `preserved_tokens` become `exact_text` and `exact_texts`; internal names and stored state are unchanged. |
 
 Additional accepted feature boundaries:
 

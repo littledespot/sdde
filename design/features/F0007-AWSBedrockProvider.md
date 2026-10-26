@@ -163,8 +163,9 @@ quality conclusion follows from API availability.
   emits ordered system/guidance text blocks in `system` and user/evidence blocks
   in one `user` message. Explicit user/evidence input is required; no input text
   is invented. Model ID is supplied by the authorized endpoint target.
-- Supported temperature is `0.1` (§12.5), serialized under
-  `inferenceConfig.temperature`; unsupported temperature is omitted.
+- Supported temperature is the prepared request's configured value (§12.5, ADR 0039),
+  serialized under `inferenceConfig.temperature`; unsupported temperature is omitted.
+  The adapter never re-sends; a runaway re-send arrives as its own prepared request.
 - The compiled `BedrockRequestProfile` selects verified model-specific request
   fields: `.openai_oss` projects GPT-OSS `reasoning_effort`, while `.openai_luna`
   supplies the required native JSON strict-format flag and admits no explicit

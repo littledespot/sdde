@@ -147,12 +147,12 @@ pub fn calculateExecutionLimit(steps: []const CompiledStep) ?usize {
     var total_retry_limit: usize = 0;
     for (steps) |step| {
         if (step.retry_authority) |authority| {
-            const visits: usize = if (authority.scope == .operation) authority.limit.value else bounded: {
-                const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;
-                const keys = std.math.add(usize, workflow_retry.maximum_repair_keys, if (authority.scope == .model_request) workflow_retry.maximum_request_assignments else 0) catch return null;
-                break :bounded std.math.mul(usize, per_key, keys) catch return null;
-            };
-            total_retry_limit = std.math.add(usize, total_retry_limit, visits) catch return null;
+            const keys: usize = if (authority.scope == .operation) 1 else std.math.add(usize, workflow_retry.maximum_repair_keys, if (authority.scope == .model_request) workflow_retry.maximum_request_assignments else 0) catch return null;
+            const per_key = std.math.add(usize, authority.limit.value, 1) catch return null;
+            const visits: usize = if (authority.scope == .operation) authority.limit.value else std.math.mul(usize, per_key, keys) catch return null;
+            // ADR 0039: each model attempt may take one runaway re-send.
+            const resends: usize = if (step.runner_accounting == .increment_model_attempt) std.math.mul(usize, per_key, keys) catch return null else 0;
+            total_retry_limit = std.math.add(usize, total_retry_limit, std.math.add(usize, visits, resends) catch return null) catch return null;
         }
     }
     const rounds = std.math.add(usize, total_retry_limit, 1) catch return null;

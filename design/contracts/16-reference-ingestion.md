@@ -157,8 +157,10 @@ Initial readers should cover:
 - Source citations in model extraction select a set of engine-issued source-line IDs;
   admission permits only the chunk's citable (non-blank) lines
   ([ADR 0036](../decisions/0036-source-quoted-claims.md)).
-- The engine quotes each claim's cited lines as written. A run of cited lines, including
-  uncited blank lines inside it, becomes one canonical citation range.
+- The engine quotes each claim's cited lines as written and splits a claim that spans
+  several top-level list items into one claim per item (reinstated by
+  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). A run of cited
+  lines, including uncited blank lines inside it, becomes one canonical citation range.
 - IDs are local to the immutable request's source/chunk scope.
 - Each selectable unit preserves one original line, including its line ending, or the remaining
   line fragment at a chunk boundary.

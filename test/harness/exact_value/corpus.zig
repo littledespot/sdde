@@ -21,8 +21,10 @@ pub const Input = struct {
     original_sources: ?[]const wire.SourceText = null,
     metadata_contract: MetadataContract = .current,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
-    /// Recorded assignment membership; the schema bytes cannot express it.
+    /// Recorded assignment membership, coverage and required items; the schema bytes cannot express them.
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
+    coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
+    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
 };
 pub const State = enum { measured, no_exact_context, invalid_packet, invalid_model_json, missing_schema, invalid_field_metadata, unsupported_schema, schema_invalid, no_declared_text_fields };
 pub const Binding = enum { assigned_requirements, selected_groups, explicit_provenance, fixed_candidate, missing, invalid };
@@ -136,6 +138,15 @@ fn binding(a: std.mem.Allocator, packet: std.json.Value, ancestors: []const std.
     if (member(packet, "candidate")) |candidate| if (member(candidate, "provenance")) |provenance| if (member(provenance, "claim_ids")) |selected| return .{ .kind = .fixed_candidate, .requirements = try ids(a, selected) };
     return .{ .kind = .missing, .requirements = &.{} };
 }
+/// ADR 0043 renamed the model-facing exact-value collection. Current
+/// descriptions carry `exact_texts`; historical and description-less captures
+/// predate the rename. No capture contract reads both keys.
+pub fn exactTextsKey(contract: MetadataContract) []const u8 {
+    return switch (contract) {
+        .current => "exact_texts",
+        .historical_v3, .historical_v4, .historical_v5, .unavailable => "preserved_tokens",
+    };
+}
 pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.LexicalClassifier) !Measurement {
     var result: Measurement = .{ .metadata_contract = input.metadata_contract, .state = .invalid_packet, .output_sha256 = try hash(a, input.output) };
     const parsed_packet = strict.parse(a, input.packet, .{ .maximum_depth = 128 }, false, null) catch |err| return if (err == error.OutOfMemory) err else result;
@@ -158,7 +169,7 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
             occurrence.* = .{ .id = id.*, .requirements = try a.dupe(recognition.RequirementId, &.{.{ .value = id.value }}), .bytes = native.bytes };
         }
     } else {
-        const tokens = member(packet, "preserved_tokens") orelse {
+        const tokens = member(packet, exactTextsKey(input.metadata_contract)) orelse {
             result.state = .no_exact_context;
             return result;
         };
@@ -191,8 +202,8 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         return result;
     };
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    // Only current descriptions record membership; older contracts cannot carry it.
-    if (input.members.len != 0 and input.metadata_contract != .current) {
+    // Only current descriptions record membership, coverage and required items; older contracts cannot carry them.
+    if ((input.members.len != 0 or input.coverages.len != 0 or input.required_items.len != 0) and input.metadata_contract != .current) {
         result.state = .invalid_field_metadata;
         return result;
     }
@@ -201,8 +212,8 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         result.state = .unsupported_schema;
         return result;
     };
-    // Production admission validates the restricted schema, membership included.
-    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictMembers(a, captured, input.members) catch |err| {
+    // Production admission validates the restricted schema, membership, coverage and required items included.
+    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictRecorded(a, captured, input.members, input.coverages, input.required_items) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.state = .invalid_field_metadata;
         return result;

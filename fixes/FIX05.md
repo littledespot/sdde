@@ -62,9 +62,9 @@ semantic benefit is not demonstrated (§7).
 | B2 | Advisory post-generation review (ADR 0023) and one record family per source-review call; live effect open (B2 below) | [B2 records](Z_FIX05.md#b2-records) |
 | B3 | Native exact-value recognition; mechanical live gate closed 17 October | [B3](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model) |
 | B4 | Option 3 and the single workflow budget. Implemented 25 October, uncommitted: the budget is `.sddtoolkit.json`'s required `workflowTokenBudget`, 125,000 for E2E (ADR 0037). Open: experiment stops and qualified scope (B4 below) | [B4 records](Z_FIX05.md#b4-records), §9 |
-| B5 | No record batch for token-only groups (ADR 0024). Implemented 25 October: cross-kind restatement in the native duplicate rule (ADR 0035). Proposed: one complete record collection with native acceptance-criterion coverage (B5 below) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches) |
+| B5 | No record batch for token-only groups (ADR 0024). Implemented 25 October: cross-kind restatement in the native duplicate rule (ADR 0035). Implemented 25 October, uncommitted: records name their claims and a functional requirement's claims need a scenario (ADR 0038). One records call per feature not adopted (B5 below) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches) |
 | B6 | GPT-OSS envelope prefix normalized; entity applicability open (B6 below) | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix), §12 |
-| B7 | List-item chunking tried and reverted on 21 October. Implemented 25 October, uncommitted: source-quoted claim wording and code-delimiter removal (ADR 0036); the native list-item claim split was withdrawn the same day after two live pairs (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
+| B7 | List-item chunking tried and reverted on 21 October. Implemented 25 October, uncommitted: source-quoted claim wording and code-delimiter removal (ADR 0036); the native list-item claim split was withdrawn the same day and reinstated by ADR 0038 (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
 | B8 | Native preserved-token bookkeeping (ADR 0024) | [B8](Z_FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens) |
 | B9 | Feature-owned entity records and no output allowance; runaway class open (B9 below) | [B9 records](Z_FIX05.md#b9-records), §§9, 11, 16 |
 | W1, W2 | No post-generation upstream rebuild; the duplicate path is deleted | [W1](Z_FIX05.md#w1-review-can-restart-the-whole-pipeline), [W2](Z_FIX05.md#w2-the-upstream-repair-path-exists-twice) |
@@ -656,6 +656,40 @@ implementation.
 - **Order.** The configurable budget (B4) first, then requirement-level claims (B7), then
   this.
 
+**Implemented 25 October 2026, uncommitted ([ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md)).** The user directed
+"implement B5 as per recommendation" and approved four choices ("APPROVED. Implement
+B5"). ADR 0038 is authoritative where the proposal above differs.
+- **Records name their claims.** Each non-entity record carries `claim_ids`, a native
+  unique-subset choice of its batch group's claims. Parsing keeps them in group order;
+  validation and readback require an ordered subset of the one group, which stays the
+  record's association. Repairs stay content-only.
+- **Scenario rule.** In one records response, every claim a functional requirement
+  names must also be named by an acceptance criterion or edge case. It is a native
+  admission constraint beside `exact_members` (`Coverage` on the records array,
+  `uncovered_member` at `/records/<i>/claim_ids/<j>`), so a gap takes the records step's
+  existing protocol correction and exhaustion fails. Request descriptions record it for
+  replay (`model-request-debug/v12`).
+- **Claim granularity.** ADR 0036's list-item split is reinstated (B7).
+- **Not adopted.** One records call per feature: a group's scenarios are all in its own
+  batch, and both live cases already form one group.
+- **Checks.** `zig build verify` on the final tree: 164 of 164 steps, 1,946 of 1,946
+  tests (unit 1,817, integration 129). A contract review found no blocker; its findings
+  (coverage effects, competing records, harness parity, tests at each boundary) are
+  fixed or recorded in ADR 0038.
+- **Live pair, 25 October 21:20** (advisory analyses in `evaluations/e2e/`):
+  - **Hello-world** published, advisory 82.14%. The split made three claims; records
+    named them and passed the scenario rule first time. New: business rules restating
+    FR-001 one claim at a time.
+  - **Loan-renewal** failed `RepairNoProgress` at the principles-review merge (99,194
+    tokens). The scenario rule caught the missing refusal scenario; after two
+    corrections the model added the refusal claim to the success acceptance criterion
+    instead of writing a scenario (the "links, not meaning" limit). The failure came
+    from an `uncertain` principles verdict without citations whose repair made no
+    progress, which ADR 0023 keeps terminal. Source review also ran away on
+    `Loan renewed!` (B9).
+- **Limits.** Prose requirements in one sentence stay one claim. The rule checks links,
+  not meaning.
+
 **Implemented 25 October 2026: cross-kind restatement in the native duplicate rule
 ([ADR 0035](../design/decisions/0035-cross-kind-restatement.md)).** The user answered
 "YES" to the recommended option. In the preflight they decided three rules:
@@ -805,8 +839,9 @@ One pair cannot decide a contract change under §7, so the revert is a user deci
 evidence that segmentation can't help. Source-quoted claim wording, for the
 obligation-weakening half, is implemented
 ([ADR 0036](../design/decisions/0036-source-quoted-claims.md)). The native list-item split
-for the list-collapse half was implemented and withdrawn on 25 October, so list collapse
-is open again. The original record is in [Z_FIX05](Z_FIX05.md#b7-original-record).
+for the list-collapse half was implemented, withdrawn and, the same day, reinstated by
+[ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md): the withdrawal's evidence was misread, since the same five-claim input
+produced both 2 and 304 records, and B5's scenario rule needs one claim per requirement. The original record is in [Z_FIX05](Z_FIX05.md#b7-original-record).
 
 **Implemented 25 October 2026, uncommitted (ADR 0036, option 1).** The user directed
 "implement B7 with option 1". ADR 0036 is authoritative where the approved text below
@@ -818,8 +853,8 @@ differs.
   - One function at extraction text validation quotes the cited lines as written,
     Markdown included. A run continues across uncited blank lines and is trimmed only at
     its ends.
-  - One proposal is one claim. The list-item split described in the reviews below was
-    withdrawn (see "Split withdrawn").
+  - The list-item split described in the reviews below was withdrawn (see "Split
+    withdrawn") and reinstated by ADR 0038 (B5).
 - **Deleted.** Claim-text repair (text repair keeps only the `no_feature_claim` reason),
   citation repair, the `source_selections` diagnostic, `business_text_replacement`, the
   `retain-reference-claim-rejection` operation and the write-only claim citation origins.
@@ -1127,8 +1162,22 @@ Evidence of runaways under schema-constrained decoding at temperature 0.1 (GPT-O
 - `/evaluate-e2e` found the whitespace pattern on 6 of about 700 retained calls, mostly in
   source review. That count is advisory analysis.
 
-**Still open.** Each choice needs a decision. Don't answer the runaway with sampling
-changes or extra retries (§7).
+**Decided and implemented 26 October 2026 ([ADR 0039](../design/decisions/0039-configured-temperatures-and-runaway-resend.md)),
+uncommitted.** A runaway (`output_limit`) discards its partial text and re-sends
+the identical request once at the configured `temperatureRunawayRetry`, outside
+`retry-limit`, and logs `model.runaway_resent`. Its response passes exactly the checks
+a first response does. A runaway on the re-send fails required work with
+`RunawayRepeated`; in review it ends that advice incomplete.
+[ADR 0040](../design/decisions/0040-incomplete-review-published-marked-logged.md) then
+publishes incomplete review marked as incomplete in `spec.md` and `reference-context.md`,
+and logs it as `review.incomplete`, and
+[ADR 0041](../design/decisions/0041-failed-run-incomplete-publication.md) makes a failed
+required step publish its validated content as a failed incomplete specification, marked
+and logged; the run still fails. `.sddtoolkit.json` now requires `temperature` and
+`temperatureRunawayRetry` (E2E: `0.1` and `1`). This is the user's recorded exception to
+§7's rule against sampling changes and extra retries; it covers only `output_limit`.
+
+**Still open.** The choices below are unaffected by ADR 0039.
 
 - **Deadline and maximum output.** The 180 s deadline covers GPT-OSS-20B's 16,384-token
   maximum. The catalogue's Claude Haiku 5.5 entries declare 128,000. If a slot selects
@@ -1140,14 +1189,13 @@ changes or extra retries (§7).
 - **Lower output allowance.** ADR 0011 permits an optional per-slot `maxOutputTokens`. On
   18 October the user directed that there be no output token limits (§11), so this needs a
   new decision.
-- **Bounded correction.** Decide whether a provider `output_limit` gets one bounded
-  correction through the existing protocol-retry owner. §7 discourages extra retries, so
-  this needs an explicit rule, not a local exception.
+- **Bounded correction.** Settled by ADR 0039: no correction, one re-send instead.
 - **Cardinality bound.** Decide whether the closed records schema should bound per-family
   cardinality. It must not become a disguised size ceiling under ADR 0011.
 
-Replay the runaway requests with repetitions to measure the rate before deciding.
-Hello-world has no entities, so §7 also needs a second case that does.
+After ADR 0039 lands, live runs should report each runaway, its re-send and what the
+re-send returned, so the re-send's effect is measured. Hello-world has no entities, so §7
+also needs a second case that does.
 
 ## 4. Spec workflow simplification
 
@@ -1272,8 +1320,11 @@ defect.
 **Decision:** first measure whether grouping and source review meet the intended
 traceability claim. If record-specific support is required, approve one binding
 change across generation, review, repair, omission insertion, readback and rendering.
-Don't create a second provenance store or infer support from text matching. B5's
-collection authoring would change the same binding.
+Don't create a second provenance store or infer support from text matching.
+
+**Partly settled 25 October 2026 ([ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md)):** non-entity records now name their supporting
+claims within their one group, so citations and review evidence narrow to those claims.
+Entities and narrative fields still bind whole groups.
 
 ### R2. Clarification answer recovery
 
@@ -1536,12 +1587,28 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
 
    Quality over cost, but never waste (user, 25 October): token cost is not a reason to
    drop a check, and spending that buys no quality is removed at its owner.
-5. **Then decide the open Spec failure classes:**
+5. **Implement the 26 October 2026 decisions, in this order** (approved: "1 yes, 2 yes,
+   3 yes, 4 yes", "update with recommendations and implement"):
+   - ADR 0039 (configured temperatures, the runaway re-send, its logging and identical
+     checks for every retry response) together with ADR 0042 (principle verdicts need
+     citations at response admission, and the prompt defines `uncertain`), sharing
+     `model-request-debug/v13`;
+   - ADR 0040 (incomplete review published, marked and logged);
+   - ADR 0041 (a failed or blocked run publishes its validated content marked
+     incomplete, `specification-state/v20`);
+   - ADR 0043 (model-facing `exact_text` names);
+   - then an approved live pair of both cases, reporting runaways, re-sends and
+     incomplete reviews separately.
+
+   Progress (26 October 2026, uncommitted, each verified with `zig build verify`):
+   ADRs 0039, 0042, 0040 and 0043 are implemented. ADR 0041's mechanism (a declared
+   workflow failure output) awaits the user's decision.
+6. **Then decide the open Spec failure classes:**
    - B2's finding-type accuracy and false assessments;
    - B4's experiment stops and qualified scope, before any baseline freeze;
    - B5's proposed single record collection with native acceptance-criterion coverage;
    - B9's open choices.
-6. **Architecture, in ADR order and independent of 1–5.** Implement ADR 0030 (A1), as
+7. **Architecture, in ADR order and independent of 1–6.** Implement ADR 0030 (A1), as
    amended on 23 October, before adding operations for another workflow. Slices 1–3 are
    done; the catalogue deadline already made pre-24-October runs unreadable to replay
    tools, so W4 uses raw response bytes or newer captures. Adjudicate the existing v9
@@ -1549,7 +1616,7 @@ passed. Nothing below authorizes a live call; each E2E run needs its own approva
    Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
    (ADR 0032), then convert repairs (ADR 0033). Fold A4's closed reasons and A5's rule
    style into each conversion, and check whether a conversion absorbs W5's pairs.
-7. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1
+8. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1
    before promising stronger provenance. Freeze the Phase 2 baseline only after B4's
    budget and scope decision. B5's proposal replaces its A/C comparison. Gather R6
    evidence after B2's live effect is measured.
@@ -1571,7 +1638,9 @@ Rules for every contract change (former FIX04 §1.1):
   second model or a weaker admission rule. The development grader's single
   mechanical correction ([Z_FIX05 §15](Z_FIX05.md#15-grader-one-shot-correction--18-october-2026),
   user decision of 18 October 2026) is an explicit
-  exception for the harness, not engine policy.
+  exception for the harness, not engine policy. The one engine exception is ADR 0039's
+  runaway re-send (user decision of 26 October 2026): an `output_limit` stop is re-sent
+  once at the configured `temperatureRunawayRetry`. It covers no other failure.
 - Budget-stopped, malformed and exhausted runs stay in the attempted-workload
   denominator.
 
@@ -1836,3 +1905,8 @@ bounded approval, and each E2E run needs its own explicit approval
   carry it. The B4 block records the details.
 - **25 October 2026, live pair at the configured 125,000 budget:** by user direction.
   Both cases published at advisory 85.71%. The B4 block records the details.
+- **25 October 2026, B5 implemented (ADR 0038):** the user approved four choices. Records
+  name their claims within their group, a functional requirement's claims need an
+  acceptance criterion or edge case (a native admission rule that takes protocol
+  correction), and the list-item split is reinstated. One records call per feature is
+  not adopted. The B5 block records the details.

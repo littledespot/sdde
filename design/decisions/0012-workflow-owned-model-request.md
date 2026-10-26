@@ -14,6 +14,10 @@
   inference only, and took the deadline from the bound catalogue entry's
   `requestTimeoutMs`, so the "missing/invalid deadlines" cases moved to catalogue
   validation.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): the temperature comes from the project configuration's required
+  `temperature`, not a fixed `0.1`, and a runaway re-send uses its
+  `temperatureRunawayRetry`.
 
 ## Decision
 
@@ -27,9 +31,9 @@
   repair or clarification authority.
 
 - The originating step declares the repository slot, prompt, result
-  schema and optional input resource once. Temperature is engine-owned (§12.5):
-  `0.1` when the registered model supports it, omitted otherwise; workflow
-  temperature parameters reject.
+  schema and optional input resource once. Temperature is configuration-owned
+  (§12.5, ADR 0039): the configured `temperature` when the registered model supports
+  it, omitted otherwise; workflow temperature parameters reject.
 - The required per-model `json` boolean in `.sddproviders.json` is the sole
   response-mode selector (user-directed, 2026-09-21). `true` selects
   native schema output, `false` prompt-only; registered capabilities still constrain

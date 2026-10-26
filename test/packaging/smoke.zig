@@ -10,6 +10,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\{
         \\  "logs": { "level": "debug", "console": false },
         \\  "workflowTokenBudget": 100000,
+        \\  "temperature": 0.1,
+        \\  "temperatureRunawayRetry": 1,
         \\  "models": { "slots": {} },
         \\  "paths": {
         \\    "specs": "requirements/current", "references": "references",

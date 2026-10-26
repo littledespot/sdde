@@ -116,7 +116,9 @@ pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTa
         .decoded => .ok,
         .protocol_rejected => .invalid,
         .not_decoded => |source| switch (source.outcome()) {
-            .validated => |evidence| if (evidence.missingFinalText()) .invalid else observation.status(source),
+            // A missing final answer takes correction, and a first runaway its
+            // one re-send (ADR 0039); neither is a candidate.
+            .validated => |evidence| if (evidence.missingFinalText() or evidence.runaway() == .first) .invalid else observation.status(source),
             .rejected, .cancelled, .advisory_stopped => observation.status(source),
         },
     };

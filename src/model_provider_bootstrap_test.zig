@@ -76,6 +76,7 @@ test "conditional runner skips F0008 for a capability-free selected workflow" {
         .{},
         &selected,
         &toolkit.value().models,
+        toolkit.value().temperatures(),
         &config_child_runner,
         &compiled_provider_contracts,
     );
@@ -113,6 +114,7 @@ test "conditional runner captures once and publishes one immutable run authority
             .{},
             &selected,
             &toolkit.value().models,
+            toolkit.value().temperatures(),
             &config_child_runner,
             &compiled_provider_contracts,
         );
@@ -232,6 +234,7 @@ fn expectPreparationFailure(
             .{},
             &selected,
             &toolkit.value().models,
+            toolkit.value().temperatures(),
             &config_child_runner,
             &compiled_provider_contracts,
         );
@@ -438,7 +441,7 @@ const missing_model_config = toolkitPrefix() ++
 
 fn toolkitPrefix() []const u8 {
     return
-    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":
     ;
 }
 

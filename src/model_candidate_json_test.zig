@@ -204,7 +204,7 @@ test "independent wire cases cover every selected specification result and neste
     }
     try checkCandidate("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":" ++ response_wire.nodes ++ "},\"token_classifications\":[]}");
     try checkCandidate("extraction", "classification_replacement", "{\"token_classifications\":" ++ response_wire.classifications ++ "}");
-    try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[7],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}]}", .unknown_property, "/statements/0/content/token_id");
+    try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[7],\"content\":{\"kind\":\"exact_text\",\"token_id\":7}}]}", .unknown_property, "/statements/0/content/token_id");
     try checkCandidate("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}");
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
@@ -217,10 +217,15 @@ test "independent wire cases cover every selected specification result and neste
     try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
     inline for (response_wire.records) |record| {
         const bytes = "{\"content\":" ++ record[1] ++ "}";
+        // Authored records name their supporting claims (ADR 0038); repairs stay content-only.
+        const authored = "{\"content\":" ++ record[1] ++ ",\"claim_ids\":[" ++ response_wire.id ++ "]}";
         if (comptime std.mem.eql(u8, record[0], "entity")) {
-            try candidateSchemaCase("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}", .unknown_variant, "/records/0/content/kind");
+            try candidateSchemaCase("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ authored ++ "]}", .unknown_variant, "/records/0/content/kind");
             try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"required\",\"basis\":" ++ response_wire.attributed ++ ",\"records\":[{\"signal_ids\":[" ++ response_wire.id ++ "],\"content\":" ++ record[1] ++ "}]}");
-        } else try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
+        } else {
+            try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ authored ++ "]}");
+            try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}", .missing_required_property, "/records/0/claim_ids");
+        }
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
         try candidateSchemaCase("generation", "primary_user_story", need, .unknown_property, "/record_kind");
@@ -349,7 +354,7 @@ test "required text and citation presence follows native rules in initial and se
 
     try checkCandidate("reconciliation", "summary", "{\"statements\":[]}");
     try checkCandidate("reconciliation", "dispositions_assignment", "{\"claim_dispositions\":[],\"conflict_groups\":[]}");
-    try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}]}", .array_length, "/statements/0/claim_ids");
+    try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"claim_ids\":[],\"content\":{\"kind\":\"exact_text\",\"token_id\":7}}]}", .array_length, "/statements/0/claim_ids");
     try candidateSchemaCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"An observable result.\"}}}]}", .array_length, "/signals/0/claim_ids");
     try candidateSchemaCase("reconciliation", "repair_selection", "{\"claim_ids\":[]}", .array_length, "/claim_ids");
     inline for (.{ .{ "business_text", "segments" }, .{ "reference_text", "nodes" } }) |case| {
@@ -565,7 +570,7 @@ test "independent multi-record proposals retain siblings and all disposition var
     ;
     try checkCandidate("reconciliation", "summary", statements);
     const records =
-        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":"Confirm a booking."}},{"content":{"kind":"functional_requirement","text":"Issue a receipt."}}]}
+        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":"Confirm a booking."},"claim_ids":[7]},{"content":{"kind":"functional_requirement","text":"Issue a receipt."},"claim_ids":[9]}]}
     ;
     try checkCandidate("generation", "records", records);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -744,4 +749,49 @@ fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
         if (err == error.OutOfMemory) return err;
         try std.testing.expectEqual(error.InvalidJsonDocument, err);
     }
+}
+
+test "exact source values reach models only as exact_text, while native names stay (ADR 0043)" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const r = @import("domain/reference_reconciliation.zig");
+    const proposal: r.ContentProposal = .{ .preserved_token = .{ .token_id = .{ .ordinal = 3 } } };
+    const content: r.Content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 3 } } };
+    inline for (.{ .{ r.ContentProposal, proposal }, .{ r.Content, content } }) |case| {
+        const wire = try codec.encodeEvidence(case[0], a, case[1]);
+        const parsed = try std.json.parseFromSliceLeaky(std.json.Value, a, wire, .{});
+        try std.testing.expectEqualStrings("exact_text", parsed.object.get("kind").?.string);
+        try std.testing.expect(std.mem.indexOf(u8, wire, "preserved_token") == null);
+        try std.testing.expectEqualDeep(case[1], try codec.decode(case[0], a, wire));
+        const legacy = try std.mem.replaceOwned(u8, a, wire, "exact_text", "preserved_token");
+        try std.testing.expectError(error.InvalidJsonDocument, codec.decode(case[0], a, legacy));
+        // Stored state keeps the native variant name; only the model codec maps it.
+        const native = try std.json.Stringify.valueAlloc(a, case[1], .{});
+        try std.testing.expect(std.mem.indexOf(u8, native, "preserved_token") != null);
+        try std.testing.expect(std.mem.indexOf(u8, native, "exact_text") == null);
+    }
+    try std.testing.expectEqualStrings("exact_text", @import("domain/model_evidence.zig").exact_text_kind);
+}
+
+test "Spec prompts, schemas and context files never name preserved tokens (ADR 0043)" {
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    var spec = try std.Io.Dir.cwd().openDir(io, "design/workflows/spec", .{ .iterate = true });
+    defer spec.close(io);
+    var iterator = spec.iterate();
+    var checked: usize = 0;
+    while (try iterator.next(io)) |entry| {
+        if (entry.kind != .file) continue;
+        const bytes = try spec.readFileAlloc(io, entry.name, allocator, .limited(@import("domain/model_result_schema.zig").max_bytes));
+        defer allocator.free(bytes);
+        for ([_][]const u8{ "preserved_token", "preserved token", "preserved-token", "Preserved token", "Preserved-token" }) |name| {
+            if (std.mem.indexOf(u8, bytes, name) != null) {
+                std.debug.print("{s} names {s}\n", .{ entry.name, name });
+                return error.TestUnexpectedResult;
+            }
+        }
+        checked += 1;
+    }
+    try std.testing.expect(checked > 0);
 }

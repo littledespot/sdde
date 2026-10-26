@@ -137,6 +137,35 @@ the provider's reported input and output tokens. This applies to required and ad
 inference alike. The event never retries, reclassifies or excuses the stop, and its
 logging rejection prevents continuation.
 
+An `OUTPUT_LIMIT` stop is re-sent once under
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md), and every
+re-send is logged:
+
+- after the runaway's `model.provider_stopped`, one warning `model.runaway_resent` for
+  the runaway attempt, with its operation, slot, `OUTPUT_LIMIT` diagnostic and reported
+  tokens, emitted at the re-send's provider-call step once every send check has passed
+  and immediately before the send;
+- the re-send's own `model.requested` and `model.completed` under the next attempt
+  number;
+- if the re-send also runs away, its own `model.provider_stopped`, then failure events
+  carrying the diagnostic `RunawayRepeated`.
+
+Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
+its request description (`model-request-debug/v13`), not in a log field. A re-send that
+succeeds removes neither event.
+
+When post-generation advice closes incomplete, the runner emits one warning
+`review.incomplete`, with the incomplete-advice reason as its diagnostic code and the
+number of unassessed subjects as its count
+([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). Its
+logging rejection prevents publication.
+
+When a failed Specify run publishes its validated content as a failed incomplete
+specification, the runner emits one warning `run.incomplete_published` after the failure
+events and before the publication writes, with the failure's diagnostic code
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Its logging
+rejection prevents publication.
+
 Useful metrics:
 
 - model calls and tokens by stage/unit;

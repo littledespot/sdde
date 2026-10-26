@@ -31,10 +31,7 @@ pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocato
     var markup_end: usize = 0;
     var offset: usize = 0;
     while (offset < bytes.len) {
-        const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;
-        var next = end;
-        if (next < bytes.len and bytes[next] == '\r') next += 1;
-        if (next < bytes.len and bytes[next] == '\n') next += 1;
+        const end, const next = lineAt(bytes, offset);
         const line = bytes[offset..end];
         var prefix = contentStart(line);
         // Indentation cannot start a code block in the middle of a paragraph.
@@ -111,6 +108,99 @@ pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocato
 }
 fn less(_: void, a: Range, b: Range) bool {
     return a.start < b.start;
+}
+
+/// The end of the line at `offset`, without its ending, and the next line's start.
+fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
+    const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;
+    var next = end;
+    if (next < bytes.len and bytes[next] == '\r') next += 1;
+    if (next < bytes.len and bytes[next] == '\n') next += 1;
+    return .{ end, next };
+}
+
+/// One source line, the top-level list item it belongs to and whether it is
+/// fenced code. Segments never decrease through a source: item `k` is segment
+/// `2k + 1`, and the lines after `k` items and before the next are segment `2k`.
+pub const ListLine = struct {
+    start: usize,
+    segment: u32,
+    code: bool,
+
+    /// Whether the line belongs to a top-level list item, not a gap between items.
+    pub fn inItem(self: ListLine) bool {
+        return self.segment % 2 == 1;
+    }
+};
+
+/// Top-level list structure in source coordinates (ADR 0036, ADR 0038). An
+/// unindented marker starts an item; indented, fenced-code and continuation
+/// lines belong to it. A heading, thematic break, HTML block or comment, or
+/// unindented text after a blank line ends it. Within a paragraph, including an
+/// item's continuation text, an ordered marker starts an item only as `1.`/`1)`
+/// or as a sibling with the open list's delimiter, after CommonMark's
+/// paragraph-interruption rule, so a wrapped number stays wording.
+pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const ListLine {
+    const ranges = try scanAll(allocator, bytes);
+    defer allocator.free(ranges);
+    var result: std.ArrayList(ListLine) = .empty;
+    errdefer result.deinit(allocator);
+    var block: usize = 0;
+    var item: ?u32 = null;
+    var items: u32 = 0;
+    var delimiter: ?u8 = null;
+    var boundary = true;
+    var html_block = false;
+    var comment_end: usize = 0;
+    var offset: usize = 0;
+    while (offset < bytes.len) {
+        const end, const next = lineAt(bytes, offset);
+        const line = bytes[offset..end];
+        while (block < ranges.len and (ranges[block].form != .code_block or ranges[block].end <= offset)) block += 1;
+        const code = block < ranges.len and ranges[block].start <= offset;
+        const blank = std.mem.trim(u8, line, " \t").len == 0;
+        if (code or offset < comment_end) {} else if (html_block and !blank) {} else if (blank) {
+            html_block = false;
+            boundary = true;
+        } else if (line[0] == ' ' or line[0] == '\t') {
+            boundary = false;
+        } else if (isHeading(line) or isBlockSeparator(line) or isHtmlBlock(line) or std.mem.startsWith(u8, line, "<!--")) {
+            // Each ends the open item and paragraph. A comment runs to its
+            // closing line and an HTML block to a blank line.
+            item = null;
+            delimiter = null;
+            boundary = true;
+            if (std.mem.startsWith(u8, line, "<!--")) {
+                comment_end = htmlEnd(bytes, offset) orelse bytes.len;
+            } else html_block = isHtmlBlock(line);
+        } else if (listMarker(line)) |marker| {
+            if (marker.bullet or marker.first or boundary or delimiter == marker.delimiter) {
+                item = items;
+                items += 1;
+                delimiter = marker.delimiter;
+            }
+            boundary = false;
+        } else {
+            if (boundary) {
+                item = null;
+                delimiter = null;
+            }
+            boundary = false;
+        }
+        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code });
+        offset = next;
+    }
+    return result.toOwnedSlice(allocator);
+}
+
+const Marker = struct { len: usize, delimiter: u8, bullet: bool, first: bool };
+/// A list marker at the start of `line`, with its following space or tab.
+fn listMarker(line: []const u8) ?Marker {
+    if (line.len > 1 and std.mem.indexOfScalar(u8, "-+*", line[0]) != null and (line[1] == ' ' or line[1] == '\t')) return .{ .len = 2, .delimiter = line[0], .bullet = true, .first = false };
+    var digits: usize = 0;
+    while (digits < line.len and digits < 9 and std.ascii.isDigit(line[digits])) digits += 1;
+    if (digits == 0 or digits + 1 >= line.len or (line[digits] != '.' and line[digits] != ')') or (line[digits + 1] != ' ' and line[digits + 1] != '\t')) return null;
+    return .{ .len = digits + 2, .delimiter = line[digits], .bullet = false, .first = digits == 1 and line[0] == '1' };
 }
 
 fn collectLinks(a: std.mem.Allocator, bytes: []const u8, protected: []const Range, output: *std.ArrayList(Range)) std.mem.Allocator.Error!void {
@@ -303,18 +393,8 @@ fn contentStart(line: []const u8) usize {
             if (cursor < line.len and line[cursor] == ' ') cursor += 1;
             continue;
         }
-        const marker = cursor;
-        if (cursor < line.len and std.mem.indexOfScalar(u8, "-+*", line[cursor]) != null) {
-            cursor += 1;
-        } else {
-            while (cursor < line.len and std.ascii.isDigit(line[cursor]) and cursor - marker < 9) cursor += 1;
-            if (cursor > marker and cursor < line.len and (line[cursor] == '.' or line[cursor] == ')')) cursor += 1 else cursor = marker;
-        }
-        if (cursor > marker and cursor < line.len and (line[cursor] == ' ' or line[cursor] == '\t')) {
-            cursor += 1;
-            continue;
-        }
-        return marker;
+        const marker = listMarker(line[cursor..]) orelse return cursor;
+        cursor += marker.len;
     }
     return cursor;
 }

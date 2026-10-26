@@ -9,7 +9,7 @@ pub const Claim = struct {
     citation_ids: []const r.CitationId,
 };
 pub const Token = struct { claim_id: r.ClaimId, source_form: tokens.ExtractorId, id: tokens.Id, kind: tokens.Kind, value: []const u8, citation_id: r.CitationId };
-pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
+pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, exact_texts: []const Token };
 pub const Source = struct { id: r.extraction.identity.SourceId, text: []const u8 };
 
 /// Resolved source meaning for authoring. Native citations, token identity and
@@ -18,14 +18,17 @@ pub const Requirement = struct { claim_id: r.ClaimId, kind: []const u8, meaning:
 pub const ExactLiteral = struct { claim_id: r.ClaimId, value: []const u8, source_id: r.extraction.identity.SourceId };
 pub const Meaning = struct { kind: []const u8, meaning: []const u8 };
 pub const ResolvedClaim = struct { id: r.ClaimId, kind: []const u8, meaning: []const u8, citation_ids: []const r.CitationId, source_id: r.extraction.identity.SourceId };
-pub const ResolvedProjection = struct { claims: []const ResolvedClaim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
+pub const ResolvedProjection = struct { claims: []const ResolvedClaim, citations: []const r.extraction.Citation, exact_texts: []const Token };
 pub const Text = union(enum) { business: r.text.BusinessText, reference: r.text.ReferenceSemanticText };
+/// The model-visible kind of an exact source value (ADR 0043), matching the
+/// content codec's declared tag.
+pub const exact_text_kind = r.ContentProposal.model_tags.preserved_token;
 
 /// Caller owns an arena; projected text may borrow validated source bytes.
 pub fn requirement(a: std.mem.Allocator, item: r.Item, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry) r.Error!Requirement {
     const scope: r.evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
     _ = try r.evidence.resolve(inputs, scope);
-    if (item.claim.content == .preserved_token) return .{ .claim_id = item.claim.id, .kind = "preserved_token", .meaning = item.claim.content.preserved_token.value.raw_value.bytes, .source_id = item.source_id };
+    if (item.claim.content == .preserved_token) return .{ .claim_id = item.claim.id, .kind = exact_text_kind, .meaning = item.claim.content.preserved_token.value.raw_value.bytes, .source_id = item.source_id };
     const resolved = try modelMeaning(a, inputs, registry, &.{scope}, item.claim.content.model);
     return .{ .claim_id = item.claim.id, .kind = resolved.kind, .meaning = resolved.meaning, .source_id = item.source_id };
 }
@@ -70,7 +73,7 @@ pub fn resolvedProject(a: std.mem.Allocator, items: []const r.Item, inputs: r.ev
         const text = try requirement(a, item, inputs, registry);
         claim.* = .{ .id = item.claim.id, .kind = text.kind, .meaning = text.meaning, .citation_ids = item.claim.citation_ids, .source_id = text.source_id };
     }
-    return .{ .claims = resolved, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens };
+    return .{ .claims = resolved, .citations = projected.citations, .exact_texts = projected.exact_texts };
 }
 
 pub fn sources(a: std.mem.Allocator, inputs: r.evidence.Inputs) std.mem.Allocator.Error![]const Source {
@@ -160,7 +163,7 @@ pub fn project(allocator: std.mem.Allocator, items: []const r.Item) std.mem.Allo
     }
     const citation_slice = try citations.toOwnedSlice(allocator);
     errdefer allocator.free(citation_slice);
-    return .{ .claims = claims, .citations = citation_slice, .preserved_tokens = try preserved.toOwnedSlice(allocator) };
+    return .{ .claims = claims, .citations = citation_slice, .exact_texts = try preserved.toOwnedSlice(allocator) };
 }
 
 pub const ExtractionReview = struct {

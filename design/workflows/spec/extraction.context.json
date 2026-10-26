@@ -11,6 +11,6 @@
     "open_question": "A question left unresolved by the source.",
     "scope_guard": "An explicit inclusion, exclusion or scope boundary."
   },
-  "citations": "IDs of the source_lines that state the complete claim, including its conditions. The cited lines become the claim's wording.",
+  "citations": "IDs of the source_lines that state the complete claim, including its conditions. The cited lines become the claim's wording; lines from several top-level list items become one claim per item.",
   "nodes": "Write the complete reason as a string, or use {\"fragments\":[text or permitted references]} for explicit composition. Fragments concatenate exactly; strings include their own separators."
 }

@@ -59,3 +59,47 @@ pub const Check = struct {
         return .{ .outcome = context.?.action.execute(ledger, current.id()), .delta = .{} };
     }
 };
+/// ADR 0039: routes a first runaway to its one re-send, and every other
+/// correctable rejection to protocol correction.
+pub const Runaway = struct {
+    pub const Action = @import("../actions/model/check_model_runaway.zig").Action;
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .outcomes = &.{ .ok, .more }, .side_effect = .none, .outcome_association = .{ .observe = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result } } };
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
+        const prepared = current.prepared() orelse return error.OperationExecutionFailed;
+        const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
+        const rejected = switch (payload.source().source().outcome()) {
+            .validated => |evidence| evidence,
+            .rejected, .cancelled, .advisory_stopped => null,
+        };
+        if (rejected) |evidence| if (evidence.request() != prepared) return error.OperationExecutionFailed;
+        return .{ .outcome = context.?.action.execute(prepared, rejected), .delta = .{} };
+    }
+};
+/// ADR 0039: builds the one re-send of a first runaway under the same request.
+pub const Resend = struct {
+    pub const Action = @import("../actions/model/build_model_runaway_resend.zig").Action;
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .replaces = Action.contract.replaces, .invalidates = Action.contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .outcome_association = .{ .request_resend = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result, .result = .prepared_model_request } } };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
+        const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
+        var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch |operation_error| return operation_error;
+        const observation = payload.source().source().outcome();
+        if (observation != .validated) return error.OperationExecutionFailed;
+        const runaway = observation.validated;
+        if (runaway.request() != current.prepared()) return error.OperationExecutionFailed;
+        var prepared = self.action.execute(self.allocator, runaway) catch |operation_error| return operation_error;
+        const next = @import("../domain/model_request_handoff.zig").resent(current, prepared, runaway) catch |native_failure| {
+            prepared.deinit();
+            return native_failure;
+        };
+        errdefer @import("../domain/model_request_handoff.zig").destroy(next);
+        delta.data_replacements[@intFromEnum(requests.prepared_schema.key)] = requests.adoptRequest(self.allocator, requests.prepared_schema, next) catch |operation_error| return operation_error;
+        return .{ .outcome = .ok, .delta = delta };
+    }
+};

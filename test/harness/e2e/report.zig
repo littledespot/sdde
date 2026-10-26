@@ -292,6 +292,9 @@ fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
         try std.json.Stringify.value(completion, .{}, writer);
         try writer.writeAll("\n\n");
     }
+    for (report.incomplete_reviews) |review| {
+        try writer.print("Published incomplete {s} review ({s}): {d} of {d} subjects not assessed.\n\n", .{ @tagName(review.review), @tagName(review.reason), review.unassessed, review.subjects });
+    }
     if (report.exchange_evidence) |exchange| {
         try writer.writeAll("Exchange evidence: ");
         try std.json.Stringify.value(exchange, .{}, writer);

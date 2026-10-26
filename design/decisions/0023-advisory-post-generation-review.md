@@ -42,6 +42,22 @@
   attempt.
 - **Amended by:** [ADR 0037](0037-configured-workflow-token-budget.md) (25 October
   2026): the single budget is the configured `workflowTokenBudget`, not a policy value.
+- **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
+  October 2026): a provider `output_limit` stop is first re-sent once at the configured
+  `temperatureRunawayRetry`. Only a runaway on the re-send ends that advice as
+  incomplete (`provider_output_limit`).
+- **Amended by:** [ADR 0040](0040-incomplete-review-published-marked-logged.md) (26
+  October 2026): incomplete advice is still published, but `spec.md` and
+  `reference-context.md` must say the review is incomplete, including for source review,
+  and each incomplete review is logged as `review.incomplete`.
+- **Amended by:** [ADR 0042](0042-principle-verdict-citations-at-admission.md) (26
+  October 2026): a `conflicting` or `uncertain` principle verdict without citations is
+  rejected at response admission as `missing_required_item` and corrected with the
+  whole response; it is no longer a finding-evidence defect for citation-only repair.
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
+  2026): a fatal failure during review, such as the token budget or terminal
+  finding-evidence repair exhaustion, still fails the run but publishes its validated
+  content as a failed incomplete specification, marked and logged.
 
 ## Decision
 
@@ -85,7 +101,8 @@ The classification controls only non-budget incomplete-failure semantics. Unknow
 actual usage forbids later model calls without estimating it; native publication
 may still finish when it requires no further model call.
 
-A provider non-candidate stop (including output limit), expected model-service
+A provider non-candidate stop (an output limit only after ADR 0039's re-send also
+runs away), expected model-service
 failure, or exhaustion of the existing malformed-response correction ends only
 that bound advice as incomplete. The logical request remains failed and the
 original provider observation, actual usage and complete findings keep their
@@ -112,7 +129,8 @@ logging failures, allocation failures and native authority/validation failures
 remain terminal. Existing native finding-evidence validation and bounded repair
 are preserved; this exception cannot admit malformed evidence or discharge a
 native defect. Pre-generation readiness and source-preservation checks remain
-required. There is no configurable review bypass or extra retry.
+required. There is no configurable review bypass or extra retry beyond ADR 0039's
+runaway re-send.
 
 The native `assessment_incomplete` outcome identifies the exact missing current
 assignment suffix, reason, revision, authorities and producing origin when a call

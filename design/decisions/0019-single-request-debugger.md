@@ -23,7 +23,15 @@
   token-count observation remains to correlate; and the catalogue deadline advanced
   descriptions to `model-request-debug/v11`, whose provider configuration records the
   entry's deadline (`request_timeout`), so replay uses the captured description's
-  deadline.
+  deadline. [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October 2026)
+  advanced them to `model-request-debug/v12`, which records native coverage so replay
+  enforces the same admission. [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+  (26 October 2026) advanced them to `model-request-debug/v13`, whose controls record
+  the temperature value each attempt sent, so replay of a runaway re-send sends its
+  own temperature. The same v13 also records
+  [ADR 0042](0042-principle-verdict-citations-at-admission.md)'s required-items
+  constraint and carries [ADR 0043](0043-model-facing-exact-text-names.md)'s
+  model-facing names.
 
 ## Diagnostic execution boundary
 

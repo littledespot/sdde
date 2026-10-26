@@ -104,6 +104,9 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     response_schema: *const @import("model_result_schema.zig").Schema,
     response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
+    /// Which configured temperature this attempt sends; only ADR 0039's runaway
+    /// re-send sends the runaway-retry temperature.
+    sampling: model_controls.Sampling = .configured,
     /// Native source witness for text admission; never serialized to providers.
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
@@ -141,6 +144,11 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
                 return error.InvalidProviderNeutralModelRequest;
             }
         }
+    }
+
+    /// The temperature this attempt sends, or null when the model takes none.
+    pub fn temperature(self: IdentifiedProviderNeutralModelRequest) ?model_controls.Temperature {
+        return self.controls.temperature(self.sampling);
     }
 
     pub fn matchesBinding(self: IdentifiedProviderNeutralModelRequest, selected: binding.ValidatedProviderModelBinding) bool {

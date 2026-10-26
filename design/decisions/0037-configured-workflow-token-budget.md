@@ -8,6 +8,9 @@
     cost, but never waste";
   - "make the token cap an external setting, that is stored and loaded from
     .sddtoolkit.json, to the e2e test set the token cap to 125000".
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
+  2026): a budget failure still stops all model calls and fails the run, but publishes
+  the validated content as a failed incomplete specification.
 - **Amends:**
   - [ADR 0011](0011-provider-owned-request-limits.md) "Workflow token accounting" and
     [ADR 0023](0023-advisory-post-generation-review.md) "Budget and incomplete advice":

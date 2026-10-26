@@ -4,6 +4,10 @@ const policy = @import("../../../src/domain/text_field_policy.zig");
 const classifier: corpus.recognition.LexicalClassifier = .{ .boundary_fn = @import("exact_value_unicode").wholeWordBoundary };
 
 const packet =
+    \\{"exact_texts":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":1}]}}
+;
+/// Captures made before ADR 0043 name the collection `preserved_tokens`.
+const historical_packet =
     \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":1}]}}
 ;
 const historical_text_schema =
@@ -24,7 +28,7 @@ fn measure(a: std.mem.Allocator, output: []const u8, field: policy.Field) !corpu
 }
 fn measureContract(a: std.mem.Allocator, output: []const u8, field: policy.Field, contract: corpus.MetadataContract) !corpus.Measurement {
     return corpus.measure(a, .{
-        .packet = packet,
+        .packet = if (contract == .current) packet else historical_packet,
         .output = try valueOutput(a, output),
         .schema = if (contract == .current) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
         .metadata_contract = contract,
@@ -97,7 +101,7 @@ test "prototype composition preserves exact original source syntax exception" {
         \\"{\"kind\":\"exact_copy\",\"claim_id\":1}"
     ;
     const source_packet =
-        \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":1}]},"sources":[{"id":1,"text":"The original source includes {\"kind\":\"exact_copy\",\"claim_id\":1} as data."}]}
+        \\{"exact_texts":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":1}]},"sources":[{"id":1,"text":"The original source includes {\"kind\":\"exact_copy\",\"claim_id\":1} as data."}]}
     ;
     const measured = try corpus.measure(a, .{
         // This particular packet omits the original witness. Native metadata
@@ -202,7 +206,7 @@ test "prototype native field metadata must fit the selected response schema" {
     try std.testing.expect(!historical.workflow_authority and !historical.semantic_quality_assessed);
 
     const wrong_leaf = try corpus.measure(a, .{
-        .packet = packet,
+        .packet = historical_packet,
         .output = "{\"value\":true}",
         .schema = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"boolean\"}},\"required\":[\"value\"],\"additionalProperties\":false}",
         .field_policies = &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }},
@@ -243,7 +247,7 @@ test "prototype lexical matches inside encoded insertion syntax cannot repair th
     const a = arena.allocator();
     const measured = try corpus.measure(a, .{
         .packet =
-        \\{"preserved_tokens":[{"claim_id":1,"value":"exact_copy"}],"source_assignment":{"requirements":[{"claim_id":1}]}}
+        \\{"exact_texts":[{"claim_id":1,"value":"exact_copy"}],"source_assignment":{"requirements":[{"claim_id":1}]}}
         ,
         .output = try valueOutput(a,
             \\"{\"kind\":\"exact_copy\",\"claim_id\":1}"
@@ -298,7 +302,7 @@ test "prototype omitted typed occurrence identity requires constructed singleton
     // canonical construction witness, despite the sole available catalogue item.
     const optional_identity_schema = try std.mem.replaceOwned(u8, a, historical_text_schema, "\"required\":[\"kind\",\"claim_id\"]", "\"required\":[\"kind\"]");
     const unknown = try corpus.measure(a, .{
-        .packet = packet,
+        .packet = historical_packet,
         .output = try valueOutput(a, output),
         .schema = try valueSchema(a, optional_identity_schema),
         .metadata_contract = .historical_v5,
@@ -313,7 +317,7 @@ test "prototype omitted typed occurrence identity requires constructed singleton
     const no_identity_property = try std.mem.replaceOwned(u8, a, historical_text_schema, ",\"claim_id\":{\"enum\":[1]}", "");
     const constructed_schema = try std.mem.replaceOwned(u8, a, no_identity_property, "\"required\":[\"kind\",\"claim_id\"]", "\"required\":[\"kind\"]");
     const constructed = try corpus.measure(a, .{
-        .packet = packet,
+        .packet = historical_packet,
         .output = try valueOutput(a, output),
         .schema = try valueSchema(a, constructed_schema),
         .metadata_contract = .historical_v5,
@@ -335,7 +339,7 @@ test "prototype offered values do not create requirement or native field binding
     const a = arena.allocator();
     const foreign = try corpus.measure(a, .{
         .packet =
-        \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":2}]}}
+        \\{"exact_texts":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":2}]}}
         ,
         .output = "{\"value\":\"ACTIVE\"}",
         .schema = root_schema,
@@ -349,7 +353,7 @@ test "prototype offered values do not create requirement or native field binding
 
     const missing = try corpus.measure(a, .{
         .packet =
-        \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}]}
+        \\{"exact_texts":[{"claim_id":1,"value":"ACTIVE"}]}
         ,
         .output = "{\"value\":\"ACTIVE\"}",
         .schema = root_schema,
@@ -373,7 +377,7 @@ test "prototype invalid selected group bindings remain visible without eligible 
     const schema = "{\"type\":\"object\",\"properties\":{\"signal_ids\":{\"type\":\"array\",\"items\":{\"enum\":[1,99]},\"minItems\":1,\"maxItems\":2},\"value\":" ++ text_schema ++ "},\"required\":[\"signal_ids\",\"value\"],\"additionalProperties\":false}";
     const measured = try corpus.measure(a, .{
         .packet =
-        \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}],"source_groups":[{"signal_id":1,"requirements":[{"claim_id":1}]}]}
+        \\{"exact_texts":[{"claim_id":1,"value":"ACTIVE"}],"source_groups":[{"signal_id":1,"requirements":[{"claim_id":1}]}]}
         ,
         .output = "{\"signal_ids\":[99],\"value\":\"ACTIVE\"}",
         .schema = schema,
@@ -396,9 +400,9 @@ test "prototype malformed capture projection and output schema failures have exp
     const cases: []const Case = &.{
         .{ .input = .{ .packet = "{", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
         .{ .input = .{ .packet = "{}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .no_exact_context },
-        .{ .input = .{ .packet = "{\"preserved_tokens\":{}}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
-        .{ .input = .{ .packet = "{\"preserved_tokens\":[{\"claim_id\":0,\"value\":\"ACTIVE\"}]}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
-        .{ .input = .{ .packet = "{\"preserved_tokens\":[{\"claim_id\":1,\"value\":\"ACTIVE\"},{\"claim_id\":1,\"value\":\"READY\"}]}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
+        .{ .input = .{ .packet = "{\"exact_texts\":{}}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
+        .{ .input = .{ .packet = "{\"exact_texts\":[{\"claim_id\":0,\"value\":\"ACTIVE\"}]}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
+        .{ .input = .{ .packet = "{\"exact_texts\":[{\"claim_id\":1,\"value\":\"ACTIVE\"},{\"claim_id\":1,\"value\":\"READY\"}]}", .output = "{\"value\":\"ACTIVE\"}", .schema = root_schema }, .state = .invalid_packet },
         .{ .input = .{ .packet = packet, .output = "{", .schema = root_schema }, .state = .invalid_model_json },
         .{ .input = .{ .packet = packet, .output = "\"ACTIVE\"", .schema = root_schema }, .state = .invalid_model_json },
         .{ .input = .{ .packet = packet, .output = "{\"value\":\"ACTIVE\"}" }, .state = .missing_schema },
@@ -449,6 +453,30 @@ test "recorded assignment membership gates measurement like production admission
     foreign.members = &.{.{ .path = path, .allowed = &.{ 2, 4, 6 } }};
     try std.testing.expectEqual(corpus.State.invalid_field_metadata, (try corpus.measure(a, foreign, classifier)).state);
     var historical = input;
+    historical.packet = historical_packet;
     historical.metadata_contract = .historical_v5;
     try std.testing.expectEqual(corpus.State.invalid_field_metadata, (try corpus.measure(a, historical, classifier)).state);
+}
+
+test "the exact-text collection key follows the capture contract (ADR 0043)" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // A current reconciliation or review packet carries no native exact scope;
+    // its exact values still come from its `exact_texts` collection.
+    const current_packet =
+        \\{"claims":[{"id":1,"content":{"kind":"exact_text","token_id":1},"citation_ids":[1]}],"exact_texts":[{"claim_id":1,"source_form":1,"id":1,"kind":"literal","value":"ACTIVE","citation_id":1}],"source_assignment":{"requirements":[{"claim_id":1}]}}
+    ;
+    const field: []const @import("../../../src/domain/model_text_field.zig").Binding = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    const measured = try corpus.measure(a, .{ .packet = current_packet, .output = try valueOutput(a, "\"ACTIVE\""), .schema = root_schema, .field_policies = field, .original_sources = &.{} }, classifier);
+    try std.testing.expectEqual(corpus.State.measured, measured.state);
+    try std.testing.expectEqual(@as(usize, 1), measured.occurrence_count);
+    try std.testing.expectEqual(@as(usize, 1), measured.fields[0].plain_runs[0].result.matches.len);
+    // No capture contract reads both keys.
+    const stale = try corpus.measure(a, .{ .packet = historical_packet, .output = try valueOutput(a, "\"ACTIVE\""), .schema = root_schema, .field_policies = field, .original_sources = &.{} }, classifier);
+    try std.testing.expectEqual(corpus.State.no_exact_context, stale.state);
+    const renamed_history = try corpus.measure(a, .{ .packet = current_packet, .output = try valueOutput(a, "\"ACTIVE\""), .schema = root_schema, .field_policies = field, .original_sources = &.{}, .metadata_contract = .historical_v5 }, classifier);
+    try std.testing.expectEqual(corpus.State.no_exact_context, renamed_history.state);
+    try std.testing.expectEqualStrings("exact_texts", corpus.exactTextsKey(.current));
+    for ([_]corpus.MetadataContract{ .historical_v3, .historical_v4, .historical_v5, .unavailable }) |contract| try std.testing.expectEqualStrings("preserved_tokens", corpus.exactTextsKey(contract));
 }

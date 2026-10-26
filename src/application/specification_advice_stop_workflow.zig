@@ -91,6 +91,18 @@ fn StopTypeFor(comptime transport_scope: stop_contract.Scope) type {
     };
 }
 
+/// ADR 0040: the advice stop a completed stop operation published, for its
+/// `review.incomplete` event. Reads only the review it replaced.
+pub fn closedAdvice(view: *const data.View) operations.Error!authority.AdviceStop {
+    const current = try support.progress(view);
+    inline for (.{ @import("../domain/specification_support.zig").Purpose.source, .principles }) |selected| if (support.purpose(current) == selected) {
+        const value = try support.collection(selected, current);
+        if (value != .accepted) return error.OperationExecutionFailed;
+        return value.accepted.inputs.advice_stop orelse error.OperationExecutionFailed;
+    };
+    return error.OperationExecutionFailed;
+}
+
 fn protocolReceipt(view: *const data.View) operations.Error!bool {
     const decision = try pipeline_values.read(view, @import("workflow_model_accounting.zig").schema, @import("../domain/model_attempt_decision.zig").Decision);
     return decision.outcome() == .advisory_stopped;

@@ -44,6 +44,7 @@ pub const Error = error{InvalidRepositoryModelAllowlist};
 pub fn createValidated(
     allocator: std.mem.Allocator,
     models: *const config.ModelsConfig,
+    temperatures: @import("model_controls.zig").Temperatures,
     registry: *const registry_contract.ValidatedLLMProviderRegistry,
 ) Error!*Owner {
     const owner = allocator.create(OwnerStorage) catch {
@@ -80,7 +81,7 @@ pub fn createValidated(
             selected.reasoningEffort,
         )) return error.InvalidRepositoryModelAllowlist;
 
-        const controls = catalogue_entry.capabilities.inferenceControls();
+        const controls = catalogue_entry.capabilities.inferenceControls(temperatures);
 
         destination.* = .{
             .slot_id = .{ .bytes = owner.arena.allocator().dupe(u8, slot_id.bytes) catch {

@@ -142,7 +142,7 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
   grader/acceptance evidence with an always-unresolved decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v9`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v10`: the single total token budget and aggregate actual usage,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.
 - `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and

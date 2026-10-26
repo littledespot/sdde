@@ -83,3 +83,55 @@ fn validEffects(inputs: []const pipeline.DataKey, produces: []const pipeline.Dat
 fn contains(keys: []const pipeline.DataKey, key: pipeline.DataKey) bool {
     return std.mem.indexOfScalar(pipeline.DataKey, keys, key) != null;
 }
+
+/// ADR 0039: a response admission whose `invalid` continues to another step
+/// (correction or closure) routes it through a runaway router whose `more`
+/// reaches the re-send, and a re-send is reached only from such a router, so
+/// no workflow can skip or forge a runaway's one re-send. An admission that
+/// ends the execution on `invalid` closes nothing and continues nothing.
+pub fn validateRunawayRoutes(authority: compilation.SemanticAuthority) error{WorkflowGraphCompileInvalid}!void {
+    for (authority.steps) |step| {
+        if (step.outcome_association != .request_admission or std.mem.indexOfScalar(workflow.OutcomeTag, step.outcomes, .invalid) == null) continue;
+        const router = switch (route(authority, step.id.bytes, .invalid) orelse return error.WorkflowGraphCompileInvalid) {
+            .step => |id| find(authority.steps, id.bytes) orelse return error.WorkflowGraphCompileInvalid,
+            .terminal => continue,
+        };
+        const resend = target(authority, router.id.bytes, .more) orelse return error.WorkflowGraphCompileInvalid;
+        if (resend.outcome_association != .request_resend) return error.WorkflowGraphCompileInvalid;
+    }
+    for (authority.transitions) |edge| {
+        const id = switch (edge.target) {
+            .step => |value| value.bytes,
+            .terminal => continue,
+        };
+        const reached = find(authority.steps, id) orelse return error.WorkflowGraphCompileInvalid;
+        if (reached.outcome_association != .request_resend) continue;
+        if (edge.outcome != .more or !admissionTarget(authority, edge.from.bytes)) return error.WorkflowGraphCompileInvalid;
+    }
+}
+
+fn admissionTarget(authority: compilation.SemanticAuthority, id: []const u8) bool {
+    for (authority.transitions) |edge| {
+        if (edge.outcome != .invalid or edge.target != .step or !std.mem.eql(u8, edge.target.step.bytes, id)) continue;
+        const source = find(authority.steps, edge.from.bytes) orelse return false;
+        if (source.outcome_association == .request_admission) return true;
+    }
+    return false;
+}
+
+fn route(authority: compilation.SemanticAuthority, from: []const u8, outcome: workflow.OutcomeTag) ?workflow.TransitionTarget {
+    for (authority.transitions) |edge| if (edge.outcome == outcome and std.mem.eql(u8, edge.from.bytes, from)) return edge.target;
+    return null;
+}
+
+fn target(authority: compilation.SemanticAuthority, from: []const u8, outcome: workflow.OutcomeTag) ?compilation.CompiledStep {
+    return switch (route(authority, from, outcome) orelse return null) {
+        .step => |id| find(authority.steps, id.bytes),
+        .terminal => null,
+    };
+}
+
+fn find(steps: []const compilation.CompiledStep, id: []const u8) ?compilation.CompiledStep {
+    for (steps) |step| if (std.mem.eql(u8, step.id.bytes, id)) return step;
+    return null;
+}

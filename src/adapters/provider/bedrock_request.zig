@@ -14,7 +14,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .content = request.content,
         .schema = schema,
         .schema_name = "sdde_model_envelope_v1",
-        .temperature = request.controls.temperature,
+        .temperature = request.temperature(),
         .reasoning_effort = try text.reasoningEffort(request.binding_id.reasoning_effort),
         .family = family,
         .max_output_tokens = max_output_tokens,

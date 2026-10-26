@@ -86,6 +86,8 @@ pub const TerminalRejection = struct {
 pub const Attempt = struct {
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     step: []const u8,
+    /// ADR 0039: the attempt ordinal a runaway re-send repeats, otherwise null.
+    resends: ?u32 = null,
     accounting: std.meta.Tag(@import("../../../src/domain/workflow_token_accounting.zig").Reconciliation),
     usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage,
 };
@@ -94,6 +96,13 @@ pub const AdvisoryCompletion = struct {
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     delivery: @import("../../../src/domain/llm_provider_operation.zig").ProviderDeliveryDisposition,
     usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage,
+};
+/// ADR 0040: one post-generation review the published state records as incomplete.
+pub const IncompleteReview = struct {
+    review: enum { source, principle },
+    reason: @import("../../../src/domain/required_authority.zig").AdviceStop.Reason,
+    unassessed: usize,
+    subjects: usize,
 };
 pub const ProtocolRejection = struct {
     call: usize,
@@ -138,7 +147,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v9" },
+    schema: enum { @"spec-e2e-report/v10" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -174,6 +183,7 @@ pub const Report = struct {
     total_tokens: u128 = 0,
     last_model_usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
     advisory_completion: ?AdvisoryCompletion = null,
+    incomplete_reviews: []const IncompleteReview = &.{},
     usage_complete: bool = true,
     diagnostic: ?[]const u8 = null,
     provider_diagnostic: ?[]const u8 = null,

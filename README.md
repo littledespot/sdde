@@ -245,9 +245,9 @@ rejects when their bytes differ from the current canonical Converse request;
 there is no legacy wire codec or replay fallback.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
-prompt formats are rejected. Request descriptions use `model-request-debug/v11`
-and retain the exact selected response schema and the catalogue entry's
-`requestTimeoutMs`, which replay uses as its deadline; older descriptions are rejected.
+prompt formats are rejected. Request descriptions use `model-request-debug/v13`
+and retain the exact selected response schema, its native membership and coverage
+constraints, the temperature each attempt sent, and the catalogue entry's `requestTimeoutMs`, which replay uses as its deadline; older descriptions are rejected.
 Replays use `request-replay/v6` records with a saved
 session and dispatch sequence; older replay records are rejected. Replay sessions
 are separate from workflow runs, each with its own execution order. Rejected replay
@@ -276,7 +276,8 @@ E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 Live development tests permit only Bedrock `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, with native JSON Schema. Generation and the standalone
 supplied-spec evaluator use the same explicit model tuple with separate settings
-and accounting. The registered profile uses temperature `0.1`; Spec generation and
+and accounting. `.sddtoolkit.json` supplies the temperature (`0.1`) and the runaway
+re-send temperature (`1`) (ADR 0039); Spec generation and
 repair select low reasoning. Sonnet, Sol, Haiku, Luna, direct OpenAI and unregistered selections
 reject before credentials or network use. Luna remains registered for explicitly
 configured production use; changing the test selection does not remove its codec.

@@ -19,11 +19,13 @@ pub const Action = struct {
         const resolved = try state.checkClarifications(try clarifications.ready.validateFor(allocator, context.inputs));
         if (value.revision != try state.nextRevision(prior) or value.clarification.state_ordinal != resolved.state_ordinal or value.clarification.revision != resolved.revision) return error.InvalidWorkflowOutput;
         if (!value.reference.inputs.corpus.state_id.eql(context.inputs.corpus.state_id)) return error.InvalidWorkflowOutput;
-        const document = try @import("../../domain/specification_projection.zig").project(allocator, context, value.content);
+        const projection = @import("../../domain/specification_projection.zig");
+        var document = try projection.project(allocator, context, value.content);
+        document.review_status = try projection.reviewStatus(value.review.seeds.len, value.review.advice_stop, value.principle_assessment);
         const rendered = try codec.render(allocator, document);
         const reparsed = try codec.render(allocator, try codec.parse(allocator, specification));
         if (!std.mem.eql(u8, specification, rendered) or !std.mem.eql(u8, specification, reparsed) or
-            !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference, value.principle_assessment, try @import("../../domain/specification_projection.zig").traceRequirements(allocator, value.reference, value.content)))) return error.InvalidWorkflowOutput;
+            !std.mem.eql(u8, reference_context, try @import("../../domain/reference_context.zig").render(allocator, value.reference, value.review.advice_stop, value.principle_assessment, try projection.traceRequirements(allocator, value.reference, value.content)))) return error.InvalidWorkflowOutput;
         var prepared = try @import("../../domain/clarification_output.zig").prepare(allocator, feature, paths, captured, inputs, clarifications, views);
         if (prepared.terminal_outcome != .ok) return error.InvalidWorkflowOutput;
         const canonical = try @import("../../domain/canonical_json.zig").encode(state.State, allocator, value);

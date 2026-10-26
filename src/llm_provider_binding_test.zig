@@ -47,7 +47,7 @@ test "YAML-declared model slot resolves to one immutable provider binding" {
         fixture.services.allowlist().resolveSlot(resolved.slot_id).?.registry_entry_id,
     ));
     try std.testing.expectEqualStrings("low", resolved.reasoning_effort.?);
-    try std.testing.expectEqual(.fixed, resolved.controls.temperature.?);
+    try std.testing.expectEqual(@as(f64, 0.1), resolved.controls.temperature(.configured).?.value);
 }
 
 test "binding rejects absent slot authority and non-model steps" {
@@ -148,7 +148,7 @@ test "binding retains the exact catalogue authority without capacity configurati
     const result = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
     try std.testing.expect(result.registry_entry == fixture.services.registry().resolveId(result.registry_entry.id).?);
     try std.testing.expectEqualDeep(contract.capabilities, result.registry_entry.capabilities);
-    try std.testing.expectEqualDeep(contract.capabilities.inferenceControls(), result.controls);
+    try std.testing.expectEqualDeep(contract.capabilities.inferenceControls(@import("test_fixtures/model_temperatures.zig").temperatures), result.controls);
 }
 
 test "binding omits unsupported temperature" {
@@ -157,7 +157,7 @@ test "binding omits unsupported temperature" {
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
     const resolved = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
-    try std.testing.expect(resolved.controls.temperature == null);
+    try std.testing.expect(resolved.controls.temperatures == null);
 }
 
 test "runner rejects altered or missing compiled model controls before operation invocation" {
@@ -315,6 +315,7 @@ const Fixture = struct {
         const allowlist_owner = try repository_allowlist.createValidated(
             std.testing.allocator,
             &toolkit.value().models,
+            toolkit.value().temperatures(),
             provider_registry.registry(registry_owner),
         );
         return .{
@@ -427,7 +428,7 @@ const FakeBarrier = struct {
 };
 
 const toolkit_config =
-    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
+    \\{"logs":{"level":"info","console":false},"workflowTokenBudget":100000,"temperature":0.1,"temperatureRunawayRetry":1,"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
 ;
 
 test "model JSON selection owns binding mode independently of workflow identity" {

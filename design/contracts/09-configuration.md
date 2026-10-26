@@ -5,8 +5,8 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
 
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
   contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
-- The closed top-level members are required `logs`, `models`, `workflowTokenBudget` and
-  `paths`, plus optional
+- The closed top-level members are required `logs`, `models`, `workflowTokenBudget`,
+  `temperature`, `temperatureRunawayRetry` and `paths`, plus optional
   `principles` under ADR 0015 and `validation` under
   [ADR 0021](../decisions/0021-optional-source-preservation-review.md).
 - Neither file is a runtime default, packaged asset, search location, or fallback.
@@ -88,13 +88,20 @@ exists.
 - For the bounded F0001 reader increment, the current closed shape is the formal [JSON
   Schema](../schemas/sddtoolkit-config.schema.json), the repository example, and the typed contract
   in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
-- The root requires `logs`, `models`, `workflowTokenBudget` and `paths` and permits
+- The root requires `logs`, `models`, `workflowTokenBudget`, `temperature`,
+  `temperatureRunawayRetry` and `paths` and permits
   optional `principles` and `validation`;
   fixed records reject missing required, duplicate and unknown members.
 - `workflowTokenBudget` is the total model tokens one workflow execution may use, an
   integer from 1 to 4,294,967,295 with no default
   ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). A missing, zero,
   negative, fractional, exponent, quoted or out-of-range value is a decode failure.
+- `temperature` is the temperature every inference request sends, and
+  `temperatureRunawayRetry` the one a runaway re-send sends
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Each
+  is a JSON number, zero or greater, with no default; a missing, negative, quoted or
+  null value is a decode failure. Models whose registered contract takes no temperature
+  omit it. The provider owns its accepted range.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
@@ -177,7 +184,11 @@ bootstrap:
   bounded `retry-limit` parameter on that YAML operation instance.
 - The compiler rejects a missing limit, a retry edge without registered monotonic accounting, or
   a cycle that can avoid the declared counter.
-- No configuration file, provider, adapter, or runner supplies a retry default.
+- No configuration file, provider, adapter, or runner supplies a retry default. The one
+  engine-owned re-send is ADR 0039's: a provider `output_limit` stop re-sends the
+  identical request once, outside `retry-limit`, and its own monotonic count bounds it
+  at one per attempt. The compiler requires a response admission whose `invalid`
+  continues to route through `check-model-runaway` to `build-model-runaway-resend`.
 
 - The v1 definition media contract is fixed by [F0005 —
   WorkflowDefinitionRegistryService](../features/F0005-WorkflowDefinitionRegistryService.md) and

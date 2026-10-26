@@ -15,7 +15,7 @@ pub fn encode(allocator: std.mem.Allocator, request: *const operation.Identified
         .model = model,
         .content = request.content,
         .schema = schema,
-        .temperature = request.controls.temperature,
+        .temperature = request.temperature(),
         .reasoning_effort = try text.reasoningEffort(request.binding_id.reasoning_effort),
         .max_output_tokens = max_output_tokens,
     });
@@ -126,7 +126,7 @@ test "Messages request rejects temperature, missing user text and non-object sch
     const content = [_]operation.ModelVisibleContent{.{ .user = "input" }};
     const base: TextRequest = .{ .model = "claude-sonnet-5-5", .content = &content, .schema = .{ .prompt_only = "{}" }, .temperature = null, .reasoning_effort = null, .max_output_tokens = .{ .tokens = 1 } };
     var with_temperature = base;
-    with_temperature.temperature = .fixed;
+    with_temperature.temperature = @import("../../domain/model_controls.zig").Temperature.init(0.1).?;
     try std.testing.expectError(error.InvalidRequest, encodeText(a, with_temperature));
     var without_user = base;
     without_user.content = &.{.{ .system = "rules" }};

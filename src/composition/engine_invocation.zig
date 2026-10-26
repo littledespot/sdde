@@ -74,6 +74,7 @@ pub const Assembly = struct {
         self.provider_outcome = self.provider_bootstrap.invoke(
             selected,
             &self.services.config.config().models,
+            self.services.config.config().temperatures(),
             self.services.roots.registry().llmProviderConfig(),
         );
         return switch (self.provider_outcome.?) {

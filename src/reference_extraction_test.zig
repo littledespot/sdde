@@ -233,28 +233,113 @@ test "positive no claim evidence and valid citations are mandatory" {
     try std.testing.expectError(error.InvalidReferenceExtraction, text_fixture.check(allocator, blank, .{ .entries = &.{entry} }));
 }
 
-test "a claim quotes its cited source lines as written" {
+test "claims quote their cited source lines and split only across top-level list items" {
     const Selection = @import("domain/source_selections.zig").Selection;
+    const Expected = struct { text: []const u8, citations: []const Selection };
     const one = struct {
         fn of(comptime first: u32, comptime last: u32) []const Selection {
             return &.{.{ .first = .{ .ordinal = first }, .last = .{ .ordinal = last } }};
         }
     }.of;
-    for ([_]struct { source: []const u8, category: []const u8, citations: []const u8, text: []const u8, selections: []const Selection }{
-        // Citations in any order quote one claim in source order, list markers included.
-        .{ .source = "- A borrower must be able to renew a loan.\n- Show `Renewed!` after renewal.\n", .category = "validation", .citations = "[2,1]", .text = "- A borrower must be able to renew a loan.\n- Show `Renewed!` after renewal.", .selections = one(1, 2) },
-        .{ .source = "### Renewal\n1. Renew only if\n   - the loan is not overdue.\n2. Never renew twice.\n", .category = "scope_guard", .citations = "[1,2,3,4]", .text = "### Renewal\n1. Renew only if\n   - the loan is not overdue.\n2. Never renew twice.", .selections = one(1, 4) },
+    for ([_]struct { source: []const u8, category: []const u8, citations: []const u8, expected: []const Expected }{
+        // Each cited top-level item is its own claim, quoted as written, in source order.
+        .{ .source = "- A borrower must be able to renew a loan.\n- Show `Renewed!` after renewal.\n", .category = "validation", .citations = "[2,1]", .expected = &.{
+            .{ .text = "- A borrower must be able to renew a loan.", .citations = one(1, 1) },
+            .{ .text = "- Show `Renewed!` after renewal.", .citations = one(2, 2) },
+        } },
+        // Ordered items split; a nested item stays with its parent.
+        .{ .source = "1. Renew only if\n   - the loan is not overdue.\n2. Never renew twice.\n", .category = "scope_guard", .citations = "[1,2,3]", .expected = &.{
+            .{ .text = "1. Renew only if\n   - the loan is not overdue.", .citations = one(1, 2) },
+            .{ .text = "2. Never renew twice.", .citations = one(3, 3) },
+        } },
         // Indentation outside fenced code is trimmed at a run's ends.
-        .{ .source = "1. Renew only if\n   - the loan is not overdue.\n", .category = "scope_guard", .citations = "[2]", .text = "- the loan is not overdue.", .selections = one(2, 2) },
-        // A run spans uncited blank lines.
-        .{ .source = "- Renew a loan.\n- Refuse overdue loans.\n\nRenewal must not be silent.\n", .category = "design", .citations = "[1,2,4]", .text = "- Renew a loan.\n- Refuse overdue loans.\n\nRenewal must not be silent.", .selections = one(1, 4) },
+        .{ .source = "1. Renew only if\n   - the loan is not overdue.\n", .category = "scope_guard", .citations = "[2]", .expected = &.{
+            .{ .text = "- the loan is not overdue.", .citations = one(2, 2) },
+        } },
+        // A continuation line stays with its item; only `1.` or a sibling starts
+        // an item inside a paragraph, so a wrapped number is wording.
+        .{ .source = "- Renew a loan in\n2024. Renewal rules apply.\n- Refuse overdue loans.\n", .category = "business", .citations = "[1,2,3]", .expected = &.{
+            .{ .text = "- Renew a loan in\n2024. Renewal rules apply.", .citations = one(1, 2) },
+            .{ .text = "- Refuse overdue loans.", .citations = one(3, 3) },
+        } },
+        // A cited heading becomes its own claim when items split, and stays with one item.
+        .{ .source = "### Renewal\n+ Renew a loan.\n+ Refuse overdue loans.\n", .category = "business", .citations = "[1,2,3]", .expected = &.{
+            .{ .text = "### Renewal", .citations = one(1, 1) },
+            .{ .text = "+ Renew a loan.", .citations = one(2, 2) },
+            .{ .text = "+ Refuse overdue loans.", .citations = one(3, 3) },
+        } },
+        .{ .source = "## Renewal\n- Renew a loan.\n", .category = "business", .citations = "[1,2]", .expected = &.{
+            .{ .text = "## Renewal\n- Renew a loan.", .citations = one(1, 2) },
+        } },
+        // Prose after a list is its own claim in a split; a run spans uncited blank lines.
+        .{ .source = "- Renew a loan.\n- Refuse overdue loans.\n\nRenewal must not be silent.\n", .category = "design", .citations = "[1,2,4]", .expected = &.{
+            .{ .text = "- Renew a loan.", .citations = one(1, 1) },
+            .{ .text = "- Refuse overdue loans.", .citations = one(2, 2) },
+            .{ .text = "Renewal must not be silent.", .citations = one(4, 4) },
+        } },
+        .{ .source = "- Renew a loan.\n\nRenewal must not be silent.\n", .category = "design", .citations = "[1,3]", .expected = &.{
+            .{ .text = "- Renew a loan.\n\nRenewal must not be silent.", .citations = one(1, 3) },
+        } },
         // An ellipsis line marks uncited text between runs, and can't complete a JSON value.
-        .{ .source = "Renew a loan.\nRefuse overdue loans.\nShow the deadline.\n", .category = "business", .citations = "[1,3]", .text = "Renew a loan.\n…\nShow the deadline.", .selections = &.{ .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } }, .{ .first = .{ .ordinal = 3 }, .last = .{ .ordinal = 3 } } } },
-        .{ .source = "Example:\n{\"fragments\": [\n\"x\",\n\"y\"]}\n", .category = "technical", .citations = "[2,4]", .text = "{\"fragments\": [\n…\n\"y\"]}", .selections = &.{ .{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 2 } }, .{ .first = .{ .ordinal = 4 }, .last = .{ .ordinal = 4 } } } },
+        .{ .source = "Renew a loan.\nRefuse overdue loans.\nShow the deadline.\n", .category = "business", .citations = "[1,3]", .expected = &.{
+            .{ .text = "Renew a loan.\n…\nShow the deadline.", .citations = &.{ .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } }, .{ .first = .{ .ordinal = 3 }, .last = .{ .ordinal = 3 } } } },
+        } },
+        .{ .source = "Example:\n{\"fragments\": [\n\"x\",\n\"y\"]}\n", .category = "technical", .citations = "[2,4]", .expected = &.{
+            .{ .text = "{\"fragments\": [\n…\n\"y\"]}", .citations = &.{ .{ .first = .{ .ordinal = 2 }, .last = .{ .ordinal = 2 } }, .{ .first = .{ .ordinal = 4 }, .last = .{ .ordinal = 4 } } } },
+        } },
+        // HTML blocks and comments hold no list items.
+        .{ .source = "<div>\n- a\n- b\n</div>\n", .category = "business", .citations = "[1,2,3,4]", .expected = &.{
+            .{ .text = "<div>\n- a\n- b\n</div>", .citations = one(1, 4) },
+        } },
+        .{ .source = "<!--\n- draft one\n- draft two\n-->\n", .category = "business", .citations = "[1,2,3,4]", .expected = &.{
+            .{ .text = "<!--\n- draft one\n- draft two\n-->", .citations = one(1, 4) },
+        } },
+        // A comment ends its block on its closing line, so an ordered item may follow it.
+        .{ .source = "<!-- note -->\n2. Renew a loan.\n3. Refuse overdue loans.\n", .category = "business", .citations = "[2,3]", .expected = &.{
+            .{ .text = "2. Renew a loan.", .citations = one(2, 2) },
+            .{ .text = "3. Refuse overdue loans.", .citations = one(3, 3) },
+        } },
+        .{ .source = "1. Renew a loan.\n<!--\nnote\n-->\n2. Refuse overdue loans.\n", .category = "business", .citations = "[1,2,3,4,5]", .expected = &.{
+            .{ .text = "1. Renew a loan.", .citations = one(1, 1) },
+            .{ .text = "<!--\nnote\n-->", .citations = one(2, 4) },
+            .{ .text = "2. Refuse overdue loans.", .citations = one(5, 5) },
+        } },
+        // A heading ends an item; `)` items split like `.` items.
+        .{ .source = "1) Renew a loan.\n## Refusal\n1) Refuse overdue loans.\n2) Never renew twice.\n", .category = "scope_guard", .citations = "[1,2,3,4]", .expected = &.{
+            .{ .text = "1) Renew a loan.", .citations = one(1, 1) },
+            .{ .text = "## Refusal", .citations = one(2, 2) },
+            .{ .text = "1) Refuse overdue loans.", .citations = one(3, 3) },
+            .{ .text = "2) Never renew twice.", .citations = one(4, 4) },
+        } },
+        // CRLF and lone CR end lines as the reader's lines do.
+        .{ .source = "- Renew a loan.\r\n- Refuse overdue loans.\r\n", .category = "business", .citations = "[1,2]", .expected = &.{
+            .{ .text = "- Renew a loan.", .citations = one(1, 1) },
+            .{ .text = "- Refuse overdue loans.", .citations = one(2, 2) },
+        } },
+        .{ .source = "- Renew a loan.\r- Refuse overdue loans.\r", .category = "business", .citations = "[1,2]", .expected = &.{
+            .{ .text = "- Renew a loan.", .citations = one(1, 1) },
+            .{ .text = "- Refuse overdue loans.", .citations = one(2, 2) },
+        } },
+        // Look-alike markers and a thematic break start no item.
+        .{ .source = "-5 °C is the floor.\n#tag and **bold** stay.\n+1 vote.\n", .category = "business", .citations = "[1,2,3]", .expected = &.{
+            .{ .text = "-5 °C is the floor.\n#tag and **bold** stay.\n+1 vote.", .citations = one(1, 3) },
+        } },
+        .{ .source = "- Renew.\n* * *\n- Refuse.\n", .category = "business", .citations = "[2,3]", .expected = &.{
+            .{ .text = "* * *\n- Refuse.", .citations = one(2, 3) },
+        } },
         // Spacing and code spans are kept exactly; only each run's ends are trimmed.
-        .{ .source = "Hello-world  must print `Hello,  World!`\n   only if asked.\n", .category = "technical", .citations = "[1,2]", .text = "Hello-world  must print `Hello,  World!`\n   only if asked.", .selections = one(1, 2) },
-        // Fenced code lines keep every byte.
-        .{ .source = "Configuration:\n\n```yaml\n- name: loan\n- limit: 5\n```\n", .category = "technical", .citations = "[4,5]", .text = "- name: loan\n- limit: 5\n", .selections = one(4, 5) },
+        .{ .source = "Hello-world  must print `Hello,  World!`\n   only if asked.\n", .category = "technical", .citations = "[1,2]", .expected = &.{
+            .{ .text = "Hello-world  must print `Hello,  World!`\n   only if asked.", .citations = one(1, 2) },
+        } },
+        // Fenced code lines keep every byte and are never items, while an item may open a fence.
+        .{ .source = "Configuration:\n\n```yaml\n- name: loan\n- limit: 5\n```\n", .category = "technical", .citations = "[4,5]", .expected = &.{
+            .{ .text = "- name: loan\n- limit: 5\n", .citations = one(4, 5) },
+        } },
+        .{ .source = "- first\n- ```\n  code\n  ```\n- third\n", .category = "technical", .citations = "[1,2,3,4,5]", .expected = &.{
+            .{ .text = "- first", .citations = one(1, 1) },
+            .{ .text = "- ```\n  code\n  ```", .citations = one(2, 4) },
+            .{ .text = "- third", .citations = one(5, 5) },
+        } },
     }) |case| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -265,10 +350,12 @@ test "a claim quotes its cited source lines as written" {
         const bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"claims\",\"claims\":[{{\"category\":\"{s}\",\"citations\":{s}}}],\"token_classifications\":[]}}", .{ case.category, case.citations });
         const checked = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, bytes)} }));
         const claims = checked.entries[0].outcome.claims;
-        try std.testing.expectEqual(@as(usize, 1), claims.len);
-        try std.testing.expectEqualStrings(case.category, @tagName(claims[0].content));
-        try std.testing.expectEqualStrings(case.text, quotedText(claims[0].content));
-        try std.testing.expectEqualDeep(case.selections, claims[0].citations);
+        try std.testing.expectEqual(case.expected.len, claims.len);
+        for (claims, case.expected) |claim, expected| {
+            try std.testing.expectEqualStrings(case.category, @tagName(claim.content));
+            try std.testing.expectEqualStrings(expected.text, quotedText(claim.content));
+            try std.testing.expectEqualDeep(expected.citations, claim.citations);
+        }
     }
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -278,6 +365,8 @@ test "a claim quotes its cited source lines as written" {
     // quoting part of one leaves it free.
     for ([_]struct { source: []const u8, citations: []const u8, forced: bool }{
         .{ .source = "Display `Loan\n  renewed!` after renewal.\n", .citations = "[1,2]", .forced = true },
+        // A list item's claim keeps the duty when its proposal splits.
+        .{ .source = "- Display `Loan\n  renewed!` now.\n- Refuse overdue loans.\n", .citations = "[1,2,3]", .forced = true },
         .{ .source = "Config:\n\n```\na: 1\n\nb: 2\n```\n", .citations = "[1,3,4,6,7]", .forced = true },
         .{ .source = "Config:\n\n```\na: 1\nb: 2\n```\n", .citations = "[4,5]", .forced = true },
         .{ .source = "Config:\n\n```\na: 1\nb: 2\n```\n", .citations = "[3,4,5]", .forced = true },
@@ -313,6 +402,12 @@ test "a claim quotes its cited source lines as written" {
         quoted.entries[2].outcome.claims[0].content,
         quoted.entries[2].outcome.claims[1].content,
     }) |expected, content| try std.testing.expectEqualStrings(expected, quotedText(content));
+    // List structure comes from the whole source, so a chunk can start inside a paragraph.
+    const long = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "Context line.\n" ** 63 ++ "The limit was raised in\n2024. Renewals are unlimited.\n- Renew.\n"));
+    try std.testing.expectEqual(@as(usize, 2), long.chunks.entries.len);
+    const second = try text_fixture.check(a, long, try parse.execute(a, .{ .entries = &.{ raw(long, 0, no_claim), raw(long, 1, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[1,2]}],\"token_classifications\":[]}") } }));
+    try std.testing.expectEqual(@as(usize, 1), second.entries[1].outcome.claims.len);
+    try std.testing.expectEqualStrings("2024. Renewals are unlimited.\n- Renew.", quotedText(second.entries[1].outcome.claims[0].content));
     // A model cannot supply claim wording: the closed proposal has no text field.
     const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "A borrower must be able to renew a loan.\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, parse.execute(a, .{ .entries = &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[1],\"content\":{\"business\":{\"segments\":\"A borrower may renew a loan.\"}}}],\"token_classifications\":[]}")} }));
@@ -340,7 +435,7 @@ test "claim quoting allocates in proportion to the source, not per chunk" {
     var validation: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer validation.deinit();
     _ = try context.check(validation.allocator(), inputs, parsed);
-    // The source's code blocks are scanned once per validation, not once per chunk.
+    // The source's list structure is built once per validation, not once per chunk.
     try std.testing.expect(validation.queryCapacity() < 64 * source.len);
 }
 

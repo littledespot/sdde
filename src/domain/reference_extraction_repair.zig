@@ -224,7 +224,8 @@ pub const Omission = struct {
                 if (checked != .valid) return error.InvalidAtomicRepair;
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
-                try claims.append(a, checked.valid.entries[0].outcome.claims[0]);
+                // A proposal spanning several list items quotes one claim per item (ADR 0036, ADR 0038).
+                try claims.appendSlice(a, checked.valid.entries[0].outcome.claims);
                 changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
                 if (entry.outcome == .no_feature_claim) {
                     // Forced irrelevant choices depended on the retired outcome.

@@ -1174,9 +1174,9 @@ test "authorized content payloads cover every kind across statement and signal i
             const repair_input = body.value.object.get("repair").?.object;
             try std.testing.expect(!repair_input.contains("expected"));
             try std.testing.expectEqual(!insert, repair_input.contains("current_value"));
-            if (!insert) try std.testing.expectEqualStrings("preserved_token", repair_input.get("current_value").?.object.get("kind").?.string);
+            if (!insert) try std.testing.expectEqualStrings("exact_text", repair_input.get("current_value").?.object.get("kind").?.string);
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "exact_selected_token") == null);
-            for ([_][]const u8{ "{\"kind\":\"preserved_token\",\"token_id\":1}", "{\"token_id\":1}", "{}", "{\"current_value\":{}}" }) |wire|
+            for ([_][]const u8{ "{\"kind\":\"exact_text\",\"token_id\":1}", "{\"kind\":\"preserved_token\",\"token_id\":1}", "{\"token_id\":1}", "{}", "{\"current_value\":{}}" }) |wire|
                 try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, auth, packet, wire));
             const replacement = try repair.parse(a, auth, packet, try f.repairResponse(a, good));
             try std.testing.expectEqualDeep(good, replacement);

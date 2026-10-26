@@ -388,7 +388,7 @@ test "request validation rejects divergent binding controls and modes" {
             0 => wrong.binding_id.registry_entry_id.ordinal += 1,
             1 => wrong.binding_id.slot_id.bytes = "another-slot",
             2 => {
-                wrong.controls.temperature = null;
+                wrong.controls.temperatures = null;
                 wrong.binding_id.controls = wrong.controls;
             },
             3 => wrong.response_guidance_mode = .native_schema,
@@ -607,9 +607,55 @@ test "replay authority matches a description only to its exact current binding a
     other.reasoning_effort = null;
     try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
     other = described;
-    other.controls.temperature = if (described.controls.temperature == null) .fixed else null;
+    other.controls.temperatures = if (described.controls.temperatures == null) @import("test_fixtures/model_temperatures.zig").temperatures else null;
     try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
     other = described;
     other.response_mode = if (described.response_mode == .native_schema) .prompt_only else .native_schema;
     try std.testing.expect(!other.matchesBinding(&fixture.provider_binding));
+}
+
+test "a runaway re-send is the identical request at the runaway-retry temperature, and a model without one omits it" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const resource = resultResource(&fixture);
+    const selected = try source(&fixture, &resource);
+    const content = [_]provider.ModelVisibleContent{ .{ .guidance = "Keep the declared fields." }, .{ .user = "Describe this item." } };
+    var original = try preparation.build(std.testing.allocator, selected, &content);
+    defer original.deinit();
+    var resent = try preparation.resend(std.testing.allocator, original.request);
+    defer resent.deinit();
+    // Only the sampling differs; every byte of content is its own copy.
+    var expected = original.request.*;
+    expected.sampling = .runaway_resend;
+    try std.testing.expectEqualDeep(expected, resent.request.*);
+    try std.testing.expect(resent.request.content.ptr != original.request.content.ptr);
+    // A re-send is never re-sent.
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.resend(std.testing.allocator, resent.request));
+    const temperatures = @import("test_fixtures/model_temperatures.zig").temperatures;
+    for ([_]?@import("domain/model_controls.zig").Temperatures{ temperatures, null }) |configured| {
+        var first = original.request.*;
+        var second = resent.request.*;
+        inline for (.{ &first, &second }) |request| {
+            request.controls.temperatures = configured;
+            request.binding_id.controls.temperatures = configured;
+        }
+        const family: @import("domain/llm_provider_contracts.zig").BedrockFamily = if (configured == null) .claude else .@"gpt-oss";
+        const a = std.testing.allocator;
+        const first_body = try @import("adapters/provider/bedrock_request.zig").encode(a, &first, family, .{ .tokens = 16384 });
+        defer a.free(first_body);
+        const second_body = try @import("adapters/provider/bedrock_request.zig").encode(a, &second, family, .{ .tokens = 16384 });
+        defer a.free(second_body);
+        if (configured == null) {
+            // The same request bytes on every attempt, with no temperature.
+            try std.testing.expectEqualStrings(first_body, second_body);
+            try std.testing.expect(std.mem.indexOf(u8, first_body, "\"temperature\"") == null);
+        } else {
+            try std.testing.expect(std.mem.indexOf(u8, first_body, "\"temperature\":0.1") != null);
+            try std.testing.expect(std.mem.indexOf(u8, second_body, "\"temperature\":1") != null);
+            const normalized = try std.mem.replaceOwned(u8, a, second_body, "\"temperature\":1", "\"temperature\":0.1");
+            defer a.free(normalized);
+            try std.testing.expectEqualStrings(first_body, normalized);
+        }
+    }
 }

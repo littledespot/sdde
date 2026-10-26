@@ -239,17 +239,22 @@ pub fn sameContent(allocator: std.mem.Allocator, a: IdentifiedContent, b: Identi
 pub const CodeSpan = struct { start: usize, end: usize };
 pub const Scalar = struct { bytes: []const u8, code_spans: []const CodeSpan = &.{} };
 pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar) };
+/// ADR 0040: engine-owned status of incomplete post-generation review. It is a
+/// view of stored advice stops, never review evidence or authority.
+pub const ReviewStatus = struct { unassessed: u32, subjects: u32 };
 pub const CapturedDocument = struct {
     display_name: Scalar,
     primary_user_story: Scalar,
     records: []const CapturedRecord,
     /// A missing section cannot assert a supported not_applicable decision.
     entity_section: enum { present, omitted },
+    review_status: ?ReviewStatus = null,
 };
 
 /// Shape validation only. Caller owns an arena for parsed/constructed records.
 /// Optional collections have no minimum count. H-008 owns required evidence.
 pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!void {
+    if (document.review_status) |status| if (status.unassessed == 0 or status.unassessed > status.subjects) return error.InvalidSpecification;
     try scalar(document.display_name);
     try scalar(document.primary_user_story);
     var previous: ?Kind = null;

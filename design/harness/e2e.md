@@ -8,8 +8,9 @@ live case from the repository root:
 1. Review the case's explicit Bedrock `openai.gpt-oss-20b-1:0` generation
    selection from `ap-southeast-2`, and set its credential under
    [Environment setup](#environment-setup). Both cases share the native JSON
-   catalogue; Spec generation and repair select low reasoning. The registered
-   profile uses temperature `0.1`.
+   catalogue; Spec generation and repair select low reasoning. The case's
+   `.sddtoolkit.json` sets `temperature` `0.1` and `temperatureRunawayRetry` `1`
+   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).
 3. Run the launcher with an explicitly selected live case:
@@ -118,8 +119,8 @@ their existing model/settings restrictions.
 The launcher reuses the canonical Bedrock Converse encoder and decoder. The
 registered `BedrockRequestProfile` selects provider-specific fields through
 `additionalModelRequestFields`, while supported common controls use
-`inferenceConfig`. GPT-OSS-20B uses its registered reasoning-effort field and
-temperature `0.1`. The separate registered Luna profile retains its required
+`inferenceConfig`. GPT-OSS-20B uses its registered reasoning-effort field and the
+configured temperature. The separate registered Luna profile retains its required
 `text.format.strict: true` field and omits temperature and explicit reasoning.
 Complete engine validation still applies. No model-name prefix selects a
 serializer or grants a capability.
@@ -182,7 +183,8 @@ credential access. Production preparation validates the catalogue and selected r
 the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
-low reasoning and registered temperature `0.1`. Each request sends the catalogue's
+low reasoning and the configured temperature `0.1` (`1` on a runaway re-send).
+Each request sends the catalogue's
 recorded model maximum and no smaller allowance
 ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
 The shipped wf-001/wf-002 configuration selects exactly these slot controls and
@@ -278,7 +280,8 @@ credentials. No model answer means no evidence yet about schema conformance.
   `.sddtoolkit.json`; all configured slots must pass the current small-model cost
   preflight. The provider catalogue must declare `openai.gpt-oss-20b-1:0`
   with `json: true` in `ap-southeast-2`; Spec generation and repair select
-  `reasoningEffort: "low"`. The compiled profile uses temperature `0.1`.
+  `reasoningEffort: "low"`. The configuration sets temperature `0.1` and runaway
+  re-send temperature `1`.
 - The current production provider is Bedrock; its internal test credential is
   `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 - The harness supplies a validated credential snapshot to the shared runtime. The CLI
@@ -305,7 +308,7 @@ credentials. No model answer means no evidence yet about schema conformance.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, diagnostics and the standalone evaluator share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
-  and temperature `0.1`, and sends `inferenceConfig.maxTokens` 16,384. Provider
+  and the configured temperature, and sends `inferenceConfig.maxTokens` 16,384. Provider
   reasoning counts toward output usage;
   the engine accounts actual reported tokens separately from provider quotas.
   The separate registered Luna profile retains its strict JSON flag and omitted
@@ -346,6 +349,11 @@ credentials. No model answer means no evidence yet about schema conformance.
 - A stale file, partial publication or in-memory candidate cannot satisfy the check.
 - Only the engine's registered writer publishes output; the harness never exports or
   renders candidates to manufacture a specification.
+- A failed run that publishes a failed incomplete specification
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) still fails the
+  case. The report records the published incomplete set, its failed step and
+  diagnostic, and retains its bytes for inspection. Like ADR 0017's pending view, it is
+  not scored, and `spec-e2e-report/v10` records it.
 
 ### Rubric assessment
 
@@ -515,7 +523,13 @@ unsuccessfully even if generation succeeded. It does not retry writes or rerun t
 workflow to repair reporting.
 
 `token_accounting` (the single total budget and actual usage), `retry_settings` and `attempts` project the executed graph
-and native accounting. `model_calls` counts reconciled inference operations,
+and native accounting. Each attempt records `resends`, the attempt number it re-sends,
+when it is a runaway re-send
+([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), and the
+report records each incomplete review's reason and unassessed count
+([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)), so runaways,
+re-sends and incomplete reviews are counted separately. Together with ADR 0041's failed
+incomplete publication, they advanced `spec-e2e-report` to v10; v9 reports stay readable only by the build that made them. `model_calls` counts reconciled inference operations,
 including proven non-delivery; `not_sent_operations` identifies that subset.
 Captured exchanges separately count physical sends. Missing receipts are permitted
 only for explicit non-delivery or captured-evidence failure, never to invent paid
@@ -578,7 +592,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v9`,
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v10`,
 `baseline-freeze/v3`, `baseline-acquisition/v7`, `baseline-score/v4` and
 `baseline-budget-feasibility/v2`. Step events remain
 `e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),

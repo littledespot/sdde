@@ -4,6 +4,8 @@
     "console": true
   },
   "workflowTokenBudget": 100000,
+  "temperature": 0.1,
+  "temperatureRunawayRetry": 1,
   "models": {
     "slots": {
       "audit_analysis": {
