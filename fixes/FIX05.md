@@ -1,16 +1,17 @@
 # FIX05 — Architecture review and consolidated open work
 
-**Reviewed:** 17 October 2026, Australia/Melbourne, at `b2f10a3`. **Updated:** 25 October
+**Reviewed:** 17 October 2026, Australia/Melbourne, at `b2f10a3`. **Updated:** 26 October
 2026.
 
 **Status:** sole active fix record. It holds open work only: unimplemented decisions, open
 proposals and the evidence rules. Completed implementation, dated live diagnostics and the
-full decision records moved to [Z_FIX05](Z_FIX05.md) on 23 October 2026, under their
-original IDs. Earlier completed work is in [Z_FIX01](Z_FIX01.md) and [Z_FIX02](Z_FIX02.md).
-FIX05 consolidated the open work of FIX01 (Spec reliability backlog) and FIX04
-(semantic-simplicity evaluation), which are deleted. Their last text is at `b2f10a3`
-(`git show b2f10a3:fixes/FIX01.md`, `git show b2f10a3:fixes/FIX04.md`). Former item IDs
-(FIX01 R1–R11, FIX04 F1–F13 and Phases 0–6) are kept for traceability.
+full decision records are in [Z_FIX05](Z_FIX05.md), under their original IDs: moved on
+23 October 2026 (§§1–18 there) and on 26 October 2026 (§§19–20). Earlier completed work is
+in [Z_FIX01](Z_FIX01.md) and [Z_FIX02](Z_FIX02.md). FIX05 consolidated the open work of
+FIX01 (Spec reliability backlog) and FIX04 (semantic-simplicity evaluation), which are
+deleted. Their last text is at `b2f10a3` (`git show b2f10a3:fixes/FIX01.md`,
+`git show b2f10a3:fixes/FIX04.md`). Former item IDs (FIX01 R1–R11, FIX04 F1–F13 and
+Phases 0–6) are kept for traceability.
 
 Unless a dated user approval is recorded below, items are findings or proposals.
 Items marked **Decision** amend an accepted ADR, contract or scope and need
@@ -52,101 +53,70 @@ A stronger model would likely hide these weaknesses rather than remove them.
 The dated live diagnostics of 16–18 October are in
 [Z_FIX05 §1](Z_FIX05.md#1-live-diagnostics-1618-october-2026).
 
-### Current state — 23 October 2026
+### Current state — 26 October 2026
 
-**Done and moved to Z_FIX05.** These are implemented and verified offline. Their live
-semantic benefit is not demonstrated (§7).
+**Done, committed and moved to Z_FIX05.** Everything below is on `39a06ea`, merged as
+PR #10 (`1261106`), and verified offline. Live semantic benefit is not demonstrated
+unless a row says so (§7).
 
 | Item | State | Record |
 | --- | --- | --- |
-| B2 | Advisory post-generation review (ADR 0023) and one record family per source-review call; live effect open (B2 below) | [B2 records](Z_FIX05.md#b2-records) |
-| B3 | Native exact-value recognition; mechanical live gate closed 17 October | [B3](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model) |
-| B4 | Option 3 and the single workflow budget. Implemented 25 October, uncommitted: the budget is `.sddtoolkit.json`'s required `workflowTokenBudget`, 125,000 for E2E (ADR 0037). Open: experiment stops and qualified scope (B4 below) | [B4 records](Z_FIX05.md#b4-records), §9 |
-| B5 | No record batch for token-only groups (ADR 0024). Implemented 25 October: cross-kind restatement in the native duplicate rule (ADR 0035). Implemented 25 October, uncommitted: records name their claims and a functional requirement's claims need a scenario (ADR 0038). One records call per feature not adopted (B5 below) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches) |
-| B6 | GPT-OSS envelope prefix normalized; entity applicability open (B6 below) | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix), §12 |
-| B7 | List-item chunking tried and reverted on 21 October. Implemented 25 October, uncommitted: source-quoted claim wording and code-delimiter removal (ADR 0036); the native list-item claim split was withdrawn the same day and reinstated by ADR 0038 (B7 below) | [B7 original record](Z_FIX05.md#b7-original-record) |
-| B8 | Native preserved-token bookkeeping (ADR 0024) | [B8](Z_FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens) |
-| B9 | Feature-owned entity records and no output allowance; runaway class open (B9 below) | [B9 records](Z_FIX05.md#b9-records), §§9, 11, 16 |
+| B2 | Advisory post-generation review (ADR 0023); one record family per source-review call | [B2 records](Z_FIX05.md#b2-records) |
+| B3, B8 | Native exact-value recognition and bookkeeping (ADR 0024) | [B3](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model), [B8](Z_FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens) |
+| B4 | One principle assignment per principle set; one budget, configured as `workflowTokenBudget` (ADR 0037, 125,000 for E2E) | [B4 records](Z_FIX05.md#b4-records), [B4 configured budget](Z_FIX05.md#b4-configured-budget-record) |
+| B5 | No batch for token-only groups (ADR 0024); cross-kind restatement deleted natively (ADR 0035); records name their claims and functional requirements need a scenario (ADR 0038) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches), [B5 records](Z_FIX05.md#b5-records-2425-october-2026) |
+| B6 | GPT-OSS envelope prefix normalized | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix) |
+| B7 | Source-quoted claim wording and code-delimiter removal (ADR 0036); list-item claim split (ADR 0038) | [B7 records](Z_FIX05.md#b7-records-2125-october-2026) |
+| B9 | Feature-owned entity records; no output allowance; one re-send after a runaway at the configured `temperatureRunawayRetry`, logged (ADR 0039) | [B9 records](Z_FIX05.md#b9-records), [B9 runaway evidence](Z_FIX05.md#b9-runaway-evidence-and-re-send-decision) |
+| Review publication | Incomplete review published, marked and logged (ADR 0040); principle verdicts need citations at admission (ADR 0042) | [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) |
+| Vocabulary | Model-facing `exact_text` names (ADR 0043) | [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) |
+| A1 | ADR 0030 slices 1–3 (freeze, token counting removed, catalogue deadline) | [A1 slices 1–3](Z_FIX05.md#a1-settled-choices-and-slices-13) |
 | W1, W2 | No post-generation upstream rebuild; the duplicate path is deleted | [W1](Z_FIX05.md#w1-review-can-restart-the-whole-pipeline), [W2](Z_FIX05.md#w2-the-upstream-repair-path-exists-twice) |
-| R8 | Acceptance policy implemented offline; adjudication and calibration open (R8 below) | [R8 record](Z_FIX05.md#r8-record), §17 |
-| §§9–17 | Implementation records, 17–21 October | [Z_FIX05](Z_FIX05.md#9-b4b9-implementation--17-october-2026) |
-| Test performance P1, P9 | Untraced leak-checking allocator and opt-in test-run reuse, implemented 24 October (`bf8a297`, `2bafdb0`, `269410b`); no verify result or re-measurement recorded | [Z_FIX05 §18](Z_FIX05.md#18-offline-test-performance-p1-and-p9--24-october-2026) |
+| R8 | Acceptance policy implemented offline; adjudication and calibration open (R8 below) | [R8 record](Z_FIX05.md#r8-record) |
+| Test performance P1, P9 | Untraced leak-checking allocator and opt-in test-run reuse | [Z_FIX05 §18](Z_FIX05.md#18-offline-test-performance-p1-and-p9--24-october-2026) |
 
-Section references §9–§18 point to Z_FIX05.
+The 21–25 October runs and the record as it stood on 25 October are in
+[Z_FIX05](Z_FIX05.md#current-state-as-of-25-october-2026).
 
-**Live runs since 21 October 2026 (AEDT).** Every run in the table used GPT-OSS-20B on
-Bedrock, ran once and was separately approved. The eleven Claude Haiku 5.5 attempts of
-24 October, all `authorization_denied` before any output, are in the §8 log. Advisory scores are `/evaluate-e2e` analysis under
-`evaluations/`, not grades or acceptance.
+**Live runs on 26 October 2026 (AEDT), GPT-OSS-20B on Bedrock, each user-approved.**
+Advisory scores are `/evaluate-e2e` analysis under `evaluations/e2e/`, not grades or
+acceptance.
 
 | Run | Build | Calls / tokens | Outcome |
 | --- | --- | --- | --- |
-| [Hello-world](../zig-out/e2e-spec/2026-10-20T21-16-50Z-e36938ea061e468db9f9b2c6c5efc94c/report.json), 21 Oct 08:16 | `7a88804` | 25 / 65,896 | Published; advisory 89.29% |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-20T21-29-05Z-984a39676411cca90510cd014f625a4f/report.json), 21 Oct 08:29 | `7a88804` | 25 / 76,501 | Published; advisory 78.57%, below threshold |
-| [Hello-world](../zig-out/e2e-spec/2026-10-21T00-38-18Z-b39db999214e70a1e97993ec1f3a5d00/report.json), 21 Oct 11:38 | `2bf5ca6` (B7), modified | 27 / 75,669 | Published; advisory 89.29% |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-21T00-45-18Z-3d0adef9037fc6708573f4b4bf2d3a34/report.json), 21 Oct 11:45 | `2bf5ca6` (B7), modified | 27 / 100,793 | `WorkflowTokenBudgetExceeded` in source review |
-| [Hello-world](../zig-out/e2e-spec/2026-10-21T00-55-40Z-871ef5835db845f998a02fa87553dfed/report.json), 21 Oct 11:55 | `2bf5ca6` (B7), modified | 30 / 86,111 | Published; advisory 60.71%, with critical failures |
-| [Hello-world](../zig-out/e2e-spec/2026-10-21T07-17-06Z-cbd566225c37b59539b17e81b88d7052/report.json), 21 Oct 18:17 | `2bf5ca6` (B7), modified | 19 / 35,869 | Failed: source-review `timeout` at 60 s (B9) |
-| [Hello-world](../zig-out/e2e-spec/2026-10-21T07-40-30Z-35c394a473ad918f326a57351bb1b25a/report.json), 21 Oct 18:40 | `527f870` (B7 reverted), modified | 25 / 67,485 | Published; advisory 89.29% |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-21T07-45-38Z-1bde6e1800ab1c0ef972767b4101a3e9/report.json), 21 Oct 18:45 | `527f870`, modified | 24 / 63,190 | Failed: source-review `timeout` at 60 s (B9) |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-21T07-52-36Z-d390b591aa68651da4e0bf27d99b51ed/report.json), 21 Oct 18:52 | `527f870`, modified | 22 / 56,571 | Failed: source-review `timeout` at 60 s (B9) |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-21T08-13-29Z-c349baea793fb60355880e989bb740d6/report.json), 21 Oct 19:13 | `527f870`, 180 s deadline, modified | 25 / 92,825 | Published; advisory 82.14%; one review call ended `output_limit` (B9) |
-| [Hello-world](../zig-out/e2e-spec/2026-10-21T21-30-07Z-73f19805794c3c63535e6c175ec0c103/report.json), 22 Oct 08:30 | `fee2f39`, modified | 24 / 63,918 | Published; not evaluated |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-21T21-31-00Z-aee04c3ee1ac6e061551be002d987027/report.json), 22 Oct 08:31 | `fee2f39`, modified | 32 / 100,763 | `WorkflowTokenBudgetExceeded` in principle review |
-| [Hello-world](../zig-out/e2e-spec/2026-10-24T06-49-59Z-172d37237530ce1fdd29108d598ab447/report.json), 24 Oct 17:49 | `8a600d7` | 24 / 63,402 | Published; advisory 89.29% |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-24T06-58-47Z-67dd5ecc82bd3aa1d1ccdc1b6a3be752/report.json), 24 Oct 17:58 | `8a600d7` | 31 / 99,098 | Published, 902 tokens under budget; one bounded protocol correction in source review; advisory 82.14% |
-| [Hello-world](../zig-out/e2e-spec/2026-10-24T20-52-24Z-920d6f61f4f754ba0febe016a63a0d73/report.json), 25 Oct 07:52 (step 0) | `269410b` | 24 / 63,013 | Published; advisory 89.29% |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-24T20-52-59Z-2eea9516eda639fe5f16f42ea5f8d431/report.json), 25 Oct 07:52 (step 0) | `269410b`, own principles | 29 / 109,327 | `WorkflowTokenBudgetExceeded` in principle review, after a source-review runaway (`output_limit`, 19,404 tokens) on `Renewal refused.` (B9) |
-| [Hello-world](../zig-out/e2e-spec/2026-10-24T22-15-43Z-30b8b0c83633333af9b587cffd04a72f/report.json), 25 Oct 09:15 (B5) | `47723fd` | 24 / 63,479 | Published; advisory 82.14%; no restatement to delete |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-24T22-16-19Z-66cb68e78884933cdbb32c75a15a6314/report.json), 25 Oct 09:16 (B5) | `47723fd` | 25 / 80,195 | Published; advisory 82.14%; no restatement to delete |
-| [Hello-world](../zig-out/e2e-spec/2026-10-25T02-14-59Z-affe7e5515d88a93ea871e6cac782617/report.json), 25 Oct 13:14 (B7) | `47723fd`, ADR 0036 uncommitted | 24 / 65,021 | Published; advisory 82.14%; escaped backticks around the greeting |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-25T02-15-01Z-67214efa45244f986e884838c171a5c5/report.json), 25 Oct 13:15 (B7) | `47723fd`, ADR 0036 uncommitted | 27 / 109,967 | `WorkflowTokenBudgetExceeded` in policy review, after a source-review runaway (`output_limit`, 19,270 tokens) on `Loan renewed!` (B9) |
-| [Hello-world](../zig-out/e2e-spec/2026-10-25T03-31-56Z-8ad5e999fcf1b2bd4f7c2fdeba3a0fab/report.json), 25 Oct 14:31 (B7 + Decision 6) | `47723fd`, ADR 0036 uncommitted | 27 / 75,877 | Published; advisory 71.43%, critical failure on source-grounding (filler assumption, non-goal and prohibition) |
-| [Loan-renewal](../zig-out/e2e-spec/2026-10-25T03-31-57Z-b94ba811af124b3c5fc699618cae4e01/report.json), 25 Oct 14:31 (B7 + Decision 6) | `47723fd`, ADR 0036 uncommitted | 18 / 112,532 | `WorkflowTokenBudgetExceeded` in source review, after a records runaway (294 edge cases) (B9) |
+| Hello-world and loan-renewal, 17:57 | `54ce8fa`, modified | 1 / 0 each | `authorization_denied`: the Bedrock API key had expired |
+| [Hello-world](../zig-out/e2e-spec/2026-10-26T07-06-24Z-2bcbb4d769b998b2249210be1e590348/report.json), 18:06 | `54ce8fa`, modified (the ADR 0038–0043 tree) | 24 / 66,358 | Published; advisory 82.14% |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-26T07-06-25Z-a5ac7cc3a13b9dc94d84828648c7eaba/report.json), 18:06 | `54ce8fa`, modified | 26 / 91,129 | Published; advisory 78.57%, below threshold, no critical failure |
+| [Hello-world](../zig-out/e2e-spec/2026-10-26T08-09-02Z-314509c4e65f3bb4bc6a15fc2d3dd4ed/report.json), 19:09 | `39a06ea` | 25 / 84,951 | Published; advisory 82.14%; one source-review runaway recovered by the re-send |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-26T08-09-03Z-a89fd748b0ce942ddd496ba3e42469c3/report.json), 19:09 | `39a06ea` | 26 / 89,887 | Published; advisory 78.57%, below threshold, no critical failure |
 
-- **Completion.** Hello-world published in 10 of 11 attempts and loan-renewal in 4 of 11.
-  All sixteen reports are `spec-e2e-report/v9`, so the published ones can be adjudicated,
-  but none has been. No run counts toward the
-  [ADR 0034](../design/decisions/0034-spec-quality-gate.md) gate yet. Three pairs (one run
-  of each case) used an unmodified committed build:
-  - `7a88804` (21 October 08:16 and 08:29 AEDT);
-  - `8a600d7` (24 October 17:49 and 17:58);
-  - `269410b` (25 October 07:52, the step 0 baseline of §6 step 4).
+- **Completion since 21 October**, counting every attempt: hello-world published 15 of
+  17, loan-renewal 7 of 17. All four completed 26 October runs published, every call was
+  admitted first time apart from the one runaway, and no review ended incomplete.
+- **What held across the four runs:**
+  - loan-renewal's refusal behaviour has its own acceptance criterion (AC-002), written
+    on the first records attempt, which no earlier build achieved (B5);
+  - the 25 October `uncertain` title verdict that failed loan-renewal didn't recur, but
+    principle citations collapsed (B11);
+  - business rules restate the functional requirement in every run of both cases (B5);
+  - invented or restating entities (B6), "may renew" in loan-renewal's story (B7), the
+    renderer artefacts (B12), and source review passing defects (B2).
+- **The re-send worked once.** Hello-world's source review of `Hello, World!` ran to the
+  16,384-token maximum (18,823 tokens). The identical request at temperature 1 returned
+  an admitted finding, and the log recorded `model.provider_stopped` then
+  `model.runaway_resent` (B9).
+- **Vocabulary.** "The preserved token" is gone from both cases (ADR 0043). Hello-world's
+  brief now says "display the exact text …", which reads as plain English; watch it.
+- **Evidence status.** One pair ran on an unmodified committed build of the current engine
+  (`39a06ea`). No run has been adjudicated (R8, A6).
 
-  The rest were modified builds.
-- **Run-to-run variation.** Hello-world's step 0 text differed noticeably from
-  `8a600d7`, though nothing affecting hello-world had changed:
-  - its title became concise and its BR-001 disappeared;
-  - FR-001 gained the startup obligation;
-  - the acceptance criterion gained an implementation detail.
+**Awaiting the user's decision:** ADR 0041's four mechanism choices (B10), the principle
+prompt rewording (B11), business-rule guidance (B5), the renderer fixes (B12), the retained
+v9 reports (R8), withdrawing B9's two conflicting choices, and B4's experiment stops.
 
-  The advisory score stayed at 89.29%. Single runs therefore can't attribute a change, so
-  each measurement round needs repetitions (§7).
-- **Loan-renewal's own principles.** Principle review judged all 19 subjects `compatible`
-  on `269410b`, where `8a600d7` had 4 `conflicting` and 3 `uncertain`. The output wasn't
-  admitted, because the budget ran out first.
-- **Content.** Loan-renewal's published output still weakens "must be able to renew" to
-  "may renew" and has no refusal acceptance criterion (B7). On 24 October FR-001 kept
-  "must allow", but the story, a business rule and the entity say "may renew"; FR-001
-  covers both refusal conditions, and an edge case now covers the already-renewed one.
-- **Budget.** Loan-renewal ran out of the 100,000-token budget in review in 3 of its 8
-  attempts (B4). The 24 October run published with 902 tokens left, review taking 81.3%.
-  The 25 October step 0 run reached 109,327 tokens after a runaway, and would have
-  published under the approved 125,000 budget.
-- **Runaway output** caused all three timeouts; the 180 s deadline made it visible (B9).
-
-**Providers.** [ADR 0028](../design/decisions/0028-anthropic-messages-provider.md)
-(21 October) added the Anthropic Messages API provider on shared provider owners.
-[ADR 0029](../design/decisions/0029-bedrock-model-families.md) (22 October) lets a Bedrock
-catalogue entry name any model with a compiled family. The E2E catalogue lists Claude
-Haiku 5.5 through both, and the live-test policy permits it for generation. On 23 October
-the user chose Claude Haiku 5.5 on Bedrock (`au.anthropic.claude-haiku-5-5`, low effort)
-for every E2E slot. All eleven attempts ended `authorization_denied`, because the account
-lacks access to the model, and on 24 October the user switched the slots back to
-GPT-OSS-20B (ADR 0029, amended; see the 24 October log entry). No live Claude run has
-completed. All
-live evidence in this record so far comes from GPT-OSS-20B, and which failure classes
-are model limitations is unmeasured (R7).
+**Providers.** ADR 0028 (Anthropic Messages API) and ADR 0029 (Bedrock model families) are
+implemented. All live evidence so far comes from GPT-OSS-20B; the account has no Claude
+Haiku 5.5 access, and model choice is the user's decision (R7).
 
 ## 2. Why the engine is hard to implement
 
@@ -172,112 +142,50 @@ with 213 decision tokens, and the "generic" runner mentions `model` 130 times an
 `provider` 82 times. A wiring error surfaces as a runtime rejection, not a compile
 error. Any lifecycle change touches YAML, runner checks and tests together.
 
-**Decided 22 October 2026; partly implemented (slices 1–3; see "Implementation
-progress").** [ADR 0030](../design/decisions/0030-engine-owned-model-request.md) replaces
-the request
-subgraph with one `request-model` step per model request (its 22 October text also gave
-counting a `count-model-tokens` step, removed on 23 October; see below). A fixed,
+**Decided 22 October 2026; partly implemented (slices 1–3).**
+[ADR 0030](../design/decisions/0030-engine-owned-model-request.md) replaces the request
+subgraph with one `request-model` step per model request. A fixed,
 capability-free kernel orchestrator runs the lifecycle through
 runner-owned child bindings. Consumers, release, advisory routing, `retain-json-part` and
 ledger initialization stay in YAML. The full record is in
 [Z_FIX05](Z_FIX05.md#a1-decision-record).
 
-**Choices settled — 23 October 2026.** The user asked for "the best possible solution,
-remember this is a POC and best outcomes is the primary goal", then directed "update docs
-with" the resulting table. ADR 0030's "Choices settled on 23 October 2026" records it:
-
-| Choice | Derived on 22 October | Settled |
-| --- | --- | --- |
-| 1. Form | Kernel orchestrator | **Kept** |
-| 2. Token counting | Rebuild as `count-model-tokens` | **Removed**: no workflow, fixture or registered model uses it |
-| 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as a required `requestTimeoutMs` |
-| 4a. Release | Explicit YAML step | **Kept** |
-| 4b. Advisory routing | Every step maps all six outcomes | **Only steps marked `advisory: allowed` map `more` and `blocked`**; they may carry both kinds of request |
-
-The global token count is unchanged: the workflow budget, report totals and per-call
-usage come from actual inference usage, never from counting. The amendment points ADRs
-0005, 0011, 0014, 0019, 0023, 0028 and 0029, design.md, contracts §§6, 9, 12, 14, 27 and
-28, the operation catalogue, F0005–F0007, F0100, diagram 16 and the README to it. No code,
-workflow YAML or catalogue changed.
+**Settled choices and slices 1–3** (freeze `5ce2af4`, token counting removed and the
+deadline moved to each catalogue entry's `requestTimeoutMs`, 23–24 October) are recorded
+in [Z_FIX05](Z_FIX05.md#a1-settled-choices-and-slices-13).
 
 Open:
 
-- implementation, with ADR 0030's offline acceptance, including the shared
-  contract-variant mechanism (confirmed 23 October 2026) that ADR 0033 reuses;
-- the measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`;
+- **Slice 4:** the `request-model` step itself, with ADR 0030's offline acceptance and the
+  shared contract-variant mechanism (confirmed 23 October 2026) that ADR 0033 reuses.
+  - Since ADR 0039 the shared request body also carries `check-model-runaway` and
+    `build-model-runaway-resend`, guarded by a compiler rule that admission's `invalid`
+    route goes through them. Slice 4 folds the re-send into the `request-model` stages
+    (ADR 0030 stage 12, as amended by ADR 0039) and retires that YAML rule.
+  - ADR 0042's required-items constraint and ADR 0040's review closure must carry over
+    unchanged; the slice 1 freeze is the equivalence baseline.
+- the measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`,
+  only if the user selects that model;
 - whether the engine should also take over release, which needs the compiler to derive
   each request's lifetime.
 
-**Implementation progress.**
+Slice 4 also settles the open points from the slice 1 contract review:
 
-- **Slice 1, freeze — done 23 October 2026 (`5ce2af4`).** The Specify integration matrix
-  writes one step trace and summary per scenario to `.zig-cache/workflow-step-trace/`
-  (`src/test_fixtures/workflow_step_trace.zig`). A request-lifecycle step inside a request
-  wrapper is keyed by its call site plus the stage's operation ID, the form `request-model`
-  keeps; a lifecycle body reached without a wrapper fails the run. Each summary records
-  the outcome, the canonical rejection diagnostic, step and call counts, token totals,
-  every accounted inference (call site, purpose, request and attempt ordinals) and the
-  hashes of the published and state files. 195 scenarios: 147 ok, 36 failed, 6 invalid,
-  5 needs-user and 1 blocked. Two consecutive runs produced 1,018 identical files. The
-  baseline is reproducible by running `zig build test-integration` at `5ce2af4`; a copy
-  goes to `evaluations/adr0030-freeze/5ce2af4/`.
-- **Open points for slice 4,** from the slice 1 contract review:
-  - the advisory production run (`test/harness/integration/tests.zig`, budget exhaustion,
-    output limits and the advisory protocol stop) is not traced yet;
-  - the extraction content request appears as two keys, `extract/content`
-    (preparation) and `extract/content-request` (the body), which slice 4 makes one
-    `request-model` step;
-  - the deterministic evidence is the step traces and summary counts; file hashes are
-    deterministic only because the run's reference state ID and recorded filesystem
-    observations (file IDs and timestamps) are masked;
-  - pre-call termination, cancellation and authorization failure never occur in the
-    matrix. **Decided 23 October 2026 (user, option b):** their baseline is today's
-    runner-level lifecycle tests in `src/model_request_workflow_test.zig`, which compile
-    real YAML and drive the real runner against fake ports. Slice 4 ports each one for
-    one to `request-model`, with the same ports and assertions, and records a table
-    mapping every existing test to its ported test, with a reason for any assertion it
-    drops (such as tests that pin the removed operations' YAML ordering).
-- **Slice 2, token counting removed — done 24 October 2026.** The four count
-  operations, the `input_token_count` operation kind (`ProviderOperationKind` is now
-  `{ inference }`; every persisted kind field stays), the `assign-provider-operation`
-  `kind` parameter (assignment takes no parameters and assigns inference), the count
-  capability, the `exact_token_count_unavailable` failure cause, the two count data keys,
-  Bedrock CountTokens encoding, decoding and endpoint, the provider port's
-  `countInputTokens`, every fake and spy count path, the two count test files and their
-  build steps, and the packaging smoke's count cases are deleted. Actual-usage accounting
-  is unchanged. Tests that looped over both kinds keep their inference case; forged-kind
-  rejections became forged-attempt rejections. The inference-then-authorization closure
-  test, the option (b) baseline for that case, was converted to a second attempt whose
-  authorization fails or is cancelled, rather than deleted. Superseded count text was
-  removed from contracts §12, the operation catalogue, F0006, F0007, `code.md`, diagram 16
-  and the README; the ADR notes and design.md mark the removal implemented. The Specify
-  step traces are identical to the slice 1 freeze, and the production-admission report is
-  unchanged. Left for later:
-  - ADRs 0006 and 0013 mention optional counting in their historical text; each now
-    carries an ADR 0030 pointer (user-approved 24 October 2026);
-  - F0007's model table predates ADR 0029's families;
-  - trivially true `.inference` guards in files slice 2 did not edit, including the
-    harness's now-unreachable `CaptureNotInference`, go with `request-model` (slice 4);
-  - a pre-existing conformance case (`provider_conformance_test.zig`, forged operation)
-    is rejected for being a copy before its foreign attempt is checked; it needs its own
-    fix.
-- **Slice 3, deadline in the catalogue — done 24 October 2026.** Every `.sddproviders.json`
-  entry's `config` requires `requestTimeoutMs` (a `RequestTimeout` of 1 to 2^32-1 ms, so a
-  monotonic deadline can always be formed), read through one `requestTimeout()` accessor;
-  the test-only config schema `empty_object` is now `deadline_only`. Authorization
-  preparation takes no parameters: the runner binds the request's catalogue deadline to
-  every provider operation of the request, including protocol corrections, and a YAML
-  `timeout-ms` is rejected at compilation. Replay uses the captured deadline instead of a
-  fixed 300,000 ms. Shipped values: 180,000 ms for GPT-OSS-20B and an interim 180,000 ms for
-  both Claude Haiku 5.5 entries (B9), 60,000 ms in the packaging fixture's catalogue; the
-  frozen calibration protocol records 180,000 ms and advances to schema 4, so an older
-  protocol is rejected as a version mismatch (both user-approved). `model-request-debug`
-  advanced to v11 and `model-call-evidence` to v3, with v2 and v1 kept readable as
-  historical evidence. Retained runs captured before this change can no longer be read by
-  `e2e-call`, the compatibility inspection, the baseline or the frozen binding. **Freeze
-  recheck:** the Specify step traces and summaries are identical to the slice 1 baseline
-  (all 545 entries), and the production-admission report is unchanged; the deadline
-  changed nothing observable in the matrix.
+- the advisory production run (`test/harness/integration/tests.zig`, budget exhaustion,
+  output limits and the advisory protocol stop) is not traced yet;
+- the extraction content request appears as two keys, `extract/content`
+  (preparation) and `extract/content-request` (the body), which slice 4 makes one
+  `request-model` step;
+- the deterministic evidence is the step traces and summary counts; file hashes are
+  deterministic only because the run's reference state ID and recorded filesystem
+  observations (file IDs and timestamps) are masked;
+- pre-call termination, cancellation and authorization failure never occur in the
+  matrix. **Decided 23 October 2026 (user, option b):** their baseline is today's
+  runner-level lifecycle tests in `src/model_request_workflow_test.zig`, which compile
+  real YAML and drive the real runner against fake ports. Slice 4 ports each one for
+  one to `request-model`, with the same ports and assertions, and records a table
+  mapping every existing test to its ported test, with a reason for any assertion it
+  drops (such as tests that pin the removed operations' YAML ordering).
 
 A1 is not expected to change model calls, tokens or reliability. The 22 October estimate
 of a 35–90-line (3–8%) net YAML saving grows, because ordinary sites no longer route
@@ -422,11 +330,12 @@ on one committed build, counting every attempted run. There is no fixed run thre
 the user judges the evidence and decides when Plan is actioned. The full record is in
 [Z_FIX05](Z_FIX05.md#a6-decision-record).
 
-**Status on 25 October.** The gate isn't met:
-- no run has been adjudicated;
-- only three pairs used an unmodified committed build (one run of each case, on
-  `7a88804`, `8a600d7` and `269410b`);
-- loan-renewal published in 3 of its 8 attempts since 21 October (§1).
+**Status on 26 October.** The gate isn't met:
+- no run has been adjudicated (R8);
+- four pairs used an unmodified committed build: `7a88804`, `8a600d7`, `269410b` and,
+  for the current engine, `39a06ea` (26 October 19:09);
+- since 21 October loan-renewal published in 7 of 17 attempts and hello-world in 15 of 17,
+  with all four completed 26 October runs published (§1).
 
 ## 3. Why runs are brittle
 
@@ -457,22 +366,22 @@ never authorizes content repair, an upstream rebuild, a mandatory Plan obligatio
 clarification. Source review assigns one record family per call (approved 18 October,
 built 20 October, `specification-state/v19`).
 
-**Still open:**
+**Still open: accuracy and waste.** On 25 October the user set quality above cost and
+approved the 125,000-token budget instead of making source review optional, so source
+review stays. On 26 October review took 41–58% of each run's tokens and:
+- passed "may renew" in loan-renewal's story (B7), invented timing words in hello-world's
+  story and invented entities (B6);
+- made false statements, such as that the source defines an entity or that it says
+  "may renew";
+- filed unsupported additions as `candidate_omission`, a harmful diagnosis under §7;
+- in loan-renewal returned `supported` for every source-review subject.
 
-- **Live effect.** Review still ends loan-renewal runs on budget (B4). No run has measured
-  the record-family change's net cost, and finding-type accuracy (§7) has no labelled live
-  measurement.
-  - On 25 October the user set quality above cost and approved a configurable
-    125,000-token budget (B4) instead of making source review optional.
-  - Source review therefore stays. Its open problems are its accuracy (false assessments
-    and missed obligation changes) and waste. Under "quality over cost, but never waste",
-    review spending that buys no quality is still to be removed at its owner. Measuring
-    the prompt, schema and evidence share of each call (B4) is the first step; nothing is
-    removed by keyword or truncation.
-- **Separate assessment model** (the original decision's option 3, not approved): assign
-  review to a separately configured `models.slots.assessment` (former FIX02 and FIX03
-  Phase 9). This needs the proposed ADR 0021 and configuration amendment. The 22 October
-  live-test policy permits Claude Haiku 5.5 for generation only.
+**Next:** label retained 26 October findings offline against frozen, source-based labels
+(finding-type accuracy, §7) before any change that lets review alter output or removes a
+review call. Under "quality over cost, but never waste", spending that buys no quality is
+removed at its owner, never by keyword or truncation. A separately configured assessment
+model (the original option 3, not approved) is a model choice and stays the user's
+decision (R7).
 
 Measure the review workload (former R5): coverage, sends and actual tokens per stage,
 latency, retained memory and finding-type accuracy (§7).
@@ -493,709 +402,161 @@ controls. Further calls need bounded approval.
 
 ### B4. Fixed per-call overhead exhausts a compiled budget
 
-**Done.** Option 3 (one principle assignment per complete principle set) and the single
-workflow budget are implemented; since ADR 0037 the budget is the configured
-`workflowTokenBudget`. Option 1, a separate advisory allowance,
-was withdrawn: there is one total limit. Records are in
-[Z_FIX05](Z_FIX05.md#b4-records) and §9.
+**Done.** One principle assignment per principle set, and one total budget, configured
+since ADR 0037 as `.sddtoolkit.json`'s `workflowTokenBudget` (125,000 for E2E). The records
+are in [Z_FIX05](Z_FIX05.md#b4-records) and
+[Z_FIX05](Z_FIX05.md#b4-configured-budget-record).
 
-Input is 93% of tokens. Review sends average about 2,500 input tokens for
-single-field subjects. The four response schemas are 11.9–14.1 KB each, with 15–32
-definitions.
+**Decision** (still open, required before any baseline freeze): the experiment stops and
+the qualified scope. The protocol's stops of 1,000 sends and 2,000,000 tokens cover 16
+workflows at 125,000 tokens each, against 144 development workloads, so the Phase 2
+budget-feasibility report stays `insufficient`. The options are to revise the stops with a
+recorded rationale, reduce review cost through its owner (B2), or narrow the qualified
+scope. Measure the prompt, schema and evidence share of each call before trimming
+anything, and add no local size ceilings (ADR 0011).
 
-Until ADR 0037 the 100,000-token budget was compiled into every policy profile and was
-not case configuration. The protocol's experiment-wide stops of 1,000 sends and 2,000,000
-tokens cover fewer than 20 such workflows, against 144 development workloads. The
-Phase 2 budget-feasibility report is `insufficient`.
-
-**Decision** (required before any baseline freeze): choose the budget and scope. The
-options are:
-
-- raise the workflow budget, or make it a workflow or configuration parameter,
-  through an explicit engine contract change;
-- revise the experiment stops before freezing, with a recorded rationale;
-- reduce review or repair cost through its owner (B2);
-- narrow the qualified scope.
-
-The former recommendation was generation-only diagnostic scope for Phases 2–3, with
-controlled predecessors, deferring complete-workflow qualification until review
-qualifies. Separately, measure the prompt, schema and evidence token contributions
-per call before trimming anything. Add no local size ceilings (ADR 0011).
-
-**Approved 25 October 2026: a configurable workflow budget, raised to 125,000 tokens.**
-The user directed "make budget configurable and increase to 125000", and set the
-priority: "the key of the entire app is to ensure quality … if budget has to be
-increased in favour of quality it is fine", then "quality over cost, but never waste".
-- Token cost is not a reason to drop or weaken a quality check.
-- Spending that buys no quality is waste, to remove at its owner.
-
-This settles the budget half of the decision above.
-
-- **Change.**
-  - The single workflow token budget stops being compiled into the policy profiles
-    ([core](../src/composition/core_workflow_operations.zig#L35),
-    [native](../src/composition/native_workflow_operations.zig#L638)).
-  - It becomes a validated configuration value, read once at bootstrap.
-  - It remains one total limit for the run, as option 3 left it.
-- **Value.** 125,000 in the shipped E2E configuration, which both cases use, and in the
-  example configuration.
-- **Design points for the ADR.** It amends ADR 0011's budget contract, as ADR 0023
-  amended it.
-  - Where the value lives: the project configuration or the workflow definition.
-  - It is a closed, required, positive value with no engine default (AGENTS.md: no
-    fallbacks).
-  - Offline tests that exhaust the budget, and fixtures read by the step-trace freeze,
-    set their own explicit values, so the ADR 0030 freeze stays comparable.
-  - Persisted values that carry the budget, such as a report's
-    `token_accounting.total_budget`, take the configured value.
-- **Implemented 25 October 2026, uncommitted
-  ([ADR 0037](../design/decisions/0037-configured-workflow-token-budget.md)).** The user
-  directed "make the token cap an external setting, that is stored and loaded from
-  .sddtoolkit.json, to the e2e test set the token cap to 125000".
-  - `.sddtoolkit.json` has a required root `workflowTokenBudget`, an integer from 1 to
-    4,294,967,295, decoded through the positive-integer rule the catalogue's limits
-    now share (moved to `positive_json_integer.zig`). It sits at the root so model-slot
-    consumers don't depend on it.
-  - The composition root passes it to the pipeline runner's per-execution ledger.
-    Policy profiles (nine copies of 100,000) and compiled graph authority no longer
-    carry a budget, and the runner's policy cross-check compares capabilities only.
-  - Values: 125,000 in the E2E configuration and the example; 100,000 in the baseline
-    protocol and unit fixtures; 90,000 in the scripted budget test, which shows the
-    ledger reads the configuration.
-  - The baseline harness reads the configured value; its feasibility report's field is
-    now `configured_workflow_budget` (`baseline-budget-feasibility/v2`,
-    `baseline-freeze/v3`). The E2E report is unchanged at v9.
-  - Checks: `zig build test` 1,813 of 1,813 and integration 129 of 129 passed.
-  - **Live pair, 25 October 18:19** (advisory analyses in `evaluations/e2e/`): both
-    published, each at advisory 85.71% with no critical failure; reports record the
-    configured 125,000. Hello-world used 61,885 tokens; loan-renewal 98,492, under the old
-    100,000 too, so the larger budget wasn't decisive. Loan-renewal's source-review call
-    24 ran to the 16,384-token maximum on `Renewal refused.` (B9), and its refusal
-    behaviour still has no scenario (B5). Records: 2 per case, no filler.
-- **Still open, before any baseline freeze: the experiment stops and the qualified
-  scope.** At 125,000 tokens per workflow, the protocol's 2,000,000-token stop covers
-  16 workflows, so the Phase 2 feasibility report stays `insufficient`.
-
-**Evidence since 21 October.** Loan-renewal ended `WorkflowTokenBudgetExceeded` in review
-at 21 October 11:45 (100,793 tokens) and 22 October 08:31 (100,763), and published at
-76,501, 92,825 and, on 24 October, 99,098 tokens (§1). A larger budget gives quality
-changes room; on its own it doesn't make review cheaper or runs more reliable.
+Since 25 October no run has stopped on the budget: the 26 October runs used 66,358–91,129
+tokens.
 
 ### B5. Authoring follows mechanical source groups
 
-Evidence from former F1, F9 and F13:
+**Done.** Token-only groups get no record batch (ADR 0024), covered cross-kind
+restatements are deleted natively (ADR 0035), and each non-entity record names the
+claims it supports, with every claim a functional requirement names also named by an
+acceptance criterion or edge case (ADR 0038). One records call per feature was not
+adopted. The records are in [Z_FIX05](Z_FIX05.md#b5-token-only-record-batches) and
+[Z_FIX05](Z_FIX05.md#b5-records-2425-october-2026).
 
-- Each record batch re-authors the whole feature, which produced competing or
-  duplicate records in four runs.
-- The group holding only a preserved value gets its own batch.
-- One assignment can still require interpreting obligations, choosing record
-  families, preserving conditions, building scenarios and entities, and deciding
-  whether uncertainty blocks drafting.
-- Six model requests precede authoring even on a three-line source.
-- **24 October (`8a600d7`).** Each case formed one real group, because extraction merged
-  each list into one claim (B7), so each made exactly one records call (call 10). Today's
-  per-group authoring and a single collection therefore behave the same on both cases.
-  - Native coverage
-    ([specification_coverage.zig](../src/domain/specification_coverage.zig)) accepts a
-    claim mapped to any target, whether the story, the brief or any record.
-  - Loan-renewal's refusal behaviour had no acceptance criterion in all three evaluated
-    runs (`7a88804`, `527f870`, `8a600d7`).
+**Live effect, 26 October.** Loan-renewal's refusal behaviour has its own acceptance
+criterion in both runs, on the first records attempt; the scenario rule didn't need to
+fire. ADR 0038's limit stands: the rule checks links, not meaning.
 
-**Done.** Token-only groups no longer get a record batch (approved 17 October with B8,
-under [ADR 0024](../design/decisions/0024-native-exact-token-authority.md)). The record is
-in [Z_FIX05](Z_FIX05.md#b5-token-only-record-batches).
+Open:
 
-**Original proposal:** compare current per-group records (A) with one complete record
-collection (C). Add a purpose-only acceptance-criterion diagnostic (B) or per-family
-collections (D) only where measured failures justify them. Run it after B2 and B3,
-which change every arm and dominate cost.
-
-**Proposal: one complete record collection with native acceptance-criterion coverage.**
-This is the recommended option, recorded on 25 October 2026 by user direction. It
-replaces running the A/C comparison and needs a decision and an ADR before
-implementation.
-
-1. **One authoring call per feature (C).** It writes the complete record collection, and
-   each record names the claims it supports. The engine validates those links, under the
-   constraints below.
-2. **Coverage that knows record families.** Extend native coverage so that every
-   behavioural claim must be cited by at least one acceptance criterion or edge case. A
-   gap is a typed defect that takes the existing bounded correction. Context-only claims
-   are exempt.
-
-- **Why C over A.**
-  - Per-group batches re-authored the whole feature and produced duplicates.
-  - Records bind their whole group (R1), so a per-claim check can't be made.
-  - Calls grow with group count, which lengthens the chain (B1).
-  - C has one author, explicit support links, and a call count that doesn't depend on
-    the source's structure.
-- **Why native coverage over B and D.** B is model-facing guidance, which the model can
-  ignore. Once support links are explicit, coverage is computable, so deterministic code
-  owns it. D adds calls without measured need.
-- **Why not run the comparison.** On both current cases A and C produce the same single
-  records call, so it can't decide anything, and its baseline is blocked on B4.
-- **What it depends on to pay off.**
-  - **Requirement-level claims.** With one merged claim, one acceptance criterion
-    already satisfies coverage, so the missing refusal criterion is still not caught.
-    B7's native list-item split, which supplied them, was withdrawn on 25 October after
-    the records call inflated with more claims. With C, more claims no longer add
-    records calls.
-  - **Review headroom (B2, B4).** More claims mean more review subjects. The 21 October
-    list-item run exhausted the budget in source review. The approved 125,000-token
-    budget (B4) provides headroom; whether it is enough is unmeasured.
-- **Cost and risk.**
-  - It is a large contract change; the constraints below list what changes together.
-  - It amends ADR 0020's group binding, which would settle R1.
-  - One larger call has a larger output and an all-or-nothing failure, and a correction
-    re-sends the whole collection.
-- **Evidence required (§7).**
-  - Offline, multi-claim features: a behavioural claim without an acceptance criterion
-    or edge case is rejected; an acceptance criterion that paraphrases a functional
-    requirement is accepted; context-only claims are exempt.
-  - Then repeated live runs of both cases, counting every attempt.
-- **Order.** The configurable budget (B4) first, then requirement-level claims (B7), then
-  this.
-
-**Implemented 25 October 2026, uncommitted ([ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md)).** The user directed
-"implement B5 as per recommendation" and approved four choices ("APPROVED. Implement
-B5"). ADR 0038 is authoritative where the proposal above differs.
-- **Records name their claims.** Each non-entity record carries `claim_ids`, a native
-  unique-subset choice of its batch group's claims. Parsing keeps them in group order;
-  validation and readback require an ordered subset of the one group, which stays the
-  record's association. Repairs stay content-only.
-- **Scenario rule.** In one records response, every claim a functional requirement
-  names must also be named by an acceptance criterion or edge case. It is a native
-  admission constraint beside `exact_members` (`Coverage` on the records array,
-  `uncovered_member` at `/records/<i>/claim_ids/<j>`), so a gap takes the records step's
-  existing protocol correction and exhaustion fails. Request descriptions record it for
-  replay (`model-request-debug/v12`).
-- **Claim granularity.** ADR 0036's list-item split is reinstated (B7).
-- **Not adopted.** One records call per feature: a group's scenarios are all in its own
-  batch, and both live cases already form one group.
-- **Checks.** `zig build verify` on the final tree: 164 of 164 steps, 1,946 of 1,946
-  tests (unit 1,817, integration 129). A contract review found no blocker; its findings
-  (coverage effects, competing records, harness parity, tests at each boundary) are
-  fixed or recorded in ADR 0038.
-- **Live pair, 25 October 21:20** (advisory analyses in `evaluations/e2e/`):
-  - **Hello-world** published, advisory 82.14%. The split made three claims; records
-    named them and passed the scenario rule first time. New: business rules restating
-    FR-001 one claim at a time.
-  - **Loan-renewal** failed `RepairNoProgress` at the principles-review merge (99,194
-    tokens). The scenario rule caught the missing refusal scenario; after two
-    corrections the model added the refusal claim to the success acceptance criterion
-    instead of writing a scenario (the "links, not meaning" limit). The failure came
-    from an `uncertain` principles verdict without citations whose repair made no
-    progress, which ADR 0023 keeps terminal. Source review also ran away on
-    `Loan renewed!` (B9).
-- **Limits.** Prose requirements in one sentence stay one claim. The rule checks links,
-  not meaning.
-
-**Implemented 25 October 2026: cross-kind restatement in the native duplicate rule
-([ADR 0035](../design/decisions/0035-cross-kind-restatement.md)).** The user answered
-"YES" to the recommended option. In the preflight they decided three rules:
-- a restatement is deleted only when the kept occurrence covers its evidence;
-- an uncovered one is left as today;
-- a functional requirement is kept, and otherwise the earlier record.
-
-Same-kind duplicate checks run first, so a competing pair still blocks. A restatement
-has its own `restatement` repair rule. The text below is the approved proposal; ADR
-0035 is authoritative where they differ. Follow-up: no offline integration scenario yet
-exercises a records-batch native delete, whether duplicate or restatement.
-
-- **Today.** `duplicate_record`
-  ([specification_generation.zig:291-305](../src/domain/specification_generation.zig#L291-L305))
-  compares whole typed content, record kind included, and compares records only with
-  other records.
-  - Identical text in two kinds passes, and so does a record that repeats the primary
-    user story.
-  - Its remedy is a native delete of the redundant record
-    ([specification_repair.zig:82-87](../src/domain/specification_repair.zig#L82-L87)),
-    with old-value and revision preconditions. A delete builds no model request
-    ([atomic_repair.zig:128](../src/domain/atomic_repair.zig#L128)).
-- **Change.**
-  - Compare normalized statement text across the single-statement record kinds:
-    functional requirements, business rules, assumptions, non-goals, prohibitions and
-    user-visible outcomes.
-  - Also compare them against the primary user story, which is never the deleted
-    occurrence.
-  - Acceptance criteria and edge cases keep today's same-kind comparison.
-  - Reuse the native delete and the coverage revalidation unchanged.
-- **Evidence.** On `8a600d7`, BR-001 equals the primary user story word for word in both
-  cases: hello-world specification lines 7 and 21, and loan-renewal lines 7 and 31.
-- **Effect.**
-  - It deletes those business rules with no model call.
-  - It removes their review subjects, which saves tokens where loan-renewal's budget is
-    tight.
-  - B7's source-quoted wording would make restatements word for word more often, so this
-    rule would catch more of them.
-- **Limits.**
-  - It catches exact restatement only. Paraphrased filler still passes, such as
-    loan-renewal's non-goal restating the one-renewal limit, or a restated prohibition.
-  - An entity description identical to the story can't be deleted, because deleting the
-    entity would change the entity decision (R6). It needs a bounded rewrite of that
-    field, under its own decision.
-  - Deleting a record can remove an obligation's last mention in the records:
-    hello-world's BR-001 is the only record that says "start successfully". Coverage
-    still passes through the story; B5's acceptance-criterion coverage would catch real
-    gaps in testing.
-- **Evidence required (§7).**
-  - Offline, at the rule:
-    - a business rule identical to the story is deleted natively, and coverage holds;
-    - a functional requirement identical to a business rule loses the later one;
-    - an acceptance criterion that paraphrases a functional requirement is kept;
-    - an entity description identical to the story isn't deleted.
-  - Then repeated live runs of both cases.
-
-| Former phase | Status |
-| --- | --- |
-| 0 Evaluation protocol | Complete offline: [protocol, cases, specimens and scoring](../test/calibration/semantic-simplicity/README.md) |
-| 1 Compatible execution | Live gate passed for the observed first request only ([record](Z_FIX02.md#phase-1-implementation-and-live-gate)) |
-| 2 Baseline | [Harness](../test/harness/baseline/cli.zig) implemented; not frozen; needs B4's decision and a committed build (B3's gate closed on 17 October) |
-| 3–6 A/C comparison, implementation, qualification, adoption | Not started; the recommended option above replaces the comparison |
-
-Constraints carried from former F1–F8 and FIX04 §§4–5:
-
-- Historical same-model panels ran under superseded contracts. They identify failure
-  classes, not today's defect rate, so capture a fresh baseline on a frozen committed
-  revision.
-- Separate an oracle-premise capability test from a production handoff test.
-  Evaluation expectations never enter generator inputs.
-- Batching findings into one call, narrowing the semantic question and removing a
-  required finding are different changes. Only the last changes authority.
-- C needs disclosed, validated per-record support selection. Never bind every record
-  to every group or discard lineage to make it pass.
-- If C or D is selected, the production contract must define finite native
-  assignments, complete content units, explicit supporting groups, exact assembly
-  with origins, currentness and bounded correction, and it must keep every
-  completion gate.
-  - Generation parsing, session admission, provenance and readback, omission
-    comparison and insertion, and entity ownership change together.
-  - Replace superseded readers rather than keeping compatibility.
-- If the baseline already meets the protocol's adequacy targets, retain it and stop
-  the redesign.
+- **Business rules restate functional requirements** (every 26 October run of both cases;
+  loan-renewal states one requirement up to five times across the story, FR-001, business
+  rules and the entity). ADR 0035 deletes only exact, covered restatements.
+  **Decision:** add records guidance that a business rule holds only a constraint not
+  already stated by a functional requirement (recommended), or extend the duplicate rule
+  to partial restatements, which needs meaning, not text, and so isn't computable natively.
+- **Records inflation.** On 25 October one loan-renewal batch wrote 40 records and another
+  304. The 26 October batches were normal. It has no owner: B9's cardinality bound
+  conflicts with the user's no-caps rule. Measure it on repetitions.
+- **Follow-up:** no offline integration scenario exercises a records-batch native delete
+  (ADR 0035).
+- **Baseline.** Phase 2's harness exists but isn't frozen; it needs B4's decision and a
+  committed build. The A/C comparison is superseded by ADR 0038. If the baseline meets the
+  protocol's adequacy targets, retain it and stop the redesign.
 
 ### B6. Secondary failure classes to measure
 
-- Before B3, entity applicability was marked required for a feature with no business
-  data, and the entity-name exception then admitted an insertion-only name. No native
-  rule can judge applicability. Both B3 baselines judged it correctly:
-  `not_applicable` for hello-world and `required` for loan-renewal.
-  Later hello-world publications judged it `required` and invented an entity
-  ("Application Start" on 17 October 18:40, "Greeting" on 18 October).
-- The GPT-OSS envelope-prefix malformation is resolved by native normalization of the
-  truncated member-name form (18 October, §12).
+- **Entity applicability.** No native rule can judge it. Hello-world has invented a
+  required entity in most publications ("Application Start", "Greeting", "Application",
+  and "HelloWorldApplication" in both 26 October runs). Loan-renewal's entity restates
+  the behaviour, and source review has passed it with false claims about the source.
+- The GPT-OSS envelope-prefix malformation is resolved
+  ([Z_FIX05](Z_FIX05.md#b6-gpt-oss-envelope-prefix)).
 
-Measure each as its own class in the baseline. Don't widen the normalizer or narrow
-the entity-name exception without a decision.
+Measure entity applicability as its own class in the baseline and in B2's labelling.
+Don't narrow the entity-name exception without a decision.
 
 ### B7. Extraction collapses structured sources and weakens obligations
 
-Evidence from GPT-OSS-20B runs, 17–24 October:
+**Done.** Claims are a category and admission-bounded source lines whose wording the engine
+quotes (ADR 0036, with Decision 6 dropping code delimiters around exact values), and list
+sources yield one claim per top-level item (ADR 0038). Per-item chunking (ADR 0027) stays
+withdrawn. The records are in [Z_FIX05](Z_FIX05.md#b7-original-record) and
+[Z_FIX05](Z_FIX05.md#b7-records-2125-october-2026).
 
-- **Collapsed lists.** Both sources are Markdown bullet lists of distinct requirements:
-  three items in hello-world and five in loan-renewal. Through 20 October, extraction
-  returned one claim for each whole list in every sample.
-- **Weakened obligation.** Loan-renewal's claim turns "A borrower must be able to renew"
-  into "may renew". It happened in at least five loan-renewal runs from 17 to
-  21 October, and review judged the weakened text `supported` each time it was reviewed.
-  On 21 October at 19:13 it appeared at extraction call 1 and review call 12 accepted it,
-  and the published specification had no refusal acceptance criterion. The 18 October
-  10:44 publication preserved the obligation.
-- **Downstream effect.** With one behavioural claim per feature, every record cites the
-  same claim, coverage is satisfied by any record that mentions it, and native checks
-  cannot tell distinct duties from paraphrases.
-- **24 October (`8a600d7`).** Both cases again extracted one claim per list (lines 5–7
-  and 5–9), and loan-renewal's claim again read "may renew".
-  - Every later loan-renewal call received both the cited source text ("must be able to
-    renew") and the weakened claim. The guidance says that original sources establish
-    obligations and that claims are derived evidence
-    ([required_authority_description.zig:10-11](../src/domain/required_authority_description.zig#L10-L11)).
-  - Yet the story, BR-001 and the entity followed the claim while FR-001 followed the
-    source, so the published specification contradicts itself.
-  - Review calls 12 and 14 judged the weakened text accurate.
-  - The extraction guidance already asks for one fact per claim and for each fact's
-    obligation strength to be kept
-    ([extraction.context.json:4](../design/workflows/spec/extraction.context.json#L4)).
+Open:
 
-**Tried and reverted — 21 October 2026.** On the user's instruction "implement B7",
-`2bf5ca6` extracted each top-level Markdown list item as its own chunk, under ADR 0027
-(`git show 2bf5ca6:design/decisions/0027-list-item-extraction-chunks.md`). Extraction
-then returned one verbatim claim per item, but the outcome didn't improve:
-
-- hello-world at 11:38 scored the same advisory 89.29% at 75,669 tokens, against 65,896
-  before;
-- loan-renewal at 11:45 ran out of budget at 100,793 tokens, against a 76,501-token
-  publication before;
-- on the same build, a later hello-world run scored 60.71% with critical failures, and
-  another failed on a 60 s timeout (B9).
-
-The user then directed "Revert B7, then do a live run". `527f870` reverted it, deleted
-ADR 0027 and restored `source_blocks_v1` chunking and `specification-state/v19`. Its
-message records the reason: the remaining defects come from generation, which already
-received each item as its own requirement and which B7 does not change.
-
-**Status.** Per-item chunking before extraction (ADR 0027) stays withdrawn by that revert.
-One pair cannot decide a contract change under §7, so the revert is a user decision, not
-evidence that segmentation can't help. Source-quoted claim wording, for the
-obligation-weakening half, is implemented
-([ADR 0036](../design/decisions/0036-source-quoted-claims.md)). The native list-item split
-for the list-collapse half was implemented, withdrawn and, the same day, reinstated by
-[ADR 0038](../design/decisions/0038-record-claims-and-scenario-coverage.md): the withdrawal's evidence was misread, since the same five-claim input
-produced both 2 and 304 records, and B5's scenario rule needs one claim per requirement. The original record is in [Z_FIX05](Z_FIX05.md#b7-original-record).
-
-**Implemented 25 October 2026, uncommitted (ADR 0036, option 1).** The user directed
-"implement B7 with option 1". ADR 0036 is authoritative where the approved text below
-differs.
-
-- **Contract.** A model claim is `{category, citations}`, where `citations` is a set of
-  line IDs. Admission restricts them to the chunk's citable lines, decided by one shared
-  predicate.
-  - One function at extraction text validation quotes the cited lines as written,
-    Markdown included. A run continues across uncited blank lines and is trimmed only at
-    its ends.
-  - The list-item split described in the reviews below was withdrawn (see "Split
-    withdrawn") and reinstated by ADR 0038 (B5).
-- **Deleted.** Claim-text repair (text repair keeps only the `no_feature_claim` reason),
-  citation repair, the `source_selections` diagnostic, `business_text_replacement`, the
-  `retain-reference-claim-rejection` operation and the write-only claim citation origins.
-  `validate-reference-claims` now ends `ok` or `failed`.
-- **Defects found and fixed.**
-  - In implementation:
-    - A citation choice scoped to the `claim` definition couldn't bind the whole
-      extraction response, so every initial request would have failed at handoff. The
-      initial request now bounds `/claims/*/citations`, and the omission claim repair
-      bounds its own `citations`.
-    - The source-omission merge kept only the first claim of a split proposal; it then
-      inserted every claim. With the split withdrawn, it inserts its one claim again.
-  - In two contract reviews:
-    - **Rewriting the quote was fragile.** The first draft removed markers and code
-      delimiters and changed whitespace. Its line-by-line parsing ignored fenced code,
-      multi-line code spans and wrapped numbers such as `2024.`. Some admitted citations
-      quoted to nothing and failed the run, words fused and delimiters leaked. A code
-      block with a blank line lost its exact-value duty.
-      - The quote is now the cited source bytes as written, which removes that class.
-      - List structure was given one Markdown owner (withdrawn with the split).
-    - **Quadratic cost.** Rebuilding the whole source's scan for every chunk was
-      quadratic: 777 MB held at 256 chunks. Each source's fenced code is now scanned once
-      per validation.
-    - **C1 control characters** passed ingestion but fail the text validator. The
-      Markdown reader now uses the typed-text scalar rule.
-  - In a third review:
-    - Trimming a run's ends could strip a fenced block's own bytes and lose its
-      exact-value duty. Code lines are no longer trimmed.
-    - Joining runs with a line break could form a JSON insertion object absent from the
-      source and fail the run. Runs are now joined by an ellipsis line.
-    - Other fixes:
-      - Each chunk's first line is found by binary search.
-      - The test helpers use the shared citable predicate.
-      - List-structure fixes (HTML blocks, one marker parser) went with the split.
-- **Tests.**
-  - New coverage:
-    - quoting, one claim per proposal, including lines cited out of order, a heading with
-      a nested list, runs across blank lines, fenced code, leading indentation, and chunks
-      starting inside and after a fenced block in two sources;
-    - the exact-value duty for a multi-line code span and a fenced block with a blank
-      line;
-    - an allocation bound across 128 chunks;
-    - admission bounds, including blank lines, for the initial request and omission
-      repair;
-    - rejection of model wording;
-    - an omission repair over two list items, inserting one quoted claim;
-    - C1 rejection at ingestion;
-    - a reason-repair test that keeps the deleted claim-text test's packet, origin,
-      progress and stale-authority coverage.
-  - Deleted: four unit tests and six integration scenarios for the deleted routes.
-  - **Scripted fixtures:**
-    - claims cite only citable lines;
-    - the omit-exact scenario authors distinct text per claim;
-    - the classification-loss scenario keeps its token on an unquoted line;
-    - the omission repair cites one line.
-  - **Retained GPT-OSS exchange:** the debugger replays it with its retained wire shape;
-    the provider-compatibility test now expects the current schema to reject it.
-- **Checks.**
-  - `zig build test`: 1,809 of 1,809 passed. Fix3's `test-build-reuse` fails only with a
-    repository-relative cache.
-  - Integration: 129 of 129 passed.
-  - `zig build lint`, `zig build test-architecture` and `zig build verify` (out-of-repo
-    cache) passed.
-- **Open, from the contract review.**
-  - Stored readback doesn't re-quote claim text from its citations. It would need the
-    Unicode normalizer at readback.
-  - Admission caps the citation count but admits a repeated ID; the quote ignores the
-    repeat.
-  - The extraction reason's text-repair route now has unit coverage only.
-  - No synthetic current-schema exchange replaces the retained one's `compatible`
-    assessment.
-  - Claim wording now carries Markdown (list markers, backticks) into later calls. The
-    first live pair showed generation copying backticks around exact values; Decision 6
-    removes them at admission. Other Markdown effects are unmeasured.
-  - `source_selections`'s typed rejection detail is read only by tests now, and the
-    `validate-reference-selections` operation and its value key validate token
-    classifications only. Renaming or trimming them was left out of scope.
-- **Live pair, 25 October 13:14–13:15, on the uncommitted tree** (advisory analyses in
-  `evaluations/e2e/`):
-  - **Extraction:** both cases cited a whole list as one claim, and the engine split it
-    into one quoted claim per item (3 and 5). Reconciliation grouped each case's claims
-    back into one signal.
-  - **Hello-world** published at 65,021 tokens, advisory 82.14% (unchanged). Its "should
-    output" weakening didn't recur. A new defect appeared: generation copied the
-    quoted Markdown and wrapped the greeting in backticks, which render escaped beside
-    the exact-value code span.
-  - **Loan-renewal** failed `WorkflowTokenBudgetExceeded` at 109,967 tokens, after a
-    source-review runaway on the preserved-token subject `Loan renewed!`. This is the
-    third runaway on a preserved-token subject (B9).
-    - Before failing, its records batch authored 12 records against 2 in the previous
-      run, including both refusal conditions as edge cases.
-    - Generation still wrote "may renew" in the brief, story and entity, although every
-      claim and signal it received said "must be able to renew". The weakening's source
-      is now generation.
-    - Under the approved 125,000 budget (B4) the run would have continued.
-- **Backtick fix, 25 October (user: "apply recommendations as per above", ADR 0036
-  Decision 6):** the exact-value recogniser reports equal backtick runs directly around a
-  value, and admission drops them with it. The value becomes an exact copy in an
-  obligation-bearing field and stays text elsewhere. Nothing else in the text changes.
-  - Fixed during implementation: prohibited fields used the unit's lineage for the first
-    recognition and every value for the re-check, so their stored value no longer
-    matched. They now always use every eligible value.
-  - Fixed after contract review:
-    - Removing delimiters could join a longer value across the gap, so the re-check
-      turned ambiguous and escaped as an untyped error. Delimiters now stay unless
-      removing them leaves the same matches, and the re-check reports a typed issue.
-    - A backtick between two values could be claimed by both, panicking in a prohibited
-      field. It now belongs to neither, and every caller cuts one outer span.
-    - Tests now catch both cases and a reverted composition cut.
-    - A second review found that repairs recognise with a narrower lineage than the
-      re-check, so the guard could approve a removal that the re-check then found
-      ambiguous. Removal is now a separate recogniser step, checked against every
-      eligible value. A repair-path test catches the narrow-set mutation.
-  - Checks: `zig build test` 1,812 of 1,812, integration 129 of 129, lint and
-    architecture passed. The typed re-check in `valueIn` has no reachable test once the
-    guard shares one set; it stays as a typed outcome.
-  - The other open items affect no outcome, so they stay open: readback re-quoting, the
-    repeated citation ID and reason-repair integration coverage.
-- **Live pair, 25 October 14:31, B7 + Decision 6** (advisory analyses in
-  `evaluations/e2e/`):
-  - **Hello-world** published, advisory 71.43%, with a critical failure on
-    source-grounding.
-    - Decision 6 worked: the greeting renders once.
-    - The records call added a filler assumption ("system clock is set to UTC"), a
-      non-goal forbidding any other output and a crash prohibition. It also wrote
-      business rules that restate the quoted claims. Source review flagged the three
-      fillers, as advice only and filed as `candidate_omission`.
-  - **Loan-renewal** failed on budget. Its records call ran away with 294 edge cases
-    (9,318 output tokens) enumerating loan-state combinations, which source review then
-    had to assess.
-    - This is a new form of the B9 runaway class, in generation.
-    - B9's open "cardinality bounds" choice is its owner.
-    - The 125,000 budget alone would not have saved it.
-  - Across the four B7 runs, generation output varies widely: loan-renewal's records went
-    from 12 to 304 (294 of them edge cases), and hello-world's from 3 to 8.
-- **Split withdrawn, 25 October (user: "make the changes as suggested").** Quoting stays;
-  the native list-item split is removed, so one proposal is one claim again.
-  - **Why.** In the four B7 runs the records call authored 3, 12, 8 and 304 records,
-    against 2 to 4 for the same cases with one claim per list. The extra records were
-    unsupported fillers and restatements, and once a runaway enumeration. The evidence is
-    correlational and small; it says requirement-level claims don't pay off while the
-    records call is unbounded (B9).
-  - **Changed.**
-    - [reference_extraction_text.zig](../src/domain/reference_extraction_text.zig) quotes
-      each proposal as one claim. It keeps a per-validation cache of each source's fenced
-      code blocks, which the quote needs for the code-line trimming rule.
-    - `markdown_code_spans.zig` is back to its committed form: `listSegments`, `ListLine`
-      and the shared marker parser are deleted.
-    - The source-omission merge inserts its one claim.
-    - The extraction `citations` guidance again asks for the lines of "the complete
-      claim", and drops "and no others", which pushed toward narrow claims.
-  - **Tests.** The quoting test now asserts one claim per proposal, including a two-item
-    list cited out of order, a heading with a nested list and trimmed indentation. The
-    chunk-boundary case uses two sources, with chunks starting inside and after fenced
-    blocks; a cache keyed to the wrong source fails it. The omission-repair test inserts
-    one claim over two items and checks its quote; the authoring test quotes
-    hello-world's whole chunk; the post-generation advice test uses the default
-    whole-chunk claim again.
-  - **Checks.** `zig build verify` (out-of-repo cache): 164 of 164 steps, 1,941 of 1,941
-    tests. A contract review found no code defect; its document and coverage findings
-    are fixed.
-  - **Live pair, 25 October 16:46** (advisory analyses in `evaluations/e2e/`):
-    - **Hello-world** published, advisory 85.71% (71.43% before), no critical failure.
-      Extraction itself cited one line per claim; reconciliation merged them. The
-      records call wrote 3 records and the native restatement rule deleted one. No
-      filler families. The invented entity persists, and review judged it supported.
-    - **Loan-renewal** failed on budget at 101,424, after the last source-review subject.
-      Generation received one merged quoted claim, yet the records call wrote 40 records:
-      five near-repeats of all eight families, fillers included. Native deletes removed
-      17 exact copies; 23 reached review. The 125,000 budget would probably have let it
-      publish, with filler.
-    - Extraction returned five claims each citing all five lines. Under quoting they are
-      identical; reconciliation marked four as duplicates.
-    - **Reading.** Withdrawing the split didn't stop loan-renewal's records inflation, so
-      claim count isn't its only driver. The records cardinality bound (B9) is the open
-      owner. Identical citation sets are a new, computable duplicate (decision open).
-  - **Open, found in review (predates the withdrawal).** A fenced block whose first or
-    last interior line is blank can escape the exact-value duty: citing every other
-    line quotes the block without that blank line, so the token's bytes aren't in the
-    quote. Whether ADR 0036's "cites in full" means every citable interior line needs a
-    decision.
-- **Next:** the user decides on the commit, and on B9's cardinality bound.
-
-**Approved 25 October 2026: source-quoted claim wording.** The user answered "YES" to
-the recommended option. It needs an ADR amending the §16 extraction contract, written
-with the implementation; the native list-item split below is part of the same ADR.
-
-The model keeps the semantic work: it selects each claim's cited source lines and
-classifies the claim. The engine supplies the wording, taking each claim's statement text
-natively from its cited lines, so no paraphrase can change obligation strength, conditions
-or negation. [ADR 0024](../design/decisions/0024-native-exact-token-authority.md) applies
-the same pattern to exact values.
-
-- **Why this owner.** The weakened claim adds no information the source lacks, because
-  every downstream call already receives the cited source text. It only adds a second,
-  conflicting wording, which the model follows despite explicit guidance. Removing the
-  paraphrase removes the conflict by construction, without keyword rules, for any
-  modality or language.
-- **What it fixes.** Obligation changes that start at extraction and are copied
-  downstream, which is every observed case.
-- **What it doesn't fix.**
-  - List collapse: citations are whole lines, so a merged selection stays merged, though
-    its wording is correct. The native list-item split below was tried and withdrawn.
-  - Repetition across record kinds. B5's cross-kind duplicate rule handles that.
-  - Defects introduced at generation.
-- **Design points for the ADR.**
-  - Normalize list markers and Markdown in the quoted text, and keep ADR 0024's native
-    authority for exact values inside it.
-  - Claim text validation
-    ([reference_extraction_text.zig](../src/domain/reference_extraction_text.zig)) checks
-    a source-derived value instead of model prose.
-  - Decide whether reconciliation statements and signals, which also restate claims,
-    must reference claim text natively. Otherwise they can reintroduce a paraphrase.
-  - A cited line that holds two facts stays one claim.
-- **Alternatives considered.**
-  - Comparing modal verbs between claim and source is a keyword rule. It is fragile with
-    negation and phrasing such as "is required to", which AGENTS.md's anti-overfitting
-    rule forbids.
-  - Review can't fix it. Source review is already told to check obligation strength
-    ([required_authority_description.zig:20](../src/domain/required_authority_description.zig#L20))
-    and missed it, and under ADR 0023 it can't change the output.
-- **Evidence required (§7).**
-  - Offline, accepted and rejected extraction fixtures where the proposed text differs
-    from the cited source, including negation and conditions ("must not", "only if") in
-    unrelated sources.
-  - Then repeated live runs of both cases, counting every attempt.
-
-**Approved 25 October 2026, implemented and withdrawn the same day: one claim per source
-requirement, by native list-item split.** The user directed "apply the best option" for
-B7's list-collapse half, then "make the changes as suggested" to withdraw it (see "Split
-withdrawn" above). The approved text follows as history.
-
-- **Change.** When a claim's citation spans more than one top-level Markdown list item,
-  the engine splits it into one claim per item. Each new claim:
-  - cites its own item's lines;
-  - quotes that item's text, under source-quoted wording;
-  - keeps the merged claim's category, and the token classifications for its own lines.
-
-  A claim inside one item, a heading claim and prose are unchanged. No model call is
-  added.
-- **Why this option.**
-  - Per-item chunking (ADR 0027, reverted on 21 October) gave the model one item per call.
-    That added extraction calls: hello-world rose from 65,896 to 75,669 tokens.
-  - Rejecting a merged claim for a bounded correction costs a call per claim, and the
-    model can merge again.
-  - With source-quoted wording the engine already owns each claim's text. Splitting at the
-    source's own Markdown structure is therefore deterministic, works for any structured
-    source and costs nothing at extraction.
-- **Depends on.** Source-quoted wording, in the same change and the same §16 ADR.
-- **Limits.**
-  - It acts on explicit structure only. Several requirements in one prose sentence or
-    paragraph stay one claim.
-  - If the items of one merged claim need different categories, the copied category is
-    wrong. The ADR decides whether such a split is rejected for correction instead.
-  - Nested list items stay with their top-level item.
-- **Cost interaction.**
-  - Reconciliation still makes four calls, but signals may form more groups. Until B5's
-    single collection lands, each group gets its own records call.
-  - More claims and records also mean more source-review subjects. The 21 October
-    list-item run ran out of budget in source review.
-  - The approved 125,000-token budget (B4) provides that headroom; whether it is enough
-    is unmeasured.
-- **Evidence required (§7).**
-  - Offline:
-    - a merged claim over *n* top-level items becomes *n* claims, with each item's text,
-      citations, category and token classifications;
-    - a claim inside one item, a heading claim, prose and nested items are unchanged.
-  - Then repeated live runs of both cases, counting every attempt.
+- **Weakened obligation, now at generation.** Claims carry the source's "must be able to
+  renew" since ADR 0036, yet generation still writes "may renew": the brief, story and
+  FR-001 in the first 26 October run, the story only in the second. Source review passed
+  it each time. No keyword rule; measure it as a class in B2's labelling, then decide the
+  owner.
+- **Contract-review leftovers** (no observed outcome): stored readback doesn't re-quote
+  claim text from its citations; admission admits a repeated citation ID; the extraction
+  reason's text-repair route has unit coverage only; no synthetic current-schema exchange
+  replaces the retained `compatible` one; `source_selections` naming was left out of scope.
+- **Markdown in claim wording** reaches later calls. Backticks around exact values are
+  removed at admission (Decision 6); other effects are unmeasured.
+- **Decisions:** whether ADR 0036's "cites in full" includes a fenced block's blank first
+  or last interior line (otherwise the token's bytes can fall outside the quote), and
+  whether identical citation sets are a native duplicate.
 
 ### B9. Model output can run away
 
-**Done.** Approved on 17 October: entity records are authored once per feature with the
-applicability decision, and non-entity batches can't emit them. Required `output_limit`
-stays a typed failure; advisory `output_limit` closes that advice as incomplete (B4). The
-2,048-token output allowance was withdrawn on 18 October, and each request now sends its
-catalogue model's documented maximum (16,384 tokens for GPT-OSS-20B; ADR 0011 "Model
-maximum output"). Records are in [Z_FIX05](Z_FIX05.md#b9-records), §9, §11 and §16.
+**Done.** Entity records are authored once per feature; no request carries an output
+allowance below the model's documented maximum; and since ADR 0039 a runaway is re-sent
+once with the identical request at the configured `temperatureRunawayRetry`, outside
+`retry-limit`, and logged. A runaway on the re-send fails required work with
+`RunawayRepeated` and ends advice incomplete (ADR 0040). The records are in
+[Z_FIX05](Z_FIX05.md#b9-records) and
+[Z_FIX05](Z_FIX05.md#b9-runaway-evidence-and-re-send-decision).
 
-Evidence of runaways under schema-constrained decoding at temperature 0.1 (GPT-OSS-20B):
+**Live effect.** One runaway in the four 26 October runs, on hello-world's `Hello, World!`
+(call 21), was recovered by its re-send. Every completed source-review runaway so far
+has been on an exact-value subject (`Renewal refused.`, `Loan renewed!`, `Hello, World!`).
+One recovery is one sample: keep reporting each runaway, its re-send and what the re-send
+returned.
 
-- **17 October.** One record batch wrote 286 mostly invented entity records until the
-  output limit. A source-review call broke its JSON close, then emitted about 48,500
-  characters of blank lines.
-- **18 October 10:44.** A source-review call stopped at Bedrock's then-default 4,096-token
-  cap after a whitespace runaway.
-- **21 October, 60 s deadline.** Three runs failed on a source-review `timeout` (18:17
-  hello-world, 18:45 and 18:52 loan-renewal). A non-streaming response arrives only after
-  generation ends, and a 16,384-token response takes about 37–74 s, so the deadline hid
-  the cause.
-- **21 October, 180 s deadline.** The user raised the request deadline to 180 s
-  (`timeout-ms: 180000` in the Specify workflow, committed in `9719dc7`; since ADR 0030
-  slice 3 the value lives in each catalogue entry's `requestTimeoutMs`). In the 19:13 loan-renewal run, call 24 wrote a valid `supported`
-  finding for `Renewal refused.`, then about 40,000 newline and space characters until the
-  16,384-token limit, in 74.1 s. The engine recorded `output_limit`, closed that advice as
-  incomplete and published. The call cost 19,402 tokens (21% of the budget). The same
-  subject was under review when both earlier loan-renewal runs that day timed out, which
-  suggests, speculatively, a subject-linked trigger.
-- **25 October, step 0 (`269410b`).** Source-review call 28 reviewed the same subject, the
-  exact value `Renewal refused.`. Its reasoning concluded "supported"; it then ran to the
-  16,384-token maximum in 69 s, costing 19,404 tokens.
-  - That advice closed incomplete. Principle review then pushed the run to 109,327
-    tokens, so it ended `WorkflowTokenBudgetExceeded`.
-  - This is a second completed runaway on that subject, so the subject-linked trigger
-    remains a hypothesis with more support. It isn't established.
-- `/evaluate-e2e` found the whitespace pattern on 6 of about 700 retained calls, mostly in
-  source review. That count is advisory analysis.
+Open:
 
-**Decided and implemented 26 October 2026 ([ADR 0039](../design/decisions/0039-configured-temperatures-and-runaway-resend.md)),
-uncommitted.** A runaway (`output_limit`) discards its partial text and re-sends
-the identical request once at the configured `temperatureRunawayRetry`, outside
-`retry-limit`, and logs `model.runaway_resent`. Its response passes exactly the checks
-a first response does. A runaway on the re-send fails required work with
-`RunawayRepeated`; in review it ends that advice incomplete.
-[ADR 0040](../design/decisions/0040-incomplete-review-published-marked-logged.md) then
-publishes incomplete review marked as incomplete in `spec.md` and `reference-context.md`,
-and logs it as `review.incomplete`, and
-[ADR 0041](../design/decisions/0041-failed-run-incomplete-publication.md) makes a failed
-required step publish its validated content as a failed incomplete specification, marked
-and logged; the run still fails. `.sddtoolkit.json` now requires `temperature` and
-`temperatureRunawayRetry` (E2E: `0.1` and `1`). This is the user's recorded exception to
-§7's rule against sampling changes and extra retries; it covers only `output_limit`.
+- **Conflicting with user direction; recommend withdrawal.** Two earlier choices would cap
+  output: a lower per-slot output allowance, and a per-family records cardinality bound.
+  The user directed on 18 October that there be no output token limits and on 25–26
+  October that limits must not discard useful output. Both stay open only until the user
+  confirms their withdrawal.
+- **Claude Haiku 5.5's deadline.** Its catalogue maximum is 128,000 tokens under an
+  interim 180,000 ms deadline; measure it only if the user selects that model.
 
-**Still open.** The choices below are unaffected by ADR 0039.
+### B10. Failed and blocked runs publish nothing
 
-- **Deadline and maximum output.** The 180 s deadline covers GPT-OSS-20B's 16,384-token
-  maximum. The catalogue's Claude Haiku 5.5 entries declare 128,000. If a slot selects
-  that model, a runaway could again end as an unexplained `timeout`, and one completed
-  runaway would exceed the workflow budget (125,000 in the E2E configuration). *Implemented 24 October 2026* (ADR 0030
-  slice 3): each catalogue entry declares its own required `requestTimeoutMs`, so a
-  deadline follows its model. Claude Haiku 5.5 starts at the shared 180,000 ms until its
-  measured maximum-output time replaces it, and the budget point stands.
-- **Lower output allowance.** ADR 0011 permits an optional per-slot `maxOutputTokens`. On
-  18 October the user directed that there be no output token limits (§11), so this needs a
-  new decision.
-- **Bounded correction.** Settled by ADR 0039: no correction, one re-send instead.
-- **Cardinality bound.** Decide whether the closed records schema should bound per-family
-  cardinality. It must not become a disguised size ceiling under ADR 0011.
+**Decided 26 October 2026 ([ADR 0041](../design/decisions/0041-failed-run-incomplete-publication.md));
+docs updated, implementation waiting on four decisions.** A Specify run that fails because
+model work couldn't be completed, or ends `blocked`, should publish only its validated
+content as an incomplete specification, marked in `spec.md` and `reference-context.md` and
+logged as `run.incomplete_published`, while still ending `failed` or `blocked`.
 
-After ADR 0039 lands, live runs should report each runaway, its re-send and what the
-re-send returned, so the re-send's effect is measured. Hello-world has no entities, so §7
-also needs a second case that does.
+A read-only design pass found that the commonest loan-renewal failures (exhausted
+correction, `RepairNoProgress`, the token budget) are runner rejections that end the run
+before any YAML edge, and that publication today requires `ok` or `needs_user`. The
+decisions it needs:
+
+1. **Mechanism:** a YAML-declared workflow-level `failure-output` subgraph, run by the
+   engine through the runner after an eligible failure, with a model-free runner
+   failure-output mode. It amends ADRs 0005, 0009 and 0030.
+2. **Eligibility:** YAML `failed`, `blocked` and `invalid` terminals and the
+   `retry_limit` and `token_budget` rejections; cancellation, authority, logging,
+   capture, operational and deadline failures publish nothing.
+3. **No final requirement IDs** in the incomplete view, as ADR 0017's view already does.
+4. **`workflow/v2`** for the new definition member.
+
+When implemented, two tests that assert a required repeated runaway publishes nothing must
+flip, and `spec.md`'s reader needs a slot for the failure status line beside ADR 0040's.
+
+### B11. Principle citations collapsed after ADR 0042's prompt line
+
+ADR 0042 added "if no principle addresses the subject, it is compatible" to the principle
+prompt, and the 25 October `uncertain` title verdict didn't recur. But citations on
+`compatible` findings fell from 481 of 481 in 33 earlier principle-review responses to 17 of
+76 in the four 26 October runs (three runs cited none). Loan-renewal's second run gave a
+false reason, "No principle governs user-visible behavior descriptions", although the
+supplied user-interface principle covers them.
+
+**Decision:** reword the line so a verdict cites the principle text it rests on whenever
+one applies, for example: "Cite the principle text behind every verdict. Use uncertain only
+when a cited principle applies but compliance can't be decided; a subject no supplied
+principle addresses is compatible, and only then without citations." It amends ADR 0042
+Decision 4.
+
+### B12. Renderer artefacts in published specifications
+
+Deterministic and present in most runs: the acceptance-criterion clause join renders
+"…\., **When**" (`specification_markdown.zig:40-44`), and exact values appear as quoted
+code spans with an extra full stop. These are code defects at the renderer with no
+contract change; they need only the user's go-ahead.
 
 ## 4. Spec workflow simplification
 
@@ -1304,8 +665,8 @@ for example `validate-dispositions`. The incoming paths here carry different dat
 though, so first confirm that the workflow compiler's data-flow checking accepts
 these two joins.
 
-**Note (23 October 2026).** Both pairs are still in the workflow. An ADR 0031 stage
-conversion may absorb them; check that before merging them separately.
+**Note (checked 26 October 2026).** Both pairs are still in the workflow. An ADR 0031
+stage conversion may absorb them; check that before merging them separately.
 
 ## 5. Other carried open work
 
@@ -1445,19 +806,19 @@ own approval.
 
 ### R8. Development acceptance policy
 
-**Implemented offline; human calibration review pending by user decision.**
-[R8 development acceptance](../design/harness/acceptance.md) defines the shared quality
-and critical gate and the per-case terminal outcome. Since 19 October the advisory grader
-is removed from E2E (§17): a published run ends `human_adjudication_required`, and only a
-human-written `human-spec-adjudication/v2` record, applied with the offline
-`zig build adjudicate-spec`, decides acceptance. The record is in
+**Implemented offline; human adjudication and calibration open.** Only a human-written
+`human-spec-adjudication/v2` record, applied with the offline `zig build adjudicate-spec`,
+decides acceptance; a published run ends `human_adjudication_required`. The record is in
 [Z_FIX05](Z_FIX05.md#r8-record).
 
 Open:
 
-- **Adjudication.** No published run has been adjudicated. The 21–22 October reports are
-  `spec-e2e-report/v9`, which the adjudicator reads; reports up to v8 can't be
-  adjudicated.
+- **Adjudication.** No published run has been adjudicated. The 26 October reports are
+  `spec-e2e-report/v10` and can be adjudicated.
+- **Retained v9 reports.** ADR 0039 advanced the report to v10, so this build can't
+  adjudicate the 16 retained v9 runs, and several were made by uncommitted builds.
+  **Decision:** accept that they stay unadjudicated (recommended, since they predate ADRs
+  0038–0043), or adjudicate them on matching builds first.
 - **Calibration.** The [Hello World panel](../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/REVIEW.md)
   (nine specimens) and the
   [loan-renewal panel](../test/integration/fixtures/wf-002-loan-renewal/calibration/REVIEW.md)
@@ -1523,22 +884,12 @@ repair workload.
   in git at `8ed40ba`.
 - **Direct Anthropic provider: implemented** as
   [ADR 0028](../design/decisions/0028-anthropic-messages-provider.md), with Bedrock model
-  families in [ADR 0029](../design/decisions/0029-bedrock-model-families.md).
-  [claude_connector.md](claude_connector.md) is now a historical source document. Open:
-  - ADR 0028 names a new F0009 feature document and a contract §12.3.2, and neither
-    exists yet.
-  - *Resolved 23 October 2026:* ADR 0029 says the shipped E2E cases select Claude
-    Haiku 5.5 with low effort in every slot, but the configuration both cases use,
-    [.sddtoolkit.json](../test/e2e/wf-001-hello-world/.sddtoolkit.json), still selected
-    GPT-OSS-20B, which also failed the compatibility preflight test. The user chose Haiku
-    via Bedrock, and the configuration now matches the ADR. Its deadline is the interim
-    180,000 ms until measured (B9). On 24 October the user switched the slots back to
-    GPT-OSS-20B after every Haiku attempt was denied (ADR 0029, amended).
+  families in [ADR 0029](../design/decisions/0029-bedrock-model-families.md). Open:
+  - ADR 0028 names a new F0009 feature document and a contract §12.3.2; neither exists.
   - ADR 0028's "Live use" still says the policy permits only GPT-OSS-20B; since
     22 October it also names `anthropic` / `claude-haiku-5-5` for generation.
-  - ADR 0028 leaves Claude's response mode (native schema or prompt-only) open until
-    compatibility is measured. No live Claude call has succeeded, and no compatibility
-    probe has been made.
+  - Claude's response mode (native schema or prompt-only) stays open until compatibility
+    is measured; no live Claude call has succeeded.
 - Historical optional provider, reasoning-setting and principle-passage experiments
   are not current tasks.
 
@@ -1563,63 +914,39 @@ repair workload.
 
 ## 6. Recommended order
 
-The 17–22 October sequence and its completed steps are in
-[Z_FIX05 §6](Z_FIX05.md#6-recommended-order-as-of-22-october-2026). Under ADR 0034, Spec
-quality is the critical path, and Plan starts only when the user declares the gate
-passed. Nothing below authorizes a live call; each E2E run needs its own approval.
+Earlier sequences are in [Z_FIX05 §6](Z_FIX05.md#6-recommended-order-as-of-22-october-2026)
+and [Z_FIX05](Z_FIX05.md#6-recommended-order-as-of-26-october-2026). Under ADR 0034, Spec
+quality is the critical path, and Plan starts only when the user declares the gate passed.
+Accuracy comes first; token cost is never a reason to drop a check, and spending that buys
+no quality is removed at its owner. Nothing below authorizes a live call; each E2E run
+needs its own approval.
 
-1. **Adjudicate.** No run counts toward the gate until a human adjudicates a published v9
-   report under R8.
-2. **Measure on a committed build.** Repeat both cases on one committed, unmodified build,
-   counting every attempt (§7). Two pairs have used an unmodified committed build
-   (`7a88804` and `8a600d7`). Use `/evaluate-e2e` for advisory defect origins.
-3. **Model choice is the user's decision (R7).** All live evidence comes from GPT-OSS-20B.
-   The user decides when to change or compare models, and B7 doesn't wait on that. If the
-   user selects Claude Haiku 5.5, measure its latency for its `requestTimeoutMs` first
-   (B9, ADR 0030).
-4. **Implement the approved Spec changes (25 October 2026), each with `/preflight`:**
-   - first, B5's cross-kind restatement in the native duplicate rule, which is
-     independent of the others (done: ADR 0035);
-   - the configurable workflow budget at 125,000 tokens (B4), which gives the later
-     changes room in loan-renewal's live runs (done, uncommitted: ADR 0037);
-   - then B7's source-quoted claim wording, under one ADR amending §16 (done,
-     uncommitted: ADR 0036). Its native list-item split was implemented and withdrawn.
-
-   Quality over cost, but never waste (user, 25 October): token cost is not a reason to
-   drop a check, and spending that buys no quality is removed at its owner.
-5. **Implement the 26 October 2026 decisions, in this order** (approved: "1 yes, 2 yes,
-   3 yes, 4 yes", "update with recommendations and implement"):
-   - ADR 0039 (configured temperatures, the runaway re-send, its logging and identical
-     checks for every retry response) together with ADR 0042 (principle verdicts need
-     citations at response admission, and the prompt defines `uncertain`), sharing
-     `model-request-debug/v13`;
-   - ADR 0040 (incomplete review published, marked and logged);
-   - ADR 0041 (a failed or blocked run publishes its validated content marked
-     incomplete, `specification-state/v20`);
-   - ADR 0043 (model-facing `exact_text` names);
-   - then an approved live pair of both cases, reporting runaways, re-sends and
-     incomplete reviews separately.
-
-   Progress (26 October 2026, uncommitted, each verified with `zig build verify`):
-   ADRs 0039, 0042, 0040 and 0043 are implemented. ADR 0041's mechanism (a declared
-   workflow failure output) awaits the user's decision.
-6. **Then decide the open Spec failure classes:**
-   - B2's finding-type accuracy and false assessments;
-   - B4's experiment stops and qualified scope, before any baseline freeze;
-   - B5's proposed single record collection with native acceptance-criterion coverage;
-   - B9's open choices.
-7. **Architecture, in ADR order and independent of 1–6.** Implement ADR 0030 (A1), as
-   amended on 23 October, before adding operations for another workflow. Slices 1–3 are
-   done; the catalogue deadline already made pre-24-October runs unreadable to replay
-   tools, so W4 uses raw response bytes or newer captures. Adjudicate the existing v9
-   runs before `request-model` lands if it advances the report contract.
-   Convert `prepare-toolchain` (ADR 0031) and record its measure, convert startup
-   (ADR 0032), then convert repairs (ADR 0033). Fold A4's closed reasons and A5's rule
-   style into each conversion, and check whether a conversion absorbs W5's pairs.
+1. **Adjudicate (R8).** No run counts toward the gate until a human adjudicates one. The
+   26 October v10 reports can be adjudicated; decide what happens to the retained v9 runs.
+2. **Decide and implement the 26 October Spec follow-ups**, each with `/preflight`:
+   - B11, the principle prompt rewording;
+   - B5, business-rule guidance;
+   - B12, the renderer artefacts;
+   - B10, ADR 0041, once its four mechanism decisions are made.
+3. **Measure on a committed build.** Repeat both cases on one committed, unmodified build,
+   counting every attempt and reporting runaways, re-sends and incomplete reviews
+   separately (§7). One pair has run on `39a06ea`. Use `/evaluate-e2e` for advisory defect
+   origins.
+4. **Measure review accuracy (B2)** by offline labelling before any change that lets review
+   alter output; label B7's obligation weakening and B6's entity applicability as their
+   own classes.
+5. **Model choice is the user's decision (R7).** All live evidence comes from GPT-OSS-20B.
+6. **Close the remaining Spec decisions:** B4's experiment stops and qualified scope before
+   any baseline freeze; withdrawing B9's two conflicting choices; B7's fenced-block and
+   duplicate-citation questions.
+7. **Architecture, in ADR order and independent of 1–6.** ADR 0030 slice 4 (A1), which
+   absorbs ADR 0039's re-send steps, before adding operations for another workflow; then
+   `prepare-toolchain` (ADR 0031) with its measure, startup (ADR 0032) and repairs
+   (ADR 0033). Fold A4's closed reasons and A5's rule style into each conversion, and check
+   whether a conversion absorbs W5's pairs.
 8. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1
    before promising stronger provenance. Freeze the Phase 2 baseline only after B4's
-   budget and scope decision. B5's proposal replaces its A/C comparison. Gather R6
-   evidence after B2's live effect is measured.
+   decision. Gather R6 evidence after B2's labelling.
 
 ## 7. Acceptance and evidence rules
 
@@ -1677,236 +1004,29 @@ bounded approval, and each E2E run needs its own explicit approval
 ## 8. Record history
 
 - **17–22 October 2026:** see [Z_FIX05 §8](Z_FIX05.md#8-record-history-to-22-october-2026).
-- **23 October 2026, completed work moved:** the user directed updating this record and
-  moving completed items to Z_FIX05.
-  - Moved: §1's dated diagnostics; the A1–A3, A6 and W3 decision records; B2's completed
-    records; B3; B4's completed records; B5's token-only change; B6's prefix resolution;
-    B7's original record; B8; B9's completed records; W1; W2; R8's record; the 17–22
-    October §6 sequence; the §8 history; and §§9–17.
-  - Recorded: B7's trial and revert; ADRs 0028 and 0029; the 21 October deadline change
-    and runaway evidence; R7's policy change; the 21–22 October runs; the follow-ups
-    carried from §§10, 11 and 17.
-  - Rewrote §6.
-  - Elsewhere: added the design.md §32 rows for ADRs 0028 and 0029, pointed the B3
-    links in two calibration READMEs and Z_FIX02 to Z_FIX05, and updated
-    `fixes/README.md`, the fix-records rule and `.claude/known-work.md`.
-- **23 October 2026, ADR 0030 choices settled:** the user directed the best option for
-  each derived choice (A1). ADR 0030 now keeps the kernel orchestrator and YAML release,
-  removes provider token counting, moves the request deadline to each catalogue entry as
-  `requestTimeoutMs`, and lets only `role: advisory` steps map `more` and `blocked`
-  (renamed and made one-directional later the same day; see the next entry). Updated A1,
-  A2, B9 and §6, the affected ADRs, design.md, contracts, features, diagram 16, the
-  README and known-work. No code, workflow YAML or catalogue changed.
-- **23 October 2026, ADR 0030 review fixes:** a contract review of the amendment found
-  factual, pointer and wording defects. Fixed: Claude Haiku 5.5's interim 180,000 ms
-  deadline, the count-path claim, unconditional retained-evidence breakage, ADR 0012's
-  note, contract §9 in the amends list, ADR 0028's named clauses, the catalogue's count
-  operations, the replay deadline, an oversized-deadline rejection and line wrapping.
-- **23 October 2026, one-directional advisory check:** the review found that
-  `assess-support` serves both the required pre-generation review and post-generation
-  advice, so a two-directional `role: advisory` check would fail every run. The user
-  directed "update documentations" with the one-directional form: a step marked
-  `advisory: allowed` maps `more` and `blocked` and may carry both kinds of request, and
-  only an advisory request at an unmarked step is rejected, at preparation, before any
-  attempt. A second review confirmed it safe against the code. Its framing as two
-  `request-model` contract variants was then confirmed (next entry). Updated ADR 0030,
-  ADRs 0005 and 0023, design.md, contracts §§12, 28 and the operation catalogue, F0005,
-  F0006, F0100, A1 and known-work. No code, workflow YAML or catalogue changed.
-- **23 October 2026, shared contract-variant mechanism:** after comparing a shared
-  variant mechanism, separate operations, a compiler special case and a union contract,
-  the user directed "update the documentation around option 1". ADR 0030 builds one
-  mechanism (complete closed variants, one closed selector parameter at compile time,
-  per-variant admission, compiler and runner checks against the compiled variant), and
-  ADR 0033 reuses it; this confirms ADR 0033's derived choice 1. Updated ADRs 0030, 0033
-  and 0005, design.md, F0005, A1, W3 and known-work. No code, workflow YAML or catalogue
-  changed.
-- **23 October 2026, second review of ADR 0030:** a contract review found ADR 0030's
-  selector sentence ("selects no … owner rule") contradicting ADR 0033's owner rules.
-  Fixed: the selector grants no policy, scope or defect identity, and each operation's
-  ADR owns any rule selection and run-time selector check. Also added optional selectors
-  and per-outcome descriptors to the mechanism, registry-wide checks, compiled-graph and
-  publication rechecks, testable acceptance cases, and a loss-localization case; updated
-  ADRs 0005 and 0033, contract 28, F0005, known-work and a stale Z_FIX05 link. ADR 0033's
-  derived choices 2–8 still await confirmation. No code, workflow YAML or catalogue
-  changed.
-- **23 October 2026, `zig build verify` restored after ADR 0029:** verify failed on `main`
-  with 17 failing steps, all from the ADR 0029 change: the baseline harness still built a
-  Region-only transport request, the rubric-evaluator smoke expected the error text from
-  before `TEST_EVALUATION_FAMILY`, the example catalogue had no `family`, the packaging
-  smoke's invalid-Region case used a Region ADR 0029 made valid, a capture test's legacy
-  version edit changed the archive row length, and the compatibility test expected the
-  E2E configuration to select Claude Haiku 5.5. The user chose Haiku via Bedrock for
-  every E2E slot; the other fixes are test and fixture corrections.
-- **23 October 2026, ADR 0030 slice 1 (`5ce2af4`, committed with the verify repair):** the
-  freeze instrumentation and its baseline; A1 records it and the open points for slice 4.
-  The user chose option (b) for the pre-call termination, cancellation and authorization
-  failure baseline. Corrected §1, A6 and §6: the first 21 October pair ran on an
-  unmodified committed build (`7a88804`).
-- **24 October 2026, ADR 0030 slice 2:** provider token counting removed from code,
-  tests, build steps and documentation; A1 records the scope, the kept persisted kind
-  fields and the converted inference-then-authorization closure test.
-- **24 October 2026, ADR 0030 slice 3:** the provider-operation deadline moved to each
-  catalogue entry's `requestTimeoutMs`; A1 and B9 record the scope, versions, shipped
-  values and the freeze recheck.
-- **24 October 2026, Claude Haiku 5.5 route:** the first live Haiku runs on clean `cbabda6`
-  (nine attempts, one call and 0 tokens each) all ended `authorization_denied` while the
-  account's IAM policy and model access were set up. Runs 8 and 9 showed the AU
-  cross-Region profile `au.anthropic.claude-haiku-5-5` routing to `ap-southeast-4`. For the
-  user's Sydney-only requirement, `2014df4` pinned the in-Region ID
-  `anthropic.claude-haiku-5-5`; run 10 also ended `authorization_denied` (Bedrock 403: "not
-  available for this account"). The AWS model card (checked 24 October) lists Claude Haiku
-  5.5 in `ap-southeast-2` only through the AU geo and global profiles. The user then chose
-  the AU profile, accepting routing to `ap-southeast-4` and relaxing the Sydney-only
-  requirement, and the pin was reverted (`7da8ef0`). Run 11, through the AU profile, got the
-  same 403, so the denial is the account's access to the model (an AWS Marketplace
-  subscription is the likely prerequisite), not the Region. The user then switched every
-  E2E slot back to GPT-OSS-20B; ADR 0029 records both changes. All eleven attempts count
-  as attempted workloads.
-- **24 October 2026, GPT-OSS pair on `8a600d7`:** the first runs since ADR 0030 slices 1–3
-  both published on an unmodified committed build: hello-world (24 calls, 63,402 tokens,
-  advisory 89.29%, unchanged from 21 October) and loan-renewal (31 calls, 99,098 tokens,
-  902 under budget, advisory 82.14%, unchanged from 21 October). §1 and A6 record the pair; neither run is
-  adjudicated.
-- **24 October 2026, loan-renewal principles:** loan-renewal copied hello-world's principles,
-  whose "State Ownership: Keep no application state" made the policy review mark the
-  stateful loan behaviour `conflicting` (four findings on `8a600d7`). By user direction the
-  case now supplies its own project principles, `test/e2e/wf-002-loan-renewal/principles/`,
-  for a "Library Lending" project: same seven files and `toolchain.yaml`, with domain-owned
-  in-memory state, atomic operations and typed rejections, and no rule taken from the
-  renewal story. Principles reach only the policy review, not generation. Loan-renewal
-  principle findings before this change come from hello-world's principles.
-- **24 October 2026, test performance P1 and P9 (recorded 25 October):** from the
-  investigation note `improve_test_performance.md`:
-  - `bf8a297` and `2bafdb0` implemented P1, the untraced leak-checking allocator;
-  - `269410b` implemented P9, opt-in test-run reuse, which `verify` refuses.
-  They were committed without the FIX05 record the note requires; Z_FIX05 §18 now holds
-  it. The note's other proposals remain unadopted.
-- **25 October 2026, B7 proposal:** by user direction, B7 records source-quoted claim
-  wording as the recommended option, with the 24 October evidence that every later call
-  received the source text and followed the weakened claim. It needs a decision and an
-  ADR amending §16. §6 now records that model choice is the user's decision, and B7 no
-  longer waits on a model comparison.
-- **25 October 2026, B5 proposal:** by user direction, B5 records the recommended option.
-  It is one complete record collection per feature, each record naming the claims it
-  supports, with native coverage requiring every behavioural claim to be cited by an
-  acceptance criterion or edge case. It replaces the A/C comparison, which can't
-  discriminate while each case forms one group. It needs a decision and an ADR, and it
-  depends on requirement-level claims (B7) and review headroom (B2/B4). §1 and §6 point
-  to it.
-- **25 October 2026, cross-kind duplicate proposal:** by user direction, B5 records the
-  recommended option for repetition across record kinds. It widens the native
-  `duplicate_record` rule to compare statement text across single-statement record kinds
-  and against the user story, keeping its native delete, which makes no model call. It
-  needs a decision and is independent of B7, B2 and B4. Known-work's "Record authoring
-  duplicates" entry carries both B5 proposals.
-- **25 October 2026, approvals:** the user approved three changes. None is implemented
-  yet.
-  - B5's cross-kind restatement in the native duplicate rule ("YES").
-  - B7's source-quoted claim wording ("YES").
-  - For B7's list-collapse half, "apply the best option", recorded as a native split of
-    claims at top-level list-item boundaries. It adds no model call and builds on the
-    quoted wording; ADR 0027's per-item chunking stays withdrawn.
-
-  §1, §6 (a new step 4, "Implement the approved Spec changes") and known-work record
-  them. B7's two changes share one ADR amending §16.
-- **25 October 2026, budget and priority:** the user approved making the workflow token
-  budget configurable and raising it to 125,000 (B4), instead of making source review
-  optional. The priority is "quality over cost, but never waste": token cost is not a
-  reason to drop a check, and spending that buys no quality is removed at its owner.
-  - B4 records the change and its ADR design points.
-  - B2 records that source review stays, and that its waste and accuracy remain open.
-  - B5 and B7 now name the budget as their headroom.
-  - §6 step 4 adds the budget to the approved changes, and step 5 keeps B4's experiment
-    stops and qualified scope open.
-- **25 October 2026, step 0 baseline on `269410b`:** both cases ran once on an unmodified
-  build, as the reference for the approved changes (§6 step 4).
-  - **Hello-world** published: 24 calls, 63,013 tokens, advisory 89.29%. Its text varied
-    noticeably from `8a600d7` with nothing relevant changed, so later rounds need
-    repetitions.
-  - **Loan-renewal** failed `WorkflowTokenBudgetExceeded` at 109,327 tokens. A
-    source-review runaway on `Renewal refused.` cost 19,404 tokens, the second on that
-    subject (B9). Under the approved 125,000 budget it would have published.
-  - Its own principles brought principle review to 19 `compatible` decisions, though the
-    output wasn't admitted.
-
-  Advisory analyses are in `evaluations/e2e/`.
-- **25 October 2026, B5 cross-kind restatement implemented (ADR 0035):** the user's
-  preflight decisions were to delete only covered restatements, leave uncovered ones, and
-  keep the functional requirement (otherwise the earlier record).
-  - **Code:** `restatement`/`restatesStory` in `specification_generation.zig`.
-    Restatements run in the session consistency check after every same-kind check, with
-    a closed `restatement` repair rule using the native delete.
-  - **Tests:** two existing tests now give the deletable kinds their own wording. The
-    R46 competing pair still blocks. The scripted complete story in the integration
-    fixture gained leading words, so review-advice scenarios don't trip the delete. New
-    tests cover the story, superset evidence, ordering and uncovered cases.
-  - **Status:** `zig build verify` passes. The integration scenario for a records-batch
-    delete remains a follow-up.
-- **25 October 2026, B5 live pair on `47723fd`:** both cases published, at advisory 82.14%
-  each.
-  - **Hello-world:** 24 calls and 63,479 tokens. Its score fell from 89.29% because the
-    story wrote "should output" and invented an entity.
-  - **Loan-renewal:** 25 calls and 80,195 tokens. It used fewer review calls because the
-    model wrote fewer records.
-  - **ADR 0035 didn't fire.** Neither records call produced a restating business rule,
-    assumption, non-goal, prohibition or user-visible outcome. The pair is therefore
-    run-to-run variation, not evidence about B5. B5's effect needs repetitions that
-    produce restatements.
-  - **Persisting defects:**
-    - obligation weakening in the story and entity: "may renew", "should output" (B7);
-    - an entity that copies the story or is invented (outside ADR 0035; B6, R6);
-    - a paragraph title;
-    - no refusal acceptance criterion (B5 collection proposal).
-- **25 October 2026, B7 implemented (ADR 0036):** the user directed "implement B7 with
-  option 1". Claims are a category and admission-bounded line IDs; one pure function
-  quotes their wording and, until its withdrawal below, split them at top-level list
-  items. Claim-text and citation repair are deleted.
-  - Implementation found and fixed two defects: the citation bound's scope at handoff,
-    and the omission merge dropping split claims. A contract review then found four
-    major issues and a second review four more. Claims now quote the cited source bytes
-    as written, with list structure from one Markdown owner built once per source. The
-    reader rejects C1 controls, and the split follows "one claim per item" when a
-    heading is cited. The omission bound gained rejected cases. Re-quoting at readback
-    stays open.
-  - **Documents:** ADR 0036 and the design.md §32 row, ADR 0016's amended-by note,
-    F0100 §§3.7–3.8, contracts §§12.7, 13, 16.3–16.4 and 22, text-field composition,
-    diagrams 05 and 21, and known-work.
-  - **Status:** uncommitted at the user's direction. Unit, integration, lint,
-    architecture and full `verify` checks pass.
-- **25 October 2026, B7 live pair on the uncommitted ADR 0036 tree:** by user direction,
-  before deciding on the commit.
-  - **Hello-world** published, advisory 82.14%, with a new escaped-backtick defect.
-  - **Loan-renewal** ran out of budget after a runaway on a preserved-token subject.
-    Its records now cover each requirement, but generation still weakens "must be able
-    to renew".
-  - The B7 block records the details.
-- **25 October 2026, B7 kept and backtick fix:** the user asked whether to fix or
-  abandon B7, and then directed "apply recommendations as per above". B7 is kept. ADR 0036
-  Decision 6 makes admission drop the Markdown code delimiters directly around a
-  recognised exact value. The text-field composition contract and the §32 row record
-  it. The open items that affect no outcome stay open.
-- **25 October 2026, second B7 live pair (with Decision 6):** by user direction.
-  - **Hello-world** published at advisory 71.43%, with a critical failure from filler
-    records; the backtick defect is fixed.
-  - **Loan-renewal** failed on budget after a records runaway of 294 edge cases, a new
-    B9 form.
-  - The B7 block records the details.
-- **25 October 2026, list-item split withdrawn:** the user directed "make the changes as
-  suggested". Source quoting and Decision 6 stay; one proposal is one claim again, and the
-  extraction `citations` guidance again asks for the complete claim. ADR 0036 Decision 3
-  records the withdrawal and its evidence. Unit, integration, lint, architecture and full
-  `verify` checks pass. The B7 block records the details.
-- **25 October 2026, live pair after the split's withdrawal:** by user direction.
-  Hello-world published at advisory 85.71% with no filler records; loan-renewal failed on
-  budget after a 40-record batch with repeats. The B7 block records the details.
-- **25 October 2026, B4 implemented (ADR 0037):** the user directed that the token cap
-  be stored in and loaded from `.sddtoolkit.json`, at 125,000 for E2E. The budget is a
-  required root `workflowTokenBudget`; policy profiles and compiled graphs no longer
-  carry it. The B4 block records the details.
-- **25 October 2026, live pair at the configured 125,000 budget:** by user direction.
-  Both cases published at advisory 85.71%. The B4 block records the details.
-- **25 October 2026, B5 implemented (ADR 0038):** the user approved four choices. Records
-  name their claims within their group, a functional requirement's claims need an
-  acceptance criterion or edge case (a native admission rule that takes protocol
-  correction), and the list-item split is reinstated. One records call per feature is
-  not adopted. The B5 block records the details.
+- **23–25 October 2026:** see [Z_FIX05](Z_FIX05.md#8-record-history-2325-october-2026).
+- **26 October 2026, decisions:** the user decided ADR 0039 (configured `temperature` and
+  `temperatureRunawayRetry`; one re-send after a runaway, logged; every retry response
+  passes the same checks), ADR 0040 (incomplete review published, marked and logged),
+  ADR 0041 (failed and blocked runs publish their validated content, marked and logged),
+  ADR 0042 (principle verdicts need citations at admission; the prompt defines
+  `uncertain`) and ADR 0043 (model-facing `exact_text` names). CLAUDE.md and §7 record the
+  re-send as the one engine exception to the rule against sampling changes and extra
+  retries.
+- **26 October 2026, implementation:** ADRs 0039, 0042, 0040 and 0043 implemented in that
+  order, then a contract review's two major and four minor findings fixed (a false
+  missing-final-text log on a first runaway, exact-value harness measurement, a compiler
+  rule for the re-send route, full re-send identity, logging only an actual re-send,
+  harness temperatures). `zig build verify`: 164 of 164 steps, 1,968 of 1,968 tests.
+  Committed as `39a06ea` and merged as PR #10. ADR 0041 awaits its decisions (B10).
+  [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) holds the
+  record.
+- **26 October 2026, live runs:** two attempts denied by an expired Bedrock key, then two
+  published pairs (§1).
+- **26 October 2026, record review:** by user direction, completed work moved to Z_FIX05
+  §§19–20 (the 25 October state and runs, A1's settled choices and slices 1–3, B4's
+  configured budget, B5's and B7's records, B9's runaway evidence and decision, the
+  23–26 October §6 sequence and the 23–25 October history). The open items were checked
+  for relevance and alignment: B10–B12 are new; B9's lower output allowance and
+  cardinality bound are flagged as conflicting with the user's no-limits direction; B2's
+  separate assessment model is recorded as the user's model choice.

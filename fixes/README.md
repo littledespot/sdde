@@ -17,7 +17,7 @@ Completed implementation, executed comparisons and their supporting dated review
 are in [Z_FIX01](Z_FIX01.md), for earlier FIX01 work; [Z_FIX02](Z_FIX02.md), for
 the FIX01-01, FIX01-02, FIX03 and FIX04 work of 10–16 October 2026 and the
 unimplemented FIX02 proposal; and [Z_FIX05](Z_FIX05.md), for FIX05 work completed by
-22 October 2026 and its dated live diagnostics. Outstanding semantic quality,
+26 October 2026 and its dated live diagnostics. Outstanding semantic quality,
 clarification, resource and live acceptance work remains in FIX05; cleanup does not
 mark it complete.
 
