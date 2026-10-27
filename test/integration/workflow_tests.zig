@@ -1313,12 +1313,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // and ends that advice incomplete.
         .{ .stage = .principle_review, .shape = .uncited_verdict, .repetition = .{ .first_request = 1 } },
         .{ .stage = .principle_review, .shape = .uncited_verdict, .repetition = .persistent },
-        // ADR 0044: a story that weakens its claims' "must" to "may" takes the
-        // existing value repair. Returning the same weakened story is no progress;
-        // rewording it but keeping it weak recurs until the allowance runs out.
-        .{ .stage = .story, .shape = .weakened_obligation, .repetition = .{ .first_request = 1 } },
-        .{ .stage = .story, .shape = .weakened_obligation, .repetition = .persistent },
-        .{ .stage = .story, .shape = .reworded_weakening, .repetition = .persistent },
     };
     const classification_repair_start = 14 + faults.len;
     const reconciliation_start = classification_repair_start + 3;
@@ -1430,8 +1424,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // Principle assignments exist only with a selected principle corpus.
         if (fault != null and fault.?.stage == .principle_review) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = "Make loan deadlines visible to borrowers.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
-        // ADR 0044: the weakening scenarios need a source obligation to weaken.
-        if (fault != null and (fault.?.shape == .weakened_obligation or fault.?.shape == .reworded_weakening)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian must be able to renew a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
             "MOCK Track library loans and display their return deadlines.\n"
@@ -2512,24 +2504,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             .first_request => |count| {
                 try std.testing.expectEqual(@as(usize, 1), driver.fault_requests);
                 try std.testing.expectEqual(@as(usize, count), driver.fault_calls);
-                if (selected_fault.shape == .weakened_obligation) {
-                    // The repaired story keeps the source's "must" and publishes.
-                    const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                    const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-                    const story = for (session.units) |unit| {
-                        if (unit) |completed| if (completed.response == .content and completed.response.content == .primary_user_story) break completed;
-                    } else return error.MissingStory;
-                    try std.testing.expect(story.last_repair != null);
-                    try std.testing.expectEqual(@as(usize, 1), driver.weakened_repairs);
-                    var weakened = false;
-                    var mandatory = false;
-                    for (story.response.content.primary_user_story.value.segments) |segment| if (segment == .literal) {
-                        weakened = weakened or std.mem.indexOf(u8, segment.literal.value, " may ") != null;
-                        mandatory = mandatory or std.mem.indexOf(u8, segment.literal.value, "must") != null;
-                    };
-                    try std.testing.expect(mandatory and !weakened);
-                    try std.testing.expect(view.contains(.published_workflow_output));
-                }
             },
             .every_request => |count| {
                 // Distinct logical requests traverse the same correction step.
@@ -2551,23 +2525,6 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
                 const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
                 try std.testing.expect(!view.contains(.published_workflow_output));
-            } else if (selected_fault.shape == .weakened_obligation or selected_fault.shape == .reworded_weakening) {
-                // Every value repair left the story weak, so the existing repair
-                // allowance ends the run and nothing is published: the same story is
-                // no progress, and a reworded one recurs until the allowance runs out.
-                try std.testing.expectEqual(@as(usize, 1), driver.fault_calls);
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                const exhausted = result.execution_rejected.retry_limit;
-                if (selected_fault.shape == .weakened_obligation) {
-                    try std.testing.expectEqual(.unchanged_repair, exhausted.reason);
-                    try std.testing.expectEqual(@as(usize, 1), driver.weakened_repairs);
-                } else {
-                    try std.testing.expectEqual(.retry_limit, exhausted.reason);
-                    try std.testing.expectEqual(@as(usize, 2), driver.weakened_repairs);
-                }
-                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                try std.testing.expect(!view.contains(.published_workflow_output));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             } else {
                 const advised: @TypeOf(driver).AdviceProjection = if (selected_fault.stage == .principle_review) .principles else .source;
                 const exhausted = if (protocol_advice) driver.protocol_advice.get(advised).?.exhaustion else result.execution_rejected.retry_limit;

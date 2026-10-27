@@ -34,7 +34,7 @@
   reads quoted text. Reconciliation statements and signals stay model text. The overall
   design remains **Proposed design**.
 - **Amended by:** [ADR 0045](0045-entity-description-exact-values-as-code-spans.md)
-  (entity meaning and each relationship are incidental, so Decision 6 turns their
+  (on hold; entity meaning and each relationship are incidental, so Decision 6 turns their
   recognised exact values into exact copies).
 
 ## Context

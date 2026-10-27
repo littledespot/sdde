@@ -1271,11 +1271,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
-  normalized records and covered restatements (ADR 0035), flags a field that weakens a
-  linked claim's `must`/`shall` into `may`/`might`/`should`/`could` (a weaker word in a
-  sentence copied whole from a linked claim is exempt) for the existing value repair, which quotes the
-  claim ([ADR 0044](../decisions/0044-generated-text-keeps-obligation-strength.md)),
-  and keeps questions outside specification content.
+  normalized records and covered restatements (ADR 0035), and keeps questions outside
+  specification content.
 
 - The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`

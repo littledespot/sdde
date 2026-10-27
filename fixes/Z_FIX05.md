@@ -4198,7 +4198,7 @@ Open:
 - **Markdown in claim wording** reaches later calls. Backticks around exact values are
   removed at admission (Decision 6); other effects are unmeasured.
 
-**Decided 27 October 2026 ([ADR 0044](../design/decisions/0044-generated-text-keeps-obligation-strength.md)):**
+**Decided 27 October 2026 (ADR 0044, deleted on 28 October by FIX06 Q1a; its text is at `git show d74fc1f:design/decisions/0044-generated-text-keeps-obligation-strength.md`):**
 a native unit-validation rule flags a generated field that weakens a linked claim's
 `must`/`shall` into `may`/`might`/`should`/`could`, for the existing unit repair. It is a
 closed word list, chosen by the user despite its brittleness; measure its false positives

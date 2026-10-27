@@ -79,7 +79,6 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
     const rule: Rule = .{ .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .value_bound = value_bound, .requirement = switch (rejection.issue.rule) {
         .provenance => return error.UnsafeSpecificationRepair,
         .typed_text, .exact_copy => if (rejection.issue.value_choices) |choices| try choices.correction(allocator, rejection.issue.text_issue orelse return error.InvalidSpecificationRepair) else (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
-        .weakened_obligation => rejection.issue.detail orelse return error.InvalidSpecificationRepair,
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
         .restatement => "Remove only the restatement whose evidence the kept occurrence covers; preserve coverage and sibling order.",
         .entity_membership, .unit_kind, .interpretation => return error.UnsafeSpecificationRepair,
@@ -126,14 +125,12 @@ fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.Evi
 }
 
 fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
-    const task = switch (policy) {
+    const requirement = switch (policy) {
         .membership => if (insert)
             "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
         else
             "Return the complete corrected entity record, preserving its source meaning and all siblings.",
     };
-    // A weakened obligation names its claim and both words (ADR 0044).
-    const requirement = if (rejection.issue.rule == .weakened_obligation) try std.fmt.allocPrint(a, "{s} {s}", .{ task, rejection.issue.detail orelse return error.InvalidSpecificationRepair }) else task;
     const rule: Rule = .{ .requirement = requirement, .text_issue = rejection.issue.text_issue, .value_choices = null, .group = policy };
     var authorization = if (insert)
         try atomic.authorizeInsert(a, owner, candidate.revision, target, .record, facts, rule)
@@ -242,8 +239,7 @@ fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Valida
             _ = p.checkRecord(.model, scratch, validator, context, selected.record) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
     }
-    // A target that still weakens a linked claim's obligation recurs (ADR 0044).
-    return (g.targetWeakening(scratch, context, response, target) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair) == null;
+    return true;
 }
 
 pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {

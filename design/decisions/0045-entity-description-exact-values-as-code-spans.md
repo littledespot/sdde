@@ -1,6 +1,8 @@
 # ADR 0045: Entity meaning and relationships show exact values as code spans
 
-- **Status:** Accepted
+- **Status:** Accepted, on hold (28 October 2026). Not implemented; the contract is
+  unchanged until [FIX06](../../fixes/FIX06.md) Q7 decides it together with ADR 0036
+  Decision 6, which it builds on.
 - **Date:** 2026-10-27
 - **Decision authority:** The user's direction on 27 October 2026, "updated the
   documentation inline with option 1", choosing [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B12's
@@ -54,8 +56,6 @@ the functional requirement, acceptance criterion and outcome.
   code span shows where the value ends.
 - **Lineage.** An occurrence adds its claim to the entity's exact lineage (ADR 0020's
   `E`); that is not a new semantic association.
-- **ADR 0044.** Its marker check never reads exact-value segments, so text inside a
-  recognised value in these fields is no longer read.
 - **Persistence.** The segment representation and contract versions don't change; stored
   readback accepts exact copies in these fields. Earlier stored states get no
   compatibility reader (ADR 0020).

@@ -44,15 +44,13 @@ already made.
     into one claim per top-level list item. It was withdrawn after records inflated, but
     the same five-claim input later produced 2 records, so claim count wasn't the
     driver; B5's scenario rule needs it. ADR 0027's per-item chunking stays withdrawn.
-  - *Implemented 27 October 2026, uncommitted ([ADR 0044](../design/decisions/0044-generated-text-keeps-obligation-strength.md)):*
-    a native word-list check flags a generated field that weakens a linked claim's
-    `must`/`shall`, for the existing unit repair. In the first live pair both triggers
-    did harm (a "must renew" duty, and the source's own "may be renewed only once"
-    replaced). *Fix implemented 27 October, uncommitted:* the repair quotes the claim,
-    and a weaker word in a sentence copied whole from a linked claim sentence doesn't
-    count. On the next pair the repair returned the story unchanged (`RepairNoProgress`,
-    nothing published); the requirement now leads with the action ("Restate linked claim
-    N's obligation as the claim states it: …"). Not yet measured live.
+  - *Tried and removed, 27–28 October 2026:* ADR 0044, a native must/may word-list
+    check with a model repair, did harm on all three live firings (an invented
+    "must renew" duty, an unchanged repair that failed the run, and a story replaced
+    by the quoted claim). The user rejected it as "an extremely poor direction"; the
+    code, tests and ADR were removed on 28 October (FIX06 Q1a), and weakening in
+    generated text is recorded as a model limitation. Never police wording with word
+    lists or phrase rules (AGENTS.md).
   - Details are in Z_FIX05 §21 (B7); the open work is FIX06 Q1, Q7 and Q8.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as

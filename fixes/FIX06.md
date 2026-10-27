@@ -41,12 +41,12 @@ October.
 
 **Findings of the 27 October audits** (read-only; key citations re-checked):
 
-1. **Rejected patches still in the tree.**
+1. **Rejected patches** (removed by Q1a on 28 October 2026).
    - ADR 0044's must/may word list (`src/domain/obligation_strength.zig`), the only
-     production code that reads English words. It did harm on all three live firings: an
+     production code that read English words. It did harm on all three live firings: an
      invented "must renew" duty, an unchanged repair that failed the run, and a story
      replaced by the quoted claim.
-   - [records.prompt.md:9-10](../design/workflows/spec/records.prompt.md), a single-run
+   - The records-prompt line "never restate a requirement claim by claim", a single-run
      patch copying the evaluator's defect label, ignored in two of three later runs.
 2. **Prompt structure.**
    - "Preserve conditions and obligations" appears in 17 places across three layers
@@ -157,7 +157,7 @@ human and decision items, **R** research and backlog.
 
 | Step | Item | Validation | Decisions |
 | --- | --- | --- | --- |
-| 1 | **Q1a** Remove ADR 0044 and the records-prompt line; hold ADR 0045 | Offline | D1.1, D1.2 |
+| 1 | **Q1a** Remove ADR 0044 and the records-prompt line; hold ADR 0045 (**done 28 October**) | Offline | D1.1, D1.2 (decided) |
 | 2 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041) | Offline, byte-identical requests, one run per case | Accepted |
 | 3 | **Q1b** Clean baseline | Measurement set; H1 may start | — |
 | 4 | **Q2** Repair requests carry their step's own instructions | Measurement set, call replay | D2.1 |
@@ -205,7 +205,17 @@ after the Q phase that produces their evidence.
 
 ### Q1. Remove the rejected patches and take the clean baseline
 
-**Q1a changes.**
+**Q1a: done 28 October 2026, uncommitted** (the user's "implement Q1a"). D1.1: ADR 0044
+was deleted, as ADR 0027 was; its evidence stays in Z_FIX05 §21 (B7) and known-work. D1.2:
+the records-prompt line is removed. The seven code and test files were restored to their
+`28ff156` content (the commit before ADR 0044), which differed from `d74fc1f` only by ADR
+0044, and `obligation_strength.zig` was deleted. ADR 0045 is marked on hold, and
+text-field-composition.md is restored to its pre-ADR-0045 text, so the contract describes
+the implemented behaviour until Q7 decides. Verified: `zig build verify` passed (164 of
+164 steps, 1,969 of 1,969 tests) and a contract review found no code issues; its three
+minor documentation findings are fixed.
+
+**Q1a changes (as planned).**
 - Remove ADR 0044 completely:
   - code: `src/domain/obligation_strength.zig`; the `weakened_obligation` rule in
     `specification_candidate.zig`; `weakenedObligation`, `weakened`, `Weakened`,
@@ -672,7 +682,7 @@ request's lifetime. Decide after E1.
 
 | Step | Item | State | Build | Runs | Result |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Q1a | Proposed; D1.1 and D1.2 await the user | — | — | — |
+| 1 | Q1a | Done 28 October 2026 (D1.1, D1.2 decided); awaiting the user's commit | Working tree on `d74fc1f` | Offline only | `zig build verify`: 164 of 164 steps, 1,969 of 1,969 tests; `git diff --check` clean; contract review: no code findings, three minor doc findings fixed |
 | 2 | E0 | Accepted (ADR 0041); not started | — | — | — |
 | 3–14 | Q1b–Q11 | Proposed | — | — | — |
 | — | E1–E7, T1–T4 | Proposed or accepted, not started | — | — | — |

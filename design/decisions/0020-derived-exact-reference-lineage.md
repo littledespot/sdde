@@ -18,7 +18,7 @@
   record task; native exact duties are independent of semantic kind),
   [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
   claims, a subset of its one group; the group stays its association), and
-  [ADR 0045](0045-entity-description-exact-values-as-code-spans.md) (entity meaning and
+  [ADR 0045](0045-entity-description-exact-values-as-code-spans.md) (on hold; entity meaning and
   each relationship take the incidental exact-copy role).
 
 ## Native exact-value recognition

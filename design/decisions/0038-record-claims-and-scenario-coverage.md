@@ -89,11 +89,14 @@ only block.
   - **Business rules restating requirements (amended 26 October 2026).** With one claim
     per list item, every run of both cases from the first live pair on wrote business
     rules that restate a functional requirement claim by claim, and organization scores
-    fell. By the user's direction to "make the changes to address the two area that
-    resulted in lower quality", the records prompt now says: "A business rule states a
-    constraint that no functional requirement in this response already states; never
-    restate a requirement claim by claim." The list split stays: it is what gives a
-    refusal requirement its own claim and scenario.
+    fell. On 26 October a records-prompt line was added against it ("A business rule
+    states a constraint that no functional requirement in this response already states;
+    never restate a requirement claim by claim."). It was a single-run patch, and the
+    27 October 08:31 and 09:40 hello-world runs still restated FR-001 claim by claim, so
+    it was removed on 28 October 2026 ([FIX06](../../fixes/FIX06.md) Q1a, D1.2).
+    Claim-by-claim restatement is left unpatched; FIX06 Q6 and Q8 measure it. The list
+    split stays for now: it is what gives a refusal requirement its own claim and
+    scenario.
   - **Identical records naming different claims** are not evidence-equivalent, so the
     native duplicate rule blocks them as `competing_records` instead of deleting one
     (ADR 0035 Decision 3).
