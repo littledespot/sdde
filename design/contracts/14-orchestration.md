@@ -50,7 +50,13 @@ workflow without branching on workflow names:
    any later project, feature, toolchain, or other workflow-specific setup.
    After each applied child outcome, follow only the matching validated typed
    transition; and
-7. return the compiled terminal outcome.
+7. return the compiled terminal outcome. After an eligible failure (a YAML `failed`,
+   `blocked` or `invalid` terminal, or a `retry_limit` or `token_budget` runner
+   rejection, once a validated reference snapshot exists), first run the definition's
+   declared `failure-output` steps through the same runner-owned invocation in
+   failure-output mode, then return the original failure, which stands even if the
+   failure output fails ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+   Decision 6, not yet implemented).
 
 - It does not parse a workflow definition, compile a graph, construct a node or binding, invoke
   a node directly, inspect domain data, or receive any operation port.

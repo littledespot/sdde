@@ -4,7 +4,7 @@
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026: "The plan will not
   start until spec workflow is stable and producing high quality output, update the
-  documentation". It decides [FIX05](../../fixes/FIX05.md) A6's scope question. It
+  documentation". It decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A6's scope question. It
   replaces A6's proposed bar, which was "until Specify publishes on both development
   cases".
 - **Amends:**

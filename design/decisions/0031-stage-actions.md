@@ -6,7 +6,7 @@
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
   documentation with the recommendations for option B". It decides
-  [FIX05](../../fixes/FIX05.md) A2 after a comparison of two forms. The user ranked the
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A2 after a comparison of two forms. The user ranked the
   criteria: "this is a proof of concept and refactoring to best possible outcomes is the
   most important". The approved recommendation included three rules: single
   responsibility and narrow ports per function, function-local intermediate values, and

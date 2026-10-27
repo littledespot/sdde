@@ -1,6 +1,6 @@
 High-level execution flow for the Specify workflow, including the accepted
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md) review policy.
-The governing design remains proposed; live quality evidence is tracked in FIX05.
+The governing design remains proposed; live quality evidence is tracked in FIX06.
 
 ```mermaid
 flowchart TD

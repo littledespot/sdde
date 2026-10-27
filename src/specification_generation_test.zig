@@ -2407,11 +2407,14 @@ const Fixture = struct {
     }
     fn proposalAllGroups(self: *const Fixture, bytes: []const u8) !spec.Model.AttributedValue {
         const binding = @import("domain/specification_source_binding.zig");
-        const records = @import("domain/reference_support.zig").records(self.context.references);
-        const catalogue = try binding.catalogue(self.allocator, records, .content);
+        const catalogue = try binding.catalogue(self.allocator, @import("domain/reference_support.zig").records(self.context.references), .content);
         const ids = try self.allocator.alloc(references.r.SignalId, catalogue.len);
         for (catalogue, ids) |group, *id| id.* = group.signal_id;
-        const resolved = try binding.resolveGroups(self.allocator, records, self.context.inputs, ids, .content);
+        return self.proposalGroups(bytes, ids);
+    }
+    /// A value selecting exactly these groups, with their resolved claims.
+    fn proposalGroups(self: *const Fixture, bytes: []const u8, groups: []const references.r.SignalId) !spec.Model.AttributedValue {
+        const resolved = try @import("domain/specification_source_binding.zig").resolveGroups(self.allocator, @import("domain/reference_support.zig").records(self.context.references), self.context.inputs, groups, .content);
         var proposed = try self.proposal(bytes);
         proposed.source_group_ids = resolved.source_group_ids;
         proposed.provenance = resolved.selection;
@@ -11540,4 +11543,259 @@ test "coverage counts only the claims each record names" {
     // not (an ADR 0038 limit).
     const story = try attributed(a, behaviours.id, behaviours.value.claim_ids);
     try std.testing.expect(try coverage.checkRecords(a, records, brief, content(story, narrative, &.{ requirement, scenario })) == .valid);
+}
+
+test {
+    _ = @import("domain/obligation_strength.zig");
+}
+
+test "ADR 0044: a field that weakens a linked claim's obligation takes the existing value repair" {
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const candidates = @import("domain/specification_candidate.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A borrower must be able to renew a loan.");
+    defer fixture.deinit();
+    const good = try fixture.proposal("A borrower must be able to renew a loan.");
+    const current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
+    for ([_][]const u8{ "may", "should", "might", "could" }) |weaker| {
+        const weakened = try fixture.proposal(try std.fmt.allocPrint(a, "A borrower {s} renew a loan.", .{weaker}));
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = weakened, .primary_goal = good } } } };
+        const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+        try std.testing.expectEqual(.weakened_obligation, rejection.issue.rule);
+        try std.testing.expectEqualDeep(candidates.Target{ .value = .{ .subject = .description, .field = .value } }, rejection.issue.field.target);
+        // The detail leads with the action, quotes the claim and names both words.
+        const named = try std.fmt.allocPrint(a, "Restate linked claim {d}'s obligation as the claim states it: \"", .{good.provenance.claim_ids[0].ordinal});
+        try std.testing.expect(std.mem.startsWith(u8, rejection.issue.detail.?, named));
+        try std.testing.expect(std.mem.indexOf(u8, rejection.issue.detail.?, "A borrower must be able to renew a loan.") != null);
+        try std.testing.expect(std.mem.indexOf(u8, rejection.issue.detail.?, try std.fmt.allocPrint(a, "This text uses \"{s}\" where the claim uses \"must\".", .{weaker})) != null);
+        // The existing value repair carries the defect as its requirement.
+        const authorization = try repair.authorize(a, current, fixture.context, candidate, rejection);
+        try std.testing.expectEqualStrings(rejection.issue.detail.?, authorization.rule.requirement);
+        const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        for ([_]bool{ true, false }) |restored| {
+            const replacement: repair.Replacement = .{ .value = if (restored) good.value else weakened.value };
+            const parsed = try repair.parse(a, authorization, packet, try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement));
+            const merged = try repair.merge(a, canonical, current, fixture.context, candidate, authorization, parsed, null);
+            const transition = (try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?;
+            try std.testing.expectEqual(@as(@TypeOf(transition.validated.result), if (restored) .resolved else .recurring), transition.validated.result);
+            try std.testing.expectEqual(restored, (try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
+        }
+    }
+    // Accepted: capability wording, a prohibition, and a field that keeps "must".
+    for ([_][]const u8{ "A borrower can renew a loan.", "A borrower may not renew a loan twice.", "A borrower must be able to renew a loan; renewal may happen once." }) |accepted| {
+        const value = try fixture.proposal(accepted);
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = value, .primary_goal = good } } } };
+        try std.testing.expect((try validate_unit.execute(a, current, fixture.context, candidate)) == .valid);
+    }
+    // A record field weakens the claims the record names.
+    {
+        const weakened = try fixture.proposal("A borrower may renew a loan.");
+        const records = try sessionAtRecords(a, &fixture, good);
+        const requirement: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = weakened.value } }, .source_group_ids = weakened.source_group_ids, .provenance = weakened.provenance };
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{requirement} } } };
+        const rejection = (try validate_unit.execute(a, records, fixture.context, candidate)).invalid;
+        try std.testing.expectEqual(.weakened_obligation, rejection.issue.rule);
+        try std.testing.expectEqualDeep(candidates.Target{ .value = .{ .subject = .{ .record = 0 }, .field = .text } }, rejection.issue.field.target);
+    }
+    // A claim with no mandatory marker can't be weakened.
+    {
+        var plain = try Fixture.init(a, "A borrower renews a loan.");
+        defer plain.deinit();
+        const start = (try sessions.initialize(a, .{ .bytes = "selected" }, plain.context)).ready;
+        const value = try plain.proposal("A borrower may renew a loan.");
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = value, .description = value, .primary_goal = value } } } };
+        try std.testing.expect((try validate_unit.execute(a, start, plain.context, candidate)) == .valid);
+    }
+    // An exact value is never read, even when it contains a weaker marker.
+    {
+        var exact = try Fixture.init(a, "The system must display `You may renew` to the borrower.");
+        defer exact.deinit();
+        const start = (try sessions.initialize(a, .{ .bytes = "selected" }, exact.context)).ready;
+        const plain = try exact.proposal("The system must display the renewal message.");
+        const value = try exact.proposal("The system displays You may renew to the borrower.");
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = plain, .description = value, .primary_goal = plain } } } };
+        try std.testing.expect((try validate_unit.execute(a, start, exact.context, candidate)) == .valid);
+        // Linking the exact value's own claim too: its token claim is skipped, not read.
+        var linked = candidate;
+        linked.response.content.brief.description = try exact.proposalAllGroups("The system displays You may renew to the borrower.");
+        try std.testing.expect((try validate_unit.execute(a, start, exact.context, linked)) == .valid);
+    }
+    // Entity fields: the basis, a record field and a relationship each name their target.
+    {
+        var entities = current;
+        entities.completed = sessions.entities_index;
+        const name = try fixture.proposal("Loan");
+        const weak = try fixture.proposal("A loan a borrower may renew.");
+        const record = struct {
+            fn of(id: spec.Model.AttributedValue, meaning: spec.BusinessValue, relationships: []const spec.BusinessValue) spec.Model.RecordProposal {
+                return .{ .content = .{ .entity = .{ .name = id.value, .business_meaning = meaning, .relationships = relationships } }, .source_group_ids = id.source_group_ids, .provenance = id.provenance };
+            }
+        }.of;
+        for ([_]struct { candidate: repair.Candidate, target: candidates.Target }{
+            .{ .candidate = .{ .response = .{ .content = .{ .entities = .{ .disposition = .required, .basis = weak, .records = &.{record(name, good.value, &.{})} } } } }, .target = .{ .value = .{ .subject = .entity_basis, .field = .value } } },
+            .{ .candidate = .{ .response = .{ .content = .{ .entities = .{ .disposition = .required, .basis = good, .records = &.{record(name, weak.value, &.{})} } } } }, .target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .business_meaning } } },
+            .{ .candidate = .{ .response = .{ .content = .{ .entities = .{ .disposition = .required, .basis = good, .records = &.{record(name, good.value, &.{ good.value, weak.value })} } } } }, .target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .{ .relationship = 1 } } } },
+        }) |case| {
+            const rejection = (try validate_unit.execute(a, entities, fixture.context, case.candidate)).invalid;
+            try std.testing.expectEqual(.weakened_obligation, rejection.issue.rule);
+            try std.testing.expectEqualDeep(case.target, rejection.issue.field.target);
+        }
+    }
+}
+
+test "ADR 0044: a field is checked only against the claims it is linked to" {
+    const claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    const source = "MOCK A borrower renews an active loan.\nMOCK The system must refuse renewal of an overdue loan.\n";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // One group of two claims: a record is checked against the claims it names.
+    {
+        var fixture = try Fixture.initClaimsGrouped(a, source, null, .{ .selected = &claims }, &.{&.{ 0, 1 }});
+        defer fixture.deinit();
+        const group = @import("domain/reference_support.zig").records(fixture.context.references).signals[0];
+        const plain = group.value.claim_ids[0];
+        const mandatory = group.value.claim_ids[1];
+        for ([_][]const u8{ "may", "should", "might", "could" }) |weaker| {
+            const value = (try fixture.proposalAllGroups(try std.fmt.allocPrint(a, "MOCK The system {s} refuse renewal of an overdue loan.", .{weaker}))).value;
+            for ([_][]const @import("domain/reference_identity.zig").ClaimId{ &.{plain}, &.{mandatory}, &.{ plain, mandatory } }) |named| {
+                const record: spec.Model.RecordProposal = .{ .content = .{ .business_rule = .{ .text = value } }, .source_group_ids = &.{group.id}, .provenance = .{ .claim_ids = named, .clarification_response_ids = &.{} } };
+                const result = try g.validateCandidate(a, text.validator, fixture.context, .records, .{ .response = .{ .content = .{ .records = &.{record} } } });
+                if (named.len == 1 and named[0].ordinal == plain.ordinal) {
+                    // The unnamed claim's "must" in the same group isn't this record's.
+                    try std.testing.expect(result == .valid);
+                    continue;
+                }
+                try std.testing.expectEqual(.weakened_obligation, result.invalid.rule);
+                try std.testing.expectEqualDeep(@import("domain/specification_candidate.zig").Target{ .value = .{ .subject = .{ .record = 0 }, .field = .text } }, result.invalid.field.target);
+                try std.testing.expect(std.mem.startsWith(u8, result.invalid.detail.?, try std.fmt.allocPrint(a, "Restate linked claim {d}'s obligation as the claim states it: \"", .{mandatory.ordinal})));
+                try std.testing.expect(std.mem.indexOf(u8, result.invalid.detail.?, "The system must refuse renewal of an overdue loan.") != null);
+                try std.testing.expect(std.mem.indexOf(u8, result.invalid.detail.?, try std.fmt.allocPrint(a, "This text uses \"{s}\" where the claim uses \"must\".", .{weaker})) != null);
+            }
+        }
+    }
+    // Two groups: a narrative field ignores a "must" in a group it didn't select.
+    {
+        var fixture = try Fixture.initClaimsGrouped(a, source, null, .{ .selected = &claims }, &.{ &.{0}, &.{1} });
+        defer fixture.deinit();
+        const signals = @import("domain/reference_support.zig").records(fixture.context.references).signals;
+        const plain = try fixture.proposalGroups("MOCK A borrower renews an active loan.", &.{signals[0].id});
+        const weakened = "MOCK The system may refuse renewal of an overdue loan.";
+        for ([_]references.r.SignalId{ signals[0].id, signals[1].id }, [_]bool{ false, true }) |selected, flagged| {
+            const description = try fixture.proposalGroups(weakened, &.{selected});
+            const result = try g.validateCandidate(a, text.validator, fixture.context, .brief, .{ .response = .{ .content = .{ .brief = .{ .title = plain, .description = description, .primary_goal = plain } } } });
+            if (!flagged) {
+                try std.testing.expect(result == .valid);
+                continue;
+            }
+            try std.testing.expectEqual(.weakened_obligation, result.invalid.rule);
+            try std.testing.expectEqualDeep(@import("domain/specification_candidate.zig").Target{ .value = .{ .subject = .description, .field = .value } }, result.invalid.field.target);
+        }
+    }
+}
+
+test "ADR 0044: a field sentence copied from a linked claim is the source's own wording" {
+    const claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
+    };
+    const source = "MOCK A borrower must be able to renew an active loan.\nMOCK A loan may be renewed only once.\n";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // One group: a narrative field linked to both claims.
+    var fixture = try Fixture.initClaimsGrouped(a, source, null, .{ .selected = &claims }, &.{&.{ 0, 1 }});
+    defer fixture.deinit();
+    const good = try fixture.proposalAllGroups("MOCK A borrower must be able to renew an active loan.");
+    for ([_][]const u8{ "MOCK A loan may be renewed only once.", "mock a loan may be  renewed only once." }) |copied| {
+        const description = try fixture.proposalAllGroups(copied);
+        const result = try g.validateCandidate(a, text.validator, fixture.context, .brief, .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = description, .primary_goal = good } } } });
+        try std.testing.expect(result == .valid);
+    }
+    // A paraphrase is the field's own wording and is checked.
+    const paraphrase = try fixture.proposalAllGroups("MOCK A loan may be renewed once.");
+    const result = try g.validateCandidate(a, text.validator, fixture.context, .brief, .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = paraphrase, .primary_goal = good } } } });
+    try std.testing.expectEqual(.weakened_obligation, result.invalid.rule);
+    try std.testing.expect(std.mem.indexOf(u8, result.invalid.detail.?, "MOCK A borrower must be able to renew an active loan.") != null);
+
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    // An entity relationship that copies its group's sentence passes; a paraphrase is flagged.
+    {
+        var entities = current;
+        entities.completed = sessions.entities_index;
+        const name = try fixture.proposalAllGroups("Loan");
+        for ([_][]const u8{ "MOCK A loan may be renewed only once.", "MOCK A loan may be renewed once." }, [_]bool{ false, true }) |relationship, flagged| {
+            const value = (try fixture.proposalAllGroups(relationship)).value;
+            const entity: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = name.value, .business_meaning = good.value, .relationships = &.{value} } }, .source_group_ids = name.source_group_ids, .provenance = name.provenance };
+            const outcome = try validate_unit.execute(a, entities, fixture.context, .{ .response = .{ .content = .{ .entities = .{ .disposition = .required, .basis = good, .records = &.{entity} } } } });
+            if (!flagged) {
+                try std.testing.expect(outcome == .valid);
+                continue;
+            }
+            try std.testing.expectEqual(.weakened_obligation, outcome.invalid.issue.rule);
+            try std.testing.expectEqualDeep(@import("domain/specification_candidate.zig").Target{ .value = .{ .subject = .{ .record = 0 }, .field = .{ .relationship = 0 } } }, outcome.invalid.issue.field.target);
+        }
+    }
+    // A repair that copies the source sentence resolves the defect.
+    {
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = good, .description = paraphrase, .primary_goal = good } } } };
+        const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+        const authorization = try repair.authorize(a, current, fixture.context, candidate, rejection);
+        const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const copied = try fixture.proposalAllGroups("MOCK A loan may be renewed only once.");
+        const parsed = try repair.parse(a, authorization, packet, try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, .{ .value = copied.value }));
+        const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
+        const merged = try repair.merge(a, canonical, current, fixture.context, candidate, authorization, parsed, null);
+        try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?.validated.result);
+    }
+}
+
+test "ADR 0044: an entity record repaired through its membership route keeps the defect and recurs while weak" {
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "A borrower must be able to renew a loan.");
+    defer fixture.deinit();
+    const basis = try fixture.proposal("A borrower must be able to renew a loan.");
+    var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
+    current.completed = sessions.entities_index;
+    const candidate: repair.Candidate = .{ .response = .{ .content = .{ .entities = .{ .disposition = .required, .basis = basis } } } };
+    const missing = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+    try std.testing.expectEqual(.entity_membership, missing.issue.rule);
+    const insert = try repair.authorize(a, current, fixture.context, candidate, missing);
+    const entity = struct {
+        fn of(source: spec.Model.AttributedValue, meaning: []const u8) spec.Model.RecordProposal {
+            return .{ .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Loan" } }} }, .business_meaning = .{ .segments = &.{.{ .literal = .{ .value = meaning } }} }, .relationships = &.{} } }, .source_group_ids = source.source_group_ids, .provenance = source.provenance };
+        }
+    }.of;
+    const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
+    const inserted = try repair.merge(a, canonical, current, fixture.context, candidate, insert, .{ .record = entity(basis, "A loan a borrower may renew.") }, null);
+    // The inserted record still weakens the basis claim's "must": it recurs.
+    try std.testing.expectEqual(.recurring, (try repair.retryValidation(a, text.validator, current, fixture.context, inserted)).?.validated.result);
+    const weakened = (try validate_unit.execute(a, current, fixture.context, inserted)).invalid;
+    try std.testing.expectEqual(.weakened_obligation, weakened.issue.rule);
+    try std.testing.expectEqualDeep(@import("domain/specification_candidate.zig").Target{ .record = 0 }, weakened.issue.repair_target.?);
+    // The record repair carries the claim and both words.
+    const correction = try repair.authorize(a, current, fixture.context, inserted, weakened);
+    try std.testing.expect(correction.target == .record);
+    try std.testing.expect(std.mem.endsWith(u8, correction.rule.requirement, weakened.issue.detail.?));
+    // Reworded but still weak recurs; restoring "must" resolves.
+    for ([_][]const u8{ "A loan a borrower should renew.", "A loan a borrower must be able to renew." }, [_]bool{ false, true }) |meaning, restored| {
+        const merged = try repair.merge(a, canonical, current, fixture.context, inserted, correction, .{ .record = entity(basis, meaning) }, null);
+        try std.testing.expectEqual(@as(@TypeOf((try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?.validated.result), if (restored) .resolved else .recurring), (try repair.retryValidation(a, text.validator, current, fixture.context, merged)).?.validated.result);
+        try std.testing.expectEqual(restored, (try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
+    }
 }

@@ -799,7 +799,7 @@ rather than copied into this feature document.
 **Implementation**
 
 - The logging service and stream lifecycle are implemented; production Specify
-  integration remains open ([FIX05](../../fixes/FIX05.md)).
+  integration remains open ([FIX06](../../fixes/FIX06.md#wider-scope-retained)).
 - The workflow-definition schema supplies `WorkflowShortcode`, the registry validates
   uniqueness, and the runner-created `WorkflowLog` producer binding carries it.
 - The F0001 logging shape supplies every configurable user choice, and all operational

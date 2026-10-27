@@ -154,6 +154,13 @@ Logging rejection prevents the re-send. The temperature each attempt sent is rec
 its request description (`model-request-debug/v13`), not in a log field. A re-send that
 succeeds removes neither event.
 
+At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt
+stream, for the runaway attempt and for its re-send: the assembled request, its request
+description (both configured temperatures and the sampling), the provider request with
+the temperature sent, and the complete returned output with its stop reason and token
+counts. A repeated runaway's output is captured before the failure events and the stop.
+Higher levels log only the events.
+
 When post-generation advice closes incomplete, the runner emits one warning
 `review.incomplete`, with the incomplete-advice reason as its diagnostic code and the
 number of unassessed subjects as its count

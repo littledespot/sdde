@@ -12,8 +12,8 @@ flowchart TD
     WRITEFAIL -. Fresh invocation .-> START
     VALIDATE -->|Invalid| FAILED["End failed;<br/>discard candidate output"]
     RESULT -->|Needs user| CLARIFY["Preserve clarification questions and answers;<br/>publish no partial successful output"]
-    RESULT -->|Failed| FAILKIND{"Model work could not be completed,<br/>after a validated reference snapshot?"}
-    FAILKIND -->|Yes| PARTIAL["Log run.incomplete_published;<br/>publish validated content marked incomplete;<br/>end failed or blocked (ADR 0041)"]
+    RESULT -->|Failed or invalid| FAILKIND{"Eligible failure (ADR 0041),<br/>after a validated reference snapshot?"}
+    FAILKIND -->|Yes| PARTIAL["Run the declared failure output, model-free:<br/>log run.incomplete_published;<br/>publish validated content marked incomplete;<br/>end failed or blocked (ADR 0041)"]
     FAILKIND -->|No| FAILED
     PARTIAL -. Later invocation .-> START
     RESULT -->|Blocked| BLOCKKIND{"After a validated reference snapshot?"}

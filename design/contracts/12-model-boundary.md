@@ -413,7 +413,8 @@ findings. Only complete native collection validation permits authority advanceme
   output allowance below the model's own maximum: Bedrock requests send the
   catalogue's documented maximum. A provider-applied stop is logged with its reason
   under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output).
-- A runaway, a provider `output_limit` stop, discards its partial text and re-sends the
+- A runaway, a provider `output_limit` stop, discards its partial text as a candidate
+  (at `debug` it is logged in full, §27) and re-sends the
   identical request once, changing only the temperature to the configured
   `temperatureRunawayRetry`
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). The

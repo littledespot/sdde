@@ -50,7 +50,7 @@ source, copy or edit `.env.e2e`; the launchers load it.
 - `test/integration/` and `test/harness/`: offline scenarios and the E2E harness.
   `test/e2e/`: live cases.
 - `design/contracts/`: detail for each design section. `design/decisions/`: ADRs.
-- [fixes/FIX05.md](fixes/FIX05.md): the sole active fix record.
+- [fixes/README.md](fixes/README.md) names the active fix record.
 
 ## Current project state
 
@@ -117,6 +117,7 @@ criteria, then only the sections for the work area. Section *N* is detailed in
   policy only when the task explicitly includes it.
 - Get explicit approval before changing a production dependency, publishing,
   writing externally, acting destructively or materially expanding scope.
+- Never stage, commit or push unless the user asks.
 - Preserve existing user changes; make no unrelated edits in a dirty worktree.
 
 ## Before editing
@@ -152,8 +153,8 @@ A small non-semantic documentation fix needs none of this.
 ## Anti-overfitting rule
 
 - Never fix a cross-cutting invariant with a branch for one caller, workflow,
-  domain, format, framework, token, filename, fixture or example. The owner is the
-  narrowest shared contract covering the whole failure class.
+  domain, format, framework, token, filename, fixture, example or model wording. The
+  owner is the narrowest shared contract covering the whole failure class.
 - Name the violated invariant and inspect everything it governs, including
   validators, repair and recovery paths; change shared contracts across stages.
 - Domain components contribute typed facts or evidence to shared mechanisms; they
@@ -162,6 +163,30 @@ A small non-semantic documentation fix needs none of this.
   negative tests and approval.
 - Test the reported example and unrelated members of the same failure class. If the
   owning contract is unclear, ask for the decision.
+
+## Model output, prompts and evidence
+
+- Deterministic code computes only what it can compute reliably: structure, IDs,
+  links, schemas and exact source bytes. It never judges the meaning of prose with
+  word lists, phrase rules or punctuation heuristics, and no test enumerates model
+  phrasing.
+- Prompts and model-facing guidance state the task. Each instruction has one owner;
+  prompts carry no engine vocabulary, restated engine-enforced rules or case-specific
+  wording.
+- A model limitation under a coherent contract is a valid result; report it. Never
+  work around it with case-, field- or model-specific rules, sampling changes, extra
+  retries, a second model or a weaker admission rule. The recorded exceptions are the
+  standalone evaluator's one mechanical correction (harness only, user decision of
+  18 October 2026) and ADR 0039's single runaway re-send (user decision of 26 October
+  2026); report runaways and re-sends separately.
+- Decide a rule, prompt or contract change on both development cases, with repeated
+  runs on one committed build; a single run never decides it. Never tune on the
+  sixteen reserved qualification features. Count budget-stopped, malformed and
+  exhausted runs as attempted workloads.
+- Report separately: implementation complete, mechanical checks passed, semantic
+  benefit demonstrated, brittleness reduced, scope qualified. Finding-type accuracy is
+  the share of review findings whose type matches a frozen, source-based label; a real
+  defect reported with the wrong type is a harmful diagnosis.
 
 ## Non-negotiable engine boundaries
 
@@ -259,9 +284,13 @@ and approval.
   publication writes, interruption, stale approval and retry exhaustion.
 - Unit and integration tests are not E2E evidence. Keep the harnesses separate;
   live E2E needs a named case and explicit user approval before each run.
-- E2E runs the full production path with the real configured LLM and the required
-  rubric assessment. Nothing scripted substitutes; if it cannot finish, report the
-  unmet criteria.
+- E2E runs the full production path with the real configured LLM. Nothing scripted
+  substitutes; if it cannot finish, report the unmet criteria.
+- No model grades an E2E run. Acceptance comes only from a human-written
+  `human-spec-adjudication/v2` record applied with `zig build adjudicate-spec`; never
+  write that record or present advisory analysis as acceptance. Write analysis only
+  under the Git-ignored `evaluations/`; run directories under `zig-out/` are
+  immutable evidence.
 - When packaging or runtime behaviour changes, run the packaged executable from a
   clean directory (`zig build smoke`).
 
@@ -298,6 +327,7 @@ approved deviations.
 | **Policy weakening:** a schema, validator, path rule, gate, repair boundary, test or architecture rule loosened for one case | Explicit typed policy with accepted and rejected tests |
 | **Authority bypass:** raw model paths or commands, generated-view authority, stale approvals, completion without evidence | The engine's typed validation, approval and publication flow |
 | **Packaged-executable regression:** source-relative, current-directory, dynamic-loading or unpackaged-asset assumptions | Explicit asset and configuration ownership, proven by the clean-directory test |
+| **Prose heuristic:** a word, phrase or punctuation rule over model output, or a prompt patched after one run | Report the model limitation, or change a structural contract decided on repeated runs |
 
 ## Instruction maintenance
 

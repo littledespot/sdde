@@ -122,6 +122,17 @@ Typed content covers these concerns; each concern does not require a separate ca
   support plus exact segments through the shared reference owner.
 - The model does not reproduce that determined union; user answers never receive fabricated
   reference citations.
+- Native unit validation flags a generated field that weakens a mandatory obligation of
+  a claim it is linked to (a non-entity record's named claims; an entity record's or
+  a narrative field's selected groups; in entity-membership repair, the feature basis's
+  fixed groups): the claim states `must` or `shall`, and the field's own prose states `may`,
+  `might`, `should` or `could` and neither mandatory word. Exact values are never read; a
+  marker followed by `not` or `never` in the same sentence (sentences end at `.!?;:`)
+  doesn't count, and neither does a weaker marker in a whole sentence copied from a whole
+  sentence of a linked claim (ignoring case, whitespace and list markers). The
+  `weakened_obligation` defect names the claim and both words and takes the existing
+  value repair, whose requirement quotes the claim's text
+  ([ADR 0044](../decisions/0044-generated-text-keeps-obligation-strength.md)).
 - Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is
   never misrepresented as deterministic proof.
 - For explicit path/filename/URI references the model may select a unit-allowlisted

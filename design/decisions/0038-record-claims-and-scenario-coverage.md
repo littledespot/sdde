@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/FIX05.md) B5: "implement B5 as per recommendation", then
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B5: "implement B5 as per recommendation", then
   "APPROVED. Implement B5" for four choices:
   1. each record names the claims it supports, picked from its batch's claims, with the
      group staying the record's link to the source;

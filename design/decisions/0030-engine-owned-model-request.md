@@ -9,7 +9,7 @@
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
-  decides [FIX05](../../fixes/FIX05.md) A1 after a review of the pros and cons of keeping
+  decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A1 after a review of the pros and cons of keeping
   the 16-step `model-request-body` subgraph. The user's stated goal is simpler workflow
   YAML.
 - **Amendment authority:** On 23 October 2026 the user asked for "the best possible
@@ -76,6 +76,11 @@
   step's `retry-limit`. A runaway on the re-send fails a required step; an advisory one
   ends its advice incomplete ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). Until
   `request-model` lands, the explicit request-lifecycle steps carry the re-send.
+- **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (27 October
+  2026, not yet implemented): exhausting a required request's correction stays a terminal
+  runner rejection, not a YAML outcome, but after it (and after a `RepairNoProgress` or
+  token-budget rejection) the engine may run the definition's declared, model-free
+  failure output, then returns the original failure.
 
 ## Context
 

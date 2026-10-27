@@ -8,7 +8,8 @@ suffixes and separate operation-version fields, with no aliases. See
 [implementation status](#implementation-status).
 
 **Compatibility:** None. This pre-release increment accepts only the exact
-concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
+concise v1 YAML contract; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+replaces it with `workflow/v2` when implemented ([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit
 default, source example, or packaged fallback.
 
@@ -197,6 +198,16 @@ Every definition contains these exact concise fields:
 | `resources` | Optional map of concise local aliases to bounded workflow-root-relative resource names. |
 | `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
+
+**`workflow/v2` (ADR 0041 Decision 6, accepted 27 October 2026, not yet implemented).**
+`schema` becomes the constant `workflow/v2`, and the root gains one optional member:
+
+| Field | Meaning |
+| --- | --- |
+| `failure-output` | Local ID of one `subgraphs` entry that the engine runs through the runner after an eligible failure, then returns the original failure. It holds no model capability, uses only registered snapshot and incomplete-publication operations, and ends in its publication step. Only Specify declares one. |
+
+Every definition, the formal schema and every fixture move to v2 together; `workflow/v1`
+then rejects, with no compatibility reader.
 
 - `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a file.
 - A resource name is declarative input resolved only beneath the authorized
@@ -765,6 +776,10 @@ transitions and their existing native authority.
   terminal for every declared outcome, including after subgraph expansion. No
   later pure, filesystem, model, logging or publication operation is permitted;
   preparation selects the validated `ok` or `needs_user` terminal before writing;
+- under ADR 0041 (not yet implemented), a declared `failure-output` names an existing
+  subgraph that holds no model capability, uses only registered snapshot and
+  incomplete-publication operations, and ends in its publication step, whose terminal
+  is the recorded failure;
 - every terminal target preserves its source tag exactly, and graph policy
   cannot discard a failure, invalid result, user-input need, block, or
   cancellation along a later branch;

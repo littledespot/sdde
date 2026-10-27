@@ -278,7 +278,7 @@ For scored criteria, the percentage is:
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in
-  judge inputs. Human review and live calibration are tracked in FIX05 R8.
+  judge inputs. Human review and live calibration are tracked in FIX06 (H1, H3; former FIX05 R8).
 
 ## Attempts and failures
 

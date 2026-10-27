@@ -201,7 +201,7 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
         r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationUnit;
         r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationUnit;
     };
-    const bound = proposed.value_bound orelse return result;
+    const bound = proposed.value_bound orelse return weakenedObligation(a, context, proposed.response, result);
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -216,7 +216,74 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
     const r = @import("reference_reconciliation.zig");
     r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationUnit;
     r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationUnit;
+    return weakenedObligation(a, context, proposed.response, result);
+}
+
+/// ADR 0044: an admitted field that weakens a linked claim's mandatory obligation
+/// is a value defect for the existing unit repair. Stored readback is unchanged.
+fn weakenedObligation(a: std.mem.Allocator, context: provenance.Context, proposed: Response, result: Validation) Error!Validation {
+    if (result.valid.response != .content) return result;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const singletons: []const candidate.Subject = switch (result.valid.response.content) {
+        .brief => &.{ .title, .description, .primary_goal },
+        .primary_user_story => &.{.story},
+        .entities => &.{.entity_basis},
+        .records => &.{},
+    };
+    for (singletons) |subject| if (try targetWeakening(arena.allocator(), context, proposed, .{ .value = .{ .subject = subject, .field = .value } })) |found| return weakened(a, result.valid.unit, proposed, found);
+    for (0..(if (recordCollection(.model, proposed.content)) |records| records.len else 0)) |index| {
+        if (try targetWeakening(arena.allocator(), context, proposed, .{ .record = index })) |found| return weakened(a, result.valid.unit, proposed, found);
+    }
     return result;
+}
+fn weakened(a: std.mem.Allocator, unit: Unit, proposed: Response, found: Weakened) Error!Validation {
+    const selected: candidate.Target = .{ .value = found.target };
+    const observed = candidate.select(proposed, selected) catch return error.InvalidSpecificationUnit;
+    return .{ .invalid = .{ .unit = unit, .field = .{ .target = selected }, .rule = .weakened_obligation, .observed = observed, .detail = try @import("obligation_strength.zig").requirement(a, found.found) } };
+}
+
+pub const Weakened = struct { target: @FieldType(candidate.Target, "value"), found: @import("obligation_strength.zig").Weakening };
+
+/// ADR 0044: the first field of one target that weakens a mandatory obligation of a
+/// claim it is linked to: a singleton's selected groups' claims, or the claims its
+/// record carries. Values are recognized first, so exact values are never read.
+/// Admission and repair revalidation share this one check.
+pub fn targetWeakening(scratch: std.mem.Allocator, context: provenance.Context, response: Response, target: candidate.Target) Error!?Weakened {
+    if (response != .content) return error.InvalidSpecificationUnit;
+    const references = @import("reference_support.zig").records(context.references);
+    const subject: candidate.Subject = switch (target) {
+        .provenance => return error.InvalidSpecificationUnit,
+        .attributed => |subject| subject,
+        .value => |selected| if (selected.subject == .record) return recordWeakening(scratch, references, response, selected.subject.record, selected.field) else selected.subject,
+        .record => |index| return recordWeakening(scratch, references, response, index, null),
+    };
+    const value = candidate.attributedValue(.model, response, subject, .value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    const field = candidate.singletonTextField(subject) catch return error.InvalidSpecificationUnit;
+    const recognized = try provenance.recognizeValue(scratch, references, value.value, field, null);
+    const found = (try weakens(references.items, value.provenance.claim_ids, recognized)) orelse return null;
+    return .{ .target = .{ .subject = subject, .field = .value }, .found = found };
+}
+/// One field of a record, or its first weakened field when none is selected.
+fn recordWeakening(scratch: std.mem.Allocator, references: @import("reference_support.zig").Records, response: Response, index: usize, only: ?candidate.ValueField) Error!?Weakened {
+    const records = recordCollection(.model, response.content) orelse return error.InvalidSpecificationUnit;
+    if (index >= records.len) return error.InvalidSpecificationUnit;
+    const claim_ids = records[index].provenance.claim_ids;
+    switch (try provenance.recognizeRecord(scratch, references, records[index].content, null)) {
+        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+            if (comptime field.type == spec.BusinessValue) {
+                const selected = @unionInit(candidate.ValueField, field.name, {});
+                if (only == null or std.meta.eql(only.?, selected)) if (try weakens(references.items, claim_ids, @field(fields, field.name))) |found| return .{ .target = .{ .subject = .{ .record = index }, .field = selected }, .found = found };
+            } else for (@field(fields, field.name), 0..) |relationship, position| {
+                const selected: candidate.ValueField = .{ .relationship = position };
+                if (only == null or std.meta.eql(only.?, selected)) if (try weakens(references.items, claim_ids, relationship)) |found| return .{ .target = .{ .subject = .{ .record = index }, .field = selected }, .found = found };
+            }
+        },
+    }
+    return null;
+}
+fn weakens(items: @import("reference_reconciliation.zig").Items, claim_ids: []const @import("reference_identity.zig").ClaimId, value: spec.BusinessValue) Error!?@import("obligation_strength.zig").Weakening {
+    return @import("obligation_strength.zig").weakening(items, claim_ids, value.segments) catch error.InvalidSpecificationUnit;
 }
 
 /// Revalidate complete canonical evidence; never erase and regenerate a corrupt union.

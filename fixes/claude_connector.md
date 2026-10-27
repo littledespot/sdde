@@ -10,7 +10,7 @@ Anthropic Messages API directly. It changes provider architecture, so it needs a
 accepted ADR defining the implementation scope before any code change. That ADR
 must distinguish bounded diagnostic enablement from production qualification;
 evidence-dependent decisions in §10 close at the gates in §8. It is not an active
-backlog: [FIX05](FIX05.md) is the sole active fix record under the
+backlog: [FIX06](FIX06.md) is the sole active fix record under the
 [fix-record convention](README.md). Once accepted, its normative content moves into
 an ADR and a feature document (§9), and implementation progress is recorded in FIX05.
 It authorizes no live call, no E2E run and no production dependency. The governing

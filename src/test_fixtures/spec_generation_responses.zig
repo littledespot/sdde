@@ -38,6 +38,10 @@ fn falseConflict(mode: ?SourceLoss) bool {
 
 pub const PrincipleFault = enum { recover, repeated, alternating };
 pub const Options = struct {
+    /// ADR 0044: the story binds a claim stating "must" and writes "may"; a
+    /// story value repair restores "must" once, returns the same weakened story
+    /// persistently, or rewords it but keeps it weak.
+    weakened_story: ?enum { once, persistent, reworded } = null,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     disposition_sequence: ?enum { recover, exhaust } = null,
@@ -390,7 +394,13 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
                     const auth = state.authorization;
                     if (auth.operation == .replace and auth.operation.replace == .value) {
-                        const wire = try @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, value.value) });
+                        const story_repair = options.weakened_story != null and (try @import("../domain/specification_session.zig").unit(current.completed)) == .primary_user_story;
+                        const repaired = if (story_repair) (try obligationValue(allocator, all, dispositions, switch (options.weakened_story.?) {
+                            .once => null,
+                            .persistent => "may",
+                            .reworded => if (states(auth.operation.replace.value, " may ")) "should" else "may",
+                        })).value else value.value;
+                        const wire = try @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, repaired) });
                         return if (options.repeated_provenance_fault) try withForbiddenProvenance(allocator, wire) else wire;
                     }
                     if (auth.rule.group != null and auth.rule.group.? == .membership) {
@@ -411,7 +421,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             var proposed: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
-                .primary_user_story => .{ .primary_user_story = value },
+                .primary_user_story => .{ .primary_user_story = if (options.weakened_story != null) try obligationValue(allocator, all, dispositions, "may") else value },
                 .entities => entity: {
                     const include = options.entities_required != options.contradict_entities;
                     const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
@@ -913,6 +923,27 @@ fn withoutExact(allocator: std.mem.Allocator, options: Options, value: g.spec.Mo
     const text = try std.fmt.allocPrint(allocator, "MOCK Required behavior {d} is described.", .{value.provenance.claim_ids[0].ordinal});
     result.value = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = text } }}) };
     return result;
+}
+/// The first retained claim whose prose states "must", optionally weakened to `weaker`.
+fn obligationValue(allocator: std.mem.Allocator, all: r.Items, dispositions: []const r.ClaimDisposition, weaker: ?[]const u8) !g.spec.Model.AttributedValue {
+    for (all.entries) |item| {
+        if (!eligibleRecordClaim(dispositions, item.claim.id)) continue;
+        const value = (try businessValue(allocator, item.claim)) orelse continue;
+        if (!states(value, "must")) continue;
+        var result = try attributed(allocator, all, &.{item.claim.id});
+        if (weaker) |word| {
+            const segments = try allocator.alloc(r.text.BusinessSegment, value.segments.len);
+            for (value.segments, segments) |segment, *target| target.* = if (segment == .literal) .{ .literal = .{ .value = try std.mem.replaceOwned(u8, allocator, segment.literal.value, "must", word) } } else segment;
+            result.value = .{ .segments = segments };
+        }
+        return result;
+    }
+    return error.InvalidFixture;
+}
+fn states(value: g.spec.BusinessValue, word: []const u8) bool {
+    return for (value.segments) |segment| {
+        if (segment == .literal and std.mem.indexOf(u8, segment.literal.value, word) != null) break true;
+    } else false;
 }
 fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
     const value = (try businessValue(allocator, (try r.item(all, ids[0])).claim)) orelse return error.InvalidFixture;

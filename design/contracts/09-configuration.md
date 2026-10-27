@@ -200,6 +200,11 @@ bootstrap:
 - Only bounded regular resources explicitly declared by a definition are captured alongside it.
 - Other encodings, YAML aliases or custom tags, executable includes, and compatibility readers
   are not supported in v1.
+- [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 (accepted,
+  not yet implemented) advances the contract to `schema: workflow/v2`, adding an optional
+  `failure-output` member that names one model-free definition-local subgraph. Every
+  definition, the formal schema and every fixture move together, and `workflow/v1` then
+  rejects without a compatibility reader.
 
 The `specify`, `plan`, `tasks`, and `implement` definitions are the initial SDD
 suite. Their registered predecessor gates enforce their feature order even

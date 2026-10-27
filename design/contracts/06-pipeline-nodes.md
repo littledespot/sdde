@@ -124,7 +124,12 @@ An unexpected binding error terminates execution without applying a delta or
 following a YAML outcome edge. Rejected input, delta, accounting or dependency-renewal
 contracts likewise return a terminal typed runner rejection, never an `invalid` or
 `failed` operation outcome. Only a declared operation outcome whose delta and runner
-transitions have been accepted and applied may select a YAML successor.
+transitions have been accepted and applied may select a YAML successor. After an
+eligible terminal failure, the engine may run the definition's declared model-free
+`failure-output` subgraph in the runner's failure-output mode; it follows no transition
+from the failing step and returns the original failure
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6, not yet
+implemented).
 
 An applied `invalid`, `needs_user`, `blocked`, `failed` or `cancelled` outcome
 remains associated with its canonical native subject (including the complete

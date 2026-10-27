@@ -28,4 +28,4 @@ Question preparation follows [§12.7](../contracts/12-model-boundary.md#127-work
 through existing builders; it adds no summary model or multi-subject answer authority.
 Open Spec clarifications stop Plan at entry; open Spec or Plan clarifications stop
 Tasks at entry. Authenticated answer application is not yet implemented
-([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
+([FIX05 R2, now FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).

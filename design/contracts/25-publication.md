@@ -35,11 +35,15 @@ create intermediate publication or restart checkpoints.
   before any output write. A failed stream close prevents publication.
 - Every compiled successor of a publication operation is the corresponding terminal
   outcome. No later node may perform work, emit telemetry or fail after publication.
-  Preparation selects a closed `ok`, `needs_user` or failed-incomplete outcome from
-  validated state; the publisher returns it only after all writes succeed. A
-  failed-incomplete publication
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) still ends the
-  workflow `failed` and records no successful completion. A blocked clarification
+  Preparation selects a closed `ok`, `needs_user` or incomplete (`failed` or `blocked`)
+  outcome from validated state; the publisher returns it only after all writes succeed.
+  An incomplete publication
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) runs only as the
+  definition's declared failure output, in the runner's failure-output mode, the one
+  mode in which filesystem steps may run while failures are pending. Its prepared output
+  must carry every pending failure subject, and its terminal is the recorded failure, so
+  it still ends the workflow `failed` or `blocked` and records no successful completion.
+  A blocked clarification
   refresh is rejected before writing. Pure progress checks also precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.
@@ -50,6 +54,8 @@ create intermediate publication or restart checkpoints.
 
 - Failure, blocking, cancellation or interruption abandons the execution and its unpublished
   candidate output; files already replaced during publication may remain under Section 25.1.
+  An eligible failed or blocked Specify run publishes only its validated content, through
+  its declared failure output (ADR 0041); unvalidated candidates are still abandoned.
 - A subsequent invocation starts at `start`, revalidates current inputs and gates, and executes
   the whole selected workflow again.
 - It never restores a saved task, step, model response or provider operation.

@@ -8,8 +8,11 @@ pub const Fault = struct {
     /// `principle_review` selects only post-generation principle assignments;
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
-    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review, principle_review, loss_review, records },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, uncited_verdict, runaway, runaway_uncovered, runaway_partial_assignment },
+    /// `story` selects only primary-user-story generation requests; a persistent
+    /// `weakened_obligation` returns the same weakened story from every value
+    /// repair, and `reworded_weakening` rewords it there but keeps it weak.
+    stage: enum { extraction, reconciliation, generation, repair, support, candidate_review, principle_review, loss_review, records, story },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, uncited_verdict, runaway, runaway_uncovered, runaway_partial_assignment, weakened_obligation, reworded_weakening },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -103,6 +106,8 @@ pub const Driver = struct {
     runaway_displaced: ?@import("../adapters/provider/fake_llm_provider.zig").CompletePlan = null,
     fault_requests: usize = 0,
     fault_request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null,
+    /// ADR 0044: story value repairs requested for a weakened story.
+    weakened_repairs: usize = 0,
     rejected_operation: ?[]const u8 = null,
     protocol_advice: std.EnumArray(AdviceProjection, ?ProtocolAdvice) = .initFill(null),
     pub fn expectsProtocolAdvice(self: *const Driver) bool {
@@ -224,7 +229,11 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .weakened_story = if (self.fault) |weakening| (if (weakening.stage != .story) null else switch (weakening.shape) {
+                .weakened_obligation => if (weakening.repetition == .persistent) .persistent else .once,
+                .reworded_weakening => .reworded,
+                else => null,
+            }) else null, .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             if (self.runaway_displaced) |plan| {
                 self.fake.invocation_plan = .{ .complete = plan };
                 self.runaway_displaced = null;
@@ -416,7 +425,18 @@ pub const Driver = struct {
                 };
                 const definition = if (stage == .support) (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes else "";
                 const records_request = stage == .generation and fault.stage == .records and std.mem.eql(u8, (@import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable).resultDefinition().?.bytes, "records");
-                const matches_stage = stage == fault.stage or records_request or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null) or
+                const story_unit = fault.stage == .story and (stage == .generation or stage == .repair) and (@import("../domain/specification_session.zig").unit((@import("../application/specification_workflow.zig").readSession(&view) catch unreachable).completed) catch unreachable) == .primary_user_story;
+                if (story_unit and stage == .repair) {
+                    // ADR 0044: the weakening leads with the action, quotes the claim and names both words, and
+                    // the existing value repair carries it as its requirement.
+                    const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, packet.body(), "Restate linked claim ") != null) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, packet.body(), "obligation as the claim states it: \\\"A librarian must be able to renew a loan.") != null) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, packet.body(), "\\\". This text uses \\\"") != null) catch unreachable;
+                    std.testing.expect(std.mem.indexOf(u8, packet.body(), "where the claim uses \\\"must\\\".") != null) catch unreachable;
+                    self.weakened_repairs += 1;
+                }
+                const matches_stage = stage == fault.stage or records_request or (story_unit and stage == .generation) or (stage == .support and fault.stage == .candidate_review and (authorityInputs(&view)).specification != null) or
                     (fault.stage == .principle_review and std.mem.eql(u8, definition, "principle_assignment_findings")) or (fault.stage == .loss_review and std.mem.eql(u8, definition, "preservation_comparisons"));
                 if (matches_stage and fault.shape == .forbidden_provenance) {
                     const references = view.slots[@intFromEnum(@import("../application/reference_reconciliation_workflow.zig").accounted_schema.key)].?;
@@ -566,6 +586,8 @@ pub const Driver = struct {
                         self.fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2048 } };
                     } else if (fault.shape == .runaway_uncovered) {
                         self.fake.invocation_plan.complete.content = corrupt(arena.allocator(), body, .uncovered_scenario, attempt) catch unreachable;
+                    } else if (fault.shape == .weakened_obligation or fault.shape == .reworded_weakening) {
+                        // The scripted builder already wrote the weakened story.
                     } else if (fault.shape == .runaway_partial_assignment) {
                         self.fake.invocation_plan.complete.content = corrupt(arena.allocator(), body, .review_partial_assignment, attempt) catch unreachable;
                     } else if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {

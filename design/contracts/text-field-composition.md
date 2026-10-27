@@ -1,7 +1,8 @@
 # Text-field composition
 
 User-approved amendments to §§7.1, 17.3, 22 and ADR 0020 (field composition,
-16 October 2026; native exact values, 17 October 2026). ADR 0019 records the
+16 October 2026; native exact values, 17 October 2026; incidental entity meaning and
+relationships, 27 October 2026, [ADR 0045](../decisions/0045-entity-description-exact-values-as-code-spans.md)). ADR 0019 records the
 debug-description/replay serialization that retains their native witnesses.
 
 ## Native exact values
@@ -34,7 +35,8 @@ wrapper and terminal policy. Terminal punctuation and negation can remain
 semantically ambiguous; matching proves no correct use or fulfillment.
 
 A prohibited field keeps matching bytes as prose without exact lineage. An
-incidental entity-name occurrence cannot satisfy behavioral coverage. An
+incidental occurrence (entity name, meaning or relationship) cannot satisfy behavioral
+coverage. An
 obligation-bearing field still requires valid prose composition: recognizing a
 whole value cannot turn a reference-only value into behavioral explanation.
 Generation, response admission/correction, fixed repair, canonical no-progress
@@ -55,8 +57,9 @@ semantic judgments.
 | Declared fields | Nonblank prose | Exact-copy role | Passive/source roles |
 | --- | --- | --- | --- |
 | Brief description, story; AC Given/When/Then; visible outcome; edge condition/outcome; functional requirement, business rule, non-goal, prohibited behavior | Required | Obligation-bearing | Passive incidental; source prohibited |
-| Brief title and goal; entity-applicability basis; entity meaning and each relationship; assumption; clarification question | Required | Prohibited ([below](#exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
+| Brief title and goal; entity-applicability basis; assumption; clarification question | Required | Prohibited ([below](#exact-copies-by-field-role)) | Passive incidental; source prohibited |
 | Entity name | Optional: supplied insertions may express an identity label | Incidental | Passive incidental; source prohibited |
+| Entity meaning and each relationship | Required | Incidental ([below](#exact-copies-by-field-role)) | Passive incidental; source prohibited |
 | Extraction and reconciliation business and scope-guard text | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive incidental; source prohibited by their business-text contract |
 | Extraction design, technical, validation, implementation-assumption and open-question text; no-feature-claim reason; reconciled versions of those meanings and conflict summary | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive and source incidental |
 
@@ -82,11 +85,11 @@ workflow, filename, provider, model or fixture creates another exception. This i
 not a fragment-count restriction: several legitimate identity components retain
 their normal lineage and semantic checks, without satisfying behavioral coverage.
 
-## Exact copies only where they can carry an obligation
+## Exact copies by field role
 
 - **Prohibited role.** The descriptive fields of the inventory's second row (brief
-  title and goal, entity-applicability basis, entity meaning and each relationship,
-  assumption, clarification question) prohibit exact-copy insertions. Prose remains
+  title and goal, entity-applicability basis, assumption, clarification question)
+  prohibit exact-copy insertions. Prose remains
   required; passive and source roles are as listed.
 - **Presentation follows the role.** These fields' projected schemas, guidance and
   offered choices contain no exact-copy insertion. Passive references remain
@@ -101,8 +104,11 @@ their normal lineage and semantic checks, without satisfying behavioral coverage
   compatibility reader for stored values that contain one.
 - **Coverage.** Obligation-bearing fields keep exact-copy insertions together with
   the native prose requirement, which schemas cannot express.
-- **Entity names** keep the identity-label exception and are the only field with
-  an incidental exact-copy role.
+- **Incidental role.** Entity names keep the identity-label exception. Entity meaning
+  and each relationship require prose and keep a recognised exact value as an exact
+  copy, rendered as a code span, so the reader sees where it ends
+  ([ADR 0045](../decisions/0045-entity-description-exact-values-as-code-spans.md)).
+  None of them satisfies coverage.
 
 Native wire-type declarations bind each returned text leaf to the registry. The
 shared schema owner projects its permitted insertion alternatives for initial

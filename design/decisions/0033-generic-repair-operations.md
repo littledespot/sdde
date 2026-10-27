@@ -5,7 +5,7 @@
   per-owner repair operations carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
-  documentation on the yes, ass suggested". It decides [FIX05](../../fixes/FIX05.md) W3
+  documentation on the yes, ass suggested". It decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) W3
   as restated after [ADR 0030](0030-engine-owned-model-request.md) and
   [ADR 0031](0031-stage-actions.md). The suggestion was:
   - generic repair operations, with each owner supplying only its own rules;

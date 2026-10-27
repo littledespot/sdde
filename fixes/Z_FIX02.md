@@ -2,8 +2,8 @@
 
 This record consolidates the implemented changes, executed experiments and their
 verification from the fix records retired on 16 October 2026. It follows the
-[fix-record convention](README.md): [FIX05](FIX05.md) is the active fix record (it replaced FIX01 and FIX04 on 17 October
-2026), and [Z_FIX01](Z_FIX01.md) holds earlier completed FIX01 work.
+[fix-record convention](README.md): FIX05 replaced FIX01 and FIX04 on 17 October 2026 and
+was retired on 28 October 2026; [FIX06](FIX06.md) is now the active fix record, and [Z_FIX01](Z_FIX01.md) holds earlier completed FIX01 work.
 
 Completed execution is not completed semantic acceptance. A failed experiment is
 recorded here because it finished, not because its question was answered; every
@@ -25,11 +25,11 @@ and the files were removed.
 | FIX01-02 — diagnosis evidence to recovery (10–11 Oct) | Phase 0 recovery proof; Phase 2 reporting; the explicit `missing_obligation` handoff; native-owned assessed collections; citation guidance; Phase 4 offline integration; six panels, 298 diagnostic calls (§2) | The actual source-review direction and coverage defect, then production E2E: FIX05 B2 and R6 | [archive](archive/FIX01-02.md) |
 | FIX03 — Spec workflow reliability review (11–14 Oct) | Phases 0, 1, 3 and 6; Phase 2's presentation work and its 14 October shared reliability follow-up (state v14); Phase 4's bounded AC transport; Phase 5's replacement contract and its 50 approved responses (§3) | Phases 7–11 and the live exits of Phases 2, 4, 5 and 6: FIX05 A1, B2, B5, R2, R7 and the summary section | [archive](archive/FIX03.md) |
 | FIX02 — independently configured assessments (10 Oct) | Nothing: the proposal was never implemented (§4) | Carried forward with FIX03 Phase 9: FIX05 B2 | [archive](archive/FIX02.md) |
-| FIX04 — semantic simplicity evaluation (15–16 Oct) | Phase 0 protocol; Phase 1 compatibility harness and live gate; decoder correction; model switch; native reference review subjects; Phase 2 harness, audit and cost investigation; Phases 1A, 1A.2 and 1A.3 offline; seven full-workflow diagnostics and findings F9–F12 (§5), with F13 in FIX05 | Phase 1A.3's live items, the budget and scope decision, the Phase 2 baseline and Phases 3–6: FIX05 B3–B5 | [FIX05](FIX05.md) (active; FIX04 text at `b2f10a3`) |
+| FIX04 — semantic simplicity evaluation (15–16 Oct) | Phase 0 protocol; Phase 1 compatibility harness and live gate; decoder correction; model switch; native reference review subjects; Phase 2 harness, audit and cost investigation; Phases 1A, 1A.2 and 1A.3 offline; seven full-workflow diagnostics and findings F9–F12 (§5), with F13 in FIX05 | Phase 1A.3's live items, the budget and scope decision, the Phase 2 baseline and Phases 3–6: FIX05 B3–B5 | FIX05 (retired 28 October 2026; open items in [FIX06](FIX06.md), map in [Z_FIX05 §21](Z_FIX05.md#21-fix05-retired--28-october-2026); FIX04 text at `b2f10a3`) |
 
 ## 1. FIX01-01 — Bound preservation comparisons (10 October 2026)
 
-**Scope:** [FIX01 R6 follow-up item 1](FIX05.md#r6-semantic-repair-attribution-and-recovery):
+**Scope:** [FIX01 R6 follow-up item 1](FIX06.md#r6-semantic-repair-attribution-and-recovery):
 replace broad culprit selection in loss attribution with native-bound preservation
 comparisons. The model assesses `preserved`, `lost` or `uncertain` for each
 assigned producer collection, and the existing loss owner derives the repair
@@ -314,7 +314,7 @@ The full-workflow diagnostics, in Melbourne time on 16 October:
 | 16:20 | hello-world | committed `bfec3d7` | 8 | 12,896 | `RepairNoProgress`: the insertion-only title was rejected at admission and the repair repeated it |
 | 18:58 | hello-world | `54de975` with uncommitted Phase 1A.2 code (source `fbd52cd8…`) | 14 | 20,374 | `RepairNoProgress` at record generation; admission escape measured zero |
 | 20:22 | hello-world | committed `6676ad8` | 14 | 22,780 | Blocked at native exact-copy coverage before review: the value was typed, never inserted ([FIX04 F13](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)) |
-| 20:33 | hello-world | committed `6676ad8` | 42 | 100,884 | `WorkflowTokenBudgetExceeded` during re-review, with review at 75.6% of the tokens ([FIX04 F13](FIX05.md#b2-review-dominates-cost-and-drives-harmful-repair)) |
+| 20:33 | hello-world | committed `6676ad8` | 42 | 100,884 | `WorkflowTokenBudgetExceeded` during re-review, with review at 75.6% of the tokens ([FIX04 F13](Z_FIX05.md#b2-records)) |
 
 Twenty-two one-send compatibility probes also ran between 15 October 16:25 and
 16 October 16:16. Eighteen received HTTP 403 access rejections, one exposed the
@@ -469,7 +469,7 @@ compatibility evidence without publication authority. Generation prompts,
 assignment topology and semantic admission rules are unchanged; F10 proposes an
 admission contract change that is not implemented. The explicit
 transport amendment does not accept the overall **Proposed design**.
-FIX01 (now [FIX05](FIX05.md)) remains the active implementation
+FIX01 (later FIX05, now [FIX06](FIX06.md)) remains the active implementation
 backlog under the [fix-record convention](README.md). This report supplies findings
 and decision criteria, not a parallel progress checklist.
 
@@ -1445,7 +1445,7 @@ amendment. Its command results describe that earlier build. The
 contract and verification; the Phase 2 freeze still requires fresh feasibility
 evidence on the committed build containing that amendment.
 
-This audit maps [Phase 2 and the common measures](FIX05.md#7-acceptance-and-evidence-rules)
+This audit maps [Phase 2 and the common measures](FIX06.md#2-rules-for-every-phase)
 to the development harness. Implementation, offline enforcement evidence and live
 semantic evidence are separate. The governing design remains proposed.
 The applicable boundaries are [design §§1, 3–4, 28, 30–31](../design/design.md):
@@ -1939,7 +1939,7 @@ send and actual-token accounting, and offline source-backed assessment intake.
 The user selected complete first-pass fidelity for qualification sizing.
 Original, corrected, failed, unknown-usage and unattempted evidence remain
 distinct. Evaluator expectations and qualification sources are excluded from
-generation inputs. [FIX04 Phase 2](FIX05.md#b5-authoring-follows-mechanical-source-groups)
+generation inputs. [FIX04 Phase 2](FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5)
 retains the budget-decision prerequisite and open live/semantic exit gate;
 implementation and offline checks do not establish baseline quality.
 Verification: `zig build test-baseline test-rubric-evaluator build-baseline lint
@@ -2030,7 +2030,7 @@ Converse codecs, typed reasoning diagnostics and a pre-credential live-test cost
 policy permitting only Bedrock Luna and excluding Sonnet/Sol/Haiku. Canonical live
 fixtures select `global.openai.gpt-6-luna` with native JSON Schema;
 generation topology and semantic acceptance rules are unchanged.
-[FIX04 §5.6](FIX05.md#b5-authoring-follows-mechanical-source-groups) and its
+[FIX04 §5.6](FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5) and its
 [retained Phase 0 report](../test/calibration/semantic-simplicity/phase0-results.md)
 record the completed scope/checks: **Phase 0 complete offline**, with full
 verification at 145/145 build steps and 1,671/1,671 tests. No live

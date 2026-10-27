@@ -14,7 +14,7 @@ reconciliation phases and token authority; and
 post-generation source and principle finding as advice. One configured token budget
 covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
-[Implementation status](#implementation-status) and [FIX05](../../fixes/FIX05.md)
+[Implementation status](#implementation-status) and [FIX06](../../fixes/FIX06.md)
 record what is built and what remains.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
@@ -61,7 +61,7 @@ The definition uses [F0005's closed root, step and subgraph contracts](F0005-Wor
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | Closed `workflow/v1` schema identity. |
+| `schema` | Closed `workflow/v1` schema identity; `workflow/v2` once ADR 0041 is implemented. |
 | `id` | Content-owned identity: the supplied implementation uses `spec-generation`; the complete initial-suite proposal names it `specify`. |
 | `version` | Positive workflow-definition version. |
 | `shortcode` | Validated unique four-character logging shortcode. |
@@ -212,7 +212,7 @@ Accepting submitted answers requires the trusted authentication mechanism that
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) selects: the
 operating-system account that runs the engine, with the run that reads valid closed
 forms as the act of acceptance. It is not yet implemented
-([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
+([FIX05 R2, now FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
 Merely editing a form or loading an actor/evidence ID is not authentication. This does not affect user-close file
 protection, which applies even when acceptance is blocked.
 
@@ -978,7 +978,7 @@ validators:
 - Every write failure prevents new completion, and a fresh invocation starts from the
   beginning.
 - Feature-log integration and authenticated answer application remain open
-  ([FIX05](../../fixes/FIX05.md)).
+  ([FIX06](../../fixes/FIX06.md)).
 - A clarification publication ending in `needs_user` still does not claim a completed
   Specify workflow.
 
@@ -1163,7 +1163,8 @@ reference snapshot validated, it publishes an incomplete specification
 
 1. only content that passed every check that applies to it on its own: the validated
    reference snapshot's cited source requirements and each generated unit admitted and
-   validated before the failure;
+   validated before the failure, without final requirement IDs, leaving out any unit
+   whose owner has an unresolved candidate outcome;
 2. `spec.md` starting `**Status: Incomplete — the run failed.**` or
    `**Status: Incomplete — the run was blocked.**`, naming the step
    and diagnostic, with each section not produced marked not generated, and a "Run
@@ -1172,6 +1173,11 @@ reference snapshot validated, it publishes an incomplete specification
    state, written last;
 4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
    next run starts at `start`.
+
+Eligible failures are a YAML `failed`, `blocked` or `invalid` terminal and the runner's
+`retry_limit` and `token_budget` rejections. The Specify definition declares the steps as
+its `failure-output` subgraph, which the engine runs through the runner with model calls
+refused (ADR 0041 Decision 6, `workflow/v2`; not yet implemented).
 
 - On a Specify rerun, the engine MUST overwrite existing `spec.md` and
   `reference-context.md` with the newly validated output at the same paths, including
@@ -1265,8 +1271,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
-  normalized records and covered restatements (ADR 0035), and keeps questions outside
-  specification content.
+  normalized records and covered restatements (ADR 0035), flags a field that weakens a
+  linked claim's `must`/`shall` into `may`/`might`/`should`/`could` (a weaker word in a
+  sentence copied whole from a linked claim is exempt) for the existing value repair, which quotes the
+  claim ([ADR 0044](../decisions/0044-generated-text-keeps-obligation-strength.md)),
+  and keeps questions outside specification content.
 
 - The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`
@@ -1568,7 +1577,7 @@ YAML definition.
   API (§16.5).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/README.md) captures the exact published specification for
-  separate human adjudication, and [FIX05](../../fixes/FIX05.md) tracks open work.
+  separate human adjudication, and [FIX06](../../fixes/FIX06.md) tracks open work.
 
 ## 9. Traceability
 

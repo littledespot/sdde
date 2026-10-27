@@ -722,4 +722,4 @@ eligible non-budget stop does not establish acceptance: R8's rubric thresholds,
 expected publication and human adjudication remain independent.
 
 Human calibration and broader rerun/failure acceptance are tracked in
-[FIX05](../../fixes/FIX05.md).
+[FIX06](../../fixes/FIX06.md).

@@ -45,4 +45,4 @@ prove that inputs and execution were processed safely.
 | `/evaluate-e2e <run>` (Claude Code) | No | Advisory rubric assessment and defect-origin analysis of a retained run |
 | `zig build test-integration`, `test-rubric-evaluator`, `verify` | No | Offline mechanics, packaging and smoke checks |
 
-Open calibration and acceptance work is tracked in [FIX05](../../fixes/FIX05.md).
+Open calibration and acceptance work is tracked in [FIX06](../../fixes/FIX06.md).

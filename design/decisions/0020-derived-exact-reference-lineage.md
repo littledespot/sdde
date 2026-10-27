@@ -15,9 +15,11 @@
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
   (post-generation findings are advice) and
   [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
-  record task; native exact duties are independent of semantic kind), and
+  record task; native exact duties are independent of semantic kind),
   [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
-  claims, a subset of its one group; the group stays its association).
+  claims, a subset of its one group; the group stays its association), and
+  [ADR 0045](0045-entity-description-exact-values-as-code-spans.md) (entity meaning and
+  each relationship take the incidental exact-copy role).
 
 ## Native exact-value recognition
 

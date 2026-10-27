@@ -5,7 +5,7 @@
   Documents that describe those orchestrators carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the docs
-  around yes, form b". It decides [FIX05](../../fixes/FIX05.md) A3 as option (b): fixed
+  around yes, form b". It decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A3 as option (b): fixed
   engine sequences become typed routines in the pattern of
   [ADR 0031](0031-stage-actions.md), starting with startup. The user had earlier ranked
   the criteria for this proof of concept: "refactoring to best possible outcomes is the

@@ -188,7 +188,8 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   fails because model work couldn't be completed, or ends `blocked`, publishes an
   incomplete specification of its validated content: `spec.md` starts with
   `**Status: Incomplete — the run failed.**` or `**Status: Incomplete — the run was
-  blocked.**` and names the step and diagnostic, each section not produced is marked not generated, and
+  blocked.**` and names the step and diagnostic, validated records appear without final
+  requirement IDs, each section not produced is marked not generated, and
   `reference-context.md` has a "Run status" section
   ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Other failed
   executions publish nothing. A clarification pause (`needs_user`)
