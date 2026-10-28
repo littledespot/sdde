@@ -2546,7 +2546,7 @@ follow their own compiled gates and transitions.
 ```text
 Levels use the shared CanonicalLogLevel definition from Section 3.
 Configured aliases = CRITICAL -> fatal | WARN -> warning
-Emission rule = rank(eventDefinition.level) >= rank(featureLogPolicy.threshold)
+Emission rule = eventDefinition.emission == always or rank(eventDefinition.level) >= rank(featureLogPolicy.threshold)
 
 run.started | run.completed | run.blocked | run.failed | run.cancelled
 stage.started | stage.completed | stage.blocked | stage.failed |

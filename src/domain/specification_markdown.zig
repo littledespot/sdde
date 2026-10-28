@@ -182,7 +182,8 @@ fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(
         if (span_index < spans.len and spans[span_index].start <= offset + frame.len) continue;
         for (labels, 0..) |marker, index| if (std.mem.startsWith(u8, input[offset..], marker)) {
             if (index != found) return error.InvalidSpecification;
-            if (index != 0) separators[index] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ")) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
+            // An escaped comma ends the clause's own text, so only an unescaped ", " separates.
+            if (index != 0) separators[index] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
             positions[index] = offset;
             found += 1;
         };
@@ -197,11 +198,18 @@ fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(
     return .{ .given = given, .when = when, .then = try unescape(allocator, input[positions[2] + labels[2].len ..]) };
 }
 
-/// A clause that already ends a sentence is followed by a space, not a comma, so
-/// its own bytes, including an exact value such as `Done.`, stay unchanged.
+/// Whether the byte at `index` follows an odd run of backslashes, so it is escaped text.
+fn escaped(input: []const u8, index: usize) bool {
+    var count: usize = 0;
+    while (count < index and input[index - count - 1] == '\\') count += 1;
+    return count % 2 == 1;
+}
+
+/// A clause that already ends in terminal punctuation is followed by a space, not a
+/// comma, so its own bytes, including an exact value such as `Done.`, stay unchanged.
+/// The boundary owner holds the one terminal-punctuation policy (§23).
 fn clauseSeparator(clause: spec.Scalar) []const u8 {
-    const bytes = clause.bytes;
-    return if (bytes.len != 0 and std.mem.indexOfScalar(u8, ".!?", bytes[bytes.len - 1]) != null) " " else ", ";
+    return if (@import("exact_value_boundary.zig").endsWithTerminal(clause.bytes)) " " else ", ";
 }
 
 fn label(comptime name: []const u8) []const u8 {

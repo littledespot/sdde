@@ -49,7 +49,7 @@
     `model-request-debug/v13`;
   - [ADR 0029](0029-bedrock-model-families.md): the `gpt-oss` family sends the
     configured temperature instead of `0.1`;
-  - the CLAUDE.md evidence rule against sampling changes and extra retries, which
+  - the evidence rule (now in AGENTS.md) against sampling changes and extra retries, which
     records this as an explicit engine-policy exception;
   - §9 (configuration shape and retry defaults), §12 (model controls, stops and
     `model-request-debug/v13`), the §13 model actions (a new
@@ -179,7 +179,7 @@ temperature was a compiled engine constant, so projects couldn't choose it.
 
 ## Consequences
 
-- **Evidence policy.** CLAUDE.md forbids working around a model limitation with
+- **Evidence policy.** AGENTS.md forbids working around a model limitation with
   "sampling changes, extra retries". This rule is the user's explicit exception to it,
   recorded like the 18 October 2026 evaluator correction. It covers only a provider
   `output_limit` stop: it gives no other model limitation a retry or a sampling change.

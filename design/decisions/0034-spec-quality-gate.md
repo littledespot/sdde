@@ -63,7 +63,7 @@ never used for it.
   Advisory `/evaluate-e2e` analysis doesn't count, and no model grades a run.
 - **Stable.** Repeated live runs of each case on the same committed build show stable
   output. Every attempted run counts, including runs stopped by budget or deadline and
-  malformed or exhausted runs (CLAUDE.md). There is no fixed run count or pass rate: the
+  malformed or exhausted runs (AGENTS.md). There is no fixed run count or pass rate: the
   user judges the evidence.
 - **Evidence reported separately:**
   - mechanical checks passed;
@@ -90,10 +90,10 @@ from the user's words, and await the user's confirmation:
 1. **Tasks and Implement** wait too, because they follow Plan in the ordered SDD suite.
 2. **Design work waits,** not only code: no contracts, ADRs or amendments specific to those
    workflows (FIX05 A6's original scope).
-3. **Both development cases** must meet the gate (CLAUDE.md: decide on at least two
-   unrelated cases).
+3. **Both development cases** must meet the gate (AGENTS.md: "Decide a rule, prompt or
+   contract change on both development cases").
 4. **"High quality" means R8 acceptance.** The user may want a higher bar than "accepted".
-5. **Stability runs use one committed build,** and every attempt counts (CLAUDE.md).
+5. **Stability runs use one committed build,** and every attempt counts (AGENTS.md).
 6. **The evidence list** above.
 7. **The build.** The gate must hold on the build Plan work starts from.
 

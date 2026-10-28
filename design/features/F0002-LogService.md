@@ -65,7 +65,7 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 
 | Result | Required meaning |
 | --- | --- |
-| `ok` with drop evidence | The event is below threshold; no event identity, sequence, lock, or write is created. |
+| `ok` with drop evidence | Section 26.5's emission rule drops the event; no event identity, sequence, lock, or write is created. |
 | `ok` with persistence evidence | The complete safe record was appended, any required flush completed, and the stream lock was released. |
 | `blocked` | Logging failed; cleanup, emergency reporting, and execution cleanup completed before new work was blocked. |
 
@@ -168,7 +168,7 @@ The example roles above are under consideration. This is a consideration list, n
 
 | Authority | Sole owner |
 | --- | --- |
-| Event level, template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
+| Event level, emission (§26.5), template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
 | Four-character workflow shortcode source and validation | Workflow definition; canonical `WorkflowShortcode` parser; workflow-registry uniqueness validation |
 | Workflow-shortcode/fact binding | `WorkflowLog.log` and delta validation |
 | Emit/drop comparison | `EvaluateLogThresholdAction` |
@@ -258,7 +258,7 @@ defined in governing Section 13.9:
    runner-bound workflow's `WorkflowTelemetryFact`;
 2. resolve the one registered event definition;
 3. project only its allowed typed fields and apply required redaction;
-4. evaluate the definition's canonical level against the canonical threshold;
+4. apply Section 26.5's emission rule to the definition and the canonical threshold;
 5. if admitted, assign the workflow shortcode, the same canonical level,
    trusted time, event identity, and sequence to the record;
 6. validate and serialize one bounded fixed-column pipe-delimited data row;
@@ -308,6 +308,8 @@ Logging-internal nodes are not recursively observed.
   governing Section 26.5.
 - F0002 uses those types and does not define a second enum or alias table.
 - The registry owns an event's level; the configured level is the emission threshold.
+- The registry also owns each event's emission, marking the events an ADR requires to be
+  logged; governing Section 26.5 holds the rule.
 - A producer supplies neither value.
 
 - Every serialized log record MUST contain one canonical `level` value from Section

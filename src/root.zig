@@ -23,6 +23,7 @@ fn refAllDeclsRecursive(comptime T: type) void {
 
 test {
     _ = @import("domain/exact_value_recognition.zig");
+    _ = @import("domain/exact_value_boundary.zig");
     _ = @import("domain/model_exact_values.zig");
     _ = @import("provider_conformance_test.zig");
     _ = @import("model_log_redaction_test.zig");

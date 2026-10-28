@@ -82,7 +82,13 @@ Model and reference content are untrusted data:
 | `DEBUG` | `debug` / 20 | Developer detail plus complete credential-redacted model requests and responses in the separate prompt stream under ADR 0018. |
 | `TRACE` | `trace` / 10 | Debug capture plus the most verbose step/branch/scheduling, typed-key/ID, rule-ID, and bounded count detail. Credential redaction remains mandatory. |
 
-- An event is emitted iff `rank(event) >= rank(configured threshold)`.
+- An event is emitted iff the registry marks it ADR-required (`always`) or
+  `rank(event) >= rank(configured threshold)`. **ADR-required emission amendment
+  (user-approved, 28 October 2026):** an event an ADR requires to be logged
+  (`model.response_normalized`, `model.provider_stopped`, `model.runaway_resent`,
+  `review.incomplete`, and `run.incomplete_published` once ADR 0041 lands) is emitted at every
+  configured level, so an incomplete result is never published, nor a runaway re-sent,
+  without its record.
 - The closed proof-of-concept `LogEventDefinitionRegistry` is exactly the table in F0002 Section
   6.2 and owns every event's canonical level, `<event_type>/v1` template, field types, required
   fields, and sensitivity classification.

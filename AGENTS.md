@@ -177,8 +177,10 @@ A small non-semantic documentation fix needs none of this.
   work around it with case-, field- or model-specific rules, sampling changes, extra
   retries, a second model or a weaker admission rule. The recorded exceptions are the
   standalone evaluator's one mechanical correction (harness only, user decision of
-  18 October 2026) and ADR 0039's single runaway re-send (user decision of 26 October
-  2026); report runaways and re-sends separately.
+  18 October 2026), the §22.6 normalization of a malformed response opening (ADR 0014;
+  user decisions of 21 September and 18 October 2026) and ADR 0039's single runaway
+  re-send (user decision of 26 October 2026); report runaways, re-sends and
+  normalizations separately.
 - Decide a rule, prompt or contract change on both development cases, with repeated
   runs on one committed build; a single run never decides it. Never tune on the
   sixteen reserved qualification features. Count budget-stopped, malformed and

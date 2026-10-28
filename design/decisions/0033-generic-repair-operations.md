@@ -253,7 +253,7 @@ A structural change, with no semantic change claimed, so the evidence is offline
 - **Measure:** operations, bindings, data keys, YAML lines, and the files a "new
   repairable owner" change touches.
 
-Each statement CLAUDE.md lists is reported separately.
+Each statement AGENTS.md lists is reported separately.
 
 - **Contract versions.** Registered action and compiled step IDs change, so the
   implementation advances each closed contract whose shape changes (as ADR 0030 states).

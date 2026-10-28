@@ -23,9 +23,15 @@ pub const Field = enum {
 
 pub const FieldSet = std.EnumSet(Field);
 
+/// Whether the configured threshold may drop an event. An event an ADR requires to be
+/// logged is emitted at every threshold (§26.5), so an incomplete result is never
+/// published, nor a runaway re-sent, without its record.
+pub const Emission = enum { threshold, always };
+
 pub const EventDefinition = struct {
     event_type: telemetry.EventType,
     level: telemetry.CanonicalLogLevel,
+    emission: Emission = .threshold,
     required: FieldSet,
     optional: FieldSet,
 
@@ -60,13 +66,14 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .stage_failed, .action_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
         .model_requested => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id }, &.{}),
         .model_completed => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .outcome }, &.{ .input_tokens, .output_tokens, .duration_ms }),
-        .model_response_normalized => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{}),
+        // ADR 0014 and section 22.6: every normalization is logged.
+        .model_response_normalized => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{})),
         // Provider-applied stops carry their exact closed reason, never only usage.
-        .model_provider_stopped => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens }),
+        .model_provider_stopped => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens })),
         // ADR 0039: every re-send of a runaway names the attempt it repeats.
-        .model_runaway_resent => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens }),
+        .model_runaway_resent => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens })),
         // ADR 0040: advice that closed incomplete names its reason and unassessed count.
-        .review_incomplete => definition(event_type, .warning, &.{.diagnostic_code}, &.{.count}),
+        .review_incomplete => adrRequired(definition(event_type, .warning, &.{.diagnostic_code}, &.{.count})),
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),
@@ -89,6 +96,14 @@ pub fn validateFact(fact: telemetry.TelemetryFact) Error!EventDefinition {
     allowed.setUnion(event_definition.optional);
     if (!allowed.supersetOf(actual)) return error.InvalidLogEventFact;
     return event_definition;
+}
+
+/// Marks an event an ADR requires to be logged (ADR 0011, 0014, 0039 and 0040); the
+/// threshold never drops it (§26.5).
+fn adrRequired(event_definition: EventDefinition) EventDefinition {
+    var result = event_definition;
+    result.emission = .always;
+    return result;
 }
 
 fn definitionForFailure(event_type: telemetry.EventType) EventDefinition {
@@ -144,4 +159,12 @@ test "closed event registry validates required and unexpected fields" {
             .command_id = telemetry.Identifier.validate("CMD-1"),
         },
     }));
+}
+
+test "exactly the events an ADR requires are always emitted" {
+    const required = [_]telemetry.EventType{ .model_response_normalized, .model_provider_stopped, .model_runaway_resent, .review_incomplete };
+    for (std.enums.values(telemetry.EventType)) |event_type| {
+        const expected: Emission = if (std.mem.indexOfScalar(telemetry.EventType, &required, event_type) != null) .always else .threshold;
+        try std.testing.expectEqual(expected, eventDefinition(event_type).emission);
+    }
 }

@@ -405,7 +405,7 @@ fn evaluateEventBinding(
     context: *const anyopaque,
     definition: log_event_registry.EventDefinition,
 ) child_bindings.Decision {
-    return if ((threshold.Action{}).execute(castConst(context).policy.*, definition.level) == .emit) .emit else .drop;
+    return if ((threshold.Action{}).execute(castConst(context).policy.*, definition) == .emit) .emit else .drop;
 }
 
 fn validatePromptBinding(

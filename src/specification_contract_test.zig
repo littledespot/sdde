@@ -301,12 +301,20 @@ test "acceptance clauses that end a sentence join without a comma and keep their
         .{ .given = plain, .when = .{ .bytes = "The borrower asks!" }, .joins = &.{ "active, **When** ", "asks\\! **Then** " } },
         .{ .given = plain, .when = .{ .bytes = "Is the loan due?" }, .joins = &.{ "active, **When** ", "due\\? **Then** " } },
         .{ .given = refused, .when = plain, .joins = &.{ "`Renewal refused.` **When** ", "active, **Then** " } },
+        // The shared terminal policy covers non-ASCII sentence ends and a closing comma.
+        .{ .given = .{ .bytes = "The loan is active\u{2026}" }, .when = plain, .joins = &.{ "active\u{2026} **When** ", "active, **Then** " } },
+        .{ .given = plain, .when = .{ .bytes = "\u{8cb8}\u{51fa}\u{4e2d}\u{3002}" }, .joins = &.{ "active, **When** ", "\u{3002} **Then** " } },
+        .{ .given = .{ .bytes = "the loan is active," }, .when = plain, .joins = &.{ "active\\, **When** ", "active, **Then** " } },
+        // A clause ending in a literal backslash keeps the real ", " separator on readback.
+        .{ .given = .{ .bytes = "the path ends in \\" }, .when = plain, .joins = &.{ "in \\\\, **When** ", "active, **Then** " } },
+        // A literal backslash then a comma ends in an escaped comma: an odd run, one space.
+        .{ .given = .{ .bytes = "the path ends in \\," }, .when = plain, .joins = &.{ "in \\\\\\, **When** ", "active, **Then** " } },
     };
     for (cases) |case| {
         const document: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = case.given, .when = case.when, .then = refused } } }} };
         const rendered = try markdown.render(a, document);
         for (case.joins) |join| try testing.expect(std.mem.indexOf(u8, rendered, join) != null);
-        for ([_][]const u8{ "., **", "!, **", "?, **", ".`, **" }) |doubled| try testing.expect(std.mem.indexOf(u8, rendered, doubled) == null);
+        for ([_][]const u8{ "., **", "!, **", "?, **", ".`, **", "\\,, **", "\u{2026}, **", "\u{3002}, **" }) |doubled| try testing.expect(std.mem.indexOf(u8, rendered, doubled) == null);
         const parsed = try markdown.parse(a, rendered);
         try testing.expectEqualDeep(document, parsed);
         try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
@@ -322,6 +330,15 @@ test "acceptance clauses that end a sentence join without a comma and keep their
     }) |mutation| {
         const changed = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
         try testing.expect(!std.mem.eql(u8, changed, rendered));
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
+    }
+    // Renderings from before the shared terminal policy doubled a clause's own comma,
+    // semicolon, colon or ellipsis; readback now rejects that separator.
+    for ([_][2][]const u8{ .{ "the loan is active,", "active\\," }, .{ "the loan is active;", "active\\;" }, .{ "the loan is active:", "active\\:" }, .{ "the loan is active\u{2026}", "active\u{2026}" } }) |ending| {
+        const ended: spec.CapturedDocument = .{ .display_name = plain, .primary_user_story = plain, .entity_section = .omitted, .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = .{ .bytes = ending[0] }, .when = plain, .then = refused } } }} };
+        const current = try markdown.render(a, ended);
+        const changed = try std.mem.replaceOwned(u8, a, current, try std.mem.concat(a, u8, &.{ ending[1], " **When** " }), try std.mem.concat(a, u8, &.{ ending[1], ", **When** " }));
+        try testing.expect(!std.mem.eql(u8, changed, current));
         try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
     }
 }

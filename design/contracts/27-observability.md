@@ -52,7 +52,8 @@ encoding-tagged base64. Reconstruction preserves the complete sanitized body wit
 truncation; a storage failure follows the existing fail-closed path after required
 provider usage accounting. `logs.level` alone selects capture; higher thresholds
 emit metadata only and the removed `promptCapture` field rejects. Prompt records
-keep their registered `debug` severity and the configured event threshold.
+keep their registered `debug` severity and the configured event threshold. Emission follows
+[§26.5](26-security.md): an event an ADR requires to be logged is emitted at every level.
 
 - Candidate diagnostics retain typed rule, target, rejected value and admissible scope.
 - The shared diagnostic projection distinguishes a response origin, an assembled-candidate

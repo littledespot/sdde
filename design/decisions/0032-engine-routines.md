@@ -203,7 +203,7 @@ below.
 
 ### Evidence
 
-CLAUDE.md's "Evidence for a contract change" applies. A conversion claims no semantic
+AGENTS.md's "Model output, prompts and evidence" applies. A conversion claims no semantic
 change, so its evidence is offline:
 
 - **Frozen equivalence.** Freeze public outcomes and error codes, emitted diagnostics,
@@ -213,7 +213,7 @@ change, so its evidence is offline:
 - **Clean packaged-executable smoke test.** Startup governs configuration discovery.
 - **The FIX05 A2 measures:** files touched per change, lines, and `anyopaque` count.
 
-Each conversion reports CLAUDE.md's statements separately, with semantic benefit "none
+Each conversion reports AGENTS.md's statements separately, with semantic benefit "none
 claimed".
 
 ## Derived under existing rules

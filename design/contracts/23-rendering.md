@@ -113,6 +113,11 @@ Renderers own:
   remain protected by validation.
 - Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet;
   free-form or partially labeled criteria do not normalize into authority.
+- The renderer joins a clause to the next label with ", " unless the clause already ends in
+  terminal punctuation, when a single space joins them, so no clause's own bytes change.
+  Terminal punctuation is the closed policy of the
+  [exact-value boundary owner](../../src/domain/exact_value_boundary.zig), shared with
+  exact-value recognition; readback accepts only the separator the renderer derives.
 - Surviving IDs stay attached to their records; an un-ID'd new record receives the next
   monotonic ID; deleted IDs are not reused.
 - A duplicate, malformed, or reassigned ID blocks with targeted guidance.

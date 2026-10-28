@@ -241,14 +241,14 @@ output and rejection rules.
 
 ### Evidence
 
-CLAUDE.md's "Evidence for a contract change" applies. A conversion claims no semantic
+AGENTS.md's "Model output, prompts and evidence" applies. A conversion claims no semantic
 change, so its evidence is offline:
 
 - frozen-behaviour equivalence on two unrelated workflows that use the stage: for
   `prepare-toolchain`, the Specify definition and the `toolchain-check` fixture;
 - the measures under Acceptance.
 
-Each conversion reports CLAUDE.md's statements separately: implementation complete,
+Each conversion reports AGENTS.md's statements separately: implementation complete,
 mechanical checks passed, brittleness reduced (the A2 measure), and semantic benefit
 demonstrated, which is "none claimed". Live E2E runs and the replayed two-case semantic
 rule apply only if a conversion claims a semantic or reliability effect.
