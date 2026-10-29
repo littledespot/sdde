@@ -79,7 +79,14 @@ is repository-relative; there is no automatic latest-run selection. `--workflow`
 is the captured workflow ID: the supplied Spec definition uses `spec-generation`.
 `--call` is the positive physical call ordinal in the selected run, not a YAML step
 number. All five selectors are required. `--repeats` is an optional positive
-count and defaults to `1`. `--reasoning-effort none` explicitly omits reasoning
+count and defaults to `1`. `--edit <file>` optionally names a repository-relative
+closed JSON file, `{"content":[...],"schema":"..."}` in the captured `context.json`
+content shape, that every repeat sends instead of the captured content and schema:
+the debugger's modified replay
+([ADR 0019](../decisions/0019-single-request-debugger.md)), validated by the same
+canonical schema compiler and provider serializer before any call. Provider, model
+and settings stay as selected; the report (`call-diagnostic-report/v2`) records the
+edit file's SHA-256. `--reasoning-effort none` explicitly omits reasoning
 effort; other values must be supported by the selected model.
 
 The selected run must retain its project/configuration, generation context and
@@ -127,7 +134,8 @@ serializer or grants a capability.
 
 Each dispatched repeat makes exactly one provider request. There are no automatic
 retries, repairs, upstream nodes, workflow continuation, publication or evaluator
-calls. Repeats are independent diagnostics against the selected captured request.
+calls. Repeats are independent diagnostics against the selected captured request, or its
+`--edit` replacement.
 Responses remain untrusted diagnostic data and never become workflow authority.
 Transport failure, cancellation or storage failure stops the remaining repeats;
 the report records the completed count and incomplete result. A failed exchange

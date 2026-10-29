@@ -1,6 +1,7 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
-- **Status:** Accepted
+- **Status:** Accepted, on hold (30 October 2026): E0 stopped by user decision ("stop E0")
+  during implementation; nothing is implemented.
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decision on 26 October 2026. Asked whether a
   required step that fails should also publish what it has, marked incomplete (for
@@ -189,6 +190,30 @@ incomplete specification when a run pauses for clarification.
    11. **Pending failure subjects.** A runner rejection is one typed pending failure
        subject, which the incomplete prepared output must carry.
    12. **Timing.** E0 lands after the Q1b set (done 29 October 2026).
+8. **Design details** (approved 29 October 2026, "approve all 13").
+   1. The failure line names the full authored step path, such as
+      `generate/records/gen/request`.
+   2. The checks not completed are a closed list (coverage, cross-record, review), each
+      shown as not completed; no result is claimed either way.
+   3. ADR 0040's review line is never shown in the failed view: review is one of the checks
+      not completed (Decision 2).
+   4. The failed view has no `spec.md` reader slot; it is never read back as input, and the
+      completed reader rejects it.
+   5. Without a produced title the H1 is `# Feature Specification: <feature-id>`.
+   6. Partly generated records show the produced records, then one line,
+      "Record batches generated: k of n."
+   7. The failure output builds the reference snapshot itself, from the validated
+      reference inputs (Decision 7.3's required input is those inputs).
+   8. A logging failure at the incomplete-publication barrier publishes nothing; the
+      original failure stands.
+   9. The diagnostic shown is the failing step's own code when it has one, otherwise the
+      outcome (`FAILED`, `BLOCKED` or `INVALID`); `run.failed` is unchanged.
+   10. A unit is unresolved when it has a pending generation request of its own.
+   11. When the failure output's inputs are missing it doesn't start, logs nothing extra,
+       and the original failure stands.
+   12. `run.incomplete_published` carries `diagnostic_code` only, as F0002 defines.
+   13. The eligibility flag has three values (excluded, shared, failure-output only), so
+       the compiler also rejects a failure-output-only operation in the main graph.
 
 ## Consequences
 

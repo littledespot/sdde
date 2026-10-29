@@ -9,6 +9,9 @@ pub const Diagnostic = struct {
     reason: Reason,
     expected: *const schema.Node,
     expected_location: enum { value, parent } = .value,
+    /// ADR 0038: for `uncovered_member`, the compiled coverage rule, borrowed like
+    /// `expected`, so a correction can name the kinds that cover.
+    covering: ?schema.ItemCoverage = null,
     // Compiler depth bounds traversal; this is not a response size/token limit.
     segments: [schema.max_depth + 2]Segment = @splat(.{ .property = "" }),
     length: usize = 0,
@@ -28,7 +31,7 @@ pub const Diagnostic = struct {
             .enum_mismatch => "Schema validation failed: this value is not among the allowed values.",
             .unknown_variant => "Schema validation failed: this discriminator does not identify an allowed kind.",
             .duplicate_member => "Schema validation failed: this item repeats an assigned member; return exactly one item for every assigned member.",
-            .uncovered_member => "Schema validation failed: no item of a covering kind names this value; add one that does, as the instructions require.",
+            .uncovered_member => "Schema validation failed: no item of a kind in covering.kinds names this value; add one that does, as the instructions require.",
             .missing_required_item => "Schema validation failed: with the value given for that property, this list needs at least one item; add the items the instructions require, or correct that value.",
         };
     }
@@ -54,7 +57,8 @@ pub const Diagnostic = struct {
 
     pub fn eql(self: Diagnostic, other: Diagnostic) bool {
         if (self.reason != other.reason or self.expected != other.expected or
-            self.expected_location != other.expected_location or self.length != other.length) return false;
+            self.expected_location != other.expected_location or self.length != other.length or
+            !std.meta.eql(self.covering, other.covering)) return false;
         for (self.segments[0..self.length], other.segments[0..other.length]) |left, right| {
             if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
             switch (left) {

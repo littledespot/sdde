@@ -256,7 +256,8 @@ and backlog. "Gap" means between measurement sets.
 | 2 | **Pre-baseline decisions** (**decided 28 October**, as recommended): D2.1 (b), E0's report marker (as an optional v10 member; reopened under rule 13 and decided 29 October as a `spec-e2e-report/v11` member, step 3), the H2 label scheme, D11.2 (keep, contract, shared terminal policy), D11.4 (name the exception), DE6 (always emit ADR-required events), D11.5; D11.2, D11.4, D11.5 and DE6 implemented | Decisions; offline | D2.1, D11.2, D11.4, D11.5, DE6 (decided) |
 | 3 | **T5** measures and request projections, with `spec-e2e-report/v11` (decided 29 October); **T1**; D11.1 docs; all committed before the set (D11.2 and D11.5 were done in step 2). H1 may start on the clean 26 October `39a06ea` pair | Offline | — |
 | 4 | **Q1b** Clean baseline, six runs per case, on the committed build; Q2's pre-phase replays alongside | Measurement set | T5's definitions (approved 29 October); DT5 (decided and implemented 29 October) |
-| 5 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041): built during Q1b, landing after it and before Q2's set | §2.11 freeze diff, one run per case | Accepted; DE6 decided first |
+| 5 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041): built during Q1b, landing after it and before Q2's set | Stopped 30 October 2026 (user decision); ADR 0041 on hold | Accepted; DE6 decided first |
+| 5a | **D4.1 correction** The `uncovered_member` correction names the kinds that count as cover, from the compiled coverage rule (moved ahead of Q2 on 30 October 2026, user decision: Q1b's two loan-renewal failures were this correction making no progress) | Measurement set | Decided 30 October |
 | 6 | **Q2** Repair requests carry their step's definitions (one generic owner), with **T3** | Paired replays decide the target; measurement set guards | D2.1 |
 | 7 | **Q2b** Generic content-loss guard for repairs | Measurement set | D2.2 |
 | 8 | **Q3** One owner per model instruction (move only), with **T2** | §2.11 projections byte-identical, one run per case | D3.1 |
@@ -399,9 +400,10 @@ is decided on paired replays of identical captured state:
   quote, 2 repeated field prefix). Reports: `zig-out/e2e-call/2026-10-29T09-18-37Z-d0b3…/`
   (call 6) and `…-404a…/` (call 5).
 - **Q2 request.** The same requests with the repaired step's definitions added as Q2 binds
-  them, through the debugger's modified replay (ADR 0019), run on a copy of the retained
-  project under `evaluations/`, never on `zig-out/`; or a T-track change that lets
-  `e2e-call` send edited content with `--repeats` (the user's decision). Record any
+  them, sent by `e2e-call` with `--repeats` from an edited-content file (decided 30 October
+  2026: a small T-track change reusing the debugger's modified-replay validation, ADR 0019;
+  implemented 30 October as `e2e-call --edit <file>`),
+  run on a copy of the retained project under `evaluations/`, never on `zig-out/`. Record any
   difference from the request the Q2 build assembles.
 - **Counting.** Read each repeat's returned disposition, grade it helpful, neutral, harmful
   or no progress, and count every requested repeat, including failed exchanges. Both right
@@ -487,6 +489,19 @@ owning resource; one run of each case.
 prompt only when the schema or its correction states it. Making a correction state a rule
 (naming the covering kinds in `uncovered_member`, or explaining `required_preserve`) changes
 model-visible engine text and would be a separate decision with its own measurement set.
+**Decided 30 October 2026** for `uncovered_member` (sequence step 5a, ahead of Q2): the
+correction names the covering kinds, taken from the compiled coverage rule, never
+hard-coded. `required_preserve` is unchanged. Implemented 30 October 2026: the `uncovered_member` diagnostic carries the
+compiled rule and its correction adds `covering` (`kind_property`, `kinds`); every other
+correction is byte-identical: the request-projection freeze
+(`evaluations/request-projection/d41-2026-10-30/`) differs from the step-3 base in exactly 4
+of 4,406 requests, all `uncovered_member` corrections. Contract review (one major: the
+owner comparison never ran; two minor) fixed: a real uncovered case in the payload test, the
+driver compares with `specification_session.scenario_coverage`, the correction rejects a
+covering rule on any other reason, one serialization; the fixed build's freeze is
+byte-identical. Measurement set approved 30 October 2026 and running on the latest build;
+run 1 (hello-world, `2026-10-29T19-56-29Z-919b…`) used the pre-fix build, whose requests the
+freeze proves identical, so it counts. Control runs need a `5bb7f17` checkout from the user.
 
 **Validation.** Scripted responses with a missing and with a repeated member, for source and
 principle reviews, receive the `array_length` and `duplicate_member` corrections, compared
@@ -739,8 +754,10 @@ artifacts the run wrote (its step, diagnostic and outcome are the report's own
 `terminal_step`, `diagnostic` and `workflow_outcome`); it landed with T5 (decided 29 October
 2026) and stays null until E0 writes it, so E0 changes no report version. With a test that a
 pre-E0 v11 report still decodes. Two tests asserting that a required repeated
-runaway publishes nothing flip, and `spec.md`'s reader needs a slot for the failure status
-line beside ADR 0040's. DE6 is decided first. About the size of ADR 0039.
+runaway publishes nothing flip. The failed view has no `spec.md` reader slot (ADR 0041
+Decision 8.4). Implementation decisions: ADR 0041 Decisions 7 and 8 (approved 29 October
+2026); slices S1 definition and compilation, S2 terminals, event and ledger, S3 runner
+mode and engine binding, S4 Specify content, S5 wiring and tests. DE6 is decided first. About the size of ADR 0039.
 
 ### E1. Engine-owned model request (A1, ADR 0030 slice 4)
 
@@ -1124,7 +1141,7 @@ request's lifetime. Decide after E1.
 | 2 | Pre-baseline decisions | Decided 28 October 2026; D11.2, D11.4, D11.5 and DE6 implemented, uncommitted | Working tree on `d4fd4a5` | Offline only | `zig build verify` on the final tree: 164 of 164 steps, 1,972 of 1,972 tests; D11.2: none of the 21 retained `spec.md` files has a clause ending whose join changes, so re-rendering is byte-identical; contract review: no code defects; its major finding (§26.5 and §13.9 still stated the old emission rule) and six minor findings fixed |
 | 3 | T5, T1, D11.1, `spec-e2e-report/v11`, DT5 | Implemented 28 October 2026; v11, the measure-definition approval and DT5 on 29 October (decided that day); uncommitted, except brittleness counts (see T5) | Working tree on `371b55a` | Offline only | `zig build verify` on the final tree: 169 of 169 steps, 1,984 of 1,984 tests; contract reviews: step 3 had no blockers and one major, seven minor and three nit findings, all fixed; v11 had no blockers or majors and eight minor findings and a nit, all resolved (the draft measures files are renamed); DT5 had no blockers, one major (operational errors marked a run unmeasurable), three minor and five nit findings, all fixed; see T5's status |
 | 4 | Q1b | Done 29 October 2026 on the latest build by user decision ("run Q1b on the latest build"): the uncommitted step-3 tree, source digest `c7684e21…`, so every run records `modified: true` (a user-approved deviation from §2 rule 3). Runs 1 of each case are the 08:51 and 08:53 runs | `371b55a` + working tree | 6 hello-world, 6 loan-renewal | Baseline table below; measures `evaluations/q1b/measures-set.json`; evaluations `evaluations/e2e/2026-10-29T*/`; none adjudicated |
-| 5 | E0 | Accepted (ADR 0041); its twelve preflight decisions approved 29 October 2026 (ADR 0041 Decision 7); in progress | — | — | — |
+| 5 | E0 | Stopped 30 October 2026 by user decision ("stop E0"): slice S1 and part of S2 were built, then removed; ADR 0041 on hold with Decisions 7 and 8 recorded | — | — | — |
 | 6–20 | Q2–Q11, closing set | Proposed | — | — | — |
 | — | E1–E8, T2–T4 | Proposed or accepted, not started | — | — | — |
 

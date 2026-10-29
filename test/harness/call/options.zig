@@ -7,10 +7,12 @@ pub const Options = struct {
     model: []const u8,
     reasoning_effort: ?[]const u8,
     repeats: u16 = 1,
+    /// A repository-relative edit file replacing the captured content and schema.
+    edit: ?[]const u8 = null,
 };
 
 pub fn parse(args: []const []const u8) !Options {
-    const names = [_][]const u8{ "--run", "--workflow", "--call", "--model", "--reasoning-effort", "--repeats" };
+    const names = [_][]const u8{ "--run", "--workflow", "--call", "--model", "--reasoning-effort", "--repeats", "--edit" };
     var values: [names.len]?[]const u8 = @splat(null);
     var i: usize = 0;
     while (i < args.len) : (i += 2) {
@@ -23,6 +25,7 @@ pub fn parse(args: []const []const u8) !Options {
     }
     for (values[0..5]) |value| if (value == null) return error.InvalidArguments;
     try @import("../contracts.zig").path(values[0].?);
+    if (values[6]) |edit| try @import("../contracts.zig").path(edit);
     if (@import("../../../src/domain/workflow.zig").WorkflowId.parse(values[1].?) == null or
         @import("../../../src/domain/llm_provider_identity.zig").ModelId.parse(values[3].?) == null) return error.InvalidArguments;
     const ordinal = try std.fmt.parseInt(u32, values[2].?, 10);
@@ -35,5 +38,6 @@ pub fn parse(args: []const []const u8) !Options {
         .model = values[3].?,
         .reasoning_effort = if (std.mem.eql(u8, values[4].?, "none")) null else values[4].?,
         .repeats = repeats,
+        .edit = values[6],
     };
 }

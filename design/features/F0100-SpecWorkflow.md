@@ -1404,7 +1404,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - A records response whose functional-requirement claim no acceptance criterion or edge
   case names is rejected at admission as `uncovered_member` and takes the request's
-  existing protocol correction; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+  existing protocol correction, which names the covering kinds; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or

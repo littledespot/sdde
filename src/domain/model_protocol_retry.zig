@@ -55,16 +55,22 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
         .missing_final_text => try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .provider_content = provider.ProviderContentDiagnostic.missing_final_text }, .explanation = "Final-answer admission failed: no final answer was received." }, .{}),
         .decoder => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = reason.explanation() }, .{}),
         .composition => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .composition = try reason.describe(scratch) }, .explanation = "Model-text composition failed. Correct every listed field within this same response and retain the original assignment." }, .{}),
-        .schema => |reason| try std.json.Stringify.valueAlloc(scratch, .{
-            .diagnostic = .{ .schema = try reason.describe(scratch) },
-            .explanation = reason.explanation(),
-            .expected = .{
-                .path = (try reason.describeExpected(scratch)).path,
-                .scope = reason.expected_location,
-                .schema_pointer = (try projection.locate(scratch, original.response_schema, reason.expected)) orelse return error.ModelRequestAssociationInvalid,
-                .shape = try projection.outline(scratch, reason.expected),
-            },
-        }, .{}),
+        .schema => |reason| value: {
+            // ADR 0038: exactly an uncovered value's correction names the compiled covering kinds.
+            if ((reason.covering != null) != (reason.reason == .uncovered_member)) return error.ModelRequestAssociationInvalid;
+            const Covering = struct { kind_property: []const u8, kinds: []const []const u8 };
+            break :value try std.json.Stringify.valueAlloc(scratch, .{
+                .diagnostic = .{ .schema = try reason.describe(scratch) },
+                .explanation = reason.explanation(),
+                .expected = .{
+                    .path = (try reason.describeExpected(scratch)).path,
+                    .scope = reason.expected_location,
+                    .schema_pointer = (try projection.locate(scratch, original.response_schema, reason.expected)) orelse return error.ModelRequestAssociationInvalid,
+                    .shape = try projection.outline(scratch, reason.expected),
+                },
+                .covering = @as(?Covering, if (reason.covering) |rule| .{ .kind_property = rule.kind_property, .kinds = rule.covering } else null),
+            }, .{ .emit_null_optional_fields = false });
+        },
     };
     const parts = try scratch.alloc(provider.ModelVisibleContent, base_content.len + 2 + @as(usize, @intFromBool(content != null)));
     @memcpy(parts[0..base_content.len], base_content);

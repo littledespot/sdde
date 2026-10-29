@@ -153,7 +153,11 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     const values = item.object.get(coverage.property).?.array;
                     for (0..values.count()) |position| {
                         const wanted = listedValue(values.at(position).?) orelse continue;
-                        if (!covered(value.array, coverage, wanted)) return (reject(.uncovered_member, listed)).within(.{ .index = position }).within(.{ .property = coverage.property }).within(.{ .index = index });
+                        if (!covered(value.array, coverage, wanted)) {
+                            var diagnostic = reject(.uncovered_member, listed);
+                            diagnostic.covering = coverage.rule;
+                            return diagnostic.within(.{ .index = position }).within(.{ .property = coverage.property }).within(.{ .index = index });
+                        }
                     }
                 }
             }

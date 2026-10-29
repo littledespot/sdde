@@ -316,7 +316,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
 /// ADR 0038: every claim a functional requirement names needs an acceptance
 /// criterion or edge case that names it too. Response admission enforces it, so a
 /// gap takes the request's existing protocol correction.
-const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
+pub const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
     .kind_property = "content",
     .covered = &.{@tagName(g.spec.Kind.functional_requirement)},
     .covering = &.{ @tagName(g.spec.Kind.acceptance_criterion), @tagName(g.spec.Kind.edge_case) },

@@ -38,7 +38,7 @@ prove that inputs and execution were processed safely.
 | Command | Live? | Purpose |
 | --- | --- | --- |
 | `./scripts/e2e-spec.sh --case <case>` | Yes | Generate and publish one case, capturing it for adjudication |
-| `./scripts/e2e-call.sh ...` | Yes | Resend one captured request |
+| `./scripts/e2e-call.sh ...` | Yes | Resend one captured request, or its `--edit` replacement |
 | `./scripts/provider-compatibility.sh --case <case> --live` | Yes | Send one fresh first request (needs the frozen 16,384-token binding; shipped cases are rejected) |
 | `zig build evaluate-spec -- ... --live` | Yes | Grade a supplied specification |
 | `zig build adjudicate-spec -- ...` | No | Apply a human adjudication offline |

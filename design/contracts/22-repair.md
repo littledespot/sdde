@@ -598,7 +598,10 @@ defined response-level correction containing:
   every constraint that schema syntax can express; `exact_members` uniqueness stays
   native and is reported as `duplicate_member` with parent scope on the enclosing
   array. ADR 0038's coverage (`uncovered_member`) and ADR 0042's required items
-  (`missing_required_item`, at the array that needs an item) are native the same way. Correction does not repeat schema subtrees. Syntax correction uses that
+  (`missing_required_item`, at the array that needs an item) are native the same way.
+  An `uncovered_member` correction also names the compiled rule's covering kinds
+  (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
+  (FIX06 D4.1, decided 30 October 2026); no other correction changes. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.
