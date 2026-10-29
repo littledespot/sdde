@@ -104,6 +104,9 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
             try attempts.append(allocator, .{
                 .origin = origin,
                 .step = try allocator.dupe(u8, record.binding_id.operation_id.workflow_step_id.bytes),
+                // A composed request's identity carries its base packet's purpose and owner.
+                .purpose = std.meta.activeTag(id.model_request_id.purpose),
+                .owner_kind = std.meta.activeTag(id.model_request_id.immutable_unit_owner_id),
                 // A re-send directly follows the runaway attempt it repeats.
                 .resends = if (record.sampling == .runaway_resend) id.model_attempt_ordinal.value - 1 else null,
                 .accounting = accounted.reconciliation,

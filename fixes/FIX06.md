@@ -210,9 +210,13 @@ governs every phase. These rules add what FIX06 needs on top.
     rule. Candidates include E1's request-lifecycle operations, E4's repair data keys, E5's
     split of `OperationExecutionFailed` and rule withdrawals in Q7, Q8 or Q11. Such a change
     lands only after H1 has adjudicated the published measurement-set runs it would strand,
-    or after the user records that they stay unadjudicated. Adding members (for example an
-    optional report field) is safe. Alternative **Decision** for the user: adjudication
-    decodes only the members acceptance needs.
+    or after the user records that they stay unadjudicated. **Adding a member is not safe
+    either** (corrected 28 October 2026): the strict decoder rejects an object whose member
+    count differs from its type's field count, so a missing member fails like an unknown
+    one even when the field has a default (`src/domain/strict_json.zig`, `wireTypes`). Any
+    new report member therefore needs a report version and strands the earlier version on
+    newer builds. Alternative **Decision** for the user: adjudication decodes only the
+    members acceptance needs.
 
 **Boundary gates** for contract changes (carried from FIX05 §7, `git show
 28ff156:fixes/FIX05.md`, which took them from the deleted FIX01 §5 "Acceptance and
@@ -249,9 +253,9 @@ and backlog. "Gap" means between measurement sets.
 | Step | Item | Validation | Decisions |
 | --- | --- | --- | --- |
 | 1 | **Q1a** Remove ADR 0044 and the records-prompt line; hold ADR 0045 (**done**, `d4fd4a5`) | Offline | D1.1, D1.2 (decided) |
-| 2 | **Pre-baseline decisions** (**decided 28 October**, as recommended): D2.1 (b), E0's report marker as an optional v10 member, the H2 label scheme, D11.2 (keep, contract, shared terminal policy), D11.4 (name the exception), DE6 (always emit ADR-required events), D11.5; D11.2, D11.4, D11.5 and DE6 implemented | Decisions; offline | D2.1, D11.2, D11.4, D11.5, DE6 (decided) |
-| 3 | **T5** measures and request projections; **T1**; D11.1 docs; all committed before the set (D11.2 and D11.5 were done in step 2). H1 may start on the clean 26 October `39a06ea` pair | Offline | — |
-| 4 | **Q1b** Clean baseline, six runs per case, on the committed build; Q2's pre-phase replays alongside | Measurement set | — |
+| 2 | **Pre-baseline decisions** (**decided 28 October**, as recommended): D2.1 (b), E0's report marker (as an optional v10 member; reopened under rule 13 and decided 29 October as a `spec-e2e-report/v11` member, step 3), the H2 label scheme, D11.2 (keep, contract, shared terminal policy), D11.4 (name the exception), DE6 (always emit ADR-required events), D11.5; D11.2, D11.4, D11.5 and DE6 implemented | Decisions; offline | D2.1, D11.2, D11.4, D11.5, DE6 (decided) |
+| 3 | **T5** measures and request projections, with `spec-e2e-report/v11` (decided 29 October); **T1**; D11.1 docs; all committed before the set (D11.2 and D11.5 were done in step 2). H1 may start on the clean 26 October `39a06ea` pair | Offline | — |
+| 4 | **Q1b** Clean baseline, six runs per case, on the committed build; Q2's pre-phase replays alongside | Measurement set | T5's definitions (approved 29 October); DT5 (decided and implemented 29 October) |
 | 5 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041): built during Q1b, landing after it and before Q2's set | §2.11 freeze diff, one run per case | Accepted; DE6 decided first |
 | 6 | **Q2** Repair requests carry their step's definitions (one generic owner), with **T3** | Paired replays decide the target; measurement set guards | D2.1 |
 | 7 | **Q2b** Generic content-loss guard for repairs | Measurement set | D2.2 |
@@ -286,8 +290,9 @@ their evidence.
   report marker) are settled first so every measured run shares them.
 - **Baseline first, then E0.** `adjudicate-spec` reads only `report.json` and its embedded
   capture, and `e2e-call` replays captured requests without compiling definitions, so
-  `workflow/v2` strands no run. E0 adds its report marker as an optional v10 member, so
-  Q1b's reports still decode. E0 changes no model input and no outcome measure (a failed
+  `workflow/v2` strands no run. E0's report marker ships in `spec-e2e-report/v11` with T5
+  (decided 29 October; rule 13), so E0 changes no report version. E0 changes no model
+  input and no outcome measure (a failed
   run that publishes stays failed and isn't scored), so it doesn't need to delay the
   baseline. DE6 comes first because E0 adds a required warning event.
 - **Harm before polish.** Q2 fixes the only observed requirement loss; Q2b guards against
@@ -387,6 +392,12 @@ is decided on paired replays of identical captured state:
   whose trigger survives Q1a.
 - **Old request.** `e2e-call --repeats 20` with the captured settings, on the last pre-Q2
   build while it can still load the `model-request-debug/v13` capture.
+  **Done 29 October 2026** on the Q1b build (`openai.gpt-oss-20b-1:0`, `low`): call 6
+  answered `retained` 19 times and `duplicate` (target claim 2) once, which would drop the
+  UTC claim (harmful); control call 5 answered `retained` 20 times. All 40 exchanges
+  completed and were schema-valid; 39 needed the §22.6 normalization (37 leading brace
+  quote, 2 repeated field prefix). Reports: `zig-out/e2e-call/2026-10-29T09-18-37Z-d0b3…/`
+  (call 6) and `…-404a…/` (call 5).
 - **Q2 request.** The same requests with the repaired step's definitions added as Q2 binds
   them, through the debugger's modified replay (ADR 0019), run on a copy of the retained
   project under `evaluations/`, never on `zig-out/`; or a T-track change that lets
@@ -723,9 +734,11 @@ an incomplete specification, marked in `spec.md` and `reference-context.md` and 
 `run.incomplete_published`, while still ending `failed` or `blocked`. Mechanism: a
 YAML-declared `failure-output` subgraph run by the engine through the runner in a model-free
 failure-output mode; eligibility as ADR 0041 Decision 1; no final requirement IDs;
-`workflow/v2`. Its report marker is an optional `spec-e2e-report/v10` member (decided 28
-October 2026), with a test
-that a pre-E0 v10 report still decodes. Two tests asserting that a required repeated
+`workflow/v2`. Its report marker is `spec-e2e-report/v11`'s `incomplete_publication`, the
+artifacts the run wrote (its step, diagnostic and outcome are the report's own
+`terminal_step`, `diagnostic` and `workflow_outcome`); it landed with T5 (decided 29 October
+2026) and stays null until E0 writes it, so E0 changes no report version. With a test that a
+pre-E0 v11 report still decodes. Two tests asserting that a required repeated
 runaway publishes nothing flip, and `spec.md`'s reader needs a slot for the failure status
 line beside ADR 0040's. DE6 is decided first. About the size of ADR 0039.
 
@@ -843,7 +856,10 @@ No model-input change.
 ADR 0039's debug-capture test: at `debug`, a repeated runaway leaves both attempts'
 requests, request descriptions and complete returned outputs in the prompt log before the
 failure events; at a higher level, only the events. No live run has had a repeated runaway.
-Before Q1b.
+Before Q1b. **Done 28 October 2026** (uncommitted): `src/model_request_workflow_test.zig`,
+"ADR 0039: a repeated runaway is captured in full at debug before its failure, and only its
+events survive higher levels", at every log level, including §26.5's always-emitted events
+at `error` and `fatal`.
 
 ### T2. Test decoupling
 
@@ -907,17 +923,88 @@ October runs; no live run. The user reviews the definitions before Q1b.
   It is an observation, never asserted; a proof is a byte diff of two freeze directories
   under `evaluations/`. Retire any driver `measurement_prefix` dump that only duplicates it.
 
+**Status, 28 October 2026 (uncommitted).**
+- (a) and (c): `zig build e2e-measures` writes `measures.json` (`e2e-measures/v1`) per run
+  and a set summary (`e2e-measures-set/v1`), offline, reusing the scorer's admission metric
+  and the production parsers; definitions are in [e2e.md](../design/harness/e2e.md) ("Run
+  measures"), including each stage's sends, tokens and shares from v11's per-attempt request
+  purpose and owner, through the stage classification and accumulation the baseline scorer
+  also uses (moved to `baseline/stages.zig`, one owner). **Not yet:** the brittleness
+  counts, which belong in `zig build code-heuristics` from source structure, never from
+  word lists.
+- (b) and (d): the `/evaluate-e2e` skill holds the defect-class vocabulary, repair grades,
+  `e2e-assistant-evaluation/v2` and `b2-review-label/v2` (provisional until H2).
+- (e): a recorder at the fake provider port writes projections keyed by scenario and call
+  order (request ordinals restart per unit); `SDDE_REQUEST_PROJECTION=<dir> zig build
+  test-integration` takes a freeze, and `diff -r` proves byte identity. First freeze:
+  `evaluations/request-projection/371b55a-worktree/` (4,378 requests; a repeat freeze was
+  identical). The driver's `measurement_prefix` dumps stay: they also record wire encoding,
+  compiled steps and composition, which the projection omits.
+- Contract-review fixes (28 October): the event-log reader is strict and versioned through
+  the log-format owners, and `measures.json` records the run's log threshold; publication
+  is `native`, `incomplete` (v11's marker, written once E0 lands) or `none`; the pooled
+  publication rate counts every attempted run, with undecodable reports counted separately;
+  `--out` must sit under `evaluations/` and never inside a run directory; a report marked
+  v1–v10 is `unavailable`, and an undecodable v11 report makes the run unmeasurable (DT5). So no retained run's
+  report measures: all are v10 or older. Their call evidence and feature logs still measure
+  where the retained configuration decodes, which excludes the 24–25 October runs (no
+  configured temperatures). `e2e-measures` builds and smoke-tests in the offline suite.
+- Freezes are grouped as `<group>/scenario-NNN/call-NNNN.json` with a `manifest.json`
+  (groups, scenarios, calls): the first freeze's flat layout let case groups overwrite each
+  other's scenario numbers, so it is superseded. **Base freeze taken 29 October 2026** on
+  the step-3 tree (v11 and DT5 included; uncommitted at the time, tree digest
+  `99bad68a5db586f3` over `git diff HEAD` and the untracked files), fresh:
+  `evaluations/request-projection/step3-2026-10-29/`, 8 groups, 198 scenarios, 4,406
+  requests; a repeat freeze was byte-identical. It is E0's base as long as the step-3
+  commit holds this tree; otherwise it is retaken on that commit.
+- **Report version, decided 29 October 2026 (user: "move to v11"):** `spec-e2e-report/v11`
+  records each attempt's request `purpose` and `owner_kind` from its native request
+  identity (a composed request's identity carries its base packet's), and ADR 0041's
+  `incomplete_publication`. Baseline acquisition, which embeds the report, advances to
+  `baseline-acquisition/v8` and rejects an attempt whose purpose or owner differs from its
+  physical receipt; the baseline trace reads both from the same request identity. An
+  offline runaway scenario checks that each re-send is attributed to the stage of the
+  request the runaway targeted (review, repair or generation). Retained v10 runs no longer
+  decode on builds from v11 (rule 13; H1).
+- **Definitions approved 29 October 2026 (user),** as written in
+  [e2e.md](../design/harness/e2e.md) ("Run measures"), keeping the coarse stages: they match
+  §2.6's cost row (extraction and reconciliation, generation, review, repair).
+- **Decision DT5, decided and implemented 29 October 2026 (user).** Two guards that protect
+  the baseline's completeness and comparability; they change no engine output, so they
+  improve no specification (the first change that can is Q2).
+  1. **A run that can't be measured doesn't stop the set.** A run whose records can't be
+     read or trusted (for example, a feature log whose last row was cut off mid-write) is
+     recorded as `unmeasurable`, naming which kind of record from a closed list, counted
+     as attempted (§2.4) and never as a publication. An exhaustive, compile-checked switch
+     classifies every error. A run without a readable `case.json` (it can't be attributed
+     to a case) and an operational failure of the measurement itself (cancellation,
+     exhausted resources) still stop the command.
+  2. **A case's runs share one log threshold.** Rejection, validation-failure and latency
+     counts compare only at one level, so the set summary records each case's threshold,
+     and a case whose measured runs differ stops the command, naming the case and both
+     levels. Both cases share one configuration at `debug` today.
+
+  Every run is measured and summarized before anything is written, so a stop leaves no
+  partial output.
+- **Draft measures files renamed 29 October 2026 (user).** The seven files the draft
+  producer wrote on 28 October predate the final format (no log threshold or stages), so
+  they are now `evaluations/e2e/<run>/measures-draft.json` for the six 27 October runs and
+  `evaluations/fix06-review/2026-10-28/measures-set-2026-10-27-draft.json`.
+  `/evaluate-e2e` never reads them, and the three hello-world files keep the only
+  report-derived counts for runs whose v10 reports v11 can't read.
+
 ## 7. Human and decision track (H)
 
 ### H1. Adjudication (R8)
 
 Only a human `human-spec-adjudication/v2` record, applied with `zig build adjudicate-spec`,
-decides acceptance. No run has been adjudicated. A `spec-e2e-report/v10` run can be
-adjudicated while its report still decodes (§2.13): Q1a's removal of the
+decides acceptance. No run has been adjudicated. A run can be adjudicated only by a build
+whose report contract decodes it (§2.13). From `spec-e2e-report/v11` (29 October), every
+retained run is v10 or older, so only a build before v11 reads them. Q1a's removal of the
 `weakened_obligation` rule made the three 27 October loan-renewal reports (05:06 and 09:40
 published, 08:31 failed) undecodable, and they stay unadjudicated unless the user decides
 otherwise; the retained v9 runs also stay unadjudicated (decided 27 October). The clean 26
-October `39a06ea` pair can be adjudicated now. Needed for the ADR 0034 gate, for every
+October `39a06ea` pair is v10. Needed for the ADR 0034 gate, for every
 measurement set from Q1b on.
 
 ### H2. Review-label confirmation (B2)
@@ -1035,11 +1122,44 @@ request's lifetime. Decide after E1.
 | --- | --- | --- | --- | --- | --- |
 | 1 | Q1a | Done 28 October 2026 (D1.1, D1.2 decided) | `d4fd4a5` | Offline only | `zig build verify`: 164 of 164 steps, 1,969 of 1,969 tests; `git diff --check` clean; no tracked file outside `fixes/` names the removed rule; contract review: no code findings, three minor doc findings fixed |
 | 2 | Pre-baseline decisions | Decided 28 October 2026; D11.2, D11.4, D11.5 and DE6 implemented, uncommitted | Working tree on `d4fd4a5` | Offline only | `zig build verify` on the final tree: 164 of 164 steps, 1,972 of 1,972 tests; D11.2: none of the 21 retained `spec.md` files has a clause ending whose join changes, so re-rendering is byte-identical; contract review: no code defects; its major finding (§26.5 and §13.9 still stated the old emission rule) and six minor findings fixed |
-| 3 | T5, T1, D11.1 | Proposed | — | — | — |
-| 4 | Q1b | Proposed | — | — | — |
-| 5 | E0 | Accepted (ADR 0041); not started; DE6 decided | — | — | — |
+| 3 | T5, T1, D11.1, `spec-e2e-report/v11`, DT5 | Implemented 28 October 2026; v11, the measure-definition approval and DT5 on 29 October (decided that day); uncommitted, except brittleness counts (see T5) | Working tree on `371b55a` | Offline only | `zig build verify` on the final tree: 169 of 169 steps, 1,984 of 1,984 tests; contract reviews: step 3 had no blockers and one major, seven minor and three nit findings, all fixed; v11 had no blockers or majors and eight minor findings and a nit, all resolved (the draft measures files are renamed); DT5 had no blockers, one major (operational errors marked a run unmeasurable), three minor and five nit findings, all fixed; see T5's status |
+| 4 | Q1b | Done 29 October 2026 on the latest build by user decision ("run Q1b on the latest build"): the uncommitted step-3 tree, source digest `c7684e21…`, so every run records `modified: true` (a user-approved deviation from §2 rule 3). Runs 1 of each case are the 08:51 and 08:53 runs | `371b55a` + working tree | 6 hello-world, 6 loan-renewal | Baseline table below; measures `evaluations/q1b/measures-set.json`; evaluations `evaluations/e2e/2026-10-29T*/`; none adjudicated |
+| 5 | E0 | Accepted (ADR 0041); its twelve preflight decisions approved 29 October 2026 (ADR 0041 Decision 7); in progress | — | — | — |
 | 6–20 | Q2–Q11, closing set | Proposed | — | — | — |
 | — | E1–E8, T2–T4 | Proposed or accepted, not started | — | — | — |
+
+### Q1b baseline (29 October 2026)
+
+Advisory evaluations (`/evaluate-e2e`) are not acceptance; no run is adjudicated (H1).
+Spreads are minimum / median / maximum over attempted runs unless stated.
+
+| Measure | hello-world | loan-renewal |
+| --- | --- | --- |
+| Native publication | 6 / 6 | 4 / 6; runs 1 and 6 failed `RetryLimitExhausted` at the records call (`uncovered_member` three times each: a claim named by a functional requirement but by no acceptance criterion or edge case; both corrections returned the same response) |
+| Advisory aggregate (published runs) | 82.14 / 89.29 / 96.43; 6 of 6 at or above 80 | 78.57 / 82.14 / 85.71; 3 of 4 at or above 80 (run 5 `threshold_failed`); renewal-eligibility at its minimum in all four |
+| Sends | 22 / 23 / 27 | 12 / 25.5 / 27 |
+| Actual tokens | 58,282 / 65,119 / 122,002 | 26,347 / 96,736 / 113,908 |
+| Review share of tokens (published runs) | 74.6–80.9% | 78.4–83.6% |
+| Protocol corrections (pooled per send) | 1 / 142 | 5 / 129 |
+| Runaways and re-sends (pooled per send) | 4 / 142 (all in review) | 3 / 129 (all in review) |
+| Admission rejections (pooled per send) | 1 / 142 (`SYNTAXERROR`) | 7 / 129 (6 `UNCOVERED_MEMBER`, 1 `SYNTAXERROR`) |
+| Admission escapes | 0 / 86 values | 0 / 108 values |
+| Repairs | 1 (native business-rule delete, graded helpful) | 0 |
+| Records per records call | 2 / 2 / 5 | 3 / 5.5 / 8 |
+| Latency (ms) | 26,414 / 31,836 / 267,969 | 11,182 / 70,681 / 121,720 |
+| Lost source requirement (published) | 0 / 6 | 1 / 4 (no inactive-loan refusal scenario) |
+| Weakened obligation (published) | 0 / 6 | 4 / 4 story "may renew"; 2 / 4 FR-001 too |
+| Unsupported addition (published) | 3 / 6 (trigger "executable"; entity "immediately … followed by") | 3 / 4 (AC-001 adds a renewal mark or "remains active") |
+| Invented or restating entity (published) | 4 / 6 | 4 / 4 |
+| Restatement (published) | 2 / 6 | 3 / 4 |
+| Rendering artefact (published) | 6 / 6 (code span inside the model's quotes) | 4 / 4 (same; plain-text values in entity meaning) |
+| Review detection recall (published) | 4 of 14 defective subjects flagged, none with the right type | 0 of 21 |
+| Principle citations | all blanket | all blanket |
+
+The label convention for a `supported` verdict on a defective subject differs between
+evaluations (`wrong_type`, `missed_defect`, or both), so finding-type accuracy isn't pooled
+until H2 settles it; each run's `labels.json` and `notes.md` state the convention used.
+Labels sit in each run's evaluation folder.
 
 **Cost estimate.** Runs on 26–27 October used 61,906–93,411 tokens (hello-world) and
 85,486–98,032 (published loan-renewal). A measurement set with its two control runs is about

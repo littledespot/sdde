@@ -86,6 +86,9 @@ pub const TerminalRejection = struct {
 pub const Attempt = struct {
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     step: []const u8,
+    /// The request's native purpose and owner, which attribute its consumption to a stage.
+    purpose: @import("../../../src/domain/model_request_identity.zig").RequestPurposeKind,
+    owner_kind: std.meta.Tag(@import("../../../src/domain/model_request_identity.zig").ImmutableUnitOwnerId),
     /// ADR 0039: the attempt ordinal a runaway re-send repeats, otherwise null.
     resends: ?u32 = null,
     accounting: std.meta.Tag(@import("../../../src/domain/workflow_token_accounting.zig").Reconciliation),
@@ -147,7 +150,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v10" },
+    schema: enum { @"spec-e2e-report/v11" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -218,6 +221,10 @@ pub const Report = struct {
     missing_artifact: ?Artifact = null,
     specification: ?[]const u8 = null,
     publication_check: enum { not_run, passed, failed } = .not_run,
+    /// ADR 0041: the incomplete set a failed or blocked run published. Its step,
+    /// diagnostic and outcome are `terminal_step`, `diagnostic` and `workflow_outcome`,
+    /// and its bytes stay in the run's `project/`. Null until E0 writes it.
+    incomplete_publication: ?[]const Artifact = null,
     /// Exact source, rubric and published bytes for offline human adjudication.
     evaluation_inputs: ?evaluator.Capture = null,
 };

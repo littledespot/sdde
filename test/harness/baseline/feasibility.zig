@@ -131,7 +131,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
         error.OutOfMemory => return error.OutOfMemory,
         else => return error.InvalidBudgetEvidence,
     };
-    if (report.schema != .@"spec-e2e-report/v10" or report.origin != .live or report.build == null or report.evidence_error != null or
+    if (report.schema != .@"spec-e2e-report/v11" or report.origin != .live or report.build == null or report.evidence_error != null or
         report.case_id == null or report.execution_id == null or report.workflow_id == null or report.model_calls == 0 or report.attempts.len != report.model_calls) return error.InvalidBudgetEvidence;
     const source = report.build.?;
     if (source.reconstruction != .captured or source.inputs_file == null) return error.InvalidBudgetEvidence;
@@ -604,15 +604,15 @@ test "budget evidence joins physical origins independently of native unsent oper
     const second: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
     const usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage.init(4, 3, 7).?;
     const attempts = [_]native.Attempt{
-        .{ .origin = second, .step = "later-required", .accounting = .exact_usage, .usage = usage },
-        .{ .origin = unsent, .step = "advisory-stopped-before-send", .accounting = .not_sent, .usage = null },
-        .{ .origin = first, .step = "first-required", .accounting = .exact_usage, .usage = usage },
+        .{ .origin = second, .step = "later-required", .purpose = .initial_generation, .owner_kind = .specification_unit, .accounting = .exact_usage, .usage = usage },
+        .{ .origin = unsent, .step = "advisory-stopped-before-send", .purpose = .semantic_review, .owner_kind = .semantic_review, .accounting = .not_sent, .usage = null },
+        .{ .origin = first, .step = "first-required", .purpose = .initial_generation, .owner_kind = .reference_chunk, .accounting = .exact_usage, .usage = usage },
     };
     const exchanges = [_]@import("admission.zig").Exchange{
         .{ .call = 1, .origin = first, .usage = usage },
         .{ .call = 2, .origin = second, .usage = usage },
     };
-    const report: native.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
+    const report: native.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated, .model_calls = 3, .not_sent_operations = 1, .total_tokens = 14, .attempts = &attempts, .admission_exchanges = &exchanges };
     const joined = try capturedAttempts(a, report);
     try std.testing.expectEqual(@as(usize, 2), joined.len);
     try std.testing.expectEqual(@as(usize, 1), joined[0].ordinal);

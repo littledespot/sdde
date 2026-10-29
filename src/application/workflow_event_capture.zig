@@ -125,7 +125,8 @@ pub fn outcome(value: workflow.OutcomeTag) t.EventOutcome {
         .cancelled => .cancelled,
     };
 }
-fn diagnostic(buffer: []u8, value: []const u8) ?t.DiagnosticCode {
+/// The diagnostic code an event records for a tag or error name.
+pub fn diagnostic(buffer: []u8, value: []const u8) ?t.DiagnosticCode {
     if (value.len > buffer.len) return null;
     for (value, buffer[0..value.len]) |byte, *target| target.* = std.ascii.toUpper(byte);
     return t.DiagnosticCode.validate(buffer[0..value.len]);

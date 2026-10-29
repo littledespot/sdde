@@ -542,7 +542,7 @@ The engine validates:
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
 - presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a functional requirement names is also named by an acceptance criterion or edge case ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
 - a record maps only the claims it names, not its whole group; an unnamed claim maps only through another target, such as a narrative field that selects its group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
-- absence of template placeholders and model-authored checklist state;
+- no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
 - artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
 - unsupported technical content: existing semantic review assesses whether code, filenames, paths, framework identifiers and implementation details belong in business requirements. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
@@ -554,7 +554,7 @@ The engine validates:
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 
-The technical-leakage validator is a strong lexical/static lint, not a complete semantic proof. A separate semantic-review action decides nuanced cases and labels them model-assisted.
+There is no technical-leakage lint: it was never built and was removed on 28 October 2026 by user decision, because lexical shape alone is not a semantic rejection. The semantic-review action decides these cases and labels them model-assisted.
 
 ### 17.6 Rendering and commit
 

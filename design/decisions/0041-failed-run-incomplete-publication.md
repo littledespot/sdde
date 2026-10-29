@@ -13,7 +13,9 @@
   blocked runs ("3 yes", then "update with recommendations and implement"). On
   27 October 2026 the user accepted the four mechanism decisions of a read-only design
   pass (Decision 6), with "update the docs with the above recommendations" after the
-  recommendation "accept all four as proposed".
+  recommendation "accept all four as proposed". On 29 October 2026 the user approved the
+  twelve implementation decisions of E0's preflight ("yes E0 is approved"), recorded in
+  Decision 7.
 - **Amends:**
   - [ADR 0009](0009-atomic-workflow-execution.md): "Candidate outputs remain private
     until whole-workflow validation permits publication", for the validated content of
@@ -147,6 +149,46 @@ incomplete specification when a run pauses for clarification.
      every failure route and reverse ADR 0030 and §22's "never an ordinary YAML outcome".
      An ADR 0032 routine publishing after the failure would be a second publication path
      outside the runner.
+
+7. **Implementation decisions** (29 October 2026). They settle what Decisions 1–6 left
+   open and amend nothing above.
+   1. **`invalid` stays `invalid`.** The engine returns the original outcome unchanged.
+      The closed `spec_incomplete` cause and the publication terminal outcomes are
+      `failed`, `blocked` and `invalid`; an `invalid` run's status line reads like a
+      failed run's.
+   2. **Eligible terminals.** Any eligible terminal after the snapshot validated, except
+      a failure in a step whose side effect is `workflow_publication`: that typed fact,
+      never a step name, keeps ADR 0009's write-failure rule.
+   3. **The snapshot owner.** The failure output declares the validated reference
+      snapshot as a required input. Without it the runner's missing-input refusal stops
+      the failure output, and the original failure stands; the orchestrator inspects no
+      domain data.
+   4. **"Only Specify declares one" is descriptive.** The compiler has no workflow-name
+      branch.
+   5. **Eligible operations.** The registered operation contract carries a typed
+      failure-output eligibility flag, which the compiler checks for every failure-output
+      step; no step may hold a model capability.
+   6. **Cancellation and deadline.** The runner's checks still apply in failure-output
+      mode; the engine returns the original failure, and ADR 0009's rule covers files
+      already written.
+   7. **Tests.** The publishing list's "authority block" is a YAML administrative block;
+      the runner's `authority` rejection publishes nothing. A `model_capture` exclusion
+      test is added.
+   8. **Rendering.** `spec.md`: the title first, then the failure line, then ADR 0040's
+      review line when present. The failure line is `**Status: Incomplete — the run
+      failed.**` or `**Status: Incomplete — the run was blocked.**`, followed by one
+      sentence naming the authored step ID and the diagnostic code. A section the run
+      didn't produce reads "Not generated." Without a produced title the H1 is the
+      feature ID. `reference-context.md` gains `## Run status`.
+   9. **State content.** `spec_incomplete` keeps the specification ID ledger and the
+      record-ID counters (as ADR 0017's pending state does), and stores the step, the
+      diagnostic, the units not produced and the checks that didn't run, so rendering
+      comes from stored state.
+   10. **The published set.** `spec.md`, `reference-context.md` and the workflow state,
+       written last; no clarification files. The CLI prints the same set.
+   11. **Pending failure subjects.** A runner rejection is one typed pending failure
+       subject, which the incomplete prepared output must carry.
+   12. **Timing.** E0 lands after the Q1b set (done 29 October 2026).
 
 ## Consequences
 

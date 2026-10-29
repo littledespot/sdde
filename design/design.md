@@ -249,8 +249,8 @@ Deterministic checks should be used wherever the answer can be computed from con
 | Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; validate brief schema/citations | Derive human title, description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
 | Reference discovery | Root containment, traversal, symlinks, inventory, ordering, readability, size, decoder availability | None | Unsupported inputs block or require an installed reader according to policy. |
 | Reference understanding | Source span validity, exact token preservation for structured formats, coverage ledger | Extract requirements, classify signals, recognize semantic conflicts | The engine can prove a citation exists; it cannot prove every semantic implication was found. |
-| Business/technical split | Obvious lint such as forbidden absolute paths, code fences, known source extensions, known framework identifiers | Decide whether nuanced content belongs in business spec or technical context | Borderline findings are model-assisted warnings or human review, not false “proof.” |
-| Spec structure | Required fields, IDs, uniqueness, status, placeholders, citation schema, required sidecar | Stories, acceptance criteria, business rules, assumptions, non-goals | Testability and ambiguity are semantic reviews unless reducible to a schema rule. |
+| Business/technical split | None: the keyword lint was never built and was removed on 28 October 2026 by user decision; explicit references and exact values keep their typed rules | Decide whether content belongs in business spec or technical context ([§17.5](contracts/17-specify.md)) | Findings are model-assisted warnings or human review, not false “proof.” |
+| Spec structure | Required fields, IDs, uniqueness, status, citation schema, required sidecar; typed rendering emits no placeholder and readback accepts only its closed grammar | Stories, acceptance criteria, business rules, assumptions, non-goals | Testability and ambiguity are semantic reviews unless reducible to a schema rule. |
 | Repository facts | File inventory, manifests, installed dependencies, scripts, source/test roots, AST parse, tool availability | Interpret which existing areas are relevant to the feature | A model may select among real facts but may not invent facts. |
 | Plan structure | Artifact manifest, canonical paths, applicability, required sections, requirement coverage, allowed commands | Architecture, trade-offs, research rationale, minimal change choice, verification strategy, principle interpretation | Principle conflicts requiring judgment remain LLM/human decisions. |
 | Planned filenames | Authorize the exact project/kind/role option; derive locations and filename shape; enumerate, validate, and identify candidates; validate the selected candidate | Select an allowed semantic name source and then one engine-enumerated `pathCandidateId` | Raw filename/path proposal is disabled by default; fallback-only invalid paths receive preset-specific atomic repair guidance. |
@@ -977,8 +977,9 @@ The new engine is ready for production evaluation when all of the following are 
       parsed as authority.
     - Those projections require approvals bound to the current canonical state IDs.
 
-21. `spec.md` is business-only according to deterministic lint and configured semantic review,
-    while technical/reference data remains in the sidecar.
+21. `spec.md` is business-only according to configured semantic review (the deterministic
+    lint was removed on 28 October 2026 by user decision), while technical/reference data remains
+    in the sidecar.
 
 22. **Project principle authority.**
     - Semantic Markdown principle filenames are category hints only; their complete bounded
