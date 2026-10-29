@@ -137,7 +137,7 @@ governs every phase. These rules add what FIX06 needs on top.
    | Defect classes | Lost source requirement; weakened obligation; unsupported addition; invented or restating entity (B6); restatement; rendering artefact; engine-vocabulary leak; records per records call (B5 inflation; a deterministic count from T5) |
    | Repairs | Each repair graded helpful, neutral, harmful or no progress |
    | Admission | Protocol corrections; admission rejections by reason; runaways and re-sends; admission escape (a value violating a declared native rule reaching review or publication, with downstream sends and tokens) |
-   | Review | Finding-type accuracy (AGENTS.md definition), provisional until H2, with precision per predicted type and recall per labelled type at original and final assessment; detection recall; false statements; principle-citation precision (findings whose citation covers the governing principle's lines; blanket whole-file citations; details naming a principle they don't cite) |
+   | Review | Finding-type accuracy ([e2e.md](../design/harness/e2e.md#reliability-assessment) definition), provisional until H2, with precision per predicted type and recall per labelled type at original and final assessment; detection recall; false statements; principle-citation precision (findings whose citation covers the governing principle's lines; blanket whole-file citations; details naming a principle they don't cite) |
    | Cost | Sends and actual tokens per stage (extraction and reconciliation, generation, review, repair) per attempted workload; review share; run latency; all dispatched sends, tokens and latency per acceptable (adjudicated) result, failed attempts included, unknown until H1 (ADR 0034; evaluation protocol) |
    | Brittleness | Counted at Q1b and after each phase: sites per model instruction (target one); guidance sentences without repeated-run evidence; model-facing English copied into tests; raw-string branches on schema names; model- or case-specific branches; repair sites without their step's guidance; model-facing English in Zig outside its single owner |
 
@@ -261,7 +261,7 @@ and backlog. "Gap" means between measurement sets.
 | 6 | **Q2** Repair requests carry their step's definitions (one generic owner), with **T3** | Paired replays decide the target; measurement set guards | D2.1 |
 | 7 | **Q2b** Generic content-loss guard for repairs | Measurement set | D2.2 |
 | 8 | **Q3** One owner per model instruction (move only), with **T2** | §2.11 projections byte-identical, one run per case | D3.1 |
-| 9 | **Q6** Scope "preserve obligations" to the fields D6.1 names, with the in-request dedupe | Measurement set | D6.1 |
+| 9 | **Q6** Scope "preserve obligations" to the fields D6.1 names, with the in-request dedupe (built and measured before Q2 and Q3 on 30 October 2026, then reverted: not kept) | Measurement set | D6.1 (b), decided 30 October |
 | 10 | **D7.1** Exact-value corrections state the boundary rule | Offline; byte-identical requests | D7.1 |
 | 11 | **Q4** Remove engine vocabulary and schema-stated rules (hygiene) | Measurement set (guards) | D4.1 |
 | 12 | **Q5** Remove unmeasured single-run sentences (hygiene) | Measurement set (guards) | D5.1 |
@@ -299,9 +299,9 @@ their evidence.
 - **Harm before polish.** Q2 fixes the only observed requirement loss; Q2b guards against
   repairs that drop content. Both precede E1 and E4, which must then preserve Q2's
   bindings.
-- **One owner before content edits.** Q3 moves ownership without moving bytes, so Q6, Q4
-  and Q5 each edit one place. Q6 comes first among content edits because restatement is the
-  most frequent remaining defect.
+- **One owner before content edits.** Q3 moves ownership without moving bytes, so Q4 and Q5
+  each edit one place. Q6 was tried first anyway (30 October 2026, user decision) and
+  reverted; Q2's replays on "the last pre-Q2 build" include D4.1.
 - **Hygiene after the targeted fixes.** Q4 and Q5 have no improvement target and are kept
   on guards alone. D7.1 lands before Q4 so corrections already state the boundary rule.
 - **Granularity on settled prompts.** Q8 follows Q4 and Q5 so its two arms share the final
@@ -448,8 +448,8 @@ resource entry.
 Q3 only moves ownership: each instruction is produced from its new owner at its current
 position, so no request's bytes change. Copies that never reach the same request merge into
 the one owner. A duplicate inside one request (for example `generation.prompt.md:2` and
-`generation.context.json`'s `business_value`, both in the brief request) stays until Q6
-removes it, because removing it changes model input.
+`generation.context.json`'s `business_value`, both in the brief request) stays until a
+measured phase removes it, because removing it changes model input.
 
 **Decision.** **D3.1** Which layer owns semantic guidance. Recommended: the workflow
 resources (contract 12: "the workflow supplies prompt content"), with the native field
@@ -571,6 +571,16 @@ satisfies coverage (ADR 0020; text-field-composition.md:57).
 Either way, amend the shared field purposes (17-specify.md:238-239) and
 `generation.context.json`'s `business_value` guidance. Changing an exact-copy role is not
 part of Q6.
+
+**Decided 30 October 2026: (b)**; built, measured and **reverted in full the same day (user
+decision, not kept)**. The build made the field purposes the single owner: `business_value`
+ended at "Fulfil the assigned field purpose.", the brief and story lost the instruction, and
+the functional-requirement, acceptance-criterion, edge-case, business-rule, non-goal and
+prohibited-behaviour purposes carried it (1,026 of 4,406 requests changed). Its set, three
+runs per case against Q1b: restating entity meanings 4 of 5 published (Q1b 8 of 10), stories
+still restated FR-001 in all five, one lost source requirement (hello-world dropped the UTC
+requirement; Q1b none), loan-renewal 2 of 3 published (one token-budget failure). The target
+didn't improve and a guard got worse, so §2.7 reverts it. Restatement needs another lever.
 
 **Validation.** Measurement set. **Keep if** restatement improves, and lost requirements and
 weakened obligations in requirements and acceptance criteria don't worsen.

@@ -260,6 +260,7 @@ When asked to label review findings, write
 - **`metrics`** is always present. Finding-type accuracy is the share of review findings
   whose predicted type equals the expected type; `missed_defect` entries (no finding,
   null `predicted_type`) are excluded from its denominator and counted in recall.
-  Precision is per predicted type and recall per expected type (AGENTS.md).
+  Precision is per predicted type and recall per expected type (FIX06 review measures;
+  `design/harness/e2e.md`, "Reliability assessment").
 - **`provisional`** stays `true`. Only a human confirms labels (FIX06 H2); never mark them
   confirmed yourself.

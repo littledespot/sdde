@@ -32,9 +32,10 @@ through `build.zig` steps; `zig build --help` lists them.
 | Unit tests | `zig build test` |
 | Layer and authority boundaries | `zig build test-architecture` |
 | One owning boundary | `zig build test-<area>` |
-| Offline integration scenarios | `./scripts/test-integration.sh` |
+| Offline integration scenarios | `zig build test-integration` |
 | Packaged executable in a clean directory | `zig build smoke` |
 | Complete offline verification | `zig build verify` |
+| Apply the user's adjudication record to a retained run | `zig build adjudicate-spec` |
 
 None of these makes a model call. These do, or run the engine, and each run needs
 explicit user approval naming the case or target project: `zig build run`,
@@ -50,13 +51,17 @@ source, copy or edit `.env.e2e`; the launchers load it.
 - `test/integration/` and `test/harness/`: offline scenarios and the E2E harness.
   `test/e2e/`: live cases.
 - `design/contracts/`: detail for each design section. `design/decisions/`: ADRs.
+  `design/features/`: proposed feature designs. `design/schemas/`: configuration,
+  provider, preset and workflow-definition JSON Schemas.
+- `design/harness/`: the E2E harness, evaluator and R8 acceptance contracts.
+- `design/workflows/`: the Spec workflow definition with its prompts, schemas and
+  context files, which E2E cases install into a target's `paths.workflows` root.
 - [fixes/README.md](fixes/README.md) names the active fix record.
 
 ## Current project state
 
 - [design/design.md](design/design.md) is **Proposed design**; keep that status
-  until the user accepts or amends it. Accepted ADRs amend it, indexed in §32.
-  Cross-cutting: [0001](design/decisions/0001-zig-engine.md) native Zig,
+  until the user accepts or amends it. Cross-cutting ADRs: [0001](design/decisions/0001-zig-engine.md) native Zig,
   [0003](design/decisions/0003-generic-workflow-engine.md) generic engine,
   [0009](design/decisions/0009-atomic-workflow-execution.md) atomic execution,
   [0010](design/decisions/0010-explicit-feature-directory.md) feature directory,
@@ -74,10 +79,12 @@ source, copy or edit `.env.e2e`; the launchers load it.
 
 Precedence, highest first:
 
-1. Explicit user-approved decisions and the accepted engine constitution.
+1. Explicit user-approved decisions, including accepted ADRs (indexed in
+   [design.md §32](design/design.md)). An accepted ADR amends the sections it names,
+   invariants included.
 2. Non-negotiable invariants ([design.md §3.3](design/design.md)).
-3. The rest of `design/design.md`, as amended by accepted ADRs.
-4. The current task's acceptance criteria and scope.
+3. The rest of `design/design.md`.
+4. The current request's acceptance criteria and scope.
 5. `design/code.md`, diagrams, examples and templates.
 
 An implementation request never relaxes an invariant. When the user authorizes a
@@ -87,36 +94,43 @@ stop and report the missing authority, the affected sections, why a local readin
 is unsafe, and the smallest decision that unblocks the work. Never choose a
 convenient local interpretation.
 
+An exception to any rule in this file, a special case included, needs an accepted
+user decision and an explicit typed policy with a narrow contract, provenance, and
+accepted and rejected tests.
+
 ## Design-reading routes
 
-Read the executive summary, goals and invariants, and the applicable acceptance
-criteria, then only the sections for the work area. Section *N* is detailed in
-`design/contracts/NN-*.md`; the §13 catalogue is in `design/contracts/actions/`.
+For any engine work read the first row, then only the rows for the work area.
+Section *N* is detailed in `design/contracts/NN-*.md`; the §13 catalogue is in
+`design/contracts/actions/`. Code samples are in `design/code.md`.
 
 | Work area | Design sections |
 | --- | --- |
-| Any engine implementation | 1, 3, 4, 30; applicable items in 31 |
-| Pipeline-node/runtime contracts | 5-7; code samples 1-6, 24 |
+| Any engine implementation | 1-4, 30; applicable items in 31 |
+| Pipeline nodes, runtime, orchestrators | 5-7, 14; code samples 1-6, 24 |
 | Configuration/principles/presets | 9-11, 15; code samples 14-21, 25 |
-| Model routes/context | 12-13.4, 21; code samples 22-24 |
-| Specify / Plan / Tasks / Implement | 17 / 18 / 19 / 20 |
-| Validation and repair | 21-22; code samples 13, 28-30 |
+| Model routes/context | 12-13.4, 21; code samples 22-23 |
+| Reference ingestion | 16; code samples 8, 26 |
+| Specify / Plan / Tasks / Implement | 17 / 18 / 19 / 20; code samples 7, 27 / 9-10 / 11 / 12 |
+| Diagnostics, validation and repair | 8, 21-22; code samples 13, 28-30 |
 | Rendering/editability | 23 |
 | State, invalidation, recovery | 24; code samples 31-33 |
 | Publication/filesystem | 23.2, 25 |
 | Security and command safety | 26 |
 | Observability | 27; code sample 34 |
 | Testing / Package structure | 28 / 29; code sample 35 |
+| E2E harness and acceptance | 28; `design/harness/`; [ADR 0034](design/decisions/0034-spec-quality-gate.md) |
 
 ## Work authorization
 
-- Answer, review, explain, diagnose and plan requests are read-only.
+- Answer, review, explain, diagnose and plan requests are read-only, except that
+  E2E run analysis is written under the Git-ignored `evaluations/`.
 - Build, change, implement and fix requests authorize in-scope local edits and
   non-destructive validation.
-- Change accepted design, ADRs, invariants, agent-instruction files, CI or security
-  policy only when the task explicitly includes it.
-- Get explicit approval before changing a production dependency, publishing,
-  writing externally, acting destructively or materially expanding scope.
+- Change the design, accepted ADRs, invariants, agent-instruction files, CI or
+  security policy only when the request explicitly includes it.
+- Get explicit approval before publishing, writing externally, acting destructively
+  or materially expanding scope.
 - Never stage, commit or push unless the user asks.
 - Preserve existing user changes; make no unrelated edits in a dirty worktree.
 
@@ -159,8 +173,6 @@ A small non-semantic documentation fix needs none of this.
   validators, repair and recovery paths; change shared contracts across stages.
 - Domain components contribute typed facts or evidence to shared mechanisms; they
   never add their own continuation, fallback, clarification or success rules.
-- A special case needs accepted authority, explicit typed policy, provenance,
-  negative tests and approval.
 - Test the reported example and unrelated members of the same failure class. If the
   owning contract is unclear, ask for the decision.
 
@@ -176,19 +188,21 @@ A small non-semantic documentation fix needs none of this.
 - A model limitation under a coherent contract is a valid result; report it. Never
   work around it with case-, field- or model-specific rules, sampling changes, extra
   retries, a second model or a weaker admission rule. The recorded exceptions are the
-  standalone evaluator's one mechanical correction (harness only, user decision of
-  18 October 2026), the §22.6 normalization of a malformed response opening (ADR 0014;
-  user decisions of 21 September and 18 October 2026) and ADR 0039's single runaway
-  re-send (user decision of 26 October 2026); report runaways, re-sends and
-  normalizations separately.
-- Decide a rule, prompt or contract change on both development cases, with repeated
-  runs on one committed build; a single run never decides it. Never tune on the
-  sixteen reserved qualification features. Count budget-stopped, malformed and
-  exhausted runs as attempted workloads.
+  standalone evaluator's one mechanical correction (harness only,
+  [evaluator.md](design/harness/evaluator.md#attempts-and-failures)), the §22.6
+  normalization of a malformed response opening
+  ([ADR 0014](design/decisions/0014-universal-response-format-guidance.md)) and
+  [ADR 0039](design/decisions/0039-configured-temperatures-and-runaway-resend.md)'s
+  single runaway re-send; report runaways, re-sends and normalizations separately.
+- Decide a rule, prompt or contract change on both development cases, hello-world
+  and loan-renewal, with repeated runs on one committed build; a single run never
+  decides it. Never tune on the sixteen reserved qualification features
+  ([ADR 0034](design/decisions/0034-spec-quality-gate.md)). Count budget-stopped,
+  malformed and exhausted runs as attempted workloads.
 - Report separately: implementation complete, mechanical checks passed, semantic
-  benefit demonstrated, brittleness reduced, scope qualified. Finding-type accuracy is
-  the share of review findings whose type matches a frozen, source-based label; a real
-  defect reported with the wrong type is a harmful diagnosis.
+  benefit demonstrated, brittleness reduced, scope qualified. Measure review findings
+  by finding-type accuracy, as
+  [e2e.md](design/harness/e2e.md#reliability-assessment) defines it.
 
 ## Non-negotiable engine boundaries
 
@@ -217,29 +231,31 @@ The full list is [design.md §3.3](design/design.md). The core rules:
 - A fixed engine sequence such as startup becomes an engine routine
   ([ADR 0032](design/decisions/0032-engine-routines.md)): typed single-purpose
   functions, each with only its port, callable only by the callers ADR 0032 names.
-- Only the composition root builds adapters, binds nodes and assembles startup,
-  which projects cannot author or select and which has no transaction lock. Only
-  the compiler builds workflow graphs, from validated definitions and registered
+- Only the composition root builds adapters, binds nodes and assembles startup.
+  Projects cannot author or select startup, and it acquires no feature transaction
+  lock. Only the compiler builds workflow graphs, from validated definitions and registered
   contracts. Domain code imports no infrastructure.
 
 ### Paths and commands
 
 - Validate every model-proposed path before use. Persisted paths are normalized and
   repository-relative, and each maps to exactly one environment, project, file kind
-  and operation. Tasks use approved file IDs.
+  and operation. Task-graph tasks use approved file IDs.
 - Only named configuration or preset command IDs run, as structured descriptors
   through a shell-disabled adapter, with explicit working directory, environment,
   network, resources, timeout and side effects.
 
 ### Workflow, repair, and persistence
 
-- Enforce the SDD suite's order through predecessor gates (not on other
-  workflows), revalidate predecessors at every gate, bind approvals to exact state
-  IDs, and let upstream changes invalidate downstream authority.
+- Enforce the SDD suite's order through those workflows' own predecessor gates,
+  not an engine-wide role list; revalidate predecessors at every gate, bind
+  approvals to exact state IDs, and let upstream changes invalidate downstream
+  authority.
 - Repair only the engine-selected unit, with old-value and revision preconditions,
   then run impacted and full validation. Retry exhaustion fails; it never weakens
   policy.
-- Candidate changes stay in memory until authorized. A task completes only in
+- Candidate changes stay in memory until authorized. An implementation task
+  completes only in
   successful whole-workflow output, after everything validates and every write
   succeeds; nothing is committed or resumed per task.
 - Keep failed, blocked, cancelled and completed distinct. Never import generated
@@ -252,18 +268,15 @@ Beyond the rules above, do not introduce:
 - unbounded `anytype` or `anyopaque` at domain or trust boundaries, unjustified
   casts, `@constCast`, undefined reads, ignored errors or missing cleanup;
 - skipped or focused tests, weakened assertions, or any schema, validator, type,
-  lint, architecture or test weakened to make a task pass;
+  lint, architecture rule, test or judge weakened to make a change pass;
 - capability bags, service locators, dispatcher callbacks or hidden node execution;
 - a success transition that discards a failure;
 - concurrency before overlay, lock, resource-conflict and failpoint tests pass.
 
-A genuine exception is an explicit decision with a narrow contract, negative tests
-and approval.
-
 ## Zig implementation expectations
 
-- Change the compiler pin, libraries, linking or platform matrix only by recorded
-  decision.
+- Change the compiler pin, production dependencies, linking or platform matrix only
+  through an accepted ADR.
 - Use tagged unions with exhaustive `switch` for every closed variant set.
 - Configuration parses into the single unversioned closed contract, rejecting
   unknown fields; other bytes parse into closed contracts with version checks.
@@ -284,31 +297,27 @@ and approval.
   Every policy needs accepted and rejected cases; coverage alone proves nothing.
 - Properties and fault injection: paths, DAGs, transitions, repairs, rendering,
   publication writes, interruption, stale approval and retry exhaustion.
-- Unit and integration tests are not E2E evidence. Keep the harnesses separate;
-  live E2E needs a named case and explicit user approval before each run.
+- Unit and integration tests are not E2E evidence, and the harnesses stay separate.
 - E2E runs the full production path with the real configured LLM. Nothing scripted
   substitutes; if it cannot finish, report the unmet criteria.
 - No model grades an E2E run. Acceptance comes only from a human-written
   `human-spec-adjudication/v2` record applied with `zig build adjudicate-spec`; never
-  write that record or present advisory analysis as acceptance. Write analysis only
-  under the Git-ignored `evaluations/`; run directories under `zig-out/` are
-  immutable evidence.
-- When packaging or runtime behaviour changes, run the packaged executable from a
-  clean directory (`zig build smoke`).
+  write that record or present advisory analysis as acceptance. Run directories
+  under `zig-out/` are immutable evidence.
 
 ## Validation
 
 1. `git diff --check` on changed text.
 2. Targeted `zig build test-<area>` while iterating.
 3. `zig build lint` and `zig build test-architecture`.
-4. `zig build verify` before completing cross-cutting work (includes smoke tests).
+4. `zig build verify` on the final tree, after the last edit. It includes the
+   integration and packaged-executable smoke tests.
 
-Before asking to commit a code change, run its targeted tests and `zig build verify`
-on the exact tree being committed, and report the results. Never ask to commit
-while a test fails or has not run.
+Run all four for every change that needs the "Before editing" analysis, and report
+the results. Never report such a change complete while a check fails or has not run.
 
 Never claim a check ran when it did not. If one cannot run, say why, run the
-strongest safe substitute and disclose the gap. Never weaken a judge to pass.
+strongest safe substitute and disclose the gap.
 
 ## Definition of done
 
@@ -326,7 +335,7 @@ approved deviations.
 | --- | --- |
 | **Symptom patch:** one caller fixed, owning contract still invalid | Repair the owning abstraction with its regression test |
 | **Capability leak:** an orchestrator gains an operation, or an action gains child execution | A single-responsibility action, or an ADR 0032 routine, reached through a runner-owned binding |
-| **Policy weakening:** a schema, validator, path rule, gate, repair boundary, test or architecture rule loosened for one case | Explicit typed policy with accepted and rejected tests |
+| **Policy weakening:** a schema, validator, path rule, gate, repair boundary, test or architecture rule loosened for one case | Keep the policy, or add an exception as "Project authority" requires |
 | **Authority bypass:** raw model paths or commands, generated-view authority, stale approvals, completion without evidence | The engine's typed validation, approval and publication flow |
 | **Packaged-executable regression:** source-relative, current-directory, dynamic-loading or unpackaged-asset assumptions | Explicit asset and configuration ownership, proven by the clean-directory test |
 | **Prose heuristic:** a word, phrase or punctuation rule over model output, or a prompt patched after one run | Report the model limitation, or change a structural contract decided on repeated runs |

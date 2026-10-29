@@ -650,6 +650,9 @@ Feasibility evidence retains the single total budget and aggregate actual usage.
   including failed attempts.
 - Report runs that are published but not yet adjudicated separately.
 - Different cases/models need separate results before aggregation.
+- Finding-type accuracy is the share of review findings whose type matches a frozen,
+  source-based label. A real defect reported with the wrong type is a harmful
+  diagnosis.
 - Mechanical tests establish contracts; repeated live completion and acceptable
   published output are separate evidence.
 - A few successful runs do not establish reliability across unimplemented workflows or

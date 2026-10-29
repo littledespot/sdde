@@ -29,13 +29,8 @@ toward smaller semantic decisions hasn't been accepted.
 
 ## Authority and open work
 
-- AGENTS.md routes work by section of [design/design.md](design/design.md):
-  - section *N* is detailed in `design/contracts/NN-*.md`;
-  - the §13 action catalogue is in `design/contracts/actions/13-*.md`;
-  - accepted amendments are ADRs in [design/decisions/](design/decisions/), indexed in
-    design.md §32.
-- These documents are large. Use the `design-router` agent to collect the governing
-  clauses with citations, rather than reading whole files.
+- The design documents AGENTS.md routes to are large. Use the `design-router` agent
+  to collect the governing clauses with citations, rather than reading whole files.
 - Before you propose, implement, review or decide an engine change:
   - read [.claude/known-work.md](.claude/known-work.md), a dated snapshot of known
     failure classes and open work;
@@ -43,16 +38,9 @@ toward smaller semantic decisions hasn't been accepted.
 
 ## Live commands
 
-AGENTS.md lists the commands and holds the evidence rules. The build rejects any
-`test`, `test-*`, `smoke*` or `verify` step that depends on a live step.
-
-Billed live calls and engine execution need explicit user approval every time. The
-project settings make each of these prompt:
-
-- `zig build run`, `e2e-spec`, `e2e-call`, `evaluate-spec`, `provider-compatibility`
-  and `baseline`;
-- the matching `scripts/*.sh` launchers;
-- any binary under `zig-out/bin/`.
+AGENTS.md lists the live commands and holds the evidence rules. The project settings
+make every one of them prompt, and the build rejects any `test`, `test-*`, `smoke*` or
+`verify` step that depends on a live step.
 
 The user starts a live Spec case with `/live-e2e <case>`.
 
@@ -65,8 +53,8 @@ The user starts a live Spec case with `/live-e2e <case>`.
 
 ## Claude Code setup
 
-- `.env.e2e` holds live provider credentials. Never read, print, source, copy or edit
-  it; the launchers load it themselves. `.env.e2e.example` lists the variable names.
+- The project settings and the Bash guard hook block access to `.env.e2e`.
+  `.env.e2e.example` lists its variable names.
 - After each edit to a repository `.zig` file, a hook runs the pinned `zig fmt`. If it
   reports a parse error, fix it before continuing.
 - `/preflight <task>` produces the AGENTS.md "Before editing" analysis. `/verify`
@@ -75,5 +63,5 @@ The user starts a live Spec case with `/live-e2e <case>`.
   diff against the AGENTS.md review rules.
 - These files are policy, so every edit to them prompts: AGENTS.md, CLAUDE.md,
   accepted ADRs, and the Claude Code settings and hooks. Change them only when the
-  task includes that policy change.
+  request includes that policy change.
 - [.claude/README.md](.claude/README.md) describes this configuration for maintainers.
