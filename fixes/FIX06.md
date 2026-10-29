@@ -257,7 +257,7 @@ and backlog. "Gap" means between measurement sets.
 | 3 | **T5** measures and request projections, with `spec-e2e-report/v11` (decided 29 October); **T1**; D11.1 docs; all committed before the set (D11.2 and D11.5 were done in step 2). H1 may start on the clean 26 October `39a06ea` pair | Offline | — |
 | 4 | **Q1b** Clean baseline, six runs per case, on the committed build; Q2's pre-phase replays alongside | Measurement set | T5's definitions (approved 29 October); DT5 (decided and implemented 29 October) |
 | 5 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041): built during Q1b, landing after it and before Q2's set | Stopped 30 October 2026 (user decision); ADR 0041 on hold | Accepted; DE6 decided first |
-| 5a | **D4.1 correction** The `uncovered_member` correction names the kinds that count as cover, from the compiled coverage rule (moved ahead of Q2 on 30 October 2026, user decision: Q1b's two loan-renewal failures were this correction making no progress) | Measurement set | Decided 30 October |
+| 5a | **D4.1 correction** The `uncovered_member` correction names the kinds that count as cover, from the compiled coverage rule (moved ahead of Q2 on 30 October 2026, user decision: Q1b's two loan-renewal failures were this correction making no progress) | Measurement set (correction never fired) | Decided, implemented and kept 30 October |
 | 6 | **Q2** Repair requests carry their step's definitions (one generic owner), with **T3** | Paired replays decide the target; measurement set guards | D2.1 |
 | 7 | **Q2b** Generic content-loss guard for repairs | Measurement set | D2.2 |
 | 8 | **Q3** One owner per model instruction (move only), with **T2** | §2.11 projections byte-identical, one run per case | D3.1 |
@@ -501,7 +501,11 @@ driver compares with `specification_session.scenario_coverage`, the correction r
 covering rule on any other reason, one serialization; the fixed build's freeze is
 byte-identical. Measurement set approved 30 October 2026 and running on the latest build;
 run 1 (hello-world, `2026-10-29T19-56-29Z-919b…`) used the pre-fix build, whose requests the
-freeze proves identical, so it counts. Control runs need a `5bb7f17` checkout from the user.
+freeze proves identical, so it counts. **Set result (30 October 2026):** hello-world 3 of 3
+published, loan-renewal 2 of 3 (one `WorkflowTokenBudgetExceeded`: review 98,870 and repair
+7,806 tokens); no run had an `uncovered_member` rejection, so the correction never fired and
+every request matched the Q1b build's. **Kept by user decision** without evaluations or
+control runs (`evaluations/e2e/d41-measures-set.json`).
 
 **Validation.** Scripted responses with a missing and with a repeated member, for source and
 principle reviews, receive the `array_length` and `duplicate_member` corrections, compared
