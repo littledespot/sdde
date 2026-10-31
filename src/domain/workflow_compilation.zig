@@ -28,6 +28,7 @@ pub const CompiledResource = struct {
         prompt: []const u8,
         result_schema: *const @import("model_result_schema.zig").Schema,
         json_composition: *const @import("json_composition.zig").Plan,
+        packet_guidance: *const @import("packet_guidance.zig").Compiled,
         example: []const u8,
         data: []const u8,
     },
@@ -40,17 +41,19 @@ pub const CompiledResource = struct {
         return switch (self.content) {
             .result_schema => |schema| schema.bytes(),
             .json_composition => |plan| plan.bytes(),
+            .packet_guidance => |compiled| compiled.bytes(),
             inline else => |value| value,
         };
     }
 
-    pub fn clone(self: CompiledResource, allocator: std.mem.Allocator, canonical: ?*const @import("model_result_schema.zig").Schema) @import("json_composition.zig").Error!CompiledResource {
+    pub fn clone(self: CompiledResource, allocator: std.mem.Allocator, canonical: ?*const @import("model_result_schema.zig").Schema) (@import("json_composition.zig").Error || @import("packet_guidance.zig").Error)!CompiledResource {
         return .{
             .id = .{ .bytes = try allocator.dupe(u8, self.id.bytes) },
             .source_path = if (self.source_path) |path| try allocator.dupe(u8, path) else null,
             .content = switch (self.content) {
                 .result_schema => |schema| .{ .result_schema = try schema.clone(allocator) },
                 .json_composition => |plan| .{ .json_composition = try plan.clone(allocator, canonical orelse return error.InvalidJsonComposition) },
+                .packet_guidance => |compiled| .{ .packet_guidance = try @import("packet_guidance.zig").compile(allocator, compiled.bytes()) },
                 inline else => |value, tag| @unionInit(@FieldType(CompiledResource, "content"), @tagName(tag), try allocator.dupe(u8, value)),
             },
         };

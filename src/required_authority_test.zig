@@ -1,4 +1,5 @@
 const std = @import("std");
+const packet_guidance = @import("test_fixtures/packet_guidance.zig");
 const a = @import("domain/required_authority.zig");
 const build: @import("actions/authority/build_required_authority_ledger.zig").Action = .{};
 const reconcile: @import("actions/authority/reconcile_required_authorities.zig").Action = .{};
@@ -252,40 +253,81 @@ test "Specify projects registered native fields and complete reference obligatio
     try std.testing.expectError(error.InvalidRequiredAuthority, build.execute(allocator, invented));
 }
 
-test "record purposes distinguish families without adding required authority or review instructions" {
+test "record purposes place workflow guidance in native record frames" {
     const spec = @import("domain/specification.zig");
     const descriptions = @import("domain/required_authority_description.zig");
+    const keys = @import("domain/packet_guidance.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const catalogue = try descriptions.records(allocator);
+    const g = &packet_guidance.marked;
+    const catalogue = try descriptions.records(allocator, g);
     inline for (comptime std.meta.tags(spec.Kind)) |kind| {
-        const family = descriptions.recordFamily(kind);
-        try std.testing.expect(family.len != 0);
-        try std.testing.expect(std.mem.indexOf(u8, catalogue, family) != null);
-        const record = try descriptions.record(allocator, kind);
+        const family = descriptions.recordFamily(g, kind);
+        try std.testing.expectEqualStrings(g.record_families.get(kind), family);
+        var expected_record: std.ArrayList(u8) = .empty;
+        try expected_record.print(allocator, "{s}: {s}", .{ @tagName(kind), family });
         inline for (std.meta.fields(@FieldType(spec.Content(spec.BusinessValue), @tagName(kind)))) |field| {
             const slot: a.Slot = @field(a.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
-            const purpose = try descriptions.recordField(kind, slot);
+            const purpose = try descriptions.recordField(g, kind, slot);
+            try std.testing.expectEqualStrings(if (slot == .text) family else g.record_fields.get(keys.recordField(slot).?), purpose);
+            if (slot != .text) try expected_record.print(allocator, " {s}: {s}", .{ field.name, purpose });
             const selected: a.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = kind, .ordinal = 3 } }, .slot = slot, .member = if (slot == .relationship) 2 else 0 };
-            const task = try descriptions.task(allocator, selected);
-            try std.testing.expectEqualStrings(try descriptions.recordTask(allocator, kind, slot), task);
-            try std.testing.expect(std.mem.indexOf(u8, task, family) != null);
-            try std.testing.expect(std.mem.indexOf(u8, task, purpose) != null);
-            try std.testing.expect(std.mem.indexOf(u8, record, purpose) != null);
-            try std.testing.expect(std.mem.indexOf(u8, task, "Source support") == null);
-            try std.testing.expect(std.mem.indexOf(u8, task, "compatible") == null);
+            const task = try descriptions.task(allocator, g, selected);
+            try std.testing.expectEqualStrings(if (slot == .text)
+                try std.fmt.allocPrint(allocator, "{s}.text: {s}", .{ @tagName(kind), family })
+            else
+                try std.fmt.allocPrint(allocator, "{s}: {s} {s}: {s}", .{ @tagName(kind), family, @tagName(slot), purpose }), task);
+            try std.testing.expectEqualStrings(try descriptions.recordTask(allocator, g, kind, slot), task);
             try std.testing.expectEqual(.spec, a.policy(selected).?.owner);
         }
-        try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(kind, .display_name));
+        const record = try descriptions.record(allocator, g, kind);
+        try std.testing.expectEqualStrings(expected_record.items, record);
+        try std.testing.expect(std.mem.indexOf(u8, catalogue, record) != null);
+        try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, kind, .display_name));
     }
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, .functional_requirement, .given));
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(g, .entity, .text));
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.task(allocator, g, .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = .assumption, .ordinal = 1 } }, .slot = .when }));
+    // Distinct text-only families keep distinct shipped definitions.
+    const shipped = &(try packet_guidance.shipped(allocator)).guidance;
     const text_kinds = [_]spec.Kind{ .user_visible_outcome, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior };
     for (text_kinds, 0..) |kind, index| {
-        for (text_kinds[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, try descriptions.recordField(kind, .text), try descriptions.recordField(prior, .text)));
+        for (text_kinds[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, try descriptions.recordField(shipped, kind, .text), try descriptions.recordField(shipped, prior, .text)));
     }
-    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(.functional_requirement, .given));
-    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(.entity, .text));
-    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = .assumption, .ordinal = 1 } }, .slot = .when }));
+}
+
+test "feature and reference tasks place workflow guidance at native frames" {
+    const descriptions = @import("domain/required_authority_description.zig");
+    const keys = @import("domain/packet_guidance.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const g = &packet_guidance.marked;
+    for (std.enums.values(a.Slot)) |slot| {
+        const kind: a.Kind = if (slot == .entities) .entity_applicability else .feature_intent;
+        const feature: a.Id = .{ .kind = kind, .unit = .{ .feature = .singleton }, .slot = slot };
+        if (keys.featurePurpose(slot)) |purpose| {
+            try std.testing.expectEqualStrings(g.feature_purposes.get(purpose), try descriptions.task(allocator, g, feature));
+        } else if (@import("domain/specification_authority.zig").collectionFamily(slot)) |family| {
+            try std.testing.expectEqualStrings(g.record_families.get(family), try descriptions.task(allocator, g, feature));
+        } else try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.task(allocator, g, feature));
+    }
+    const references = [_]a.Id{
+        .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .reference_meaning, .unit = .{ .signal = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .reference_meaning, .unit = .{ .conflict = .{ .ordinal = 7 } }, .slot = .disposition },
+        .{ .kind = .preservation, .unit = .{ .token = .{ .ordinal = 7 } }, .slot = .value },
+    };
+    for (references) |reference| {
+        const fragments = g.reference_tasks.get(std.meta.stringToEnum(keys.ReferenceUnit, @tagName(reference.unit)).?);
+        const task = try descriptions.task(allocator, g, reference);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(allocator, "{s}7{s}", .{ fragments.before, fragments.after }), task);
+        // A non-feature clarification question embeds exactly that task.
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, try descriptions.question(allocator, g, reference), task));
+    }
+    // Decision identities remain a native frame with no guidance entry.
+    try std.testing.expectEqualStrings("design_decision decision 2.", try descriptions.task(allocator, g, .{ .kind = .design_decision, .unit = .{ .decision = .{ .ordinal = 2 } }, .slot = .decision }));
 }
 
 test "reference support must name current accounted signals with no foreign or duplicate members" {
@@ -463,7 +505,7 @@ test "invalid candidate content retains genuine authority gaps without authorizi
             } else try std.testing.expectEqual(.resolved_exactly_one, std.meta.activeTag(entry.outcome));
             try std.testing.expect(!try a.validate(allocator, inputs, observations, result));
             try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, result, id(kind))) == null);
-            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, observations, result));
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, observations, result, &packet_guidance.marked));
             // Persisting a separately supported omission cannot turn the invalid
             // assertion into authorized omission recovery.
             var omission = proof;
@@ -503,7 +545,7 @@ test "authority clarification subjects preserve earliest owner and remain stable
     proofs[1].review.?.question = "Which delivery mechanism should implement the deadline? Name the mechanism.";
     inputs.evidence = proofs;
     inputs.candidates = &.{};
-    const needs = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    const needs = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
     try std.testing.expectEqual(@as(usize, 2), needs.entries.len);
     try std.testing.expectEqual(.spec, needs.entries[0].stage);
     try std.testing.expectEqual(.plan, needs.entries[1].stage);
@@ -517,7 +559,7 @@ test "authority clarification subjects preserve earliest owner and remain stable
     const changed = try allocator.dupe(a.Evidence, &.{ proofs[1], proofs[0] });
     changed[0].review.?.detail = "Specify the applicable delivery deadline.";
     inputs.evidence = changed;
-    const again = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs));
+    const again = try conversion.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked);
     const second = try refresh.refresh(allocator, .{ .state = .{ .value = first.state.value }, .submissions = &.{}, .protected_forms = &.{} }, again);
     for (first.state.value.?.records, second.state.value.?.records) |before, after| {
         try std.testing.expect(c.sameSubject(before.subject, after.subject));
@@ -543,7 +585,7 @@ test "current contradictory assessments fail while genuine missing decisions ret
         inputs.evidence = &.{negative};
         const gap = try run(allocator, inputs);
         try std.testing.expectEqual(.needs_user, gap.continuation);
-        _ = try needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), gap);
+        _ = try needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), gap, &packet_guidance.marked);
         var positive = negative;
         positive.id.ordinal = 2;
         positive.finding = .supported;
@@ -554,11 +596,11 @@ test "current contradictory assessments fail while genuine missing decisions ret
             const inconclusive = try run(allocator, inputs);
             try std.testing.expectEqual(.invalid, inconclusive.continuation);
             try std.testing.expectEqual(.inconclusive_review, inconclusive.entries[0].candidate_defect.?.reason);
-            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), inconclusive));
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), inconclusive, &packet_guidance.marked));
         }
         // A vague negative with no question cannot gain one from a descriptor.
         negative.review = null;
         inputs.evidence = &.{negative};
-        try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs)));
+        try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, source_inputs, inputs, try observe(allocator, inputs), try run(allocator, inputs), &packet_guidance.marked));
     }
 }

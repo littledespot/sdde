@@ -168,11 +168,11 @@ number of unassessed subjects as its count
 ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). Its
 logging rejection prevents publication.
 
-When a failed Specify run publishes its validated content as a failed incomplete
-specification, the runner emits one warning `run.incomplete_published` after the failure
-events and before the publication writes, with the failure's diagnostic code
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Its logging
-rejection prevents publication.
+Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
+hold since 30 October 2026; not implemented), when a failed Specify run publishes its
+validated content as a failed incomplete specification, the runner emits one warning
+`run.incomplete_published` after the failure events and before the publication writes,
+with the failure's diagnostic code. Its logging rejection prevents publication.
 
 Useful metrics:
 

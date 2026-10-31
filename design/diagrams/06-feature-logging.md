@@ -2,10 +2,10 @@ High-level flow for recording workflow activity and managing its log files.
 
 ```mermaid
 flowchart TD
-    START["Prepare logging for the selected workflow and feature"] --> HISTORY["Inspect and finalize prior log streams<br/>using their recorded policies"]
-    HISTORY --> POLICY["Validate the current logging policy<br/>and authorized log locations"]
-    POLICY --> OPEN["Prepare event streams and any enabled prompt streams;<br/>validate existing tails and apply retention"]
-    OPEN --> READY["Logging ready"]
+    START["Prepare logging for the selected workflow and feature"] --> POLICY["Validate the current logging policy<br/>and authorized log locations"]
+    POLICY --> OPEN["Prepare event streams and any enabled prompt streams;<br/>recover and rotate the current tails"]
+    OPEN --> HISTORY["Validate prior runs by segment-header identity;<br/>prune their expired closed segments (ADR 0026)"]
+    HISTORY --> READY["Logging ready"]
 
     READY --> FACT["Receive trusted workflow lifecycle facts<br/>and telemetry accepted by the runner"]
     FACT --> REDACT["Select permitted fields and redact sensitive values"]
@@ -26,7 +26,7 @@ flowchart TD
     UPDATE["Logging policy changes"] --> SWITCH["Validate the change; close old streams<br/>and prepare successor streams before activation"]
     SWITCH -->|Ready| READY
     SWITCH -->|Failed| FAILURE
-    FINISH["Workflow ends"] --> CLOSE["Flush and close active streams;<br/>apply retention to eligible closed segments"]
+    FINISH["Workflow ends"] --> CLOSE["Flush and close active streams"]
 ```
 
 [F0002](../features/F0002-LogService.md) and

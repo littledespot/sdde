@@ -308,7 +308,8 @@ fn insertion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, targe
 fn deletion(a: std.mem.Allocator, parsed: r.Parsed, facts: context.Facts, target: Target, rule: Rule) Error!Decision {
     return .{ .automatic = .{ .authorization = try withRetry(a, try atomic.authorizeDelete(a, try owner(a, parsed), parsed.source.revision, target, (try select(parsed, target)) orelse return error.InvalidAtomicRepair, facts, rule)), .replacement = null } };
 }
-pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization) Error!*packets.Packet {
+/// `summary_purpose` is the workflow's guidance text; only a summary input presents it.
+pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, summary_purpose: []const u8) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -333,7 +334,10 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .statement, .disposition_record, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
     };
     if (scope == .content) options.fields = .{ .selected = try contentFieldBindings(scratch, scope.content) };
-    const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope);
+    const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope, switch (parsed.input.purpose) {
+        .summary => summary_purpose,
+        .global => null,
+    });
     defer packets.release(base);
     const contextual = if (authorization.target == .conflict_selection)
         try packets.withContext([]const @import("reference_conflict_groups.zig").CatalogueEntry, a, base, "accepted_conflict_groups", try @import("reference_conflict_groups.zig").catalogue(scratch, parsed.proposal.global.conflict_groups))
@@ -770,7 +774,7 @@ pub const Omission = struct {
         const selected = try loss.select(a, current.reconciliation.text.?.inputs, current.support);
         return loss.retryPermit(a, .reconciliation, auth.owner, auth.id, auth.revision, current.support, selected.finding.requirement, current.reconciliation.source.omission_retry);
     }
-    pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+    pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, guidance: *const @import("packet_guidance.zig").Guidance) OmissionError!*packets.Packet {
         try loss.requireRepairPhase(support.repair_phase);
         var arena: std.heap.ArenaAllocator = .init(a);
         defer arena.deinit();
@@ -778,9 +782,9 @@ pub const Omission = struct {
         defer a.free(current.reconciliation.lineage.history);
         try Atomic.checkDependencies(a, auth, current);
         const kind = if (auth.target == .unit and auth.target.unit == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.unit.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
-        const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else if (auth.target == .conflict_group) .all else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices });
+        const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else if (auth.target == .conflict_group) .all else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices }, null);
         defer packets.release(base);
-        const prepared_input = try Atomic.packet(a, auth, base, .{ .bytes = if (kind) |value| switch (value) {
+        const prepared_input = try Atomic.packetPresenting(a, auth, guidance, base, .{ .bytes = if (kind) |value| switch (value) {
             .preserved_token => return error.InvalidAtomicRepair,
             .model => |model| switch (model) {
                 .business, .scope_guard => "business_text",

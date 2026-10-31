@@ -259,8 +259,8 @@ and backlog. "Gap" means between measurement sets.
 | 5 | **E0** Failed and blocked runs publish validated content (B10, ADR 0041): built during Q1b, landing after it and before Q2's set | Stopped 30 October 2026 (user decision); ADR 0041 on hold | Accepted; DE6 decided first |
 | 5a | **D4.1 correction** The `uncovered_member` correction names the kinds that count as cover, from the compiled coverage rule (moved ahead of Q2 on 30 October 2026, user decision: Q1b's two loan-renewal failures were this correction making no progress) | Measurement set (correction never fired) | Decided, implemented and kept 30 October |
 | 6 | **Q2** Repair requests carry their step's definitions (one generic owner), with **T3** | Paired replays decide the target; measurement set guards | D2.1 |
-| 7 | **Q2b** Generic content-loss guard for repairs | Measurement set | D2.2 |
-| 8 | **Q3** One owner per model instruction (move only), with **T2** | §2.11 projections byte-identical, one run per case | D3.1 |
+| 7 | **Q2b** Generic content-loss guard for repairs (deferred 30 October 2026: D2.2 decided no for now; reopen on a harmful repair) | Measurement set | D2.2 (deferred) |
+| 8 | **Q3** One owner per model instruction (move only), with **T2** (**done** 31 October 2026) | §2.11 projections byte-identical, one run per case | D3.1 (decided) |
 | 9 | **Q6** Scope "preserve obligations" to the fields D6.1 names, with the in-request dedupe (built and measured before Q2 and Q3 on 30 October 2026, then reverted: not kept) | Measurement set | D6.1 (b), decided 30 October |
 | 10 | **D7.1** Exact-value corrections state the boundary rule | Offline; byte-identical requests | D7.1 |
 | 11 | **Q4** Remove engine vocabulary and schema-stated rules (hygiene) | Measurement set (guards) | D4.1 |
@@ -426,6 +426,11 @@ authorized defect concerns it. Fields without claim IDs get no text-similarity c
 there is graded as repair harm and reported. Amends contract 22 (§22.4 and the value-only
 repair rule).
 
+**Decided 30 October 2026: no for now, deferred** (user decision). The only observation came
+from ADR 0044's repair, removed in Q1a; no harmful repair has been seen since (Q1b, D4.1's
+and Q6's sets), the guard might not have caught that case, and it could block legitimate
+repairs. Reopen D2.2 if a harmful repair appears on the current build.
+
 **Validation.** Its own measurement set after Q2. **Keep if** harmful repairs fall and
 neither `RepairNoProgress` nor exhausted runs rise.
 
@@ -458,6 +463,43 @@ resource-owned text at its current packet positions. Amends text-field-compositi
 12-model-boundary.md:369-371 and 758-759, and ADR 0016:124-127 ("Canonical native
 validators and requirement descriptions remain the sole rule and purpose owners"). If that
 placement isn't adopted, Q3 changes model input and is measured like any quality phase.
+**Decided 30 October 2026: option (a)**, workflow resources own semantic guidance (user:
+"D3.1 - option 1 - approved!"); Q3 implementation started the same day. Design choices
+approved 30 October 2026: one closed `packet-guidance/v1` resource
+(`design/workflows/spec/packet-guidance.json`, 48 entries) compiled and checked for exactly
+one entry per registered key; one capture step publishes it for the run and the 19 consumer
+operations read it from run data; clarification questions stay native (user-facing); the
+entity-repair resource entry is only its meaning tail; source-omission evidence drops its
+stored `purpose` copy; mechanical sentences inside moved blocks move with them (Q4 edits them
+there). Slices S1 infrastructure and summary purpose, S2 purposes, S3 review scopes and
+evidence guidance, S4 repair tails, S5 close-out; each keeps every request byte-identical.
+**S1 done 30 October 2026:** the resource, `packet-guidance/v1` compiler checks, the
+`capture-packet-guidance` step and `.packet_guidance` run data; the summary purpose reads
+from the resource; contract 12, ADR 0016 amendment and the action catalogue updated.
+Request projection identical to `d41-2026-10-30` (198 scenarios, 4,406 calls); `zig build
+verify` 169/169 steps, 1,993 tests.
+**S2 done 30 October 2026:** feature purposes, record families, record fields and reference
+tasks (27 entries) read only from the resource; their Zig copies are deleted. O3 removed the
+stored comparison `purpose`, which repair requests also present, so a generic
+`model_presentation.zig` contract re-presents stored evidence from the guidance at its
+request position. A compile-time guard rejects model input that reaches an unpresented value,
+and it moved support repair onto the presenting path too. Request projection identical to
+`d41-2026-10-30`; `zig build verify` 169/169 steps, 1,995 tests.
+**S3 done 31 October 2026:** review scopes (11) and support-evidence guidance (7) read only
+from the resource; the evidence owner's one `selection_instruction` is presented in initial
+review, insertion and repair. Tests check every marked entry by its wire path, without
+calling the code under test. Request projection identical to `d41-2026-10-30`; `zig build
+verify` 169/169 steps, 1,996 tests.
+**S4 and S5 done 31 October 2026:** both repair tails read from the resource;
+`authorize-specification-repair` composes them when it authorizes (coverage repair places no
+tail). All 52 resource texts are absent from Zig, and contract 12 and ADR 0016 describe the
+finished state. Request projection identical to `d41-2026-10-30`; `zig build verify` 169/169
+steps, 1,997 tests. Live runs 31 October 2026 (user-approved), both published:
+hello-world `2026-10-31T00-46-30Z-1a6191e1…` (22 calls, 58,147 tokens, advisory 100%) and
+loan-renewal `2026-10-31T00-47-05Z-6258a7a8…` (26 calls, 105,120 tokens, one review runaway
+re-sent, advisory 89.3%); live requests carry the resource texts. Q3 is complete. Observed in
+review, outside Q3: `ValueChoices.correction`'s rejected exact-copy arm has no production
+producer.
 
 **Validation.** T5 request projections byte-identical (§2.11); tests compare against the
 owning resource; one run of each case.

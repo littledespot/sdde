@@ -11,8 +11,8 @@ Markdown is a presentation format, not the internal source of truth while a stag
 
 #### Typed content
 
-This amends invariant 18 and the prose restrictions in §§11, 12, 16, 17, 22 and 23
-(user-approved, 25 September 2026); it does not change operational path authorization.
+[Invariant 18](../design.md#33-non-negotiable-invariants) governs; this subsection details
+typed content without changing operational path authorization.
 
 - Content separates ordinary prose, exact source values and explicit references.
   Prose is normalized inert text; punctuation alone establishes neither reference
@@ -100,21 +100,16 @@ nor operational authority.
 
 #### Native exact values
 
-Under the [native exact-value policy](text-field-composition.md#native-exact-values),
-immutable current native request eligibility may add recognized exact dependencies
-`E` beyond selected support `S`, while `S` remains fixed, and recognition uses
-contextual complete-value delimiters. Raw decoded UTF-8 is matched before NFC;
-neither case folding nor punctuation/whitespace repair creates a match. Actual
-field edges, pinned Unicode whitespace and balanced wrapper/terminal context
-delimit values; reference-adjacent literal-run edges are opaque. Competing
-lineages or overlapping eligible spans reject the whole field.
-
-The model-response codec and schemas admit prose plus allowed passive/source
-references, never `exact_copy`. Canonical exact nodes and field roles remain;
-native recognition, lineage, repair bounds, coverage and readback share the
-existing owners. Eligibility proves current occurrence authority, not semantic
-support or correct use. Model prose, source-group selection and canonical exact
-lineage therefore remain distinct typed states.
+The [native exact-value policy](text-field-composition.md#native-exact-values) and
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+own recognition: derived lineage `E` beyond fixed selected support `S`, raw-byte
+matching, delimiters, whole-field rejection, and the removal of code delimiters around
+a recognised exact value in generated text
+([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 6;
+[field inventory](text-field-composition.md#field-inventory-and-insertion-roles)). No
+model-facing codec or schema admits `exact_copy`. Eligibility proves current occurrence
+authority, not semantic support or correct use, so model prose, source-group selection
+and canonical exact lineage remain distinct typed states.
 
 ### 7.2 Stage IRs
 

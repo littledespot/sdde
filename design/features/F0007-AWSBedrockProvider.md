@@ -22,17 +22,19 @@ charges tokens, or grants success authority.
 
 | Owner | Responsibility |
 | --- | --- |
-| `composition/provider_model_contracts.zig` | Immutable supported-model facts; no client or credential. |
+| `composition/provider_model_contracts.zig` | Immutable supported family and Region facts; no client or credential. |
 | F0008 and F0006 bootstrap | Capture the configured provider file once, validate its complete catalogue and repository slot allowlist. |
-| `adapters/system/bedrock_api_key_source.zig` | Read the exact permitted environment variable once after selected-workflow binding validation. |
-| `adapters/provider/bedrock_authorization.zig` | Deposit a capability from preloaded material; no environment or I/O port. |
-| `adapters/provider/aws_bedrock.zig` | Implement the sole provider-neutral port using the existing lease-consumption boundary. |
-| `bedrock_request.zig` / `bedrock_response.zig` | Canonical request projection / strict AWS response normalization. |
-| `bedrock_http.zig` | One HTTPS exchange with its original deadline, without retries or redirects. |
+| `adapters/system/provider_api_key_source.zig` | Read the family's exact permitted environment variable once after selected-workflow binding validation (shared with Anthropic, [ADR 0028](../decisions/0028-anthropic-messages-provider.md)). |
+| `adapters/provider/api_key_authorization.zig` | Deposit a family-tagged capability from preloaded material; no environment or I/O port. |
+| `adapters/provider/model_provider.zig` | Implement the sole provider-neutral port for every provider using the existing lease-consumption boundary. |
+| `bedrock_endpoint.zig` / `bedrock_request.zig` / `bedrock_response.zig` | Bedrock endpoint / canonical request projection / strict AWS response normalization. |
+| `model_http_transport.zig` / `model_http_head.zig` / `model_http_exchange.zig` | One shared HTTPS exchange with its original deadline, without retries or redirects. |
 | `composition/model_provider_runtime.zig` | Wire implementations to existing YAML bindings and the runner-owned lease table. |
 | Pipeline runner | Own lifecycle, single-use leases, actual-usage accounting and cleanup. |
 
-The infrastructure-private exhaustive dispatch has one `aws_bedrock` variant.
+Bedrock is one variant of the closed per-family target union inside the shared
+provider-port implementation ([ADR 0028](../decisions/0028-anthropic-messages-provider.md));
+its modules hold only the Bedrock wire projections.
 Domain registry entries contain only facts. There is no second provider
 registry, provider journal, feature transaction, saved response, or recovery
 gate. An interrupted atomic execution is abandoned; another run starts afresh.
@@ -80,42 +82,54 @@ and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string
 `false` sends complete schema guidance without that native output constraint.
 Neither changes engine validation or permits fallback after provider rejection.
 
-The compiled registry supports these exact contracts:
+The compiled registry supports these Bedrock families
+([ADR 0029](../decisions/0029-bedrock-model-families.md)). A catalogue entry may name
+any Bedrock model or inference-profile ID with a compiled source Region and one family;
+the engine never interprets the model ID, and no prefix or substring selects a family,
+capability or encoding.
 
-| Exact model | Explicit source region | Converse | Response modes | Registered reasoning policy | Temperature |
-| --- | --- | --- | --- | --- | --- |
-| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1` |
-| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Prompt-only | None | Fixed `0.1` |
-| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Omitted |
+| Family | Effort | Temperature | Request fields |
+| --- | --- | --- | --- |
+| `converse` | None | Omitted (provider default) | None |
+| `gpt-oss` | `low`, `medium`, `high` | Configured `temperature`; `temperatureRunawayRetry` on a runaway re-send ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)) | `additionalModelRequestFields.reasoning_effort` |
+| `luna` | None | Omitted | `additionalModelRequestFields.text.format.strict` in native mode |
+| `claude` | `low` to `max` | Omitted | `additionalModelRequestFields.output_config.effort`; no `thinking` field |
 
-The current Luna tuple is an explicitly registered **global inference profile**
+Every family supports both response modes; the catalogue's `json` flag selects one.
+
+The Luna entry `global.openai.gpt-6-luna` is a **global inference profile**
 with Sydney as its source region. It may route worldwide and provides no
 Australian-residency guarantee. The base `openai.gpt-6-luna` model is not available
 for in-region runtime invocation, and the US geographic profile is not supported
-from Sydney. These are exact registrations, not model-name pattern rules. AWS's
+from Sydney. AWS's
 [current Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html)
 confirms Converse, native JSON Schema, global-profile Sydney availability and
 Standard tier only (checked 2026-10-15).
 
 AWS documents default medium reasoning and several effort options, but does not
-establish their exact Converse override fields. SDDE's evidence-backed subset
-admits only omission of explicit reasoning and temperature controls. It neither
+establish their exact Converse override fields. The `luna` family's evidence-backed
+subset admits only omission of explicit reasoning and temperature controls. It neither
 sends an inferred field nor claims adjustable-temperature support. The native
 JSON profile additionally requires
 `additionalModelRequestFields.text.format.strict: true`. No performance or model
 quality conclusion follows from API availability.
 
-- Unknown models, source regions, configuration fields, controls and capability claims
-  reject.
-- Future support requires another trusted contract, not an inferred capability or
-  model-name pattern.
-- Existing GPT-OSS and earlier Haiku registrations remain production contracts and
-  offline conformance representatives. They do not qualify current-model outcomes.
+- Unknown source Regions, families, configuration fields, controls and capability
+  claims reject. A wrong model ID is the project's explicit choice: Bedrock rejects
+  the request and the engine reports a typed provider failure, never retrying with
+  another family or model (ADR 0029).
+- A new request shape requires a new compiled family, not an inferred capability or
+  model-name pattern. Adding a model, or using it in another Region, is a catalogue
+  change.
+- The Claude 3.5 Haiku registration in `us-west-2` is retired (ADR 0029); that model
+  can still be configured as a `converse` entry. Offline conformance iterates the
+  compiled families and Regions; it does not qualify current-model outcomes.
 - The separate development [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only Bedrock `openai.gpt-oss-20b-1:0` for generation, grading and
-  captured-call diagnostics. Sonnet, Sol, Haiku, Luna, direct OpenAI
-  and other aliases reject before credentials or network use. Production
-  catalogue policy remains independent.
+  permits only the tuples ADR 0029 names: Bedrock `openai.gpt-oss-20b-1:0` for
+  generation, grading and captured-call diagnostics, and Bedrock
+  `au.anthropic.claude-haiku-5-5` for generation only. Every other model or alias
+  rejects before credentials or network use. Production catalogue policy remains
+  independent.
 - The rubric judge retains its native-schema gate; GPT-OSS-20B satisfies the registered
   capability contract without fallback. See the [evaluator contract](../harness/evaluator.md).
 
@@ -166,11 +180,12 @@ quality conclusion follows from API availability.
 - Supported temperature is the prepared request's configured value (§12.5, ADR 0039),
   serialized under `inferenceConfig.temperature`; unsupported temperature is omitted.
   The adapter never re-sends; a runaway re-send arrives as its own prepared request.
-- The compiled `BedrockRequestProfile` selects verified model-specific request
-  fields: `.openai_oss` projects GPT-OSS `reasoning_effort`, while `.openai_luna`
-  supplies the required native JSON strict-format flag and admits no explicit
-  reasoning override. `.none` supplies no additional profile fields. Neither the
-  project nor a model-name prefix selects the wire contract.
+- The catalogue entry's compiled `family` selects the additional request fields
+  (ADR 0029): `gpt-oss` projects `reasoning_effort`, `luna` supplies the required
+  native JSON strict-format flag and admits no explicit reasoning override, `claude`
+  projects `output_config.effort` with no `thinking` field, and `converse` supplies
+  none. The catalogue selects a family but never supplies an encoding, and no
+  model-name prefix selects the wire contract.
 - Every inference request sends the catalogue's `maxOutputTokens`, the model's
   documented maximum, as `inferenceConfig.maxTokens`; thinking and final text share
   it. Omitting it let Bedrock apply a smaller default (GPT-OSS-20B stopped at 4,096)
@@ -286,7 +301,7 @@ with a new attempt and lease. The adapter still never retries.
   growing HTTP headers.
 - Fixtures prove every inference request carries exactly the configured `maxTokens`
   and that a missing, zero, negative or oversized catalogue value rejects.
-- [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
+- [Concrete HTTP tests](../../src/model_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 
   - They prove one bearer header and request per call, fragmented writes/reads,

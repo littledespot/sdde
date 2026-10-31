@@ -107,7 +107,9 @@ nonempty retained group catalogue. Initial brief, story and entity-basis values
 select nonempty unique canonical `signal_ids` alongside content; initial questions
 select their distinct question-eligible groups. Native admission derives required
 `source_group_ids`, complete claim unions and exact lineage. Records retain one
-native-bound group and return content only. No role-classifier call or mandatory
+native-bound group and return content plus the `claim_ids` each supports, a subset
+of that group
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). No role-classifier call or mandatory
 role-prebinding gate remains. Invalid or stale native authority blocks without
 fabricating a user information gap. Post-generation source and principle reviews
 retain semantic findings as advice under
@@ -190,7 +192,7 @@ The `model-request-with-context` subgraph retains the workflow-selected context
 for extraction repairs and specification authoring. Generation and native unit
 repair use one shared `generation-context` resource. It explains
 ordered text fragments and literal insertion; the selected schema still defines
-the response shape. Story purpose comes from the shared native requirement descriptions.
+the response shape. Story purpose comes from the workflow's packet guidance.
 Brief and story packets contain source evidence without sibling drafts; entities
 receive the brief, and record requests receive the brief and entity decision.
 Authoring purposes include resolved bound requirements; other eligible meanings
@@ -234,7 +236,10 @@ flowchart TD
     INVOKE --> OBSERVE["Validate invocation observation<br/>Complete provider operation"]
     OBSERVE --> ADMIT{"admit-model-response"}
     ADMIT -->|Accepted| CLOSE["complete-model-request"]
-    ADMIT -->|Invalid response| CORRECT["build-model-protocol-retry<br/>Retain request identity and schema"]
+    ADMIT -->|Invalid response| RUNAWAY{"check-model-runaway"}
+    RUNAWAY -->|First runaway| RESEND["build-model-runaway-resend<br/>Identical request at temperatureRunawayRetry"]
+    RESEND -->|Outside retry-limit| ACCOUNT
+    RUNAWAY -->|Other invalid response| CORRECT["build-model-protocol-retry<br/>Retain request identity and schema"]
     CORRECT -->|Correction available| ACCOUNT
     CORRECT -->|Correction unavailable| FAILED["End failed"]
     ADMIT -->|Failed or cancelled| CLOSE
@@ -248,10 +253,14 @@ flowchart TD
 
 Authorization, lifecycle or accounting failures terminate through their declared
 outcomes; those terminal branches are collapsed above. Failed, cancelled and
-invalid outcomes remain distinct. Model-assisted review is candidate evidence,
+invalid outcomes remain distinct. Under
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md), admission
+returns a first `output_limit` runaway as `invalid`; its one re-send is logged as
+`model.runaway_resent`, and a runaway on the re-send is admitted as `failed`
+(`RunawayRepeated`). Model-assisted review is candidate evidence,
 not deterministic semantic proof.
 
-The call counts shown in the trees exclude protocol retries, authorized repairs,
+The call counts shown in the trees exclude protocol retries, runaway re-sends, authorized repairs,
 pre-generation localization and repeated work after pre-generation source repair.
 There is no fixed total for the workflow. The configured `spec_generation` and `repair` slots select
 models; a slot name does not imply a single call.

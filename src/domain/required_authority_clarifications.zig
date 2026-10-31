@@ -3,7 +3,7 @@ const std = @import("std");
 const a = @import("required_authority.zig");
 const c = @import("clarification_inputs.zig");
 const refresh = @import("clarification_refresh.zig");
-pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
+pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, inputs: a.Inputs, observations: a.Observations, result: a.Result, guidance: *const @import("packet_guidance.zig").Guidance) a.Error!refresh.Needs {
     if (!std.mem.eql(u8, source_inputs.corpus.feature_id.bytes, inputs.feature.bytes)) return error.InvalidRequiredAuthority;
     if (inputs.references) |references| if (!source_inputs.corpus.state_id.eql(references.items.state_id)) return error.InvalidRequiredAuthority;
     if (try a.validate(allocator, inputs, observations, result)) return error.InvalidRequiredAuthority;
@@ -66,7 +66,7 @@ pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evi
             .missing, .stale => {},
             else => return error.InvalidRequiredAuthority,
         };
-        const prepared = @import("clarification_preparation.zig").prepare(allocator, if (questions.items.len != 0) questions.items else try @import("required_authority_description.zig").question(allocator, entry.requirement), reason, if (inputs.references) |refs| refs.items.entries else &.{}, .{ .citation_ids = citations.items, .source_ids = sources.items }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
+        const prepared = @import("clarification_preparation.zig").prepare(allocator, if (questions.items.len != 0) questions.items else try @import("required_authority_description.zig").question(allocator, guidance, entry.requirement), reason, if (inputs.references) |refs| refs.items.entries else &.{}, .{ .citation_ids = citations.items, .source_ids = sources.items }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
         try needs.append(allocator, .{
             .stage = gap.owner,
             .subject = subject,

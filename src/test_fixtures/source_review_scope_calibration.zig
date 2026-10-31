@@ -111,7 +111,7 @@ pub fn run() !void {
         const first = for (ledger.requirements) |required| {
             if (std.meta.eql(unit, try @import("../domain/specification_review_subject.zig").assignmentUnit(a, prepared.inputs, required.seed.id))) break required.seed.id;
         } else return error.MissingCalibrationTarget;
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, support.assignmentScope(prepared.inputs, first));
+        const packet = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, support.assignmentScope(prepared.inputs, first));
         defer packets.release(packet);
         const baseline = try shared.baselineReviewBody(a, packet);
         // Remove the selected presentation field and prove that no subject,
@@ -136,7 +136,7 @@ pub fn run() !void {
                 if (std.meta.eql(required.seed.id, id)) break index_of;
             } else return error.MissingCalibrationTarget;
             try std.testing.expectEqual(@as(i64, @intCast(number)), member.object.get("ordinal").?.integer);
-            try std.testing.expectEqualStrings(try @import("../domain/required_authority_description.zig").task(a, id), member.object.get("task").?.string);
+            try std.testing.expectEqualStrings(try @import("../domain/required_authority_description.zig").task(a, prepared.guidance, id), member.object.get("task").?.string);
             if (number == ordinal) target_found = true;
         }
         try std.testing.expect(target_found);
@@ -172,6 +172,7 @@ pub fn run() !void {
         .baseline_prompt = try filePin(a, root ++ "/baseline.prompt.md"),
         .candidate_prompt = try filePin(a, "design/workflows/spec/support.prompt.md"),
         .schema = try filePin(a, "design/workflows/spec/support.schema.json"),
+        .guidance = try filePin(a, "design/workflows/spec/packet-guidance.json"),
         .scoring = try filePin(a, root ++ "/scorecard.template.json"),
         .taxonomy = try filePin(a, root ++ "/taxonomy.probes.json"),
         .parent = try filePin(a, "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff.parent.json"),

@@ -8615,7 +8615,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const current = if (kind == .summary) try references.build_input.execute(a, progress) else try references.summaries(a, progress, evidence.context());
         const packets = @import("domain/model_input_packet.zig");
         const packet = if (kind == .summary) summary: {
-            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry);
+            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry, @import("test_fixtures/packet_guidance.zig").marked.summary_purpose);
             defer packets.release(base);
             break :summary try packets.withAssignmentContext(std.testing.allocator, base, .{ .bytes = "summary" });
         } else signals: {

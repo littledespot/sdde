@@ -162,7 +162,7 @@ pub const Omission = struct {
         if (auth.owner != .reference_chunk) return error.InvalidAtomicRepair;
         return .{ .state_id = .{ .bytes = auth.owner.reference_chunk.reference_state_id.bytes }, .chunk_id = .{ .bytes = auth.owner.reference_chunk.chunk_id.bytes } };
     }
-    pub fn packet(a: std.mem.Allocator, facts: OmissionFacts, literals: @import("passive_literals.zig").Registry, auth: OmissionAuthorization) OmissionError!*packets.Packet {
+    pub fn packet(a: std.mem.Allocator, facts: OmissionFacts, literals: @import("passive_literals.zig").Registry, auth: OmissionAuthorization, guidance: *const @import("packet_guidance.zig").Guidance) OmissionError!*packets.Packet {
         try loss.requireRepairPhase(facts.support.repair_phase);
         try Atomic.checkDependencies(a, auth, facts);
         var arena: std.heap.ArenaAllocator = .init(a);
@@ -178,7 +178,7 @@ pub const Omission = struct {
         const scope = try Omission.scopeOf(auth);
         const base = try input.extractionBase(a, facts.extraction.inputs, literals, facts.extraction.candidates, scope);
         defer packets.release(base);
-        const result = try Atomic.packet(a, auth, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
+        const result = try Atomic.packetPresenting(a, auth, guidance, base, .{ .bytes = if (auth.target == .classification) "classification" else "claim" }, try Omission.sourceOrigin(facts, auth), .{ .fields = .{ .selected = fields } });
         if (auth.target == .classification) return result;
         defer packets.release(result);
         return input.withCitationChoices(a, result, facts.extraction.inputs, scope, &.{.{ .property = "citations" }});

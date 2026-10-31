@@ -10,18 +10,18 @@ scope and do not accept the remainder. Requirements here are not claims that the
 engine already meets them; [FIX06](../fixes/FIX06.md) tracks implementation gaps.
 [Engine intent](intent.md) orients judgment but is not contract authority.
 
-Sections 1, 3, 4 and 30–32 are stated here. Every other section links to its
-detailed contract in [contracts/](contracts/), which carries the same proposed
-authority.
+Sections 1–4 and 30–33 are stated here. §13 links to its action catalogues in
+[contracts/actions/](contracts/actions/); every other section links to its detailed
+contract in [contracts/](contracts/). Both carry the same proposed authority.
 
 **Scope:** Engine development in this repository. `init`, `drift`, `audit`,
 version-control integration and artifact fingerprinting are outside the initial
 suite.
 
-**Source material:** [paths](paths.md), [schemas](schemas/),
-[configuration examples](examples/), [legacy preset examples](toolchainPresets/)
-and [principle templates](templates/) are not runtime configuration or fallback
-data.
+**Source material:** [configuration examples](examples/),
+[legacy preset examples](toolchainPresets/) and [principle templates](templates/)
+are not runtime configuration or fallback data. [Paths](paths.md) and
+[schemas](schemas/) document contracts but are never loaded as runtime fallback.
 
 ---
 
@@ -205,7 +205,7 @@ engine fixes them:
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
     copied into nodes.
-30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. [ADR 0041](decisions/0041-failed-run-incomplete-publication.md) permits a Specify run that fails because model work couldn't be completed, or ends `blocked`, to publish its validated content as an incomplete specification, marked and logged; the run stays `failed` or `blocked` and gains no completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
+30. The whole workflow is validated before publication. [ADR 0017](decisions/0017-incomplete-specification-publication.md) permits a separately validated incomplete specification with clarification publication, never completion authority. [ADR 0041](decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented) permits a Specify run that fails because model work couldn't be completed, or ends `blocked`, to publish its validated content as an incomplete specification, marked and logged; the run stays `failed` or `blocked` and gains no completion authority. Other non-success abandons unpublished candidates; a new execution starts at `start`. Publication failure may leave already-replaced files but never records new successful completion (Section 25). No transaction, durable checkpoint or provider-recovery subsystem may be introduced.
 31. Clarification persistence and rerun replacement:
     - Clarification records and answers survive output replacement and abandoned executions.
     - One stable target/owner/subject/slot has one clarification ID. A new execution, authority
@@ -219,9 +219,11 @@ engine fixes them:
     - Section 23.2 owns rerun replacement and protection.
 32. Provider APIs own model-call size limits; SDDE adds no byte/token capacity
     ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). SDDE
-    never requests an output allowance below the model's own maximum: each Bedrock
-    model's documented maximum is recorded in the provider catalogue and sent, so a
-    provider default cannot cut output short, and every provider-applied stop is
+    never requests an output allowance below the model's own maximum: each catalogue
+    entry, for every provider, records its model's documented maximum and every
+    inference request sends it
+    ([ADR 0028](decisions/0028-anthropic-messages-provider.md)), so a provider default
+    cannot cut output short, and every provider-applied stop is
     logged with its reason. Actual input plus output tokens count
     against one total-token budget per execution, shared by all inference,
     including advice. No call starts at or above it, and budget rejection is fatal
@@ -249,7 +251,7 @@ Deterministic checks should be used wherever the answer can be computed from con
 | Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; validate brief schema/citations | Derive human title, description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
 | Reference discovery | Root containment, traversal, symlinks, inventory, ordering, readability, size, decoder availability | None | Unsupported inputs block or require an installed reader according to policy. |
 | Reference understanding | Source span validity, exact token preservation for structured formats, coverage ledger | Extract requirements, classify signals, recognize semantic conflicts | The engine can prove a citation exists; it cannot prove every semantic implication was found. |
-| Business/technical split | None: the keyword lint was never built and was removed on 28 October 2026 by user decision; explicit references and exact values keep their typed rules | Decide whether content belongs in business spec or technical context ([§17.5](contracts/17-specify.md)) | Findings are model-assisted warnings or human review, not false “proof.” |
+| Business/technical split | None; explicit references and exact values keep their typed rules ([§21.2](contracts/21-validation.md) records the removed lint) | Decide whether content belongs in business spec or technical context ([§17.5](contracts/17-specify.md)) | Findings are model-assisted warnings or human review, not false “proof.” |
 | Spec structure | Required fields, IDs, uniqueness, status, citation schema, required sidecar; typed rendering emits no placeholder and readback accepts only its closed grammar | Stories, acceptance criteria, business rules, assumptions, non-goals | Testability and ambiguity are semantic reviews unless reducible to a schema rule. |
 | Repository facts | File inventory, manifests, installed dependencies, scripts, source/test roots, AST parse, tool availability | Interpret which existing areas are relevant to the feature | A model may select among real facts but may not invent facts. |
 | Plan structure | Artifact manifest, canonical paths, applicability, required sections, requirement coverage, allowed commands | Architecture, trade-offs, research rationale, minimal change choice, verification strategy, principle interpretation | Principle conflicts requiring judgment remain LLM/human decisions. |
@@ -376,7 +378,8 @@ operation. Planning selects validated identities; later stages consume approved 
 
 Model assignments contain typed data, evidence, guidance, and a closed result schema. Explicit
 workflow operations own preparation, invocation, decoding, review, and repair under the shared
-authority boundary.
+authority boundary. Under [ADR 0030](decisions/0030-engine-owned-model-request.md) (partly
+implemented), one model request's lifecycle stages run inside one `request-model` step.
 
 [Complete §12 contract](contracts/12-model-boundary.md).
 
@@ -444,7 +447,9 @@ provider bootstrap and feature logging, become typed engine routines under
 ## 15. Bootstrap flow
 
 The fixed startup graph loads project workflow authority; under ADR 0032 (not yet implemented)
-it is a typed engine routine run by the composition root. The selected compiled workflow then
+it is a typed engine routine run by the composition root. After exact selection, the fixed
+provider bootstrap ([ADR 0004](decisions/0004-model-provider-bootstrap.md)) prepares provider
+authority only when the selected graph requires it. The selected compiled workflow then
 chooses its permitted setup operations.
 
 [Complete §15 contract](contracts/15-bootstrap.md).
@@ -477,6 +482,7 @@ supported business content, and prepares the complete specification output.
 - <a id="171-inputs"></a>[17.1 Inputs](contracts/17-specify.md#171-inputs)
 - <a id="172-deterministic-preflight"></a>[17.2 Deterministic preflight](contracts/17-specify.md#172-deterministic-preflight)
 - <a id="173-llm-work"></a>[17.3 LLM work](contracts/17-specify.md#173-llm-work)
+- <a id="1731-requirementprinciple-consistency-review"></a>[17.3.1 Requirement–principle consistency review](contracts/17-specify.md#1731-requirementprinciple-consistency-review)
 - <a id="174-specification-clarification-behavior"></a>[17.4 Specification clarification behavior](contracts/17-specify.md#174-specification-clarification-behavior)
 - <a id="175-deterministic-specification-validation"></a>[17.5 Deterministic specification validation](contracts/17-specify.md#175-deterministic-specification-validation)
 - <a id="176-rendering-and-commit"></a>[17.6 Rendering and commit](contracts/17-specify.md#176-rendering-and-commit)
@@ -665,6 +671,8 @@ requirements.
 - <a id="285-preset-conformance-fixtures"></a>[28.5 Preset conformance fixtures](contracts/28-testing.md#285-preset-conformance-fixtures)
 - <a id="286-renderer-and-artifact-tests"></a>[28.6 Renderer and artifact tests](contracts/28-testing.md#286-renderer-and-artifact-tests)
 - <a id="287-end-to-end-tests"></a>[28.7 End-to-end tests](contracts/28-testing.md#287-end-to-end-tests)
+- <a id="288-model-conformance-comparisons"></a>[28.8 Model-conformance comparisons](contracts/28-testing.md#288-model-conformance-comparisons)
+- <a id="289-clarification-admission-conformance"></a>[28.9 Clarification admission conformance](contracts/28-testing.md#289-clarification-admission-conformance)
 
 ---
 
@@ -835,7 +843,9 @@ The new engine is ready for production evaluation when all of the following are 
 
 6. No orchestrator imports or directly uses infrastructure/domain-operation ports; actions
     cannot contain/call actions or orchestrators, while orchestrators may contain only
-    runner-owned child bindings to actions/orchestrators.
+    runner-owned child bindings to actions/orchestrators. Under
+    [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), a runner-owned
+    child binding may also reach the provider-bootstrap engine routine.
 
 7. Every action and orchestrator conforms to the same typed `PipelineNode` contract,
     communicates through immutable validated envelopes/deltas, and has the required isolated
@@ -887,9 +897,10 @@ The new engine is ready for production evaluation when all of the following are 
     - A provider `output_limit` stop discards its partial text and re-sends the identical
       request once at the configured `temperatureRunawayRetry`, outside the step's
       `retry-limit`. Every re-send is logged as a warning `model.runaway_resent`. A
-      runaway on the re-send fails required work with `RunawayRepeated`, which then
-      publishes its validated content as a failed incomplete specification (ADR 0041);
-      in advisory work it ends that advice incomplete (ADR 0039).
+      runaway on the re-send fails required work with `RunawayRepeated` (ADR 0041,
+      accepted but on hold since 30 October 2026 and not implemented, would publish its
+      validated content as a failed incomplete specification); in advisory work it ends
+      that advice incomplete (ADR 0039).
     - Incomplete advice is published, marked in `spec.md` and `reference-context.md`,
       and logged as a warning `review.incomplete`
       ([ADR 0040](decisions/0040-incomplete-review-published-marked-logged.md)).
@@ -912,8 +923,8 @@ The new engine is ready for production evaluation when all of the following are 
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
       estimates or static-capacity checks gate calls.
     - No configuration, binding, request, correction, capture or replay carries an
-      output allowance below the model's own maximum. Each Bedrock inference request
-      sends the catalogue's documented model maximum. Every provider-applied stop is
+      output allowance below the model's own maximum. Every inference request, for every
+      provider, sends the catalogue's documented model maximum (ADR 0028). Every provider-applied stop is
       logged at warning level with its exact reason (ADR 0011).
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget. Prove this across generation,
@@ -937,9 +948,10 @@ The new engine is ready for production evaluation when all of the following are 
     recurrence retains its own history under §22.7. Exhaustion of the selected defect's
     explicit operation retry allowance blocks/fails and never weakens policy.
     JSON/schema rejection that cannot be corrected is a terminal error under §22.6,
-    even with open clarifications. The run still fails; it publishes only ADR 0041's
-    failed incomplete specification of its validated content, never a completed one or
-    a clarification pause.
+    even with open clarifications. The run still fails and publishes neither a completed
+    specification nor a clarification pause; under ADR 0041 (accepted, on hold since
+    30 October 2026; not implemented) it would publish only a failed incomplete
+    specification of its validated content.
 
 16. Unsupported references are reported and cannot be silently omitted; every selected source,
     decoded block, and bounded chunk has an exact disposition and accounting record.
@@ -977,9 +989,8 @@ The new engine is ready for production evaluation when all of the following are 
       parsed as authority.
     - Those projections require approvals bound to the current canonical state IDs.
 
-21. `spec.md` is business-only according to configured semantic review (the deterministic
-    lint was removed on 28 October 2026 by user decision), while technical/reference data remains
-    in the sidecar.
+21. `spec.md` is business-only according to configured semantic review (no deterministic
+    lint; §21.2), while technical/reference data remains in the sidecar.
 
 22. **Project principle authority.**
     - Semantic Markdown principle filenames are category hints only; their complete bounded
@@ -1125,7 +1136,7 @@ naming) was superseded by 0010 and removed.
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
 | [0015](decisions/0015-specification-principle-review.md) | Early Spec principle assessment and shared actionable-question preparation. |
-| [0016](decisions/0016-configured-json-response-composition.md) | Configured JSON response decomposition, prompt-free native assembly and a 1,024-step workflow ceiling. |
+| [0016](decisions/0016-configured-json-response-composition.md) | Configured JSON response decomposition, prompt-free native assembly and a 1,024-step workflow ceiling. Its 30 October amendment moves native packets' semantic guidance into one workflow `packet-guidance/v1` resource, published by `capture-packet-guidance`. |
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
@@ -1137,7 +1148,7 @@ naming) was superseded by 0010 and removed.
 | [0025](decisions/0025-clarification-answer-authentication.md) | The run that reads valid closed Specify clarification forms accepts their answers, with the invoking operating-system account as the actor. One invalid form stops the run, accepts no answers and reports a reason for each failing form. Evidence goes in the shared actor-evidence registry. Not yet implemented. |
 | [0026](decisions/0026-header-identity-log-retention.md) | Fresh runs prune prior-run log segments that are closed and past retention, using each segment header's identity. Invalid prior history blocks, and a run with an active tail is kept whole. Its 21 October amendment leaves a regular file whose name is not a segment name, such as `.DS_Store`, alone in every listing of `logs/events` and `logs/prompts`. |
 | [0028](decisions/0028-anthropic-messages-provider.md) | The Anthropic Messages API is a peer provider on shared provider owners: one native JSON-schema capability and projection, transport, credential snapshot, retry classifier and provider port, with only wire projections per family. Each slot binds one catalogue entry, with no cross-provider fallback. Every catalogue entry declares its documented `maxOutputTokens`, sent unchanged; ADR 0030 adds its required `requestTimeoutMs` (implemented 24 October 2026). Each family reads one exact credential variable, and a missing key fails at that family's first authorization. |
-| [0029](decisions/0029-bedrock-model-families.md) | A Bedrock catalogue entry names any model ID with its Region, a compiled family (`converse`, `gpt-oss`, `luna` or `claude`) and `maxOutputTokens`. The family, never the model name, fixes effort, temperature and request fields. The Claude 3.5 Haiku CountTokens registration is retired, `model-request-debug` advances to v10, and billed live tests still allow only named model tuples. ADR 0030's required `requestTimeoutMs` makes four `config` fields and advanced `model-request-debug` to v11 (implemented 24 October 2026). |
+| [0029](decisions/0029-bedrock-model-families.md) | A Bedrock catalogue entry names any model ID with its Region, a compiled family (`converse`, `gpt-oss`, `luna` or `claude`) and `maxOutputTokens`. The family, never the model name, fixes effort, whether temperature is sent (its value is configured, ADR 0039) and request fields. The Claude 3.5 Haiku CountTokens registration is retired, `model-request-debug` advances to v10, and billed live tests still allow only named model tuples. ADR 0030's required `requestTimeoutMs` makes four `config` fields and advanced `model-request-debug` to v11 (implemented 24 October 2026). |
 | [0030](decisions/0030-engine-owned-model-request.md) | One `request-model` step per model request. YAML declares the slot, resources, retry limit and outcomes; a fixed, capability-free kernel orchestrator runs the lifecycle stages, including protocol correction, through runner-owned child bindings. Its 23 October amendment removed provider token counting (the global token count, from actual inference usage, is unchanged), moved the request deadline to each catalogue entry as a required `requestTimeoutMs`, and lets only steps marked `advisory: allowed` map `more` and `blocked` (such a step may also carry ordinary requests; an advisory request at an unmarked step is rejected). It also builds the shared contract-variant mechanism: one contract of complete closed variants, selected per step at compile time by one closed parameter (`advisory` here, `owner` in ADR 0033). Consumers, release, advisory routing, JSON-part retention and ledger initialization stay in YAML. Partly implemented: provider token counting removed and the request deadline moved to the catalogue (24 October 2026); the rest is not yet implemented. |
 | [0031](decisions/0031-stage-actions.md) | One registered stage action may own a deterministic sequence of internal steps that routes no outcome, within the side-effect limits the ADR lists. Its internal steps are typed functions, each with one responsibility and only the port it uses, passing function-local values; only stage-edge data is pipeline data. Model requests and their collect actions, writes, publication, commands, clarification persistence, feature-log activation, gate issuers, repairs and every routed outcome stay in YAML. Converted one at a time, starting with `prepare-toolchain`. Not yet implemented. |
 | [0032](decisions/0032-engine-routines.md) | Fixed engine sequences become typed engine routines in `src/application/*_routine.zig`. Each step is a function with only the port it uses, values pass as distinct typed arguments (validated wrappers replace candidate/validated keys), and there are no erased child bindings or shared optional state. The composition root runs startup; a runner-owned binding runs provider bootstrap; the logging lifecycle owners run logging routines. Failure mappings and public codes are unchanged. Startup converts first; feature logging follows under preconditions (lock release, one emergency line, finalization, retention order). Specify invocation becomes an ADR 0031 stage action; ADR 0030's request coordinator keeps its form. Not yet implemented. |
@@ -1147,9 +1158,9 @@ naming) was superseded by 0010 and removed.
 | [0036](decisions/0036-source-quoted-claims.md) | A model extraction claim is a category and a set of supplied, nonblank source-line IDs, bounded at admission; it carries no wording. The engine quotes each claim's cited lines as written, Markdown included, trimming each run only at its ends (never inside fenced code) and joining separate runs with an ellipsis line. A claim spanning several top-level list items splits into one claim per item, with the same category (withdrawn on 25 October and reinstated by ADR 0038). Claim-text repair, citation repair and their diagnostics are deleted; only the `no_feature_claim` reason remains model text. Generated text loses the Markdown code delimiters directly around a recognised exact value. |
 | [0037](decisions/0037-configured-workflow-token-budget.md) | The single workflow token budget is the project configuration's required `workflowTokenBudget` (1 to 4,294,967,295, no default), decoded at bootstrap and passed to the runner's per-execution ledger. Policy profiles and compiled graphs no longer carry it. The E2E configuration and the example set 125,000. |
 | [0038](decisions/0038-record-claims-and-scenario-coverage.md) | Each non-entity record names the claims it supports, a nonempty subset of its one group kept in group order; the group stays its association. In one records response, every claim a functional requirement names must also be named by an acceptance criterion or edge case; admission rejects a gap as `uncovered_member` for the request's existing protocol correction, recorded for replay in `model-request-debug/v12`. ADR 0036's list-item split is reinstated. |
-| [0039](decisions/0039-configured-temperatures-and-runaway-resend.md) | `.sddtoolkit.json` requires `temperature` and `temperatureRunawayRetry` (numbers, zero or greater, no default); models whose contract takes a temperature send them, others omit it. A provider `output_limit` stop re-sends the identical request once at `temperatureRunawayRetry`, outside `retry-limit`, logged as `model.runaway_resent`; every retry response passes exactly the checks a first response does. A runaway on the re-send fails required work with `RunawayRepeated` and ends advisory work's advice incomplete. Request descriptions record each attempt's temperature (`model-request-debug/v13`), and the E2E report marks re-sends (`spec-e2e-report/v10`). Recorded as the user's exception to the evidence rule against sampling changes and extra retries. |
+| [0039](decisions/0039-configured-temperatures-and-runaway-resend.md) | `.sddtoolkit.json` requires `temperature` and `temperatureRunawayRetry` (numbers, zero or greater, no default); models whose contract takes a temperature send them, others omit it. A provider `output_limit` stop re-sends the identical request once at `temperatureRunawayRetry`, outside `retry-limit`, logged as `model.runaway_resent`; every retry response passes exactly the checks a first response does. A runaway on the re-send fails required work with `RunawayRepeated` and ends advisory work's advice incomplete. Request descriptions record each attempt's temperature (`model-request-debug/v13`), and the E2E report marks re-sends (`spec-e2e-report/v10`, since advanced to v11 by the [harness](harness/e2e.md)). Recorded as the user's exception to the evidence rule against sampling changes and extra retries. |
 | [0040](decisions/0040-incomplete-review-published-marked-logged.md) | Incomplete post-generation review is still published, with every admitted finding. `spec.md` carries a review-status line, `reference-context.md` lists each incomplete source or principle review's reason and unassessed subjects, each incomplete review is logged as a warning `review.incomplete`, and the E2E report records it. Required failures still fail; ADR 0041 governs what they publish. |
-| [0041](decisions/0041-failed-run-incomplete-publication.md) | A Specify run that fails because model work couldn't be completed (a failed request, exhausted correction or repair, or the token budget), or ends `blocked`, after its reference snapshot validated, publishes only its validated content as an incomplete specification: `spec.md` starts `**Status: Incomplete — the run failed.**` or `… was blocked.**`, `reference-context.md` gains a "Run status" section, `run.incomplete_published` is logged, and the `spec_incomplete` state (`specification-state/v20`) blocks Plan. The run still ends `failed` or `blocked` and is never resumed. Mechanism (27 October, not yet implemented): eligible failures (a YAML `failed`, `blocked` or `invalid` terminal, or a `retry_limit` or `token_budget` runner rejection) run the definition's declared model-free `failure-output` subgraph through the runner, which publishes validated units without final requirement IDs and returns the original failure; definitions move to `workflow/v2`. |
+| [0041](decisions/0041-failed-run-incomplete-publication.md) | On hold since 30 October 2026 (E0 stopped by user decision); nothing is implemented. A Specify run that fails because model work couldn't be completed (a failed request, exhausted correction or repair, or the token budget), or ends `blocked`, after its reference snapshot validated, publishes only its validated content as an incomplete specification: `spec.md` starts `**Status: Incomplete — the run failed.**` or `… was blocked.**`, `reference-context.md` gains a "Run status" section, `run.incomplete_published` is logged, and the `spec_incomplete` state (`specification-state/v20`) blocks Plan. The run still ends `failed` or `blocked` and is never resumed. Mechanism (27 October): eligible failures (a YAML `failed`, `blocked` or `invalid` terminal, or a `retry_limit` or `token_budget` runner rejection) run the definition's declared model-free `failure-output` subgraph through the runner, which publishes validated units without final requirement IDs and returns the original failure; definitions move to `workflow/v2`. |
 | [0042](decisions/0042-principle-verdict-citations-at-admission.md) | A generic native admission constraint (when a property has one of the listed values, a named array needs an item) rejects a `conflicting` or `uncertain` principle verdict without citations as `missing_required_item`, for the whole-response correction; values derive from the domain rule, and replay records it in `model-request-debug/v13`. A prompt line defining `uncertain` was tried and withdrawn on 27 October. |
 | [0043](decisions/0043-model-facing-exact-text-names.md) | Model-visible `preserved_token` and `preserved_tokens` become `exact_text` and `exact_texts`; internal names and stored state are unchanged. |
 | [0045](decisions/0045-entity-description-exact-values-as-code-spans.md) | On hold (not implemented; decided with ADR 0036 Decision 6 in FIX06 Q7). Entity meaning and each relationship take the entity name's incidental exact-copy role: a recognised exact value becomes an exact copy and renders as a code span instead of plain prose, and never counts toward coverage. The brief title and goal, applicability basis, assumption and clarification question stay prohibited. |
@@ -1162,7 +1173,8 @@ Additional accepted feature boundaries:
   [workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
   Identity comes only from validated content, and v1 has no alternate encoding,
   YAML alias or custom tag, include, compatibility reader, or runtime
-  schema-file fallback. ADR 0041 (not yet implemented) replaces v1 with `workflow/v2`,
+  schema-file fallback. ADR 0041 (accepted, on hold since 30 October 2026; not
+  implemented) would replace v1 with `workflow/v2`,
   adding an optional model-free `failure-output` subgraph, with no v1 reader;
 - [F0008](features/F0008-LLMProviderConfigService.md): the required
   `.sddtoolkit.json` `paths.providers` value is the sole provider-document path

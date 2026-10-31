@@ -40,10 +40,12 @@ live case from the repository root:
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0`. E2E preflight checks
-  every configured generation slot before reading credentials or starting the
-  workflow. Sonnet, Sol, Haiku, Luna, direct OpenAI
-  and other aliases reject; no target is substituted.
+  permits only named tuples ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)):
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0` for generation and judging, and
+  `aws-bedrock` / `au.anthropic.claude-haiku-5-5` for generation only. E2E preflight
+  checks every configured generation slot before reading credentials or starting the
+  workflow. Sonnet, Sol, Luna, direct OpenAI and other aliases reject; no target is
+  substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -186,8 +188,8 @@ The direct executable uses the caller's environment. Only
 or evaluation request is used.
 
 Configuration preflight requires complete `trace` or `debug` capture and checks
-every configured slot against the shared GPT-OSS-20B-only cost policy before
-credential access. Production preparation validates the catalogue and selected request;
+every configured slot against the shared cost policy and the frozen GPT-OSS-20B
+binding before credential access. Production preparation validates the catalogue and selected request;
 the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
@@ -372,8 +374,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 - A readable poor specification is retained unchanged after the engine's own gates
   accept it. There is no harness semantic prefilter or retry-until-good loop.
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
-- Rubric revision 2 includes the user-added UTC date/time requirement and remains an
-  uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
+- The Hello World rubric, now revision 3 (revision 2 added the user's UTC date/time
+  requirement), remains an uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
   assessment is correct.
 - The [`/evaluate-e2e`](../../.claude/skills/evaluate-e2e/SKILL.md) Claude Code skill
   reads a retained run, scores the captured specification against its rubric with line
@@ -538,11 +540,10 @@ when it is a runaway re-send
 ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), and the
 report records each incomplete review's reason and unassessed count
 ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)), so runaways,
-re-sends and incomplete reviews are counted separately. They advanced
-`spec-e2e-report` to v10. Each attempt's request
-`purpose` and `owner_kind`, read from its native request identity, and the
-`incomplete_publication` member advanced it to v11 (user decision of 29 October 2026),
-so stage costs can be measured and ADR 0041 adds no later version. A composed request's
+re-sends and incomplete reviews are counted separately. Each attempt's request
+`purpose` and `owner_kind` are read from its native request identity, so stage costs
+can be measured ([Format history](#format-history) records the versions these members
+advanced). A composed request's
 identity carries its base packet's purpose and owner, so these match the baseline
 trace's receipts, and baseline acquisition rejects a report whose attempt and receipt
 differ. Reports of earlier versions stay readable only by the build that made them. `model_calls` counts reconciled inference operations,
@@ -618,6 +619,13 @@ before then stay readable only by the build that made them); evaluator packets r
 `baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
 `rubric-judgment/v2` because they embed its judgments or the E2E report.
+The compatibility report's outer
+format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
+historical evidence; current readers reject superseded report versions and fields.
+Feasibility evidence retains the single total budget and aggregate actual usage.
+
+### Format history
+
 `spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
 `evaluation-report/v5`, which records per-attempt purpose and diagnostics, and
 `spec-e2e-report/v8`, `baseline-acquisition/v6` and `evaluation-report/v6` with the
@@ -628,6 +636,12 @@ adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
 `spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
 needed for each. `evaluation-report/v7` then removed the standalone evaluator's
 judge-independence field and its never-produced passed or failed model decision.
+The runaway re-send and incomplete-review members
+([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
+[ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)) advanced
+`spec-e2e-report` to v10. Each attempt's request `purpose` and `owner_kind` and the
+`incomplete_publication` member advanced it to v11 (user decision of 29 October 2026);
+ADR 0041 adds no later version.
 `baseline-acquisition/v8` advanced with `spec-e2e-report/v11`, which it embeds.
 `baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
 budget became the configured `workflowTokenBudget`
@@ -635,10 +649,6 @@ budget became the configured `workflowTokenBudget`
 now requires that member, so a retained run's captured `.sddtoolkit.json` without it can
 no longer be replayed by `e2e-call` or used as budget-feasibility evidence; adjudication
 doesn't decode configuration and is unaffected.
-The compatibility report's outer
-format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
-historical evidence; current readers reject superseded report versions and fields.
-Feasibility evidence retains the single total budget and aggregate actual usage.
 
 ### Reliability assessment
 

@@ -32,7 +32,7 @@ built. Typed rendering emits no placeholder, and readback accepts only its close
 | Reference root | Configured-root containment, readable directory, no symlink escape | None |
 | Reference accounting | Stable inventory equals processed-status inventory | Relevance of content |
 | Reader support | MIME sniff plus installed reader | Meaning of decoded content |
-| Citation | Source ID, bounds, and verbatim text exist | Whether citation proves claim |
+| Citation | Source ID and bounds exist; an extraction claim cites supplied nonblank line IDs, whose text the engine quotes ([ADR 0036](../decisions/0036-source-quoted-claims.md)) | Whether citation proves claim |
 | Required sections | Typed required fields and renderer contract | Whether prose is adequate |
 | Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
 | Acceptance form | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order | Whether scenario is truly testable |
@@ -42,6 +42,12 @@ built. Typed rendering emits no placeholder, and readback accepts only its close
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
 | Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
 | Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction, repair and readback bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
+
+[§17.5](17-specify.md#175-deterministic-specification-validation) also lists the
+duplicate check, which [ADR 0035](../decisions/0035-cross-kind-restatement.md) extends
+to covered cross-kind restatements
+([F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair)), and
+claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 
 Removed 28 October 2026 by user decision: the business-only keyword lint, which was never
 built. Semantic review owns business/technical classification ([§17.5](17-specify.md)).

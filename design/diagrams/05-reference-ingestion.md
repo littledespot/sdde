@@ -27,7 +27,9 @@ flowchart TD
     WITHIN --> CROSS["Validate complete summary membership;<br/>group across the selected directory's sources"]
     CROSS --> GLOBAL["Group global summaries recursively;<br/>retain original claim membership and payloads"]
     GLOBAL --> DISPOSITIONS["Models dispose semantic claims only;<br/>native tokens retain distinct bytes or directly duplicate<br/>their earliest equal-byte original; validate all joins"]
-    DISPOSITIONS --> RECORDS["Validate signal / citation / token / conflict joins;<br/>assign engine IDs and validate complete lineage"]
+    DISPOSITIONS --> SIGNALS["Validated dispositions feed the signals request;<br/>validate signal content and claim joins"]
+    SIGNALS --> CONFLICTS["Validated signals feed conflict explanations<br/>over native group handles; validate joins"]
+    CONFLICTS --> RECORDS["Validate signal / citation / token / conflict joins;<br/>assign engine IDs and validate complete lineage"]
     RECORDS -->|Candidate and conflict evidence| CHECK{"Shared authority gate:<br/>required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
     CHECK -->|Clarification required| CLARIFY["Reuse subject IDs; completely overwrite unresolved forms;<br/>preserve user-resolved forms and end needs_user"]
@@ -48,6 +50,8 @@ flowchart TD
     TOKENS -->|Preservation contradicts positive empty| DIAGNOSTIC
     LITERALS -->|Invalid or stale| FAILED
     DISPOSITIONS -->|Missing, duplicate, foreign or invalid| DIAGNOSTIC
+    SIGNALS -->|Invalid| DIAGNOSTIC
+    CONFLICTS -->|Invalid| DIAGNOSTIC
     RECORDS -->|Incomplete or invalid| DIAGNOSTIC
 ```
 
@@ -57,6 +61,8 @@ Candidates remain execution-local; permitted clarification state survives reruns
 
 Contracts and implementation evidence: [Design §16](../design.md#16-reference-ingestion-and-normalization)
 and [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary),
-as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md) and
-[ADR 0036](../decisions/0036-source-quoted-claims.md).
+as amended by [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md),
+[ADR 0024](../decisions/0024-native-exact-token-authority.md),
+[ADR 0036](../decisions/0036-source-quoted-claims.md) and
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md).
 Scripted verification does not establish live completion or semantic quality.

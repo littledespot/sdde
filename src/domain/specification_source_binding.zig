@@ -21,7 +21,8 @@ pub const Rejection = struct {
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
 pub const RecordBound = struct { signal: r.SignalId, selection: spec.Selection, catalogue: Catalogue };
 pub const Bound = union(enum) { brief: Catalogue, primary_user_story: Catalogue, entities: Catalogue, records: RecordBound };
-pub const GuidanceMode = enum { authoring, repair };
+/// Authoring presents the workflow's purposes; a repair presents only its task.
+pub const GuidanceMode = union(enum) { authoring: *const @import("packet_guidance.zig").Guidance, repair };
 const Requirement = @import("model_evidence.zig").Requirement;
 pub const FieldGuidance = struct { purpose: ?[]const u8 = null };
 /// Batch records inherit exactly one assignment. A feature-owned entity selects
@@ -55,16 +56,25 @@ pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirem
     return switch (bound) {
         .brief => .{ .brief = .{ .title = try fieldGuidance(a, .display_name, mode), .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
         .primary_user_story => .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, mode) },
-        .entities => .{ .entities = .{ .purpose = if (mode == .authoring) try std.fmt.allocPrint(a, "{s}\n{s}", .{ (try fieldGuidance(a, .entities, mode)).purpose.?, @import("required_authority_description.zig").record(a, .entity) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding }) else null } },
+        .entities => .{ .entities = .{ .purpose = switch (mode) {
+            .authoring => |purposes| try std.fmt.allocPrint(a, "{s}\n{s}", .{ (try fieldGuidance(a, .entities, mode)).purpose.?, @import("required_authority_description.zig").record(a, purposes, .entity) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding }),
+            .repair => null,
+        } } },
         .records => |value| .{ .records = .{
-            .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding else null,
+            .purpose = switch (mode) {
+                .authoring => |purposes| @import("required_authority_description.zig").recordsFor(a, purposes, record_kinds) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding,
+                .repair => null,
+            },
             .signal = value.signal,
             .requirements = try assignedRequirements(a, value.selection, requirements),
         } },
     };
 }
 fn fieldGuidance(a: std.mem.Allocator, slot: @import("required_authority.zig").Slot, mode: GuidanceMode) Error!FieldGuidance {
-    return .{ .purpose = if (mode == .authoring) @import("required_authority_description.zig").task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding else null };
+    return .{ .purpose = switch (mode) {
+        .authoring => |purposes| @import("required_authority_description.zig").task(a, purposes, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding,
+        .repair => null,
+    } };
 }
 fn assignedRequirements(a: std.mem.Allocator, selected: spec.Selection, requirements: []const Requirement) Error![]const Requirement {
     const result = try a.alloc(Requirement, selected.claim_ids.len);

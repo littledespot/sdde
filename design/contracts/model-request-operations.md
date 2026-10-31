@@ -4,16 +4,8 @@ Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
 > **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
-> except the token-counting removal and the catalogue deadline).** Two parts of the
-> 23 October amendment were implemented on 24 October 2026:
->
-> - provider token counting is removed: no count operation remains, and
->   `assign-provider-operation` takes no parameter and always assigns inference;
-> - the provider-operation deadline is the bound catalogue entry's required
->   `requestTimeoutMs`, and `prepare-provider-operation-authorization` takes no
->   parameter (see "Authorization preparation integration").
->
-> The rest is not yet implemented. Under
+> except the token-counting removal and the catalogue deadline, both implemented
+> 24 October 2026 and reflected in the sections below).** Under
 > [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
 > being YAML-selectable. Each request-lifecycle operation becomes a fixed stage of one
 > `request-model` step. A capability-free kernel orchestrator runs the stages in the order
@@ -32,15 +24,16 @@ Detailed contracts for the explicit YAML model-request operations governed by
 ## Accounting integration
 
 - The explicitly selected `advance-model-attempt-accounting` step consumes the prepared
-  request and declares `retry-limit` (`0` permits only its initial execution).
+  request and declares `retry-limit` (`0` permits only its initial execution and ADR
+  0039's runaway re-send, which accounting reserves with its own count, one per attempt,
+  outside `retry-limit`).
 - The compiler retains its accounting permission.
 - The runner supplies read-only ledger snapshots and initial/retry classification,
   validates the proposed transition, and publishes sealed evidence from the applied
   record.
 - The runner owns retry counts: operation/immutable-assignment counts for ordinary
   requests, also bound to a pending native parent for dependent requests, and
-  operation/native-defect counts for atomic repairs under the user-requested
-  2026-09-18 amendment in
+  operation/native-defect counts for atomic repairs under
   [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
   never become a second retry counter.
 - Retry authority names the accounting step, not the request origin.
@@ -48,8 +41,7 @@ Detailed contracts for the explicit YAML model-request operations governed by
   before a YAML retry revisits the accounting step.
 - A second initial attempt cannot reset an existing request.
 
-- The 2026-09-12 protocol-retry amendment makes that accounting step the sole attempt
-  limit on the model-request correction path.
+- That accounting step is the sole attempt limit on the model-request correction path.
 - The protocol-retry builder only prepares a corrected request from retained original
   inputs and the latest rejection; it has no separate execution limit.
 - Runner exhaustion retains the compiled owner, limit and consumed execution count as a
@@ -163,7 +155,8 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Syntax rejection returns typed `InvalidModelEnvelope` as `invalid`; the inference
   profile now permits `end.invalid`, preserving the compiler's matching-terminal rule.
 - Stops, failures, observation rejection and cancellation are forwarded unchanged
-  without parsing.
+  without parsing; response admission, not the decoder, applies ADR 0039's runaway
+  mapping (below).
 - No schema check, new identity, byte limit, token charge, retry or lifecycle transition
   is introduced.
 
@@ -192,7 +185,11 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - The shared registered/compiled contract permits exactly this output pair with
   the decoder prerequisites and existing pure-response restrictions. Other
   response operations retain their single-output contracts.
-- Syntax/schema diagnostics and non-complete outcomes remain distinct. Failure
+- Syntax/schema diagnostics and non-complete outcomes remain distinct, except a
+  provider `output_limit` stop: a first runaway (valid usage, on an attempt that is not
+  a re-send) admits as `invalid` with no candidate, and a runaway on a re-send admits
+  as `failed` with `RunawayRepeated`
+  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Failure
   before publication releases both values. One delta-application/cancellation
   boundary replaces two; current-authority dependencies remain required.
 - Detailed operations remain available. No new identity, schema selection,

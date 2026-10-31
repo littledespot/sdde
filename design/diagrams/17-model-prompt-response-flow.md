@@ -11,7 +11,7 @@ protocol correction becomes a stage of the `request-model` step, bounded by its 
 ```mermaid
 flowchart TD
     Workflow["Workflow YAML selects<br/>task prompt, result schema and model slot"]
-    Config[".sddtoolkit.json<br/>repository model slots and reasoning effort"]
+    Config[".sddtoolkit.json<br/>repository model slots, reasoning effort,<br/>temperature and temperatureRunawayRetry"]
     Policy[".sddtoolkit.json workflowTokenBudget<br/>total token budget per execution"]
     Prompt["Task prompt<br/>what to produce and how to use the evidence"]
     Schema["Compiled result schema<br/>fields, types, required values and allowed variants"]
@@ -36,7 +36,10 @@ flowchart TD
     Response --> Usage["Account all actual API-reported input and output tokens;<br/>retain usage on failure, stop or cancellation"]
     Usage -->|Overshoot or usage unavailable| Stop
     Usage -->|Accounting permits continuation| Eligible{"Complete final text<br/>from the correct call?"}
-    Eligible -->|No| Stop["Failed or cancelled<br/>no candidate accepted"]
+    Eligible -->|Missing final text| Retry
+    Eligible -->|First output_limit stop| Resend["Discard partial text; re-send the identical request once<br/>at temperatureRunawayRetry, outside retry-limit (ADR 0039)"]
+    Resend --> Accounting
+    Eligible -->|Other stop, failure, cancellation<br/>or runaway on a re-send| Stop["Failed or cancelled, or incomplete advice<br/>no candidate accepted"]
     Eligible -->|Yes| Syntax{"Strict JSON decoding<br/>one object, no fences or extra text"}
     Syntax -->|Valid JSON| Shape{"Matches the selected<br/>closed result schema?"}
     Schema -.-> Shape

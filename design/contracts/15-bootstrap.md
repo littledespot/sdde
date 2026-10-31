@@ -3,7 +3,8 @@
 Part of the [proposed design](../design.md#15-bootstrap-flow), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-Bootstrap has a fixed engine-startup portion and workflow-owned setup:
+Bootstrap has a fixed engine-startup portion, conditional provider bootstrap
+([ADR 0004](../decisions/0004-model-provider-bootstrap.md)) and workflow-owned setup:
 
 [View the Bootstrap flow sample](../code.md#bootstrap-flow).
 
@@ -17,8 +18,12 @@ Bootstrap has a fixed engine-startup portion and workflow-owned setup:
   engine routine that the composition root runs, with the same properties and public error
   codes. It is the first ADR 0032 conversion.
 
-- After exact selection, the YAML-named registered invocation operation produces the workflow's
-  typed run context.
+- After exact selection and before the invocation operation, the fixed provider bootstrap
+  derives the selected graph's model-provider requirement and, only when `required`, captures
+  and validates the provider catalogue and slot allowlist; `not_required` performs no
+  provider-document operation.
+- The YAML-named registered invocation operation then produces the workflow's typed run
+  context.
 - Only the selected graph decides whether to invoke registered target-context setup nodes.
 - The initial SDD graphs do so after their workflow arguments validate: the SDD setup owns exact
   feature-target resolution and the selected feature's existing published-state validation.

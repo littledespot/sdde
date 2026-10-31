@@ -25,7 +25,7 @@ then follow the section links in design.md.
 | Example configuration and the Spec workflow | [examples/](examples/), [workflows/](workflows/) |
 | Target-project source material | [preset examples](toolchainPresets/), [principle templates](templates/) |
 
-Schemas, examples, presets and templates are source material, never runtime
-configuration or fallback. Templates are not an instantiated engine constitution.
+Examples, presets and templates are source material; schemas document contracts.
+None of them is runtime configuration or fallback. Templates are not an instantiated engine constitution.
 Tests load [workflows/](workflows/) and `examples/.sddproviders.json` directly.
 Keep diagram `.md` files and their Mermaid fences so they render in Markdown preview.

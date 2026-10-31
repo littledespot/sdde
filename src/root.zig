@@ -33,6 +33,7 @@ test {
     _ = @import("required_authority_test.zig");
     _ = @import("specification_contract_test.zig");
     _ = @import("reference_model_input_test.zig");
+    _ = @import("packet_guidance_test.zig");
     _ = @import("specification_generation_test.zig");
     _ = @import("principle_registry_test.zig");
     _ = @import("model_result_schema_test.zig");

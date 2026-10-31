@@ -35,10 +35,11 @@ create intermediate publication or restart checkpoints.
   before any output write. A failed stream close prevents publication.
 - Every compiled successor of a publication operation is the corresponding terminal
   outcome. No later node may perform work, emit telemetry or fail after publication.
-  Preparation selects a closed `ok`, `needs_user` or incomplete (`failed` or `blocked`)
-  outcome from validated state; the publisher returns it only after all writes succeed.
-  An incomplete publication
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) runs only as the
+  Preparation selects a closed `ok` or `needs_user` outcome from validated state; the
+  publisher returns it only after all writes succeed. Under
+  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+  since 30 October 2026; not implemented), preparation may also select an incomplete
+  (`failed` or `blocked`) outcome. That incomplete publication runs only as the
   definition's declared failure output, in the runner's failure-output mode, the one
   mode in which filesystem steps may run while failures are pending. Its prepared output
   must carry every pending failure subject, and its terminal is the recorded failure, so
@@ -54,23 +55,22 @@ create intermediate publication or restart checkpoints.
 
 - Failure, blocking, cancellation or interruption abandons the execution and its unpublished
   candidate output; files already replaced during publication may remain under Section 25.1.
-  An eligible failed or blocked Specify run publishes only its validated content, through
-  its declared failure output (ADR 0041); unvalidated candidates are still abandoned.
+  Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
+  hold since 30 October 2026; not implemented), an eligible failed or blocked Specify run
+  publishes only its validated content, through its declared failure output; unvalidated
+  candidates are still abandoned.
 - A subsequent invocation starts at `start`, revalidates current inputs and gates, and executes
   the whole selected workflow again.
 - It never restores a saved task, step, model response or provider operation.
 - Run-local lifecycle, leases and token accounting start fresh.
 
-- Successful reruns completely overwrite all registered replaceable workflow outputs at their
-  existing paths, without append, merge, skip, suffix or separate overwrite approval.
-- Clarifications are the explicit persistence exception: preserve stable identity and relevant
-  validated answers, completely overwrite unresolved forms at the same IDs/paths, do not
-  duplicate subjects, and never overwrite user-resolved forms.
+- Rerun replacement of registered outputs and unresolved forms, and the clarification
+  persistence exception that protects user-resolved forms, follow Section 23.2 and
+  [ADR 0009](../decisions/0009-atomic-workflow-execution.md) for every workflow execution.
 - [ADR 0017](../decisions/0017-incomplete-specification-publication.md) extends Spec
   clarification publication to a validated incomplete `spec.md`, current reference
   context and explicit pending state. The full pending set is validated before writes,
   and its state is written last. It grants no completed-stage or downstream authority.
-- Section 23.2 owns this rule for every workflow execution.
 - Outstanding spec, plan or tasks clarifications prevent `implement` from executing.
 
 ### 25.3 External effects and observations

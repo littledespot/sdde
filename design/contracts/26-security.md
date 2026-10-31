@@ -59,10 +59,11 @@ Model and reference content are untrusted data:
 
 ### 26.5 Secrets and logging
 
-- The effective threshold is always compiled from v2 `.sddtoolkit.json` `logs.level`; neither a
+- The effective threshold is always compiled from the unversioned `.sddtoolkit.json` `logs.level`; neither a
   prompt, model response, action, nor orchestrator may override it.
 - File logging is always enabled and cannot be configured away.
-- The only other logging input is the optional `logs.console` mirror boolean.
+- The only other logging input is the required `logs.console` boolean, which enables the
+  optional mirror.
   The removed `logs.promptCapture` field rejects; capture follows the level alone.
 - Console output never substitutes for a successful file append.
 - Configuration supplies no path, file-enable switch, timestamp, format, size, retention, flush,
@@ -183,8 +184,9 @@ Every activated run writes beneath the spec being run, never into the editable s
   and a literal backslash is escaped before the reserved-null check, so absence and content
   cannot alias.
 - Unknown, duplicate, missing, or reordered headings and extra/missing row cells fail closed.
-- This pre-release proof of concept updates v2 in place and rejects all obsolete headings; it
-  has no migration, compatibility reader, dual writer, or historical conversion.
+- This pre-release proof of concept accepts only the current `event-columns/v2` and
+  `prompt-columns/v3` headings and rejects all obsolete headings; it has no migration,
+  compatibility reader, dual writer, or historical conversion.
 - After release acceptance, adding or reordering a column requires a new contract version.
 
 - The exact PoC constants are F0002 Section 6.4: timestamp enabled; pipe-delimited file and
@@ -238,7 +240,7 @@ Every activated run writes beneath the spec being run, never into the editable s
 - Every terminal branch releases the capability; after process death the adapter/OS releases
   ownership and recovery must reacquire before inspecting bytes.
 - A later new run starts its own ordinal-one binding/sequence.
-- Error/fatal and every terminal stage/task/workflow event force a flush; lower levels use the
+- Error/fatal and every terminal stage/task event force a flush; lower levels use the
   validated count/time policy.
 
 - On restart, recovery first validates the exact first pipe-delimited column-heading row and
@@ -250,7 +252,8 @@ Every activated run writes beneath the spec being run, never into the editable s
 - Retention runs after recovery and rotation; a single-use authorization selects closed segments
   oldest-first by `(closedAtUtc, runId, ordinal)`, never the current segment. For prior runs,
   ADR 0026 amends this order (below).
-- This is the only authorized destructive log operation.
+- This is the only authorized log deletion; recovery's tail truncation is the only other
+  destructive write.
 - [ADR 0026](../decisions/0026-header-identity-log-retention.md) sets how a fresh run
   retains prior runs:
   - identity comes from each binding's first segment header;
@@ -259,5 +262,26 @@ Every activated run writes beneath the spec being run, never into the editable s
   - groups are pruned one at a time under each run's own lock, in
     `(runId, bindingId, stream rank)` order;
   - within a group, only the longest expired prefix in ordinal order is deleted.
+
+The request debugger ([ADR 0019](../decisions/0019-single-request-debugger.md)) is a
+native diagnostic entry point, not a workflow:
+
+- `sdde --debugger <feature-directory>` serves its embedded browser interface on an
+  ephemeral IPv4 loopback port. It executes no project node, publishes no project
+  artifact, changes no approval and grants no completion authority.
+- Only loopback clients may connect. Same-origin checks and an unpredictable
+  process-local token protect data and replay endpoints.
+- The server accepts no browser-supplied paths, destinations, credentials, commands or
+  workflow-state changes. Replay credentials come afresh from the existing authorization
+  source, never from logs or the browser.
+- File access is descriptor-relative and no-follow; new records are exclusive,
+  owner-only files. Model text renders as text, never executable HTML.
+- Replay is a user-triggered POST for exactly one selected inference request. It makes at
+  most one provider call, with no automatic retries.
+- Each replay writes new immutable request/result records beneath the selected feature's
+  `<paths.specs>/<featureId>/logs/debugger`, linked to the source run/call. The request is
+  durably saved before dispatch; storage failure prevents dispatch or fails the replay.
+  Originals are never overwritten, and workflow execution, recovery and publication never
+  read these records.
 
 Logs are observations, not workflow authority. Their presence, absence or content cannot prove completion or resume an execution. A logging failure abandons the current workflow candidate; no transaction stabilization or recovery is invoked.

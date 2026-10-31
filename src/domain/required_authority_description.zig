@@ -2,78 +2,55 @@
 const std = @import("std");
 const a = @import("required_authority.zig");
 const spec = @import("specification.zig");
+const guidance = @import("packet_guidance.zig");
+/// Purposes are workflow-owned packet guidance; this module composes them with
+/// native identities and frames.
+const Guidance = guidance.Guidance;
 
 /// Presentation of an already-bound source-review assignment, not a new
 /// ownership, eligibility or finding policy. Business purposes remain shared
 /// with authoring and principle review; these evidence roles are source-only.
 pub const SourceReviewScope = struct {
-    original_sources: []const u8 = "Original sources establish business obligations and unresolved decisions. Candidate assertions cannot establish source requirements.",
-    derived_evidence: []const u8 = "Claims, associations, signals and dispositions are derived evidence. Their omissions or labels do not remove original obligations.",
+    original_sources: []const u8,
+    derived_evidence: []const u8,
     instruction: []const u8,
 };
 
-pub fn sourceReviewScope(subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
-    return .{ .instruction = switch (subject) {
-        .candidate_field => |field| if (field.record != null)
-            "Assess subject.text for its assigned field purpose within subject.record. Sibling fields may supply joint conditions and results; each field need not repeat the whole flow."
-        else
-            "Assess the behavior or decision expressed by subject.text for its assigned purpose, including its qualifying triggers, conditions, negation and obligation strength. Unrelated feature duties belong to their collection assessments.",
-        .collection => "Assess the selected records together for complete source-required coverage of the assigned collection purpose, including obligations absent from current claims or associations. Surrounding context cannot replace missing selected records.",
-        .entity_applicability => "Assess the entity disposition and its explanation together for their assigned purpose. Other feature behavior remains in force and is checked by its own field and collection assignments.",
-        .source_preservation => "Assess whether original sources establish the assigned business purpose before authoring. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
-        .reference => |reference| switch (reference) {
-            .source => "Assess extraction and reconciliation against the complete assigned original source, including meaning with no surviving claim. Current candidate associations do not limit this assignment.",
-            .signal => "Assess the selected signal's represented meaning against its original sources, preserving its own conditions and obligations. An exact value retains its cited source-required use and conditions; it does not assign other source duties to that signal. Selected claims identify candidate evidence, not source truth. Generated fields and collections have their own assessments.",
-            .token => "Assess the selected exact token and its source-required use and conditions against the original source. This assignment does not require the token to express other source obligations or assess generated fields and collections. Matching bytes or citations alone do not establish support.",
-            .conflict => "Assess the selected conflict and its participating meanings against their original sources. Establish whether those original meanings are incompatible; a candidate conflict label or explanation is not source truth. Preserve the assigned conflict's conditions and unresolved meaning without assessing unrelated generated fields or collections.",
-        },
+pub fn sourceReviewScope(g: *const Guidance, subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
+    const scope = g.review_scope;
+    return .{ .original_sources = scope.original_sources, .derived_evidence = scope.derived_evidence, .instruction = switch (subject) {
+        .candidate_field => |field| scope.candidate_field.get(if (field.record != null) .in_record else .standalone),
+        .collection => scope.collection,
+        .entity_applicability => scope.entity_applicability,
+        .source_preservation => scope.source_preservation,
+        .reference => |reference| scope.reference.get(std.meta.activeTag(reference)),
     } };
 }
 
 /// Business meanings shared by authoring and review; no applicability or verdict.
-pub fn recordFamily(kind: spec.Kind) []const u8 {
-    return switch (kind) {
-        .acceptance_criterion => "An observable pass/fail flow with a precondition, trigger and expected result.",
-        .user_visible_outcome => "A result, confirmation or response directly observable by the user.",
-        .edge_case => "A boundary or exceptional condition and its expected outcome.",
-        .functional_requirement => "Required application behavior, preserving its trigger, conditions and obligation strength.",
-        .business_rule => "A rule or constraint governing business decisions or outcomes.",
-        .assumption => "A supported premise on which the described behavior depends.",
-        .non_goal => "Behavior explicitly excluded from the feature's scope.",
-        .prohibited_behavior => "An action or behavior that must not occur.",
-        .entity => "A business data concept with its meaning and relationships.",
-    };
+pub fn recordFamily(g: *const Guidance, kind: spec.Kind) []const u8 {
+    return g.record_families.get(kind);
 }
 
-pub fn recordField(kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
+pub fn recordField(g: *const Guidance, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
     if (!a.recordField(kind, slot)) return error.InvalidRequiredAuthority;
-    return switch (slot) {
-        .text => recordFamily(kind),
-        .given => "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites.",
-        .when => "The action or event that triggers the behavior.",
-        .then => "The observable consequences after the trigger, including the obligations being tested.",
-        .expected_outcome => "The observable result, preserving conditions and obligations.",
-        .condition => "The boundary or exceptional condition.",
-        .name => "The business entity's name.",
-        .business_meaning => "The entity's business purpose.",
-        .relationship => "The business relationship to another entity, including its meaning.",
-        else => unreachable,
-    };
+    if (slot == .text) return recordFamily(g, kind);
+    return g.record_fields.get(guidance.recordField(slot) orelse return error.InvalidRequiredAuthority);
 }
 
-pub fn recordTask(allocator: std.mem.Allocator, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
-    const field = try recordField(kind, slot);
+pub fn recordTask(allocator: std.mem.Allocator, g: *const Guidance, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
+    const field = try recordField(g, kind, slot);
     if (slot == .text) return std.fmt.allocPrint(allocator, "{s}.{s}: {s}", .{ @tagName(kind), @tagName(slot), field });
-    return std.fmt.allocPrint(allocator, "{s}: {s} {s}: {s}", .{ @tagName(kind), recordFamily(kind), @tagName(slot), field });
+    return std.fmt.allocPrint(allocator, "{s}: {s} {s}: {s}", .{ @tagName(kind), recordFamily(g, kind), @tagName(slot), field });
 }
 
 /// Present a whole family for generation or a whole-record replacement.
-pub fn record(allocator: std.mem.Allocator, kind: spec.Kind) a.Error![]const u8 {
+pub fn record(allocator: std.mem.Allocator, g: *const Guidance, kind: spec.Kind) a.Error![]const u8 {
     var result: std.ArrayList(u8) = .empty;
     errdefer result.deinit(allocator);
     try result.appendSlice(allocator, @tagName(kind));
     try result.appendSlice(allocator, ": ");
-    try result.appendSlice(allocator, recordFamily(kind));
+    try result.appendSlice(allocator, recordFamily(g, kind));
     inline for (comptime std.meta.tags(spec.Kind)) |family| {
         if (kind == family) {
             inline for (@typeInfo(@FieldType(spec.Content(spec.BusinessValue), @tagName(family))).@"struct".fields) |field| {
@@ -83,7 +60,7 @@ pub fn record(allocator: std.mem.Allocator, kind: spec.Kind) a.Error![]const u8 
                     try result.appendSlice(allocator, " ");
                     try result.appendSlice(allocator, field.name);
                     try result.appendSlice(allocator, ": ");
-                    try result.appendSlice(allocator, try recordField(kind, slot));
+                    try result.appendSlice(allocator, try recordField(g, kind, slot));
                 }
             }
         }
@@ -91,15 +68,15 @@ pub fn record(allocator: std.mem.Allocator, kind: spec.Kind) a.Error![]const u8 
     return result.toOwnedSlice(allocator);
 }
 
-pub fn records(allocator: std.mem.Allocator) a.Error![]const u8 {
-    return recordsFor(allocator, std.meta.tags(spec.Kind));
+pub fn records(allocator: std.mem.Allocator, g: *const Guidance) a.Error![]const u8 {
+    return recordsFor(allocator, g, std.meta.tags(spec.Kind));
 }
 
-pub fn recordsFor(allocator: std.mem.Allocator, kinds: []const spec.Kind) a.Error![]const u8 {
+pub fn recordsFor(allocator: std.mem.Allocator, g: *const Guidance, kinds: []const spec.Kind) a.Error![]const u8 {
     var result: std.ArrayList(u8) = .empty;
     errdefer result.deinit(allocator);
     for (kinds) |kind| {
-        const description = try record(allocator, kind);
+        const description = try record(allocator, g, kind);
         defer allocator.free(description);
         if (result.items.len != 0) try result.appendSlice(allocator, "\n");
         try result.appendSlice(allocator, description);
@@ -107,7 +84,7 @@ pub fn recordsFor(allocator: std.mem.Allocator, kinds: []const spec.Kind) a.Erro
     return result.toOwnedSlice(allocator);
 }
 
-pub fn question(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
+pub fn question(allocator: std.mem.Allocator, g: *const Guidance, id: a.Id) a.Error![]const u8 {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;
     if (id.unit == .feature) return switch (id.slot) {
         .display_name => "What name should identify this feature's purpose?",
@@ -120,29 +97,24 @@ pub fn question(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
         .entities => "Which required business information is still undecided? Name it and the behavior that depends on it.",
         else => error.InvalidRequiredAuthority,
     };
-    const description = try task(allocator, id);
+    const description = try task(allocator, g, id);
     defer allocator.free(description);
     return std.fmt.allocPrint(allocator, "What decision resolves the following requirement? {s} Identify the missing choice or reconcile the conflicting evidence.", .{description});
 }
 /// Presentation of the native subject, not another requirement or routing policy.
-pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
+/// A feature task is a workflow-owned purpose and is not allocated; every other
+/// task is allocated by `allocator`.
+pub fn task(allocator: std.mem.Allocator, g: *const Guidance, id: a.Id) a.Error![]const u8 {
     return switch (id.unit) {
-        .feature => switch (id.slot) {
-            .display_name => "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
-            .description => "A description of intended user-visible behavior.",
-            .primary_goal => "The intended user benefit derived from the source-backed behavior and outcome.",
-            .primary_user_story => "One narrative describing the actor or system identified by the source, its action and intended result. Preserve conditions and obligations; do not invent a persona or benefit or require a prewritten story.",
-            .acceptance_criteria => recordFamily(.acceptance_criterion),
-            .functional_requirements => recordFamily(.functional_requirement),
-            .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
-            .entities => "The disposition states whether required behavior needs business entities or relationships. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary.",
-            else => error.InvalidRequiredAuthority,
+        .feature => if (@import("specification_authority.zig").collectionFamily(id.slot)) |family|
+            recordFamily(g, family)
+        else
+            g.feature_purposes.get(guidance.featurePurpose(id.slot) orelse return error.InvalidRequiredAuthority),
+        .record => |id_record| recordTask(allocator, g, id_record.kind, id.slot),
+        inline .source, .signal, .conflict, .token => |unit, tag| reference: {
+            const fragments = g.reference_tasks.get(@field(guidance.ReferenceUnit, @tagName(tag)));
+            break :reference std.fmt.allocPrint(allocator, "{s}{d}{s}", .{ fragments.before, unit.ordinal, fragments.after });
         },
-        .record => |id_record| recordTask(allocator, id_record.kind, id.slot),
-        .source => |source| std.fmt.allocPrint(allocator, "All meaningful facts in source {d} survive extraction and reconciliation, including identity, obligations, conditions and constraints. Preserve source uncertainty; assess loss, not whether specification fields can be generated.", .{source.ordinal}),
-        .signal => |signal| std.fmt.allocPrint(allocator, "Source meaning preserved by signal {d}.", .{signal.ordinal}),
-        .conflict => |conflict| std.fmt.allocPrint(allocator, "Source evidence and unresolved meaning of conflict {d}.", .{conflict.ordinal}),
-        .token => |token| std.fmt.allocPrint(allocator, "Exact token {d} and its source-required use.", .{token.ordinal}),
         .decision => |decision| std.fmt.allocPrint(allocator, "{s} decision {d}.", .{ @tagName(id.kind), decision.ordinal }),
     };
 }

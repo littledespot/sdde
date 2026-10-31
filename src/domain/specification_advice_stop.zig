@@ -16,7 +16,7 @@ pub const Scope = enum {
 };
 
 pub fn contract(comptime scope: Scope) pipeline.NodeContract {
-    const base_requires = [_]pipeline.DataKey{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt };
+    const base_requires = [_]pipeline.DataKey{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .packet_guidance };
     const transport_requires = if (scope.isProtocol()) [_]pipeline.DataKey{} else [_]pipeline.DataKey{.provider_invocation_validation_result};
     const repair_requires = if (scope.isRepair()) [_]pipeline.DataKey{.specification_support_repair} else [_]pipeline.DataKey{};
     return .{

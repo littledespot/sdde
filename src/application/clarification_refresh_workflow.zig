@@ -111,7 +111,7 @@ pub const BuildAuthorityNeeds = struct {
         const result = owned.read(&input.step.data, authority.result_schema, .result) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const needs = self.action.execute(arena.allocator(), sources.*, source, observations, result) catch |err| return switch (err) {
+        const needs = self.action.execute(arena.allocator(), sources.*, source, observations, result, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
             error.InvalidRequiredAuthority => .{ .outcome = .blocked, .delta = .{}, .diagnostic = err },
         };

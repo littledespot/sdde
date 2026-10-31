@@ -55,7 +55,7 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
 - **Output:** successor-ledger DataKey replacement
 - **Responsibility:** Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked
   -> terminal`, or the approved `assigned -> terminal` not-invoked transition for authorization
-  failure; protocol retries remain invoked and never reassign identity.
+  failure or pre-call cancellation; protocol retries remain invoked and never reassign identity.
 
 ## `ValidateModelRequestBindingAction`
 
@@ -107,12 +107,32 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
 ## Configured JSON composition responsibilities
 
 [ADR 0016 §3](../../decisions/0016-configured-json-response-composition.md#3-responsibilities-and-execution)
-owns the pending generic part-selection, retention and assembly contracts. Reuse
+owns the generic part-selection, retention and assembly contracts. Reuse
 the existing compiler, preparation, admission and validation implementations;
 keep these responsibilities as discrete callable operations. Assembly receives
 sealed admitted values and compiled destinations, returns a candidate and provenance,
 and has no prompt, provider, retry, parsing or successor-selection capability.
-Exact new operation IDs are assigned with implementation, not by this catalogue.
+The registered operations are those in ADR 0016's table:
+
+- `initialize-json-composition` binds the `composition` resource to the current packet
+  and execution epoch.
+- Request preparation selects a part through its `composition-part` parameter.
+- `retain-json-part` retains one schema-admitted, terminal-accepted part result and its
+  prerequisite placements.
+- `assemble-json` retires staging and installs the complete, unvalidated candidate in
+  one runner delta.
+- `validate-assembled-json` reuses complete schema validation for that candidate.
+
+## `CapturePacketGuidanceAction` (`capture-packet-guidance`)
+
+- **Input:** the workflow's compiled `packet-guidance` resource, bound through the
+  step's one required `guidance` resource parameter.
+- **Output:** the run-local `.packet_guidance` DataKey holding the validated guidance.
+- **Responsibility:** Publish the compiler-validated guidance for the run, so
+  consuming operations read it from run data rather than the resource
+  ([ADR 0016](../../decisions/0016-configured-json-response-composition.md)
+  packet-guidance amendment). It parses, selects, places or rewrites no text and
+  makes no model call.
 
 ## `BuildPromptBodyFragmentManifestAction`
 

@@ -7,6 +7,27 @@ const spec = @import("specification.zig");
 const refs = @import("reference_support.zig");
 const SourceId = @import("reference_identity.zig").SourceId;
 pub const Error = a.Error || r.Error || spec.Error;
+const packet_guidance = @import("packet_guidance.zig");
+
+/// One evidence-guidance entry that a native rule places in a request. The rule
+/// chooses the entry; model input presents its workflow-owned text
+/// (model_presentation.zig), so no native copy of the text exists.
+pub const Instruction = struct {
+    entry: Entry,
+    pub const Entry = union(enum) { selection, detail, obligation, authority_gap, question: packet_guidance.QuestionRule };
+    pub const model_presentation_required = "support evidence guidance";
+    pub const Presented = []const u8;
+    pub fn present(self: Instruction, _: std.mem.Allocator, guidance: *const packet_guidance.Guidance) @import("model_presentation.zig").Error!Presented {
+        const texts = guidance.support_evidence;
+        return switch (self.entry) {
+            .selection => texts.selection,
+            .detail => texts.detail,
+            .obligation => texts.obligation,
+            .authority_gap => texts.authority_gap,
+            .question => |rule| texts.question.get(rule),
+        };
+    }
+};
 
 pub fn eligible(records: refs.Records, id: a.Id, claim: r.ClaimId) bool {
     const disposition = for (records.dispositions) |value| {
@@ -43,8 +64,10 @@ pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) s
     return ids;
 }
 
+/// Evidence selection guidance, presented alike in initial review, insertion
+/// and repair.
+pub const selection_instruction: Instruction = .{ .entry = .selection };
 /// The same facts constrain admission and describe evidence selection to a model.
-pub const selection_instruction: []const u8 = "Select original sources where required for the assigned finding. Readiness source-purpose support before authoring requires nonempty original source IDs and carries no authored claim association. Native code fixes claim evidence for the assigned subject. A retained authority_gap selects its own source evidence under the existing negative rule. Eligibility alone is not support.";
 pub const Minimum = enum { optional, claim_required, claim_or_source_required, source_required };
 pub fn minimum(finding: a.Finding) Minimum {
     return switch (finding) {
@@ -69,9 +92,9 @@ pub const Rule = struct {
         };
     }
 
-    pub const Guidance = struct { instruction: []const u8 = selection_instruction, minimum: Minimum, claims: ClaimSet, eligible_source_ids: []const SourceId, provenance: ?spec.Selection };
+    pub const Guidance = struct { instruction: Instruction, minimum: Minimum, claims: ClaimSet, eligible_source_ids: []const SourceId, provenance: ?spec.Selection };
     pub fn guidance(self: Rule) Guidance {
-        return .{ .minimum = self.minimum, .claims = self.claims, .eligible_source_ids = self.eligible_source_ids, .provenance = if (self.provenance) |value| selection(value) else null };
+        return .{ .instruction = selection_instruction, .minimum = self.minimum, .claims = self.claims, .eligible_source_ids = self.eligible_source_ids, .provenance = if (self.provenance) |value| selection(value) else null };
     }
 };
 pub const Requirements = struct {
@@ -189,10 +212,10 @@ fn effectiveAttributed(allocator: std.mem.Allocator, value: spec.AttributedValue
 pub const DetailRule = struct {
     allow_empty: bool,
 
-    pub const Guidance = struct { instruction: []const u8, allow_empty: bool, maximum_utf8_bytes: usize };
+    pub const Guidance = struct { instruction: Instruction, allow_empty: bool, maximum_utf8_bytes: usize };
     pub fn guidance(self: DetailRule) Guidance {
         return .{
-            .instruction = "Preserve the retained finding. Put known facts/preconditions and the reason in detail. Nonempty text must be nonblank UTF-8; only tab/newline controls are allowed.",
+            .instruction = .{ .entry = .detail },
             .allow_empty = self.allow_empty,
             .maximum_utf8_bytes = @import("clarification_inputs.zig").max_text_bytes,
         };
@@ -207,8 +230,6 @@ pub fn detailRule(finding: a.Finding) DetailRule {
 pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
     return detailRule(finding).accepts(detail);
 }
-pub const obligation_instruction = "For candidate_omission, state only the omitted source obligation in missing_obligation. Preserve its conditions, negation, obligation strength and exact values. Keep the defect explanation in detail. Other findings omit missing_obligation.";
-pub const authority_gap_instruction = "Retain candidate_invalid and the presence or absence of authority_gap. A retained gap keeps its kind and original source evidence; correct only the authorized explanation, question or source selection. Never invent a missing obligation or turn a candidate defect into a user gap.";
 
 /// Mechanical shape validation only; faithfulness to sources remains model-assisted.
 pub fn validObligation(finding: a.Finding, missing_obligation: ?[]const u8) bool {
@@ -222,9 +243,10 @@ pub fn questionRequired(finding: a.Finding) bool {
         .ambiguous, .conflicting, .unsupported => true,
     };
 }
-pub fn questionGuidance(finding: a.Finding) []const u8 {
-    if (finding == .candidate_invalid) return "Omit a top-level question. A retained authority_gap keeps its question about the missing user choice; do not ask for a review verdict.";
-    return if (questionRequired(finding)) "In detail, explain how the missing choice affects required behavior. Ask only for that choice, with an answer format that resolves it, including needed details beyond yes/no. The user answers; do not ask for a review verdict." else "Omit question; preserve the finding and meaning.";
+/// The question guidance entry for a retained finding.
+pub fn questionRule(finding: a.Finding) packet_guidance.QuestionRule {
+    if (finding == .candidate_invalid) return .retained_gap;
+    return if (questionRequired(finding)) .required else .omitted;
 }
 pub const QuestionIssue = enum { missing_question, invalid_question, forbidden_question };
 pub fn questionIssue(finding: a.Finding, question: ?[]const u8) ?QuestionIssue {

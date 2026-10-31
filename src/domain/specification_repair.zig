@@ -29,7 +29,7 @@ const atomic = shared.Contract(Target, Replacement, dependencies.Facts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = session.Error || atomic.Error || candidates.Error || error{ InvalidSpecificationRepair, UnsafeSpecificationRepair };
 
-pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, rejection: candidates.Rejection) Error!Authorization {
+pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, rejection: candidates.Rejection, guidance: *const @import("packet_guidance.zig").Guidance) Error!Authorization {
     if (rejection.issue.text_issue) |issue| if (issue.isComposition()) return error.InvalidSpecificationRepair;
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.references.lineage.history);
@@ -45,7 +45,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         const prior = candidate.group_repair orelse return error.InvalidSpecificationRepair;
         const active = (try candidate.origins.currentTarget(prior.target, recordCount(candidate.response))) orelse return error.InvalidSpecificationRepair;
         if (!std.meta.eql(active, target)) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, owner, candidate, facts, target, prior.policy, rejection, false);
+        return authorizeGroup(allocator, guidance, owner, candidate, facts, target, prior.policy, rejection, false);
     }
     if (rejection.issue.membership) |membership| {
         if (current.completed != session.entities_index or candidate.response != .content or candidate.response.content != .entities) return error.InvalidSpecificationRepair;
@@ -63,7 +63,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         // different source group or borrowing a batch's write permission.
         const groups = try p.validateAssociation(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), entities.basis.source_group_ids, entities.basis.provenance, .content);
         defer allocator.free(groups);
-        return authorizeGroup(allocator, owner, candidate, facts, .{ .record = 0 }, .{ .membership = .{ .fixed_provenance = entities.basis.provenance, .fixed_source_group_ids = entities.basis.source_group_ids } }, rejection, true);
+        return authorizeGroup(allocator, guidance, owner, candidate, facts, .{ .record = 0 }, .{ .membership = .{ .fixed_provenance = entities.basis.provenance, .fixed_source_group_ids = entities.basis.source_group_ids } }, rejection, true);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -78,7 +78,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
     } else null;
     const rule: Rule = .{ .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .value_bound = value_bound, .requirement = switch (rejection.issue.rule) {
         .provenance => return error.UnsafeSpecificationRepair,
-        .typed_text, .exact_copy => if (rejection.issue.value_choices) |choices| try choices.correction(allocator, rejection.issue.text_issue orelse return error.InvalidSpecificationRepair) else (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
+        .typed_text, .exact_copy => if (rejection.issue.value_choices) |choices| try choices.correction(allocator, guidance, rejection.issue.text_issue orelse return error.InvalidSpecificationRepair) else (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
         .restatement => "Remove only the restatement whose evidence the kept occurrence covers; preserve coverage and sibling order.",
         .entity_membership, .unit_kind, .interpretation => return error.UnsafeSpecificationRepair,
@@ -124,12 +124,12 @@ fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.Evi
     r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
-fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
+fn authorizeGroup(a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
     const requirement = switch (policy) {
         .membership => if (insert)
             "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
         else
-            "Return the complete corrected entity record, preserving its source meaning and all siblings.",
+            try std.fmt.allocPrint(a, "Return the complete corrected entity record, {s} and all siblings.", .{guidance.repair_tails.get(.entity_record_meaning)}),
     };
     const rule: Rule = .{ .requirement = requirement, .text_issue = rejection.issue.text_issue, .value_choices = null, .group = policy };
     var authorization = if (insert)
@@ -242,7 +242,7 @@ fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Valida
     return true;
 }
 
-pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization) Error!*packets.Packet {
+pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p.Context, authorization: Authorization, guidance: *const @import("packet_guidance.zig").Guidance) Error!*packets.Packet {
     const facts = try dependencies.capture(allocator, current, context, authorization.dependencies.candidate);
     defer allocator.free(facts.references.lineage.history);
     try atomic.checkDependencies(allocator, authorization, facts);
@@ -253,13 +253,13 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     var guidance_arena: std.heap.ArenaAllocator = .init(allocator);
     defer guidance_arena.deinit();
     const options = try packetOptions(authorization);
-    const task = repairTask(guidance_arena.allocator(), authorization) catch |err| return switch (err) {
+    const task = repairTask(guidance_arena.allocator(), guidance, authorization) catch |err| return switch (err) {
         error.InvalidRequiredAuthority => error.InvalidSpecificationRepair,
         else => |other| other,
     };
     const base = try session.packetForOptions(allocator, current, context, current.completed, .{
         .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else if (groupEvidenceBound(authorization)) |bound| bound.effective else null,
-        .task = task,
+        .presentation = .{ .task = task },
     });
     defer packets.release(base);
     const definition = switch (kind) {
@@ -322,7 +322,7 @@ fn packetOptions(authorization: Authorization) Error!shared.PacketOptions {
 }
 
 /// Present the engine-selected target without reviving an authoring assignment.
-fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || authority.Error)![]const u8 {
+fn repairTask(a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance, authorization: Authorization) (Error || authority.Error)![]const u8 {
     const response = authorization.dependencies.candidate.response;
     const subject: candidates.Subject = switch (authorization.target) {
         .value => |selected| value: {
@@ -332,13 +332,13 @@ fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || auth
                     .value => return error.InvalidSpecificationRepair,
                     inline else => |_, tag| @field(authority.Slot, @tagName(tag)),
                 };
-                return descriptions.recordTask(a, std.meta.activeTag(record.content), slot);
+                return descriptions.recordTask(a, guidance, std.meta.activeTag(record.content), slot);
             }
             break :value selected.subject;
         },
         .attributed => |selected| selected,
         .record => return switch (authorization.rule.group orelse return error.InvalidSpecificationRepair) {
-            .membership => descriptions.record(a, .entity),
+            .membership => descriptions.record(a, guidance, .entity),
         },
         .provenance => return error.InvalidSpecificationRepair,
     };
@@ -350,7 +350,7 @@ fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || auth
         .entity_basis => .entities,
         .record => return error.InvalidSpecificationRepair,
     };
-    return descriptions.task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
+    return descriptions.task(a, guidance, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {

@@ -38,8 +38,9 @@ instance; it does not add that model to the repository's allowed
 
 The service does not decode JSON, validate provider definitions, construct a
 provider registry, validate the slot-to-catalogue subset relationship, select a
-workflow operation or model slot, obtain credentials, or invoke a provider. Those remain F0006/F0007
-responsibilities.
+workflow operation or model slot, obtain credentials, or invoke a provider. Those remain
+responsibilities of F0006 and each peer provider's adapter, such as F0007 for Bedrock
+([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
 
 ## 2. Path authority
 

@@ -27,6 +27,7 @@ flowchart TD
     CORRECT --> ASSESSMENT
     ASSESSMENT -->|Missing or stale authority; exhausted correction| BLOCKED
     ASSESSMENT -->|Yes, including adverse advice| RENDER["Render and reparse specification and reference context;<br/>validate canonical state and captured inputs"]
+    ASSESSMENT -->|Advice incomplete: review-status line, review.incomplete logged| RENDER
     RENDER --> PUBLISH["Replace registered outputs;<br/>workflow state written last"]
     PUBLISH -->|All writes succeed| DONE["End ok; ready for user review and Plan gate"]
     PUBLISH -->|Write failure or interruption| WRITEFAIL["No new successful completion;<br/>replaced files may remain; fresh invocation starts at start"]
@@ -42,7 +43,9 @@ flowchart TD
   definition declares `id: spec-generation`; its filename does not choose identity.
 - Model review proves no semantic truth. Positive and adverse findings complete
   the same bound advisory assessment. Neither triggers content repair, upstream
-  rebuilding, a clarification or a mandatory Plan obligation by itself.
+  rebuilding, a clarification or a mandatory Plan obligation by itself. Incomplete
+  advice is still published, marked and logged
+  ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
 - Source-repair authorization, packet preparation and merge reject once generation
   starts, even if a workflow routes directly to those operations.
 - Source repair retains its original required review purpose. Generation-ready

@@ -123,10 +123,30 @@ preserving the base packet, epoch, prerequisite origins, restrictions and native
 repair authority. Protocol corrections retain that exact selected input.
 Contexts may present applicable rules and field purposes; they cannot filter
 evidence, alter identities, choose roles, weaken coverage or create continuation
-policy. Canonical native validators and requirement descriptions remain the sole
-rule and purpose owners. Reconciliation uses this mechanism for summary,
-disposition, signal and conflict assignments, not a call-number-specific
-path. Atomic repairs keep their existing authorized scope and projection owner.
+policy. Canonical native validators remain the sole rule owners; semantic purposes
+come from the workflow's packet guidance (amendment below). Reconciliation uses
+this mechanism for summary, disposition, signal and conflict assignments, not a
+call-number-specific path. Atomic repairs keep their existing authorized scope and
+projection owner.
+
+**Packet-guidance amendment (user-approved, 30 October 2026; FIX06 D3.1 option (a)):**
+workflow resources own the semantic guidance that native packet builders present.
+One closed `packet-guidance/v1` resource holds exactly one text for each registered
+key: feature and record purposes, source-review scopes, the reconciliation summary
+purpose, support-evidence guidance and the semantic tails of native repair
+requirements. The keys are closed native enums, derived from the native registries
+where one exists, so the compiler rejects a missing, extra, duplicate, mistyped or
+empty entry and an unsupported version. One `capture-packet-guidance` step publishes
+the compiled guidance as run data; consuming operations declare `.packet_guidance`
+and receive it explicitly, never the resource. Native builders place each text at its
+existing packet position, so moving an instruction to the resource changes no request
+bytes. A native repair authorizer composes its requirement frame with the run's repair
+tail when it authorizes, and the run-local authorization carries the composed
+requirement. Native code keeps rule ownership, mechanical diagnostics, identity, coverage and sibling-order
+requirements, composition frames and the user-facing clarification question
+frames; a question about a record or reference subject embeds that subject's task
+from the guidance. Mechanical sentences inside a moved entry move with it until
+FIX06 Q4 removes them. FIX06 Q3 moved every native copy to the resource.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through

@@ -134,7 +134,7 @@ fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_r
     defer if (syntax_diagnostic) |diagnostic| diagnostic.deinit(a);
     var document: ?envelope.Document = envelope.parseContent(a, bytes, &syntax_diagnostic) catch |err| if (err == error.OutOfMemory) return err else null;
     defer if (document) |*value| value.deinit();
-    const result = try support.collectFocused(a, prepared.inputs, prepared.context, if (ordinal == 1) null else .{ .pending = prior }, packet, if (document) |value| value.content else bytes, null);
+    const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, if (ordinal == 1) null else .{ .pending = prior }, packet, if (document) |value| value.content else bytes, null);
     const tag = @tagName(result);
     const suffix = try std.fmt.allocPrint(a, "review.native-{d}.json", .{repetition});
     const admitted: ?support.Candidate = switch (result) {
@@ -156,7 +156,7 @@ fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_r
     const finding = pending.review.entries[ordinal - 1].value;
     try std.testing.expectEqualStrings(finding.missing_obligation.?, assigned.finding.missing_obligation);
     try std.testing.expectEqualDeep(finding.source_ids, assigned.finding.source_ids);
-    const loss_packet = try support.packetForLoss(a, prepared.inputs, prepared.context, pending);
+    const loss_packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, pending);
     defer packets.release(loss_packet);
     const loss_input = try std.json.parseFromSliceLeaky(std.json.Value, a, loss_packet.body(), .{});
     try std.testing.expectEqualStrings(finding.missing_obligation.?, loss_input.object.get("fixed_finding").?.object.get("missing_obligation").?.string);
@@ -232,6 +232,8 @@ pub fn sha256(a: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![
 pub const PreparedContext = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
+    /// The shipped workflow guidance, so prepared requests match production.
+    guidance: *const @import("../domain/packet_guidance.zig").Guidance,
     /// Independently admitted diagnostic data. Its presence does not invent a
     /// complete generated candidate or change a source-readiness projection.
     brief: spec.Brief,
@@ -340,14 +342,14 @@ pub fn focus(a: std.mem.Allocator, prepared: PreparedContext, target: authority.
     var prior: ?support.Collection = null;
     while (true) {
         const first = try support.nextSubject(a, prepared.inputs, prior);
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, support.assignmentScope(prepared.inputs, first));
+        const packet = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, support.assignmentScope(prepared.inputs, first));
         errdefer packets.release(packet);
         const assigned = try support.assignmentSubjects(a, prepared.inputs, first);
         const contains = for (assigned) |id| {
             if (std.meta.eql(id, target)) break true;
         } else false;
         if (contains) return .{ .prior = prior, .packet = packet };
-        const next = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, try reviewResponse(a, prepared, packet, null), null);
+        const next = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, try reviewResponse(a, prepared, packet, null), null);
         if (next != .pending) return error.InvalidCalibrationPrefix;
         packets.release(packet);
         prior = next;
@@ -383,6 +385,7 @@ pub fn reviewResponse(a: std.mem.Allocator, prepared: PreparedContext, packet: *
 const Prepared = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
+    guidance: *const @import("../domain/packet_guidance.zig").Guidance,
     pending: support.Candidate,
     passive: text.Prepared,
 };
@@ -455,7 +458,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
         try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
     } else brief = try admitBrief(a, provenance_context, brief);
     const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (candidate != null) brief else null);
-    return .{ .inputs = inputs, .context = provenance_context, .brief = brief, .passive = passive };
+    return .{ .inputs = inputs, .context = provenance_context, .guidance = &(try @import("packet_guidance.zig").shipped(a)).guidance, .brief = brief, .passive = passive };
 }
 
 /// A diagnostic prefix cannot invent an authored association. Absent canonical
@@ -501,7 +504,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     const origins = try a.alloc(?@import("../domain/model_candidate_origin.zig").Origin, findings.len);
     @memset(origins, null);
     const pending: support.Candidate = .{ .review = .{ .entries = findings }, .pending_localization = @intCast(index + 1), .working = true, .origin = null, .origins = origins };
-    return .{ .inputs = inputs, .context = provenance_context, .pending = pending, .passive = prepared.passive };
+    return .{ .inputs = inputs, .context = provenance_context, .guidance = prepared.guidance, .pending = pending, .passive = prepared.passive };
 }
 
 fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
@@ -702,7 +705,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
-        const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
+        const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, prepared.pending);
         defer packets.release(packet);
         const full = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
         try std.testing.expectEqualStrings(example.missing_obligation, assigned.finding.missing_obligation);
@@ -737,7 +740,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             arms_requests[arm_index] = selected;
             try isolationChecks(a, prepared, assigned, example, selected, arm);
         }
-        const review_packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
+        const review_packet = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, .{ .finding = assigned.finding.subject });
         defer packets.release(review_packet);
         try exportHistoricalReview(a, schema, example.id, review_packet);
         const probe_id = try std.fmt.allocPrint(a, "{s}.probe", .{example.id});
@@ -791,14 +794,14 @@ fn advisoryProbe(a: std.mem.Allocator, id: []const u8, prepared: PreparedContext
     const focused = try focus(a, prepared, target);
     defer packets.release(focused.packet);
     const bytes = try reviewResponse(a, prepared, focused.packet, .{ .target = target, .value = value });
-    const result = try support.collectFocused(a, prepared.inputs, prepared.context, focused.prior, focused.packet, bytes, null);
+    const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, focused.prior, focused.packet, bytes, null);
     const candidate = switch (result) {
         .pending => |candidate| candidate,
         .accepted => |accepted| accepted.candidate,
         .rejected => return error.InvalidCalibrationAdvice,
     };
     try std.testing.expect(candidate.pending_localization == null);
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, candidate));
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, candidate));
     const ledger = try authority.build(a, prepared.inputs);
     const selected = for (ledger.requirements, 0..) |required, index| {
         if (std.meta.eql(required.seed.id, target)) break candidate.review.entries[index].value;
@@ -828,7 +831,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         const prepared = try prepare(a, control.fixture);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
-        const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
+        const packet = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, .{ .finding = assigned.finding.subject });
         defer packets.release(packet);
         try exportHistoricalReview(a, schema, control.fixture.id, packet);
         const model = @import("../domain/specification_support_model.zig");

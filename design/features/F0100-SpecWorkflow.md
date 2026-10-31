@@ -2,10 +2,11 @@
 
 **Status:** Proposed feature design
 
-**Amendments:** [ADR 0015](../decisions/0015-specification-principle-review.md)
+**Amendments include:** [ADR 0015](../decisions/0015-specification-principle-review.md)
 adds early principle assessment and shared question preparation;
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) configures
-extraction and reconciliation response parts with prompt-free native assembly;
+extraction and reconciliation response parts with prompt-free native assembly, and
+its packet-guidance amendment makes packet purpose text a workflow resource;
 [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md),
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) and
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) own exact lineage,
@@ -14,6 +15,22 @@ reconciliation phases and token authority; and
 post-generation source and principle finding as advice. One configured token budget
 covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
+ADRs [0013](../decisions/0013-workflow-input-reuse.md),
+[0017](../decisions/0017-incomplete-specification-publication.md),
+[0025](../decisions/0025-clarification-answer-authentication.md) (not yet implemented),
+[0030](../decisions/0030-engine-owned-model-request.md) (partly implemented),
+[0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
+[0035](../decisions/0035-cross-kind-restatement.md),
+[0036](../decisions/0036-source-quoted-claims.md),
+[0038](../decisions/0038-record-claims-and-scenario-coverage.md),
+[0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
+[0040](../decisions/0040-incomplete-review-published-marked-logged.md),
+[0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+since 30 October 2026; not implemented),
+[0042](../decisions/0042-principle-verdict-citations-at-admission.md) and
+[0043](../decisions/0043-model-facing-exact-text-names.md) also amend this feature; the
+[§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
+decision.
 [Implementation status](#implementation-status) and [FIX06](../../fixes/FIX06.md)
 record what is built and what remains.
 
@@ -61,7 +78,7 @@ The definition uses [F0005's closed root, step and subgraph contracts](F0005-Wor
 
 | Field | Meaning |
 | --- | --- |
-| `schema` | Closed `workflow/v1` schema identity; `workflow/v2` once ADR 0041 is implemented. |
+| `schema` | Closed `workflow/v1` schema identity; `workflow/v2` if ADR 0041 (accepted, on hold since 30 October 2026; not implemented) is implemented. |
 | `id` | Content-owned identity: the supplied implementation uses `spec-generation`; the complete initial-suite proposal names it `specify`. |
 | `version` | Positive workflow-definition version. |
 | `shortcode` | Validated unique four-character logging shortcode. |
@@ -268,8 +285,9 @@ Four registered operations extend that boundary:
   coordinates, exclusive ends and CRLF as one newline.
 - The citation validator checks the engine-supplied state/chunk scope, exact
   source/block joins and nonempty in-chunk locations.
-- Optional verbatim text must equal the entire cited range byte-for-byte; validated text
-  comes from the captured source, without NFC normalization.
+- Models supply no quotation ([ADR 0036](../decisions/0036-source-quoted-claims.md);
+  §3.5). Any exact scalar, such as an extractor-owned token citation's value, is copied
+  by the engine from the entire cited range byte-for-byte, without NFC normalization.
 - This proves location/quotation integrity, not semantic support.
 - Models cannot choose the call scope or assign citation IDs.
 
@@ -500,11 +518,11 @@ No call site declares a deadline. Since 24 October 2026 the body's authorization
 no parameter, and each model's catalogue entry carries `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
 
-Extraction parts derive from one complete extraction schema; reconciliation parts derive from
-existing named definitions in one reconciliation schema. Signals and conflicts
-receive the exact retained dispositions as prerequisites. Part schemas validate
-before retention; these candidate dispositions are context, not native acceptance.
-Complete assembly undergoes relationship, signal, conflict and coverage validation.
+Extraction parts derive from one complete extraction schema; reconciliation summaries
+use one composition part of the reconciliation schema. Under
+[ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) each global phase is a
+separate request; dependent phases receive natively validated phase facts, not JSON
+prerequisites (§3.9). Part schemas validate before retention. Complete assembly undergoes relationship, signal, conflict and coverage validation.
 Native repair revalidates the complete candidate without reassembling provider JSON.
 Retry allowances and the workflow token budget are unchanged.
 
@@ -556,7 +574,7 @@ All operations are pure and individually registered in the generic YAML registry
 
 | Responsibility | Operations |
 | --- | --- |
-| Inputs and grouping | `build-reference-reconciliation-items`, `partition-reference-reconciliation-items` (`with: { group-size: 16 }`), `assign-reference-reconciliation-partitions`, `validate-reference-reconciliation-partitions` |
+| Inputs and grouping | `build-reference-reconciliation-items`, `partition-reference-reconciliation-items` (explicit `group-size`; the supplied definition uses 8), `assign-reference-reconciliation-partitions`, `validate-reference-reconciliation-partitions` |
 | Each partition | `build-reference-reconciliation-input`; select summary reuse or semantic processing |
 | Summary reuse | `check-reference-summary-reuse`, `reuse-reference-reconciliation-summary`; otherwise summary collection and parsing |
 | Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
@@ -564,12 +582,9 @@ All operations are pure and individually registered in the generic YAML registry
 | Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
 
 - The engine selects the current partition's summary or named phase schema.
-- Before building a summary model packet, YAML checks whether a non-final, nonempty
-  partition has one current validated child with identical claim membership. The
-  native check resolves canonical history and verifies projection, evidence and
-  text dependencies; stale or altered authority fails. An eligible child supplies
-  a native candidate to the same validation/identity/build actions. Leaf, empty and
-  multiple-child partitions retain their model path; global phases are unchanged.
+- [§16.4](../contracts/16-reference-ingestion.md#164-semantic-extraction-flow) owns
+  summary carry-forward, statement coverage, duplicate projection and carried-summary
+  lineage.
 - Native summary iteration uses the shared registered finite-iteration contract.
   Partition validation initializes the non-final partition count; summary
   construction advances the current cursor exactly once and supplies current
@@ -581,13 +596,6 @@ All operations are pure and individually registered in the generic YAML registry
   retry limits and the workflow token budget remain unchanged.
 - A summary proposal contains only semantic `statements`, with selected `claim_ids`
   and typed model `content`. Native code appends each exact-token statement.
-- Constructed statement membership covers every partition claim by union; each
-  statement selects nonempty unique authorized IDs. Combined, split and overlapping
-  expressions are allowed (§16.4).
-- After all raw statements validate, native projection retains the first occurrence
-  of identical validated content with the same claim membership. It preserves the
-  raw candidate, producer origins and original-to-surviving occurrence mapping;
-  invalid entries, distinct source occurrences and paraphrases cannot be hidden.
 - The engine constructs canonical `member_claim_ids` from that partition and
   `member_summary_ids` from its validated child summaries; neither membership field is
   accepted in a model response.
@@ -599,10 +607,6 @@ All operations are pure and individually registered in the generic YAML registry
 - Accepted summaries retain their lineage in immutable execution-local history;
   advancing clears the consumed candidate keys rather than retaining stale parallel
   candidates.
-- Carried summaries retain ordered content, membership, exact tokens and child
-  lineage with newly allocated parent identities. The child's provider/repair
-  provenance stays in history; the native parent has no provider origin or copied
-  repair receipt. Current text dependencies and typed content are revalidated.
 
 Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), global
 dispositions, signals and conflicts are collected and natively validated
@@ -842,8 +846,9 @@ validators:
 
 - `assign-model-request-id` accepts either a native `model_input_packet` or the declared
   static input resource, never both.
-- The packet supplies an engine-owned unit/purpose, not a prompt, result schema or
-  provider selection.
+- The packet supplies an engine-owned unit and purpose key, not a prompt, result schema
+  or provider selection; purpose text comes from the workflow's packet guidance
+  (`capture-packet-guidance`; ADR 0016 packet-guidance amendment).
 - Initial generation, semantic review and authorized atomic repair have native
   producers.
 - A new logical request gets an initial attempt; it does not reset the YAML operation's
@@ -990,7 +995,9 @@ owns the early consistency assessment and its advisory findings (ADR 0023).
 owns shared question preparation. Reuse canonical principle selection, model/evidence
 contracts and existing clarification builders; no workflow-local loader or summary call.
 Clear business intent survives policy conflicts; unresolved SNN still blocks Plan and
-unresolved SNN/PNN still blocks Tasks. Answer authentication (FIX05 R2) is separate.
+unresolved SNN/PNN still blocks Tasks. Answer authentication is separate:
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) (FIX06 E7; not yet
+implemented).
 
 ## 4. Required logical coverage
 
@@ -1156,10 +1163,12 @@ conflicting, the engine:
 6. after a current authenticated answer or authority resolution commits,
    regenerates every specification unit before validation and rendering.
 
-When a Specify run fails because model work couldn't be completed (a failed request,
-exhausted correction or repair, or the token budget), or ends `blocked`, after the
-reference snapshot validated, it publishes an incomplete specification
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)):
+Today a failed, blocked or invalid run publishes nothing. Under
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+since 30 October 2026; not implemented), when a Specify run fails because model work
+couldn't be completed (a failed request, exhausted correction or repair, or the token
+budget), or ends `blocked`, after the reference snapshot validated, it would publish an
+incomplete specification:
 
 1. only content that passed every check that applies to it on its own: the validated
    reference snapshot's cited source requirements and each generated unit admitted and
@@ -1177,34 +1186,14 @@ reference snapshot validated, it publishes an incomplete specification
 Eligible failures are a YAML `failed`, `blocked` or `invalid` terminal and the runner's
 `retry_limit` and `token_budget` rejections. The Specify definition declares the steps as
 its `failure-output` subgraph, which the engine runs through the runner with model calls
-refused (ADR 0041 Decision 6, `workflow/v2`; not yet implemented).
+refused (ADR 0041 Decision 6, `workflow/v2`; on hold, not implemented).
 
-- On a Specify rerun, the engine MUST overwrite existing `spec.md` and
-  `reference-context.md` with the newly validated output at the same paths, including
-  prior edits to `spec.md`.
-- It must not skip existing output, require separate overwrite approval, or add a
-  filename suffix.
-- This uses the shared rerun rule in Design Section 23.2; it never deletes the feature
-  directory or its clarification history.
-
-- Unresolved `clarify/SNN.md` forms MUST also be completely overwritten from current
-  validated state at the same paths on rerun, including their editable regions and any
-  unsubmitted draft answer.
-- Reuse the same subject ID, not the old form bytes, even when the question is
-  unchanged.
-- This replacement also applies to a clarification publication ending in `needs_user`;
-  it publishes the separately validated incomplete specification and pending state
-  under ADR 0017, never completed specification authority.
-- Design Section 23.2 applies this rule to all workflow executions and every registered
-  clarification family.
-
-- The engine MUST NOT overwrite user-closed `clarify/SNN.md` files.
-- Retain them byte-for-byte and consume applicable validated answers before generation.
-- Accept a valid close into canonical state without rewriting its submitted form.
-- A pending, stale, or invalid close is not overwritten; an inapplicable protected
-  answer blocks for user direction rather than automatic reopening or a duplicate ID.
-- The complete clarification view set includes these retained files, not writes to them.
-- Output-set validation and the writer recheck their preservation preconditions.
+- Reruns follow
+  [Design §23.2](../contracts/23-rendering.md#232-workflow-reruns-and-protected-clarification-files):
+  Specify completely overwrites `spec.md` (including prior edits), `reference-context.md`
+  and unresolved `clarify/SNN.md` forms at the same paths and subject IDs, including on a
+  `needs_user` publication, and retains user-closed forms byte-for-byte. It never
+  deletes the feature directory or its clarification history.
 
 - There is no committed `Open Questions` section in `spec.md`.
 - Specification-owned unknowns use the clarification lifecycle above; reference-context
@@ -1302,7 +1291,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   tampering rather than replacing it.
 - Canonical exact copies are derived occurrence handles, never replacement display bytes.
 - Arbitrary loaded clarification-response IDs are rejected; applicable-answer
-  integration is FIX05 R2.
+  integration is [ADR 0025](../decisions/0025-clarification-answer-authentication.md)
+  (FIX06 E7; not yet implemented).
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
@@ -1334,9 +1324,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   single-statement kind is deleted only when the kept occurrence covers its evidence. A
   functional requirement and the story are always kept, and an uncovered restatement is
   not flagged. Closed variant/schema correction handles malformed record shapes; there
-  is no whole-record kind replacement. The feature-wide entities unit can delete one contradictory entity or insert one missing required entity,
-  bound to the unchanged applicability decision and fixed feature-basis selection.
-  Record batches cannot author or insert entities.
+  is no whole-record kind replacement. Entity membership repair follows
+  [§22.3](../contracts/22-repair.md#223-repair-authorization).
   One whole-record target remains bounded across field-level failures of that
   replacement; successful siblings, full coverage and semantic review remain.
 - The engine retains owner, revision, old value, source choices and policy facts;
@@ -1367,7 +1356,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   dependencies; response parsing verifies the exact repair packet, and merge checks the
   old value before incrementing the revision.
 - Native domain actions select and apply their typed units.
-- Calls use the existing `model-request` subgraph and concise shared repair prompt.
+- Generation, reference and source-omission repairs use the shared repair prompt through
+  `model-request` or `model-request-with-context`; review repairs reuse their assessment
+  prompt (§17.3.1) through `support-request`.
 - Request release occurs before shared model/automatic reconciliation and specification
   merge routes.
 - Deterministic repair loops have explicit runner-owned execution bounds.
@@ -1417,7 +1408,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   including superseded claims. Generated business provenance still requires retained
   claims. Cycle and permutation regressions exercise the complete publication path.
 - JSON/schema protocol retry remains separate from semantic repair.
-- YAML's repair operations each have an explicit bounded ceiling; exhaustion fails.
+- Each repair route is bounded by an explicit YAML `retry-limit` on its repair request or
+  merge ([ADR 0033](../decisions/0033-generic-repair-operations.md)'s per-owner table);
+  exhaustion fails.
 - Under [ADR 0033](../decisions/0033-generic-repair-operations.md) (not yet implemented),
   the 29 per-owner repair operations of the Spec definition become four generic ones:
   `authorize-repair`, `build-repair-input`, `parse-repair` and `merge-repair`.
@@ -1569,9 +1562,10 @@ YAML definition.
   required-authority gate, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
-- Not implemented: authenticated answer application (FIX05 R2), production
-  feature-log integration, additional reference formats and the reference-feedback
-  API (§16.5).
+- Not implemented: authenticated answer application (ADR 0025, FIX06 E7), production
+  feature-log integration, additional reference formats, the reference-feedback
+  API (§16.5), and §5.5's failed-run incomplete publication (ADR 0041, accepted, on hold
+  since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/README.md) captures the exact published specification for
   separate human adjudication, and [FIX06](../../fixes/FIX06.md) tracks open work.

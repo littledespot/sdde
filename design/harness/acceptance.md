@@ -17,10 +17,9 @@ expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
 registered open clarification handles.
 
-The user chose **GPT-OSS-20B advisory grading with human adjudication for
-acceptance**. Raw model grades cannot authoritatively accept or reject a published
+Raw model grades cannot authoritatively accept or reject a published
 specification. The existing cost policy is unchanged; no alternate model,
-calibration call or new workflow diagnostic is authorized by this change.
+calibration call or new workflow diagnostic is authorized by this policy.
 
 **Amended 19 October 2026 (user decision):** the advisory grader is removed from
 E2E. An E2E run makes no judge call; human adjudication of its retained report is

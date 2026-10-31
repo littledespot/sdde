@@ -4,11 +4,8 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
-  contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
-- The closed top-level members are required `logs`, `models`, `workflowTokenBudget`,
-  `temperature`, `temperatureRunawayRetry` and `paths`, plus optional
-  `principles` under ADR 0015 and `validation` under
-  [ADR 0021](../decisions/0021-optional-source-preservation-review.md).
+  contract, and `design/examples/.sddtoolkit.json` is one accepted instance;
+  [§9.1](#91-required-configuration-shape) lists its closed members.
 - Neither file is a runtime default, packaged asset, search location, or fallback.
 - Bootstrap captures and canonicalizes the native executable's invocation working directory once
   and uses it as the project root.
@@ -63,6 +60,17 @@ exists.
   negative, fractional, string or larger value rejects the whole catalogue before
   provider I/O. Workflow YAML declares no deadline, and a `timeout-ms` parameter rejects
   at compilation.
+- Bedrock and the Anthropic Messages API are peer providers
+  ([ADR 0028](../decisions/0028-anthropic-messages-provider.md#peer-providers-selected-by-configuration)).
+  Each provider ID closes `config` through its one compiler-registered variant:
+  `aws-bedrock` accepts exactly `region`, `family`, `maxOutputTokens` and
+  `requestTimeoutMs` ([ADR 0029](../decisions/0029-bedrock-model-families.md#compiled-families-configured-models));
+  `anthropic` accepts exactly `maxOutputTokens` and `requestTimeoutMs`.
+- Neither configuration document carries a credential. Each provider reads one exact
+  environment variable, once, after binding validation and only for providers bound to
+  the selected workflow's model slots; a missing key fails that provider's first
+  authorization, with no startup check
+  ([ADR 0028](../decisions/0028-anthropic-messages-provider.md#anthropic-contract)).
 - The `models.slots` map in `.sddtoolkit.json` selects the models allowed for this repository:
   every slot's exact case-sensitive `(provider, model)` tuple must resolve to exactly one entry
   in the completely validated provider catalogue.
@@ -90,7 +98,8 @@ exists.
   in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
 - The root requires `logs`, `models`, `workflowTokenBudget`, `temperature`,
   `temperatureRunawayRetry` and `paths` and permits
-  optional `principles` and `validation`;
+  optional `principles` ([ADR 0015](../decisions/0015-specification-principle-review.md))
+  and `validation` ([ADR 0021](../decisions/0021-optional-source-preservation-review.md));
   fixed records reject missing required, duplicate and unknown members.
 - `workflowTokenBudget` is the total model tokens one workflow execution may use, an
   integer from 1 to 4,294,967,295 with no default
@@ -105,7 +114,8 @@ exists.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
-- The `logs` object contains exactly the F0002 threshold and optional console-mirror boolean.
+- The `logs` object contains exactly the F0002 threshold and the required `console` boolean,
+  which enables the optional console mirror.
   The threshold alone selects prompt capture under ADR 0018.
 - File logging is mandatory and has no configuration switch.
 - `validation.sourcePreservationCheck` is an optional boolean, disabled when
@@ -130,7 +140,7 @@ bootstrap:
 | `specs` | Feature-facing specification views, controlled clarification forms, generated plan/task views, and feature event/prompt logs. Feature directories remain `<paths.specs>/<featureId>/`. |
 | `references` | The sole configured base beneath which mandatory reference selectors resolve. |
 | `specsArchive` | Archived specification material. It is excluded from active feature discovery and is the one configurable root allowed to nest beneath another configured root, specifically beneath `paths.specs`. Archive mutation remains outside v1. |
-| `workflows` | Project workflow authority. It contains an arbitrary bounded number of closed declarative workflow definitions plus the reserved engine-owned `features/` child. The initial definitions are `specify`, `plan`, `tasks`, and `implement`; future definitions use the same generic contract. |
+| `workflows` | Project workflow authority. It contains an arbitrary bounded number of closed declarative workflow definitions plus the reserved engine-owned `features/` child. The initial definitions are Specify (supplied as `spec-generation`), Plan, Tasks and Implement; future definitions use the same generic contract. |
 | `toolchainPreset` | The direct root/registry of closed, validated preset packages from which the project toolchain layer may inherit. |
 | `principles` | Project principles: the exact mechanical `<paths.principles>/toolchain.yaml` layer and semantic Markdown principle files. |
 | `templates` | Inert `*.template.md` principle templates. The initial SDD workflows never import or copy them; only an explicit `sdde init` operation may copy them into `paths.principles`. |
@@ -201,14 +211,16 @@ bootstrap:
 - Other encodings, YAML aliases or custom tags, executable includes, and compatibility readers
   are not supported in v1.
 - [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 (accepted,
-  not yet implemented) advances the contract to `schema: workflow/v2`, adding an optional
-  `failure-output` member that names one model-free definition-local subgraph. Every
+  on hold since 30 October 2026; not implemented) advances the contract to
+  `schema: workflow/v2`, adding an optional `failure-output` member that names one
+  model-free definition-local subgraph. Every
   definition, the formal schema and every fixture move together, and `workflow/v1` then
   rejects without a compatibility reader.
 
-The `specify`, `plan`, `tasks`, and `implement` definitions are the initial SDD
-suite. Their registered predecessor gates enforce their feature order even
-though unrelated workflows are not placed into that sequence.
+The Specify, Plan, Tasks and Implement definitions are the initial SDD suite; the
+supplied Specify definition's `WorkflowId` is `spec-generation`. Their registered
+predecessor gates enforce their feature order even though unrelated workflows are not
+placed into that sequence.
 
 - Feature-scoped `WorkflowState` retains the sorted unique `WorkflowId` set whose compiled
   graphs have participated in its durable history.
@@ -279,7 +291,7 @@ when:
 - a workflow or declared workflow-resource schema version is unsupported;
 - an unknown key appears in a closed schema;
 - the `paths` object does not contain exactly `specs`, `references`, `specsArchive`, `workflows`, `toolchainPreset`, `principles`, `templates`, and `providers`;
-- a configured location is absolute, escapes the workspace, overlaps a forbidden location, or conflicts with another configured location; the one configurable nesting exception is `paths.specsArchive` beneath `paths.specs`; `paths.providers` must have the exact `.sddproviders.json` basename and must not equal or nest with a configured directory root or `.sddtoolkit.json`; the archive subtree is excluded from active feature discovery; the derived engine-owned `features/` child beneath `paths.workflows` is validated against its fixed ownership tree rather than treated as a peer root;
+- a configured location has a non-ASCII path component ([ADR 0007](../decisions/0007-unicode-normalization.md)), is absolute, escapes the workspace, overlaps a forbidden location, or conflicts with another configured location; the one configurable nesting exception is `paths.specsArchive` beneath `paths.specs`; `paths.providers` must have the exact `.sddproviders.json` basename and must not equal or nest with a configured directory root or `.sddtoolkit.json`; the archive subtree is excluded from active feature discovery; the derived engine-owned `features/` child beneath `paths.workflows` is validated against its fixed ownership tree rather than treated as a peer root;
 - a workflow definition collides with reserved `features/`,
   any encountered definition is invalid or unaccounted, workflow IDs or logging
   shortcodes are duplicated, a referenced invocation/node/policy contract is
@@ -385,9 +397,10 @@ validates rows, names and categories. No model, workflow prompt or mechanical
   material.
 - The source templates under `design/templates/` are design/init inputs only and are never a
   runtime fallback.
-- Their filenames illustrate the initial category hints—`core`, `architecture`,
-  `project-structure`, `security`, `validation`, `observability`, and `user-interface`—but a
-  Markdown principle body may be arbitrary free text.
+- Their filenames illustrate the initial category hints `core`, `architecture`,
+  `project_structure`, `security`, `validation`, `observability` and `user_interface`
+  (plus `custom` for an unmatched filename), but a Markdown principle body may be arbitrary
+  free text.
 
 - The principle inventory nevertheless accounts for every encountered directory, regular file,
   link, and special node.
@@ -410,7 +423,7 @@ validates rows, names and categories. No model, workflow prompt or mechanical
 
 Resolution is explicit:
 
-1. resolve `paths.principles` through the root-access policy, account for the separately captured exact `toolchain.yaml`, select only bounded no-follow normalized `*.md` regular files as semantic sources, reject every unclassified regular file and alias/case collision, and sort the Markdown sources by canonical filename;
+1. resolve `paths.principles` through the root-access policy, account for the separately captured exact `toolchain.yaml`, select only bounded no-follow normalized `*.md` regular files as semantic sources, reject every unclassified regular file and alias/case collision, and sort the Markdown sources by normalized Unicode-scalar root-relative path;
 2. classify a category hint from the normalized filename using the configured mapping; an unmatched filename receives the explicit `custom` hint rather than having its meaning guessed from its body;
 3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
 4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;

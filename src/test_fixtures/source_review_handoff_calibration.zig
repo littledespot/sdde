@@ -57,7 +57,7 @@ pub fn admit(a: std.mem.Allocator, id: []const u8, repetition: usize, prepared: 
     const receipt = try shared.admitReviewReceipt(a, id, repetition, packet, parent, request_hash, bytes);
     var document = try envelope.parseContent(a, receipt.response_bytes, null);
     defer document.deinit();
-    return .{ .receipt = receipt, .collection = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, document.content, null), .normalization = document.normalization };
+    return .{ .receipt = receipt, .collection = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, document.content, null), .normalization = document.normalization };
 }
 
 /// Only the native admitted omission can produce a loss request. Expected panel
@@ -66,7 +66,7 @@ pub fn derive(a: std.mem.Allocator, prepared: shared.PreparedContext, admitted: 
     const candidate = candidateOf(admitted.collection) orelse return null;
     if (admitted.collection == .rejected or candidate.pending_localization == null) return null;
     const assignment = try support.comparisonAssignment(a, prepared.inputs, prepared.context, candidate);
-    const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, candidate);
+    const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, candidate);
     return .{ .candidate = candidate, .assignment = assignment, .packet = packet };
 }
 
@@ -154,6 +154,7 @@ pub fn run() !void {
         "src/domain/model_schema_projection.zig",
         "src/adapters/provider/bedrock_request.zig",
         "design/workflows/spec/support.schema.json",
+        "design/workflows/spec/packet-guidance.json",
         "design/workflows/spec/support.prompt.md",
         "design/workflows/spec/support-loss.prompt.md",
         root ++ "/cases.associated.json",
@@ -296,7 +297,7 @@ fn mechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: shared.Prepar
     for (derived.candidate.origins) |origin| try std.testing.expect(origin == null);
     const uncertain = try @import("source_omission_evidence.zig").response(a, derived.assignment, .{ .unlocalized = .{} });
     try std.testing.expect(try comparison.admit(a, derived.assignment, derived.assignment, prepared.context.inputs, uncertain) == .unresolved);
-    const localized = try support.collectLoss(a, prepared.inputs, prepared.context, admitted.collection, derived.packet, try codec.encode(comparison.Response, a, uncertain), null);
+    const localized = try support.collectLoss(a, prepared.inputs, prepared.context, prepared.guidance, admitted.collection, derived.packet, try codec.encode(comparison.Response, a, uncertain), null);
     try std.testing.expect(localized != .rejected);
     const after = candidateOf(localized).?;
     try std.testing.expect(after.pending_localization == null);
@@ -344,7 +345,7 @@ fn mechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: shared.Prepar
     }
     var stale = prepared;
     stale.inputs.feature = .{ .bytes = "MOCK-foreign-feature" };
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, prior, packet, response, null));
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, stale.guidance, prior, packet, response, null));
     try shared.writeAt(a, output, id, "mock.mechanics.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .unchanged_actual_values = true, .complete_comparison_admission = true, .gap_uncertainty_no_loss = true, .foreign_stale_rejected = true, .native_origin_available = false, .repair_eligibility = "not_assessed_by_diagnostic_attribution", .denial = "requires_connected_native_authorizer", .harm = "not_measured_offline" }, .{}));
 }
 
@@ -362,7 +363,7 @@ fn advisoryMechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: share
     try std.testing.expect(candidate.pending_localization == null and candidate.origin == null);
     for (candidate.origins) |origin| try std.testing.expect(origin == null);
     try std.testing.expect((try derive(a, prepared, admitted)) == null);
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, candidate));
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, candidate));
     const ledger = try authority.build(a, prepared.inputs);
     const index = for (ledger.requirements, 0..) |requirement, ordinal| {
         if (std.meta.eql(requirement.seed.id, target)) break ordinal;
@@ -378,12 +379,12 @@ fn advisoryMechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: share
     };
     for (controls) |control| {
         const bytes = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = control });
-        const result = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, bytes, null);
+        const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, bytes, null);
         try std.testing.expect(result != .rejected);
         try std.testing.expect(candidateOf(result).?.pending_localization == null);
     }
     const foreign = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = .{ .candidate_omission = .{ .source_ids = &.{.{ .ordinal = 999 }}, .detail = "MOCK foreign source.", .missing_obligation = obligation } } });
-    try std.testing.expect((try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, foreign, null)) == .rejected);
+    try std.testing.expect((try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, foreign, null)) == .rejected);
     try receiptNegatives(a, id, prepared, prior, packet, parent, request_hash, receipt);
     var normalized_receipt = receipt;
     normalized_receipt.response_bytes = try std.fmt.allocPrint(a, "{{\"{s}", .{response});
@@ -393,7 +394,7 @@ fn advisoryMechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: share
     try std.testing.expectEqualDeep(candidate.review.entries, candidateOf(normalized.collection).?.review.entries);
     var stale = prepared;
     stale.inputs.feature = .{ .bytes = "MOCK-foreign-feature" };
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, prior, packet, response, null));
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, stale.inputs, stale.context, stale.guidance, prior, packet, response, null));
     try shared.writeAt(a, output, id, "mock.mechanics.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .current_assignment = packet.body(), .unchanged_actual_values = true, .finding = finding, .post_generation_advice = true, .loss_request = @as(?[]const u8, null), .native_origin_available = false, .publication_authority = false, .harm = "not_measured_offline" }, .{}));
 }
 fn completeAssignmentNegatives(a: std.mem.Allocator, prepared: shared.PreparedContext, assigned: comparison.Assignment, response: comparison.Response) !void {

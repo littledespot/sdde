@@ -67,7 +67,7 @@ fn checkCurrent(a: std.mem.Allocator, inputs: authority.Inputs, context: provena
     if (current == .rejected and !try equal(source.Rejection, a, current.rejected.rejection, result.rejected.rejection)) return error.InvalidRequiredAuthority;
 }
 
-pub fn record(a: std.mem.Allocator, history: History, inputs: authority.Inputs, context: provenance.Context, result: source.Collection, request: *const handoff.Request, proof: *const @import("model_payload_schema.zig").Evidence, ledger: *const identity.ModelRequestIdentityLedger) Error!History {
+pub fn record(a: std.mem.Allocator, history: History, inputs: authority.Inputs, context: provenance.Context, guidance: *const @import("packet_guidance.zig").Guidance, result: source.Collection, request: *const handoff.Request, proof: *const @import("model_payload_schema.zig").Evidence, ledger: *const identity.ModelRequestIdentityLedger) Error!History {
     if (!eligibleInputs(inputs)) return history;
     const candidate = candidateOf(result) orelse return history;
     try checkCurrent(a, inputs, context, result, candidate);
@@ -85,7 +85,7 @@ pub fn record(a: std.mem.Allocator, history: History, inputs: authority.Inputs, 
     const target = native.requirements[start].seed.id;
     const assigned = if (grouped) try source.assignmentSubjects(a, inputs, target) else try a.dupe(authority.Id, &.{target});
     if (assigned.len != count) return error.InvalidRequiredAuthority;
-    const expected = try source.packetFor(a, inputs, context, if (grouped) .{ .assignment = target } else .{ .finding = target });
+    const expected = try source.packetFor(a, inputs, context, guidance, if (grouped) .{ .assignment = target } else .{ .finding = target });
     defer packets.release(expected);
     if (!std.mem.eql(u8, expected.body(), packet.body()) or !identity.unitOwnerEql(expected.unit(), packet.unit()) or !identity.purposeEqlBounded(expected.purpose(), packet.purpose(), 1)) return error.InvalidRequiredAuthority;
     var prefix = candidate;
@@ -93,7 +93,7 @@ pub fn record(a: std.mem.Allocator, history: History, inputs: authority.Inputs, 
     prefix.origins = candidate.origins[0..start];
     prefix.pending_localization = source.pendingLocalization(inputs, prefix.review.entries);
     if (prefix.occurrences.next_ordinal != 0) prefix.occurrences.values = candidate.occurrences.values[0..start];
-    const replayed = try source.collectFocused(a, inputs, context, .{ .pending = prefix }, packet, proof.candidate().content(), origin);
+    const replayed = try source.collectFocused(a, inputs, context, guidance, .{ .pending = prefix }, packet, proof.candidate().content(), origin);
     const replayed_candidate = candidateOf(replayed) orelse return error.InvalidRequiredAuthority;
     if (!try equal([]const source.Finding, a, candidate.review.entries, replayed_candidate.review.entries)) return error.InvalidRequiredAuthority;
     for (candidate.origins[start..]) |finding_origin| if (finding_origin == null or !std.meta.eql(finding_origin.?, origin)) return error.InvalidRequiredAuthority;
@@ -186,13 +186,13 @@ pub fn restart(a: std.mem.Allocator, history: History, inputs: authority.Inputs,
     return try source.validateWorking(a, inputs, scope.sources, seed);
 }
 
-pub fn reuse(a: std.mem.Allocator, history: History, inputs: authority.Inputs, context: provenance.Context, prior: ?source.Collection, selection: handoff.Selection, ledger: *const identity.ModelRequestIdentityLedger) Error!?source.Collection {
+pub fn reuse(a: std.mem.Allocator, history: History, inputs: authority.Inputs, context: provenance.Context, guidance: *const @import("packet_guidance.zig").Guidance, prior: ?source.Collection, selection: handoff.Selection, ledger: *const identity.ModelRequestIdentityLedger) Error!?source.Collection {
     const scope = history.scope orelse return null;
     if (!sameScope(scope, inputs, ledger)) return null;
     if (inputs.revision < scope.input_revision) return error.InvalidRequiredAuthority;
     if (!try equal(@import("reference_evidence.zig").Inputs, a, scope.sources, context.inputs)) return null;
     const target = try source.nextSubject(a, inputs, prior);
-    const packet = try source.packetFor(a, inputs, context, source.assignmentScope(inputs, target));
+    const packet = try source.packetFor(a, inputs, context, guidance, source.assignmentScope(inputs, target));
     defer packets.release(packet);
     const selected_packet = selection.input orelse return error.InvalidRequiredAuthority;
     if (selected_packet != .packet or !std.mem.eql(u8, selected_packet.packet.body(), packet.body())) return error.InvalidRequiredAuthority;
@@ -211,7 +211,7 @@ pub fn reuse(a: std.mem.Allocator, history: History, inputs: authority.Inputs, c
                 !std.meta.eql(rule, try source.applicability(inputs, id))) matches = false;
         }
         if (!matches or !try selection.acceptsRetained(a, ledger, receipt.request, receipt.origin)) continue;
-        return try source.appendAdmitted(a, inputs, context, prior, packet, receipt.findings, receipt.origin);
+        return try source.appendAdmitted(a, inputs, context, guidance, prior, packet, receipt.findings, receipt.origin);
     }
     return null;
 }

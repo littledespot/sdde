@@ -134,7 +134,9 @@ second configuration value.
 - Each configured value is parsed as one normalized project-relative path.
 - The seven directory entries require directory form; `providers` requires file form and
   the exact `.sddproviders.json` basename.
-- Validation rejects an empty or absolute path, drive/UNC form, NUL or control scalar,
+- Validation rejects a non-ASCII path component
+  ([ADR 0007](../decisions/0007-unicode-normalization.md)), an empty or absolute path,
+  drive/UNC form, NUL or control scalar,
   traversal, ambiguous separator or segment, path-policy length violation or
   project-root escape.
 - The normalized candidate must be representable under the active workspace policy.

@@ -7,6 +7,7 @@ const r = @import("reference_reconciliation.zig");
 const authority = @import("required_authority.zig");
 const selections = @import("source_selections.zig");
 const atomic = @import("atomic_repair.zig");
+const presentation = @import("model_presentation.zig");
 pub const Id = struct {
     pub const model_scalar = "ordinal";
     ordinal: u32,
@@ -17,7 +18,7 @@ pub const MemberId = struct {
 };
 pub const Verdict = enum { preserved, lost, uncertain };
 pub const Member = struct { id: MemberId, claim_id: r.ClaimId };
-pub const View = struct { id: Id, purpose: []const u8, members: []const Member };
+pub const View = struct { id: Id, members: []const Member };
 pub const Reference = union(enum) { source_premise, deficient_subject, comparison: Id };
 pub const Owner = union(enum) {
     existing: loss.Location,
@@ -52,7 +53,30 @@ pub const Evidence = struct {
     assignment: Assignment,
     response: Response,
     origin: ?@import("model_candidate_origin.zig").Origin = null,
+
+    /// Model input carries only `Presented`, whose comparisons hold their purposes.
+    pub const model_presentation_required = "comparison purposes";
+    /// The proof as a repair request presents it: each comparison carries its
+    /// subject's workflow-owned purpose, which stored evidence never holds.
+    pub const Presented = presentation.Retyped(Evidence, "assignment", presentation.Retyped(Assignment, "comparisons", []const PresentedView));
+    /// The result borrows `self`; `a` must be the caller's arena.
+    pub fn present(self: Evidence, a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance) authority.Error!Presented {
+        const purpose = try @import("required_authority_description.zig").task(a, guidance, self.assignment.finding.subject);
+        const views = try a.alloc(PresentedView, self.assignment.comparisons.len);
+        for (self.assignment.comparisons, views) |stored, *presented| presented.* = .{ .id = stored.id, .purpose = purpose, .members = stored.members };
+        const PresentedAssignment = @FieldType(Presented, "assignment");
+        return presentation.retype(Presented, Evidence, self, "assignment", presentation.retype(PresentedAssignment, Assignment, self.assignment, "comparisons", views));
+    }
 };
+/// A comparison in its request position: the purpose precedes its members.
+pub const PresentedView = struct { id: Id, purpose: []const u8, members: []const Member };
+comptime {
+    const stored = std.meta.fieldNames(View);
+    const presented = std.meta.fieldNames(PresentedView);
+    const expected = [_][]const u8{ stored[0], "purpose", stored[1] };
+    if (stored.len != 2 or presented.len != expected.len) @compileError("a presented comparison is the stored view plus its purpose");
+    for (expected, presented) |left, right| if (!std.mem.eql(u8, left, right)) @compileError("a presented comparison is the stored view plus its purpose");
+}
 pub const Error = r.Error || authority.Error || @import("strict_json.zig").Error || error{InvalidPreservationComparison};
 
 fn sameReference(left: Reference, right: Reference) bool {
@@ -90,7 +114,7 @@ pub fn admit(a: std.mem.Allocator, retained: Assignment, current: Assignment, so
     if (!@import("specification_support_evidence.zig").validObligation(.candidate_omission, current.finding.missing_obligation)) return error.InvalidPreservationComparison;
     if (response.assessments.len != current.comparisons.len) return error.InvalidPreservationComparison;
     for (current.comparisons, 1..) |assigned, ordinal| {
-        if (assigned.id.ordinal != ordinal or assigned.purpose.len == 0) return error.InvalidPreservationComparison;
+        if (assigned.id.ordinal != ordinal) return error.InvalidPreservationComparison;
         for (assigned.members, 1..) |member, index| if (member.id.ordinal != index) return error.InvalidPreservationComparison;
     }
     for (response.assessments, 0..) |entry, index| {

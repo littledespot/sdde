@@ -160,15 +160,15 @@ Owners: [Design §6](design.md#6-common-action-and-orchestrator-contract),
 
 ```text
 NodeContract {
-  id,
-  version,
+  id,                 // one unversioned operation ID (ADR 0005)
   kind: action | orchestrator,
   requires: DataKey[],
   optional: DataKey[],
   produces: DataKey[],
   replaces: DataKey[],
   invalidates: DataKey[],
-  sideEffect: none | read | candidate-write | commit-write | model-call | command,
+  sideEffect: none | filesystem_read | filesystem_write | model_call |
+              workflow_publication | command,  // command: proposed Implement (§26)
   runnerAccountingCapability:
     | { kind: none }
     | { kind: emit_exactly_one,
@@ -695,16 +695,18 @@ ClarificationOwnershipRegistry {
 
 This illustrative sample describes canonical `specification/v3` under
 [ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Initial narrative
-responses select current whole groups through `signal_ids`; record responses
-inherit their one native-assigned group. Native admission stores canonical
-`source_group_ids` and derives explicit `claim_ids` from those complete groups.
+responses select current whole groups through `signal_ids`; non-entity record
+responses keep their one native-assigned group and name a nonempty ordered subset of
+its claims as `claim_ids` ([ADR 0038](decisions/0038-record-claims-and-scenario-coverage.md));
+entities keep whole groups. Native admission stores canonical `source_group_ids` and
+those `claim_ids`.
 Exact segments select preserved-token occurrences; effective claims and citations
 derive from explicit selection plus exact segments. Fixed repairs preserve the
 association and return content only. Earlier shapes have no reader.
 
 ```text
 InitialAuthoredValue { value: BusinessValue, signal_ids[] }
-InitialRecordProposal { content: RecordContent }
+InitialRecordProposal { content: RecordContent, claim_ids[] }  // non-entity records (ADR 0038)
 Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
 AttributedValue { value: BusinessValue, source_group_ids[], provenance: Provenance }
 RecordProposal { content: RecordContent, source_group_ids[], provenance: Provenance }
@@ -1483,6 +1485,8 @@ SDDToolKitConfig {
   logs: { level, console },
   models: { slots: map<slotName, { provider, model, reasoningEffort? }> },
   workflowTokenBudget: positive integer, // ADR 0037; no default
+  temperature: number >= 0,              // ADR 0039; no default
+  temperatureRunawayRetry: number >= 0,  // ADR 0039; no default
   paths: {
     specs, references, specsArchive, workflows,
     toolchainPreset, principles, templates, providers
@@ -1831,8 +1835,7 @@ GuidancePacket {
   principleGuidance?: PrincipleGuidance,
   mechanicalGuidance: MechanicalGuidance[],
   prohibitedAssumptions[],
-  responseSchema,
-  oneMinimalValidExample
+  responseSchema        // no synthetic candidate example (§12.2)
 }
 
 PrincipleGuidance {
@@ -1965,15 +1968,11 @@ For a schema allowing only a task-edge proposal:
 {
   "predecessorInternalKey": "verify-login",
   "successorInternalKey": "implement-login",
-  "reason": {
-    "nodes": [
-      "Implementation must make the intended-red verification pass."
-    ]
-  }
+  "reason": "Implementation must make the intended-red verification pass."
 }
 ```
 
-The selected task keys and typed reason are meaningful candidate data and
+The selected task keys and prose reason (a plain string, §7.1) are meaningful candidate data and
 remain. A schema permitting alternative results adds one root `kind` to
 distinguish them; it does not add another wrapper. Exact field schemas remain
 workflow-declared and bounded. The example defines no built-in model route.
@@ -2008,15 +2007,18 @@ schema is already bound by the engine; there is no echoed `schemaId` or outer
 ## 24. Orchestrator composition
 
 ```text
+CompositionRoot (before the engine starts; ADR 0032 routine when implemented)
+└── BootstrapOrchestrator preselection portion; validated result passed to the engine
+    ├── configuration/root actions
+    ├── workflow inventory/capture/parse/schema actions
+    ├── workflow graph compile/validate actions
+    └── variable-size workflow registry actions; no feature transaction lock
+
 PipelineRunner
 ├── WorkflowEngineOrchestrator (capability-free graph coordination)
-│   ├── BootstrapOrchestrator preselection portion through a runner-owned child binding
-│   │   ├── configuration/root actions
-│   │   ├── workflow inventory/capture/parse/schema actions
-│   │   ├── workflow graph compile/validate actions
-│   │   └── variable-size workflow registry actions; no feature transaction lock
 │   ├── ParseWorkflowSelectionAction and ValidateWorkflowIdAction through runner-owned child bindings
 │   ├── ResolveSelectedWorkflowAction through a runner-owned child binding
+│   ├── ModelProviderBootstrapOrchestrator through a runner-owned child binding (ADR 0004)
 │   └── Selected CompiledWorkflowGraph
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them
@@ -2141,7 +2143,7 @@ Both inputs are required and independent. featureDirectory is relative to
 .sddtoolkit.json paths.specs; referenceSelector is relative to paths.references.
 For --feature hello-world, the output is <paths.specs>/hello-world/spec.md.
 The configured root is neither repeated by the caller nor hard-coded by the engine.
-Missing, duplicate, unknown or positional inputs are schema errors. The generic
+Missing, empty, duplicate, unknown or positional inputs are schema errors. The generic
 engine delegates this grammar to the selected registered invocation operation.
 ```
 
@@ -2224,9 +2226,7 @@ RepairAuthorizationBase {
   immutableSiblingPointers[],
   impactedValidatorIds[],
   purpose: mechanical_atomic | semantic_atomic,
-  retryOperationInstanceId,
-  retryOrdinal,
-  explicitRetryLimit
+  retryOperationInstanceId   // compiled step instance (ADR 0033); counts and limits stay runner-owned (§22.7)
 }
 
 RepairAuthorization =
@@ -2543,20 +2543,27 @@ follow their own compiled gates and transitions.
 
 ## 34. Observability events
 
+[Design §26.5](contracts/26-security.md#265-secrets-and-logging) defines the canonical
+levels and aliases.
+
 ```text
-Levels use the shared CanonicalLogLevel definition from Section 3.
+Levels use the canonical levels defined in Design §26.5.
 Configured aliases = CRITICAL -> fatal | WARN -> warning
 Emission rule = eventDefinition.emission == always or rank(eventDefinition.level) >= rank(featureLogPolicy.threshold)
 
+publication.prepared
 run.started | run.completed | run.blocked | run.failed | run.cancelled
 stage.started | stage.completed | stage.blocked | stage.failed |
 stage.clarification_pending
 action.started | action.completed | action.invalid | action.failed
 model.requested | model.completed | model.provider_stopped |
+model.runaway_resent | // ADR 0039
 model.protocol_failed | model.schema_failed | model.response_normalized
 validation.completed | validation.failed
 repair.requested | repair.applied | repair.rejected | repair.exhausted
-review.requested | review.approved | review.rejected
+retry.admitted | retry.exhausted
+review.requested | review.approved | review.rejected |
+review.incomplete // ADR 0040
 command.started | command.completed | command.failed
 task.started | task.completed | task.blocked | task.failed
 security.denied
@@ -2589,9 +2596,13 @@ src/
   ports/         # narrow operation interfaces
   adapters/      # filesystem, parsing, provider and system implementations
   composition/   # concrete assembly
+  debugger/      # embedded request-debugger browser assets (ADR 0019)
   test_fixtures/ # fake inputs and helpers for engine tests
 test/
+  integration/   # offline integration scenarios
+  build/         # build-graph and test-registration checks
   packaging/     # clean native-executable smoke
+  calibration/   # calibration cases
   harness/       # development-only live E2E and rubric evaluation
   e2e/           # declared test-project resources and calibration specimens
 build.zig        # repository-owned build and verification steps

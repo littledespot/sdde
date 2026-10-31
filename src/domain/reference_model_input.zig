@@ -58,14 +58,15 @@ pub fn withCitationChoices(allocator: std.mem.Allocator, packet: *const packets.
     return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = path }, .allowed = lines.items, .collection = .unique_subset }});
 }
 
-pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) ReconciliationError!*packets.Packet {
-    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope });
+/// `summary_purpose` is the workflow's guidance text, present exactly for a summary input.
+pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope, summary_purpose: ?[]const u8) ReconciliationError!*packets.Packet {
+    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope }, summary_purpose);
 }
-pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
+pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, summary_purpose: []const u8) ReconciliationError!*packets.Packet {
     if (input.purpose != .summary) return error.InvalidReferenceReconciliation;
     const ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
     defer allocator.free(ids);
-    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } });
+    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } }, summary_purpose);
 }
 pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
     const current = @import("reference_reconciliation_stage.zig").input(prior);
@@ -78,13 +79,14 @@ pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("r
     const assignment: Constraint.Assignment = switch (prior) {
         inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
     };
-    return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } });
+    return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } }, null);
 }
 const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
-// Semantic guidance for summary authoring and scoped repair, not a claim of
-// deterministic proof. Complete-result membership stays in scoped constraints.
-const summary_purpose = "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.";
-fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, presentation: Presentation) ReconciliationError!*packets.Packet {
+// The workflow-owned summary purpose is semantic guidance for summary authoring
+// and scoped repair, not deterministic proof. Complete-result membership stays
+// in scoped constraints.
+fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, presentation: Presentation, summary_purpose: ?[]const u8) ReconciliationError!*packets.Packet {
+    if ((input.purpose == .summary) != (summary_purpose != null)) return error.InvalidReferenceReconciliation;
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -135,8 +137,8 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
         codec.fieldBindings(reconciliation.Proposal, scratch, .{ .reference_phase = .reconciliation })) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const bound = try packets.withFieldPolicies(allocator, witnessed, policies);
     defer packets.release(bound);
-    const summary_context = if (input.purpose == .summary)
-        try packets.withContext([]const u8, allocator, bound, "summary_purpose", summary_purpose)
+    const summary_context = if (summary_purpose) |purpose|
+        try packets.withContext([]const u8, allocator, bound, "summary_purpose", purpose)
     else
         try packets.retain(bound);
     defer packets.release(summary_context);

@@ -24,8 +24,10 @@ prove that inputs and execution were processed safely.
 - Scripted generation, prewritten specifications and golden-document comparison are
   not E2E evidence. Fakes test only individual mechanical boundaries.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0` from `ap-southeast-2`, for
-  generation and the standalone evaluator. It supplies no default and does not
+  permits only named tuples ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)):
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0` from `ap-southeast-2`, for generation and
+  the standalone evaluator, and `aws-bedrock` / `au.anthropic.claude-haiku-5-5`, for
+  generation only. The shipped cases select GPT-OSS-20B. The policy supplies no default and does not
   restrict the production model catalogue. The `/evaluate-e2e` Claude Code skill
   is advisory assistant analysis outside this harness and its cost policy.
 - Every live run needs explicit user approval

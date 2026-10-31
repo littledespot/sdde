@@ -57,14 +57,11 @@ Application and domain code depend on interfaces, never provider implementations
   `ModelProviderBootstrapOrchestrator` accepted by ADR 0004.
 - Project definitions cannot change either mechanism.
 - The startup graph remains unconditional.
-- Under ADR 0032 (not yet implemented), both mechanisms become typed engine routines.
-  - The composition root runs startup before selection.
-  - A composition-built, runner-owned binding runs provider bootstrap after selection.
-  - Both keep these properties, except that provider bootstrap is no longer
-    capability-free: its locate and read steps hold the provider-config port.
-  - Provider bootstrap keeps its single typed-requirement branch.
+- Under ADR 0032 (not yet implemented), both mechanisms become typed engine routines, with
+  the callers and properties that [invariant 27](../design.md#33-non-negotiable-invariants)
+  states.
 - After exact workflow selection, `DeriveProviderRequirementAction` inspects only compiled
-  model-binding requirements and provider-call capabilities; the run-preparation orchestrator
+  model-binding requirements and provider-call capabilities; `ModelProviderBootstrapOrchestrator`
   conditionally coordinates the provider-file children before selected-workflow execution.
 - The workflow loader inventories and parses the definitions beneath `paths.workflows`.
 - The workflow compiler alone resolves each referenced operation contract by its unversioned ID,
