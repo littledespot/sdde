@@ -35,6 +35,10 @@
     key populations;
   - [F0100](../features/F0100-SpecWorkflow.md): the per-owner repair operations of the
     Spec definition.
+- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
+  2026): the `reference-dispositions` authorizer no longer selects an insert or a
+  delete (an omitted or repeated disposition is corrected at admission); its
+  replacement path is unchanged. E4's freeze is taken after that change.
 
   The overall design remains **Proposed design**.
 

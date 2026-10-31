@@ -58,6 +58,8 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
         .schema => |reason| value: {
             // ADR 0038: exactly an uncovered value's correction names the compiled covering kinds.
             if ((reason.covering != null) != (reason.reason == .uncovered_member)) return error.ModelRequestAssociationInvalid;
+            // Exactly a missing member's correction names the member no item names.
+            if ((reason.member != null) != (reason.reason == .missing_member)) return error.ModelRequestAssociationInvalid;
             const Covering = struct { kind_property: []const u8, kinds: []const []const u8 };
             break :value try std.json.Stringify.valueAlloc(scratch, .{
                 .diagnostic = .{ .schema = try reason.describe(scratch) },
@@ -69,6 +71,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
                     .shape = try projection.outline(scratch, reason.expected),
                 },
                 .covering = @as(?Covering, if (reason.covering) |rule| .{ .kind_property = rule.kind_property, .kinds = rule.covering } else null),
+                .member = reason.member,
             }, .{ .emit_null_optional_fields = false });
         },
     };

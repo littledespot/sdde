@@ -296,7 +296,7 @@ Open steps, in the existing order:
 
 | Step | Item | Validation | Decisions |
 | --- | --- | --- | --- |
-| 7 | **Q2b** Generic content-loss guard for repairs: D2.2 deferred 30 October 2026 (user decision; its recorded premise was wrong and its literal trigger was met, so it awaits the user's re-decision); D2.3 (proposed) for the dispositions insert that lost UTC twice | Paired replays, then a measurement set | D2.2 (deferred), D2.3 (proposed) |
+| 7 | **Q2b** Generic content-loss guard for repairs: D2.2 deferred 30 October 2026 (user decision; its recorded premise was wrong and its literal trigger was met, so it awaits the user's re-decision); D2.3 for the dispositions insert that lost UTC twice: **decided and implemented 31 October 2026 (ADR 0046); two sets run 31 October: 12 of 12 published, correction never fired; keep awaits the user** | Measurement set (guards; target "not enough evidence") | D2.2 (deferred), D2.3 (decided (b)) |
 | 11 | **Q4 retry** Remove engine vocabulary and schema-stated rules (hygiene), scoped by D4.1's proposed extension; not scheduled (Q4 not kept 31 October 2026) | Measurement set (guards) | D4.1 (extension proposed) |
 | 12 | **Q5** Remove unmeasured single-run sentences (hygiene) | Measurement set (guards) | D5.1 (open) |
 | 13 | **Q8** Source-claim granularity (B7) | D8.2 and D8.3 offline; a measurement set on the experiment and main builds only if D8.1 changes or withdraws the split | D8.1–D8.3 |
@@ -328,7 +328,8 @@ user chooses. **R** items after the phase that produces their evidence.
   is labelled and needs only H2's confirmation; running Q8 first would move the comparison point
   to a set whose labels H2 must also confirm. Against it: the current order puts review after
   generation settles, because Q10b assesses what generation produces.
-- **D2.3 decided before the hygiene phases** (the Q4 retry and Q5).
+- ~~D2.3 decided before the hygiene phases~~ (decided and implemented 31 October 2026; its
+  measurement set awaits approval).
 - **D5.1: no for now** (Q5).
 - **The Q4 retry after the targeted phases** (Q2b, Q8, Q10b).
 - **D7.2 decided now** if it keeps Decision 6 and withdraws ADR 0045 (docs only); **D7.3 in any
@@ -350,7 +351,7 @@ it, and Q8 only guards it. Invented or restating entities (B6; Q1b 8 of 10), whi
 move. Unsupported additions (Q1b 6 of 10). The in-request duplicates Q3 left for Q6 (for
 example `generation.prompt.md:2` beside `generation.context.json`'s `business_value` in the
 brief request); proposed home, the Q4 retry (user decision). Reconciliation-repair harm, Q2's
-target, has a proposed owner in Q2b (D2.3). Each stays here until a structural lever with an
+target, now has an owner: D2.3 (implemented 31 October 2026, ADR 0046; unmeasured). Each stays here until a structural lever with an
 owner is found or the user records it as a model limitation.
 
 **Why this order.**
@@ -434,19 +435,77 @@ build. The omission isn't tied to the §22.6 partial-prefix normalization: on Q4
 prefixed response listed all 25 claims, and an unprefixed one (`2026-10-31T02-54-32Z`) listed
 only claim 1, followed by 24 `duplicate` inserts (harm unverified).
 
-**Decision.** **D2.3** (proposed 31 October 2026; not decided) Whether Q2b becomes the owner of
-repair-induced requirement loss, including the insert case. Options:
-- **(a)** record it as a model limitation;
-- **(b)** recover an omitted disposition under the dispositions request instead of a
-  context-free insert repair, for example by admitting the response only with one entry per
-  assigned claim, as source and principle reviews are admitted (`exact_members`,
-  12-model-boundary.md:139-146; its fit to this array is unverified). The omission class is
-  wider than dispositions: it includes token classifications (Q4's `MissingProviderEvidence`
-  runs), whose composite key `exact_members` can't bind (12-model-boundary.md:146), so (b)
-  names the class, with `exact_members` as one possible mechanism (§2.2). It amends ADR 0022 and
-  ADR 0033's dispositions repair (the `reference-dispositions` owner, 0033:90; E4) and changes
-  model input, and must state its order relative to E4 and to Q9's D9.1, which would combine the
-  dispositions, signals and conflicts calls. Whether it saves spending is unverified.
+**Decision.** **D2.3, decided 31 October 2026: option (b), native variant** (user: "implement
+D2.3: the requirement loss with recommendations"; ADR 0046). Option (a) was recording it as a
+model limitation. **Implemented 31 October 2026, offline, uncommitted:**
+- **Binding.** A dispositions assignment binds its semantic claim IDs as `exact_members` with
+  a native count. The selected schema keeps its canonical bounds, so the request the model
+  receives is unchanged. Admission rejects an omitted claim as `missing_member` (new reason; the
+  correction names it as `member`) and a repeat as `duplicate_member`. The dispositions
+  request's own `retry-limit` (2) bounds the whole-assignment correction, and exhaustion fails
+  the run.
+- **Conflict-group repair.** The source-omission conflict-group repair shares the binding under
+  its `retry-limit` (1).
+- **Deleted.** The per-claim insert, the redundant-record deletion, the competing block and the
+  foreign replacement are deleted. A gap that still reaches readback is `InvalidAtomicRepair`.
+- **Recording.** Descriptions record the binding in the existing `members` list, and replay
+  reapplies member sets natively over the recorded bounds, so `model-request-debug/v13` and its
+  captures still decode.
+- **Packet copy.** A packet-copy bug (`model_input_packet.zig` dropped the new mode) was caught
+  by the integration scenario and fixed.
+- **Request projection.** `evaluations/request-projection/d23-2026-10-31` against
+  `d41-2026-10-30`: 206 dispositions requests differ only in the recorded `members`. Every
+  model-visible difference is in the rescripted scenarios 70, 82, 83 and 125–128.
+- **Out of scope.** The statement, signal and conflict coverage inserts (at-least-one coverage,
+  no harm seen) and token classifications (a composite key) are left out. Each needs its own
+  decision if harm appears.
+- **Order.** D2.3 lands before E4's freeze. D9.1 must keep the binding in any combined schema.
+- **Report contract.** `Relations.competing` is no longer set but stays in the report contract
+  until §2.13 allows its removal. The source's unused dispositions occurrence set is deleted
+  (never reported or persisted; the projection is unchanged by it).
+- **Measurement set (31 October 2026, 3 runs per case on the uncommitted D2.3 tree; measures
+  `evaluations/d23/measures-set.json`).** All 6 published: hello-world 3 of 3
+  (`07-27-52Z-d49e…`, `07-28-49Z-cdde…`, `07-29-37Z-f496…`), loan-renewal 3 of 3
+  (`07-27-53Z-1098…`, `07-30-19Z-83fe…`, `07-31-09Z-615b…`).
+  - **Target:** every first dispositions answer listed all its assigned claims (3 of 3 and 5
+    of 5), so the new correction never fired and no reconciliation repair ran. Every
+    hello-world spec keeps UTC. The set can't show the target (not enough evidence).
+  - **Guards against Q1b:**
+    - sends: hello-world 23 / 25 / 25 (Q1b 22 / 23 / 27); loan-renewal 25 / 26 / 29 (12 /
+      25.5 / 27);
+    - tokens: hello-world 61,885 / 73,706 / 84,067 (58,282 / 65,119 / 122,002); loan-renewal
+      85,943 / 104,705 / 123,519 (26,347 / 96,736 / 113,908);
+    - protocol corrections: hello-world 2 in 73 sends, both review `array_length` at
+      `/findings` in one run (Q1b 1 / 142); loan-renewal 0 in 80 (5 / 129);
+    - runaways: 1 hello-world and 2 loan-renewal, pooled; repairs 0.
+  - **Excluded:** four earlier attempts made no billed call: two with a wrong `--case`
+    argument (`input_invalid`) and two provider 403s before credentials were refreshed.
+  - **Second set (31 October 2026, 3 more per case on the same tree; all 12 runs in
+    `evaluations/d23-12/measures-set.json`).** All 6 published (`07-35-26Z-345c…`,
+    `07-36-13Z-d0ed…`, `07-37-10Z-f5c2…`; `07-35-27Z-0669…`, `07-36-18Z-f191…`,
+    `07-37-18Z-61b3…`). Again every first dispositions answer was complete, so the correction
+    never fired and no reconciliation repair ran.
+    - **Across 12 runs:** publication 6 of 6 per case; sends hello-world 23 / 23.5 / 25,
+      loan-renewal 25 / 26.5 / 29; tokens 60,761 / 66,147 / 84,067 and 85,943 / 91,811.5 /
+      123,519; protocol corrections 4 in 143 and 3 in 161 sends, none `missing_member`;
+      runaways 1 and 2; repairs 0.
+    - **Openings:** all 12 answers open with `{"{`. Every earlier omission opened with
+      `{"claim{`, and that form didn't occur here (a correlation only).
+    - **Omission rate:** 0 of 6 hello-world omissions against the earlier 4 of 18 on the same
+      request bytes. That is within chance (about 0.22 probability), so the omission rate
+      hasn't changed measurably and the target stays unobserved.
+  - **Not done:** no evaluations, no adjudication. Keeping D2.3 is the user's decision.
+- **Contract review.** No blockers. Two majors fixed: native replay cases, and the
+  conflict-group repair's admission rejection. Minor fixes: the dead field deleted, the kept
+  field commented, a criterion for a native count added to contract 12, the ADR's diagram
+  reference corrected, and an equal-count foreign case added. Not changed: `member_count` could
+  be folded into the `collection` variant (an illegal state guarded at restriction), and the
+  exhausted scenario doesn't assert the final rejection reason.
+- **Replays.** A retained capture's first dispositions request is unchanged, so replaying it
+  measures only the omission rate (about 4 in 18 hello-world). The correction request exists only
+  in captures from this build, so the target rests on the measurement set and any later replays
+  of those captures. The target (2 losses in 20) is too rare for a set to show alone; declare it
+  "not enough evidence" unless events accumulate.
 
 **Validation.** Paired replays of the captured requests decide the target; then a measurement
 set. **Keep if** requirements lost in reconciliation and harmful repairs fall, and sends,
@@ -1428,7 +1487,8 @@ roots changing while a set runs. The user's standing constraints beyond them:
 
 Steps 1–11 (done, closed or reverted) are recorded in
 [Z_FIX06 §7](Z_FIX06.md#7-progress-rows-111-and-the-cost-estimate), with E6's report fix (31
-October 2026). No step is in progress. Steps 7 and 11–20 are open (§3); E1–E5, E7–E9,
+October 2026). Step 7's D2.3 is implemented, uncommitted (31 October 2026, ADR 0046; Q2b).
+Its two 3 + 3 sets published 12 of 12, with the correction never firing; keeping it awaits the user. Steps 7 and 11–20 are otherwise open (§3); E1–E5, E7–E9,
 T2–T4 and T5's brittleness counts are proposed or accepted, not started; E0 is on hold;
 E6's other items are open.
 

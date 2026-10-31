@@ -12,6 +12,10 @@
 - **Amended by:** [ADR 0024](0024-native-exact-token-authority.md): native code,
   not the model, owns preserved-token dispositions and relevance for candidates
   with a native requirement-byte witness.
+- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
+  2026): response admission binds one disposition to every assigned semantic claim, so
+  an omitted or repeated disposition is corrected with the whole assignment and is not
+  a phase repair; disposition repair only replaces one disposition.
 
 Semantic decisions remain model candidates. YAML explicitly requests, collects,
 validates and repairs each reconciliation phase before requesting its descendants.

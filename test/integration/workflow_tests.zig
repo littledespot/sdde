@@ -2378,9 +2378,17 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
             }
-            if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition) {
+            if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition or driver.reconciliation_fault == .duplicate_disposition) {
+                // FIX06 D2.3: a repeated disposition record is corrected at admission,
+                // as one more attempt of the dispositions request, never repaired.
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
-                try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+                var corrected: usize = 0;
+                for (runner.tokenLedger().accounted_operations.items) |operation| {
+                    const owner = operation.id.model_request_id.immutable_unit_owner_id;
+                    if (owner == .reference_global and operation.id.model_attempt_ordinal.value > 1 and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-dispositions-") != null) corrected += 1;
+                }
+                try std.testing.expectEqual(@as(usize, 1), corrected);
             }
             if (driver.reconciliation_fault == .misbound_summary or driver.reconciliation_fault == .misbound_signals) {
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
@@ -2405,7 +2413,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             if (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition) {
                 const accounted = try @import("../../src/application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.complete, accounted.payload().reconciliation_accounted.outcome);
-                try std.testing.expectEqual(@as(u64, 2), accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.revision);
+                try std.testing.expectEqual(@as(u64, if (driver.reconciliation_fault == .cycle) 2 else 1), accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.revision);
                 // Rebuilt catalogues retain current complete groups; historical
                 // groups remain evidence without authorizing feature content.
                 try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);

@@ -19,6 +19,10 @@
   the derived provider schema), §12.7, §17.3, §22.1, §22.4 and §22.6, and advances
   ADR 0019's request description to `model-request-debug/v8`. See "Assignment
   membership at response admission".
+- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
+  2026): the membership rule's scope extends to reconciliation dispositions and the
+  source-omission conflict-group repair, with the member count native (the request
+  states no count) and an omitted member reported as `missing_member`.
 - **Record-family amendment:** 2026-10-18, by the user's approval after the 15:33
   loan-renewal run spent 80,901 tokens on per-record advice, with the scope
   confirmed on 2026-10-20. Source review assigns one record family per call. It

@@ -11,7 +11,6 @@ pub const Source = struct {
     origin: ?Origin = null,
     fields: []const FieldOrigin = &.{},
     statements: @import("repair_occurrences.zig").Set = .{},
-    dispositions: @import("repair_occurrences.zig").Set = .{},
     signals: @import("repair_occurrences.zig").Set = .{},
     conflicts: @import("repair_occurrences.zig").Set = .{},
     pending_repair: ?@import("atomic_repair.zig").Pending(@import("reference_reconciliation_repair.zig").ObservationTarget) = null,
@@ -157,6 +156,8 @@ pub const Relations = struct {
     selection: []const r.ClaimId = &.{},
     conflicting_pairs: []const struct { left: r.ClaimId, right: r.ClaimId } = &.{},
     redundant: ?usize = null,
+    /// Never set since ADR 0046 (repeated dispositions are admission defects); kept
+    /// only because retained reports decode this member strictly (FIX06 §2.13).
     competing: bool = false,
 };
 pub const Rejection = struct {

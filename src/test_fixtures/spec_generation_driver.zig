@@ -72,6 +72,7 @@ pub const Driver = struct {
     reconciliation_repair_fault: @FieldType(@import("spec_generation_responses.zig").Options, "reconciliation_repair_fault") = null,
     reconciliation_fault: ?@import("spec_generation_responses.zig").ReconciliationFault = null,
     disposition_sequence: @FieldType(@import("spec_generation_responses.zig").Options, "disposition_sequence") = null,
+    disposition_member_corrections: usize = 0,
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json, foreign_content_once, foreign_content_always } = null,
@@ -123,12 +124,10 @@ pub const Driver = struct {
         const exhausted = self.disposition_sequence == .exhaust;
         var assertion: []const u8 = "repair-count";
         errdefer std.debug.print("disposition-sequence assertion={s} mode={s}\n", .{ assertion, if (exhausted) "exhaust" else "recover" });
-        try std.testing.expectEqual(@as(usize, if (exhausted) 2 else 1), self.reconciliation_repair_calls);
-        // Self-referential relations and native token selectors fail protocol admission;
-        // the successful case merges only its authorized missing disposition.
+        // FIX06 D2.3: an omitted claim is corrected at admission, never inserted by repair.
+        try std.testing.expectEqual(@as(usize, 0), self.reconciliation_repair_calls);
         assertion = "merge-count";
-        try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), self.reconciliation_merges);
-        try std.testing.expectEqual(@as(usize, 0), self.unchanged_reconciliation_merges);
+        try std.testing.expectEqual(@as(usize, 0), self.reconciliation_merges);
         const ledger = self.runner.tokenLedger();
         try std.testing.expectEqual(self.calls, ledger.accounted_operations.items.len);
         try std.testing.expectEqual(@as(u128, self.calls) * (self.fake.invocation_plan.complete.input_tokens + self.fake.invocation_plan.complete.output_tokens), ledger.committed());
@@ -139,40 +138,29 @@ pub const Driver = struct {
             if (operation.id.model_request_id.purpose != .initial_generation or operation.id.model_attempt_ordinal.value == 1) continue;
             const owner = operation.id.model_request_id.immutable_unit_owner_id;
             if (owner != .reference_global) continue;
-            if (operation.id.model_attempt_ordinal.value != 2) std.debug.print("disposition-sequence unexpected-correction slot={s} attempt={d}\n", .{ owner.reference_global.unit_slot_id.bytes, operation.id.model_attempt_ordinal.value });
-            try std.testing.expectEqual(@as(u32, 2), operation.id.model_attempt_ordinal.value);
-            if (std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-dispositions-") != null) disposition_corrections += 1;
-            if (std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-signals-") != null) signal_corrections += 1;
+            const slot = owner.reference_global.unit_slot_id.bytes;
+            if (std.mem.indexOf(u8, slot, "-dispositions-") != null) disposition_corrections += 1;
+            if (std.mem.indexOf(u8, slot, "-signals-") != null) {
+                try std.testing.expectEqual(@as(u32, 2), operation.id.model_attempt_ordinal.value);
+                signal_corrections += 1;
+            }
         }
+        // The protocol fault, then the omission: two corrections of one assignment.
         assertion = "initial-disposition-correction-count";
-        try std.testing.expectEqual(@as(usize, 1), disposition_corrections);
+        try std.testing.expectEqual(@as(usize, 2), disposition_corrections);
+        assertion = "missing-member-correction";
+        try std.testing.expectEqual(@as(usize, 1), self.disposition_member_corrections);
         assertion = "initial-signal-correction-count";
         try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), signal_corrections);
         const view: data.View = .{ .slots = self.runner.envelope.slots };
-        const identities = try @import("../application/pipeline_values.zig").read(&view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const observations = try @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view);
         assertion = "repair-observation-count";
-        try std.testing.expectEqual(@as(usize, if (exhausted) 0 else 1), observations.len);
-        if (!exhausted) {
-            assertion = "repair-observation-revision";
-            if (observations[0].revision_after != 2) std.debug.print("disposition-sequence repair-observation before={d} after={d} changed={}\n", .{ observations[0].revision_before, observations[0].revision_after, observations[0].changed });
-            try std.testing.expectEqual(@as(u64, 2), observations[0].revision_after);
-            assertion = "repair-observation-origin";
-            var matches: usize = 0;
-            for (ledger.accounted_operations.items) |operation| if (observations[0].origin.?.matches(identities, operation.id)) {
-                try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
-                matches += 1;
-            };
-            try std.testing.expectEqual(@as(usize, 1), matches);
-        }
+        try std.testing.expectEqual(@as(usize, 0), (try @import("../application/candidate_repair_observations.zig").read(arena.allocator(), &view)).len);
+        const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
         if (exhausted) {
             assertion = "exhaustion-calls-and-phase";
-            try std.testing.expectEqual(@as(usize, 7), self.calls);
-            const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
-            const parsed = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.parsed_schema, .reconciliation_parsed);
-            try std.testing.expectEqual(.dispositions, parsed.payload().reconciliation_parsed.phase);
+            try std.testing.expectEqual(@as(usize, 6), self.calls);
             for ([_]data.Schema{ reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema, reconciliation.accounted_schema }) |schema| {
                 try std.testing.expect(!view.contains(schema.key));
             }
@@ -183,19 +171,13 @@ pub const Driver = struct {
                     try std.testing.expect(std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, stage) == null);
                 }
             }
+            // Exhausting the request's own correction allowance fails the run (§22.6).
             try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-            try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
-            try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
-            const rejected = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.reconciliation;
-            // Neither invalid correction is admitted: retain the original
-            // missing-disposition diagnostic rather than a replacement defect.
-            try std.testing.expectEqual(.cardinality, rejected.issue.rule);
-            try std.testing.expectEqual(@as(u64, 1), rejected.revision);
-            try std.testing.expectEqualDeep(parsed.payload().reconciliation_parsed.source.at(.dispositions, .record), rejected.origin);
+            try std.testing.expectEqual(@as(u32, 2), result.execution_rejected.retry_limit.limit.value);
+            try std.testing.expectEqual(@as(u64, 3), result.execution_rejected.retry_limit.completed_executions);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
         } else {
             assertion = "recovery-currentness-and-publication";
-            const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
             const accepted = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.accounted_schema, .reconciliation_accounted);
             try std.testing.expectEqual(.complete, accepted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.phase);
             try std.testing.expect(accepted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.pending_repair == null);
@@ -271,6 +253,18 @@ pub const Driver = struct {
             // repeats its attempt's content unchanged.
             std.testing.expectEqual(base.len + @as(usize, if (current_request.protocolCorrection() != null) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
+            if (self.disposition_sequence != null and std.mem.eql(u8, phase, "dispositions") and attempt == 3) {
+                // FIX06 D2.3: a dispositions answer that omits an assigned claim is rejected
+                // at admission and the whole assignment is corrected, naming the claim.
+                const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
+                const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
+                std.testing.expectEqualStrings("missing_member", diagnostic.get("reason").?.string) catch unreachable;
+                std.testing.expectEqualStrings("/claim_dispositions", diagnostic.get("path").?.string) catch unreachable;
+                const members = current_request.prepared().?.response_schema.memberChoices();
+                std.testing.expectEqual(@as(usize, 1), members.len) catch unreachable;
+                std.testing.expectEqual(members[0].allowed[1], correction.value.object.get("member").?.integer) catch unreachable;
+                self.disposition_member_corrections += 1;
+            }
             if (std.mem.eql(u8, current_request.prepared().?.result_schema_id.bytes, "extraction-schema")) {
                 const prose = if (current_request.part()) |part| std.mem.eql(u8, part.plan.parts()[part.part].id.bytes, "content") else true;
                 if (prose) {
@@ -701,14 +695,6 @@ pub const Driver = struct {
                 matches += 1;
             };
             std.testing.expectEqual(@as(usize, 1), matches) catch unreachable;
-            if (self.disposition_sequence != null) {
-                std.testing.expectEqual(@as(u64, self.reconciliation_merges + 1), merged.revision_before) catch unreachable;
-                std.testing.expectEqual(@as(u64, self.reconciliation_merges + 2), merged.revision_after) catch unreachable;
-                std.testing.expect(merged.changed) catch unreachable;
-                const identities = @import("../application/pipeline_values.zig").read(&view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch unreachable;
-                const accounted = self.runner.tokenLedger().accounted_operations.items;
-                std.testing.expect(merged.origin.?.matches(identities, accounted[accounted.len - 1].id)) catch unreachable;
-            }
             if (self.summary_sequence != null) @import("summary_protocol_sequence.zig").assertMerge(&before_merge, &view, self.reconciliation_merges, 3) catch unreachable;
             if (self.global_sequence != null) @import("global_protocol_sequence.zig").assertMerge(&before_merge, &view, self.reconciliation_merges) catch unreachable;
             self.reconciliation_merges += 1;

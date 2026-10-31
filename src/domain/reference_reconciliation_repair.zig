@@ -13,8 +13,6 @@ pub const Target = union(enum) {
     statement: usize,
     insert_statement: struct { index: usize, claim: r.ClaimId },
     disposition: struct { index: usize, claim: r.ClaimId },
-    disposition_record: usize,
-    insert_disposition: struct { index: usize, claim: r.ClaimId },
     signal_selection: usize,
     signal_content: usize,
     signal: usize,
@@ -28,7 +26,7 @@ pub const Target = union(enum) {
     pub fn guidance(self: Target) Guidance {
         var result: Guidance = .{ .unit = std.meta.activeTag(self) };
         switch (self) {
-            inline .insert_statement, .disposition, .insert_disposition, .insert_signal => |value| result.claim = value.claim,
+            inline .insert_statement, .disposition, .insert_signal => |value| result.claim = value.claim,
             .insert_conflict => |value| result.claims = value.claims,
             inline else => |index| result.index = index,
         }
@@ -40,7 +38,6 @@ pub const Replacement = union(enum) {
     content: r.ContentProposal,
     statement: r.StatementProposal,
     disposition: @FieldType(r.ClaimDispositionProposal, "disposition"),
-    disposition_record: r.ClaimDispositionProposal,
     signal: r.SignalProposal,
     conflict: r.ConflictProposal,
     summary: r.text.ReferenceSemanticText,
@@ -88,7 +85,6 @@ const Family = enum { selection, content, disposition, membership, coverage, dup
 const StableTarget = union(enum) {
     statement: occurrences.Id,
     disposition: r.ClaimId,
-    disposition_occurrence: occurrences.Id,
     signal: occurrences.Id,
     conflict: occurrences.Id,
     missing_statement: r.ClaimId,
@@ -101,8 +97,6 @@ fn stableTarget(a: std.mem.Allocator, source: d.Source, proposal: @FieldType(r.P
     return switch (target) {
         .statement_selection, .statement_content, .statement => |index| .{ .statement = source.statements.at(index, proposal.summary.statements.len) catch return error.InvalidAtomicRepair },
         .disposition => |value| .{ .disposition = value.claim },
-        .disposition_record => |index| .{ .disposition_occurrence = source.dispositions.at(index, proposal.global.claim_dispositions.len) catch return error.InvalidAtomicRepair },
-        .insert_disposition => |value| .{ .disposition = value.claim },
         .signal_selection, .signal_content, .signal => |index| .{ .signal = source.signals.at(index, proposal.global.signals.len) catch return error.InvalidAtomicRepair },
         .conflict_selection, .conflict_summary, .conflict => |index| .{ .conflict = source.conflicts.at(index, proposal.global.conflicts.len) catch return error.InvalidAtomicRepair },
         .insert_statement => |value| .{ .missing_statement = value.claim },
@@ -138,8 +132,8 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
     const family: Family = switch (authorization.target) {
         .statement_selection, .signal_selection, .conflict_selection => .selection,
         .statement_content, .signal_content, .conflict_summary => .content,
-        .disposition, .insert_disposition => .disposition,
-        .statement, .signal, .conflict, .disposition_record => .duplicate,
+        .disposition => .disposition,
+        .statement, .signal, .conflict => .duplicate,
         .insert_statement => .membership,
         .insert_signal, .insert_conflict => .coverage,
     };
@@ -198,30 +192,13 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
             }
             return .{ .blocked = .no_required_member };
         },
-        .dispositions, .disposition => {
+        // Admission binds one disposition to every assigned claim (FIX06 D2.3), so
+        // collection membership is never a repair target.
+        .dispositions => return if (rejection.issue.rule == .relationship) .{ .blocked = .no_independent_target } else error.InvalidAtomicRepair,
+        .disposition => |index| {
             if (parsed.proposal != .global) return error.InvalidAtomicRepair;
             const values = parsed.proposal.global.claim_dispositions;
-            if (rejection.relations.redundant) |index| {
-                if (index >= values.len or !try modelDisposition(parsed.input.progress.plan.layout.items, values[index].claim_id)) return .{ .blocked = .no_independent_target };
-                return deletion(a, parsed, facts, .{ .disposition_record = index }, rule);
-            }
-            if (rejection.relations.competing) return .{ .blocked = .competing_entries };
-            var missing: ?r.ClaimId = null;
-            for (parsed.input.partition.group.claim_ids) |id| {
-                for (values) |value| {
-                    if (value.claim_id.ordinal == id.ordinal) break;
-                } else {
-                    if (!try modelDisposition(parsed.input.progress.plan.layout.items, id)) return .{ .blocked = .no_independent_target };
-                    missing = id;
-                    break;
-                }
-            }
-            for (values, 0..) |value, index| if (!r.contains(r.ClaimId, parsed.input.partition.group.claim_ids, value.claim_id)) {
-                return if (missing) |id| replace(a, parsed, facts, .{ .disposition = .{ .index = index, .claim = id } }, rule) else .{ .blocked = .no_independent_target };
-            };
-            if (missing) |id| return insertion(a, parsed, facts, .{ .insert_disposition = .{ .index = values.len, .claim = id } }, .disposition, rule);
-            if (rejection.unit != .disposition or rejection.unit.disposition >= values.len) return .{ .blocked = .no_independent_target };
-            const index = rejection.unit.disposition;
+            if (index >= values.len or rejection.issue.rule == .duplicate_disposition) return error.InvalidAtomicRepair;
             if (!try modelDisposition(parsed.input.progress.plan.layout.items, values[index].claim_id)) return .{ .blocked = .no_independent_target };
             return replace(a, parsed, facts, .{ .disposition = .{ .index = index, .claim = values[index].claim_id } }, rule);
         },
@@ -331,7 +308,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .disposition => .{ .disposition = if (authorization.rule.disposition_choices == null) .rules else .choices },
         .summary => .summary,
         .conflict_detail => .conflict_detail,
-        .statement, .disposition_record, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
+        .statement, .signal, .conflict, .conflict_group => return error.InvalidAtomicRepair,
     };
     if (scope == .content) options.fields = .{ .selected = try contentFieldBindings(scratch, scope.content) };
     const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope, switch (parsed.input.purpose) {
@@ -404,7 +381,7 @@ pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const p
 
 fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Error!?dispositions.RepairChoices {
     return switch (target) {
-        inline .disposition, .insert_disposition => |value| dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim),
+        .disposition => |value| dispositions.repairChoices(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.index, value.claim),
         else => null,
     };
 }
@@ -447,18 +424,10 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
     } else {
         var global = parsed.proposal.global;
         switch (target) {
-            .disposition, .disposition_record, .insert_disposition => {
-                var values: std.ArrayList(r.ClaimDispositionProposal) = .empty;
-                try values.appendSlice(a, global.claim_dispositions);
-                switch (target) {
-                    .disposition => |value| values.items[value.index] = .{ .claim_id = value.claim, .disposition = replacement.?.disposition },
-                    .disposition_record => |index| {
-                        _ = values.orderedRemove(index);
-                    },
-                    .insert_disposition => |value| try values.insert(a, value.index, .{ .claim_id = value.claim, .disposition = replacement.?.disposition }),
-                    else => unreachable,
-                }
-                global.claim_dispositions = try values.toOwnedSlice(a);
+            .disposition => |value| {
+                const values = try a.dupe(r.ClaimDispositionProposal, global.claim_dispositions);
+                values[value.index] = .{ .claim_id = value.claim, .disposition = replacement.?.disposition };
+                global.claim_dispositions = values;
             },
             .signal_selection, .signal_content, .signal, .insert_signal => {
                 var values: std.ArrayList(r.SignalProposal) = .empty;
@@ -491,7 +460,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
             else => return error.InvalidAtomicRepair,
         }
         if (merged.changed) switch (target) {
-            .disposition, .insert_disposition => {
+            .disposition => {
                 result.proposal.global = global;
                 result = try retireSignals(a, result, &.{target.guidance().claim.?});
                 global = result.proposal.global;
@@ -509,8 +478,6 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
     switch (target) {
         .statement => |index| result.source.statements = parsed.source.statements.deleting(a, index, parsed.proposal.summary.statements.len) catch |err| return occurrenceError(err),
         .insert_statement => |value| result.source.statements = parsed.source.statements.inserting(a, value.index, parsed.proposal.summary.statements.len) catch |err| return occurrenceError(err),
-        .disposition_record => |index| result.source.dispositions = parsed.source.dispositions.deleting(a, index, parsed.proposal.global.claim_dispositions.len) catch |err| return occurrenceError(err),
-        .insert_disposition => |value| result.source.dispositions = parsed.source.dispositions.inserting(a, value.index, parsed.proposal.global.claim_dispositions.len) catch |err| return occurrenceError(err),
         .signal => |index| result.source.signals = parsed.source.signals.deleting(a, index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
         .insert_signal => |value| result.source.signals = parsed.source.signals.inserting(a, value.index, parsed.proposal.global.signals.len) catch |err| return occurrenceError(err),
         .conflict => |index| result.source.conflicts = parsed.source.conflicts.deleting(a, index, parsed.proposal.global.conflicts.len) catch |err| return occurrenceError(err),
@@ -534,10 +501,8 @@ pub const ValidationStage = enum { summary, dispositions, signals, conflicts };
 pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@import("workflow_retry.zig").Transition {
     const pending = parsed.source.pending_repair orelse return null;
     if (stageOf(pending.target.selected) != .dispositions) return null;
-    const valid = if (pending.target.operation == .delete)
-        !try containsOccurrence(parsed.source.dispositions, parsed.proposal.global.claim_dispositions.len, pending.target.stable.disposition_occurrence)
-    else switch (pending.target.selected) {
-        inline .disposition, .insert_disposition => |value| try dispositions.validClaim(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.claim),
+    const valid = switch (pending.target.selected) {
+        .disposition => |value| try dispositions.validClaim(a, parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions, value.claim),
         else => return error.InvalidAtomicRepair,
     };
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
@@ -546,7 +511,7 @@ pub fn dispositionProgress(a: std.mem.Allocator, parsed: r.Parsed) Error!?@impor
 fn stageOf(target: Target) ValidationStage {
     return switch (target) {
         .statement_selection, .statement_content, .statement, .insert_statement => .summary,
-        .disposition, .disposition_record, .insert_disposition => .dispositions,
+        .disposition => .dispositions,
         .signal_selection, .signal_content, .signal, .insert_signal => .signals,
         .conflict_selection, .conflict_summary, .conflict, .insert_conflict => .conflicts,
     };
@@ -567,7 +532,6 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
     const items = parsed.input.progress.plan.layout.items;
     const valid = if (watch.operation == .delete) switch (watch.stable) {
         .statement => |id| !try containsOccurrence(parsed.source.statements, parsed.proposal.summary.statements.len, id),
-        .disposition_occurrence => |id| !try containsOccurrence(parsed.source.dispositions, parsed.proposal.global.claim_dispositions.len, id),
         .signal => |id| !try containsOccurrence(parsed.source.signals, parsed.proposal.global.signals.len, id),
         .conflict => |id| !try containsOccurrence(parsed.source.conflicts, parsed.proposal.global.conflicts.len, id),
         else => return error.InvalidAtomicRepair,
@@ -585,7 +549,7 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
             const selected = parsed.proposal.summary.statements[value.index];
             break :blk v.claims(items, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and r.contains(r.ClaimId, selected.claim_ids, value.claim);
         },
-        inline .disposition, .insert_disposition => |value| try dispositions.validClaim(a, items, parsed.proposal.global.claim_dispositions, value.claim),
+        .disposition => |value| try dispositions.validClaim(a, items, parsed.proposal.global.claim_dispositions, value.claim),
         .signal_selection => |index| blk: {
             const value = parsed.proposal.global.signals[index];
             if (try v.signalClaims(items, checked_dispositions, value.claim_ids, parsed.input.partition.group.claim_ids) != null) break :blk false;
@@ -611,17 +575,14 @@ pub fn progress(a: std.mem.Allocator, validator: r.text.Validator, ctx: v.TextCo
             const selected = parsed.proposal.global.conflicts[value.index];
             break :blk try v.conflictClaims(items, checked_dispositions, selected.claim_ids, parsed.input.partition.group.claim_ids) == null and v.sameMembers(selected.claim_ids, value.claims);
         },
-        .statement, .disposition_record, .signal, .conflict => return error.InvalidAtomicRepair,
+        .statement, .signal, .conflict => return error.InvalidAtomicRepair,
     };
     return .{ .validated = .{ .permit = pending.permit, .revision = parsed.source.revision, .result = if (valid) .resolved else .recurring } };
 }
 fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
     const summary = parsed.proposal == .summary;
     switch (target) {
-        inline .disposition, .insert_disposition => |value| if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim)) return error.InvalidAtomicRepair,
-        .disposition_record => |index| {
-            if (summary or index >= parsed.proposal.global.claim_dispositions.len or !try modelDisposition(parsed.input.progress.plan.layout.items, parsed.proposal.global.claim_dispositions[index].claim_id)) return error.InvalidAtomicRepair;
-        },
+        .disposition => |value| if (!try modelDisposition(parsed.input.progress.plan.layout.items, value.claim)) return error.InvalidAtomicRepair,
         else => {},
     }
     return switch (target) {
@@ -633,8 +594,6 @@ fn select(parsed: r.Parsed, target: Target) Error!?Replacement {
         } else error.InvalidAtomicRepair,
         .insert_statement => |value| if (summary and value.index == parsed.proposal.summary.statements.len) null else error.InvalidAtomicRepair,
         .disposition => |value| if (!summary and value.index < parsed.proposal.global.claim_dispositions.len) .{ .disposition = parsed.proposal.global.claim_dispositions[value.index].disposition } else error.InvalidAtomicRepair,
-        .disposition_record => |index| if (!summary and index < parsed.proposal.global.claim_dispositions.len) .{ .disposition_record = parsed.proposal.global.claim_dispositions[index] } else error.InvalidAtomicRepair,
-        .insert_disposition => |value| if (!summary and value.index == parsed.proposal.global.claim_dispositions.len) null else error.InvalidAtomicRepair,
         .signal_selection, .signal_content, .signal => |index| if (!summary and index < parsed.proposal.global.signals.len) switch (target) {
             .signal_selection => .{ .selection = .{ .claim_ids = parsed.proposal.global.signals[index].claim_ids } },
             .signal_content => .{ .content = parsed.proposal.global.signals[index].content },
@@ -671,8 +630,6 @@ fn targetOrigin(target: Target) struct { unit: d.Unit, field: d.Field } {
         .statement => |i| .{ .unit = .{ .statement = i }, .field = .record },
         .insert_statement => |value| .{ .unit = .{ .statement = value.index }, .field = .record },
         .disposition => |value| .{ .unit = .{ .disposition = value.index }, .field = .record },
-        .disposition_record => |i| .{ .unit = .{ .disposition = i }, .field = .record },
-        .insert_disposition => |value| .{ .unit = .{ .disposition = value.index }, .field = .record },
         .signal_selection => |i| .{ .unit = .{ .signal = i }, .field = .selections },
         .signal_content => |i| .{ .unit = .{ .signal = i }, .field = .content },
         .signal => |i| .{ .unit = .{ .signal = i }, .field = .record },

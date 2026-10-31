@@ -249,6 +249,7 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
             .allowed = try a.dupe(i64, entry.allowed),
             .singleton = entry.singleton,
             .collection = entry.collection,
+            .member_count = entry.member_count,
             .coverage = if (entry.coverage) |rule| try rule.clone(a) else null,
         };
     }

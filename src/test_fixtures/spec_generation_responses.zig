@@ -184,17 +184,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     return @import("reference_reconciliation.zig").repairResponse(allocator, .{ .content = @import("reference_reconciliation.zig").content(claim) });
                 }
                 const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
-                if (options.disposition_sequence == .exhaust) {
-                    const subject = switch (authorization.target) {
-                        inline .disposition, .insert_disposition => |target| target.claim,
-                        else => return error.InvalidReconciliationFixture,
-                    };
-                    const replacement: repair.Replacement = if (authorization.operation == .insert)
-                        .{ .disposition = .{ .duplicate = .{ .target_claim_id = subject } } }
-                    else
-                        .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{subject} } } };
-                    return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
-                }
                 if (options.reconciliation_repair_fault) |fault| {
                     if (fault == .unchanged_text) return @import("reference_reconciliation.zig").repairResponse(allocator, authorization.operation.replace);
                     const target = authorization.target.disposition;
@@ -221,7 +210,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .conflict_summary => .{ .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied assertions disagree." } }} } },
                     .insert_statement => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
                     .insert_signal => |target| .{ .content = @import("reference_reconciliation.zig").content((try r.item(input.progress.plan.layout.items, target.claim)).claim) },
-                    .disposition, .insert_disposition => .{ .disposition = .{ .retained = .{} } },
+                    .disposition => .{ .disposition = .{ .retained = .{} } },
                     .insert_conflict => .{ .conflict_detail = .{ .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied claims state conflicting outcomes." } }} } } },
                     else => return error.UnexpectedScriptedRepair,
                 };
@@ -298,7 +287,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     selected.claim_ids = try std.mem.concat(allocator, r.ClaimId, &.{ selected.claim_ids, &.{token} });
                     proposal.signals = signals;
                 }
-                if (options.attempt > 1) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
+                // The first correction still omits claims (FIX06 D2.3): admission
+                // corrects the whole assignment again, which recovers or exhausts.
+                if (options.attempt == 2 or (options.attempt > 2 and options.disposition_sequence == .exhaust)) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
             }
             if (options.source_loss == .signal or options.source_loss == .unchanged) {
@@ -340,7 +331,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         duplicate[dispositions.len] = duplicate[0];
                         const reversed = try allocator.dupe(r.ClaimId, &.{ related[1], related[0] });
                         if (fault == .permuted_conflict_disposition) duplicate[dispositions.len].disposition.conflicting.related_claim_ids = reversed else duplicate[dispositions.len].disposition.superseded.related_claim_ids = reversed;
-                        proposal.claim_dispositions = duplicate;
+                        // A repeated record is an admission defect (FIX06 D2.3): the
+                        // correction returns the same meaning without the repeat.
+                        proposal.claim_dispositions = if (options.attempt == 1) duplicate else duplicate[0..dispositions.len];
                     },
                     .mixed_selection => proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal),
                     .signal_text => {
@@ -348,7 +341,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
                         proposal.signals = signals;
                     },
-                    .duplicate_disposition => dispositions[1] = dispositions[0],
+                    .duplicate_disposition => if (options.attempt == 1) {
+                        dispositions[1] = dispositions[0];
+                    },
                     .self_relation => {
                         dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
                     },

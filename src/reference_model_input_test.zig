@@ -365,6 +365,59 @@ test "token-only semantic assignments are empty while native construction preser
     }
 }
 
+test "a dispositions assignment binds every semantic claim natively and states no count" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    for ([_][3][]const u8{
+        .{ "Display the greeting.\n", "Suppress the greeting.\n", "Display `Ready`.\n" },
+        .{ "Approve the renewal.\n", "Reject the renewal.\n", "Retain `Recorded`.\n" },
+    }) |sources| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &sources);
+        defer fixture.deinit();
+        const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const packet = try stage.packet(std.testing.allocator, .{ .dispositions = global }, fixture.inputs, fixture.text.registry);
+        defer packets.release(packet);
+        const semantic = try @import("domain/reference_reconciliation_projection.zig").semanticClaimIds(a, global.items);
+        try std.testing.expect(semantic.len >= 2);
+        // FIX06 D2.3: the packet carries one native exact-members choice over the
+        // semantic claims; a copy of the packet keeps it.
+        var bound: ?schema.IntegerChoice = null;
+        for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {
+            try std.testing.expect(bound == null);
+            bound = choice;
+        };
+        try std.testing.expectEqual(.native, bound.?.member_count);
+        try std.testing.expectEqualDeep(&[_]schema.ChoiceStep{ .{ .property = "claim_dispositions" }, .items, .{ .property = "claim_id" } }, bound.?.target.path);
+        try std.testing.expectEqual(semantic.len, bound.?.allowed.len);
+        for (semantic, bound.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
+        // The guidance schema is the one a plain sequence choice derives: no count.
+        var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+        const selected = resource.select(packet.resultDefinition().?).?;
+        const native = try schema.restrict(a, selected, packet.excludedVariants(), packet.integerChoices());
+        defer native.release();
+        const plain = try a.dupe(schema.IntegerChoice, packet.integerChoices());
+        for (plain) |*choice| if (choice.collection == .exact_members) {
+            choice.collection = .sequence;
+            choice.member_count = .stated;
+        };
+        const sequence = try schema.restrict(a, selected, packet.excludedVariants(), plain);
+        defer sequence.release();
+        try std.testing.expectEqualStrings(sequence.selected().modelBytes(), native.selected().modelBytes());
+        try std.testing.expectEqual(@as(usize, 1), native.selected().memberChoices().len);
+        try std.testing.expectEqualDeep(bound.?.allowed, native.selected().memberChoices()[0].allowed);
+        // A native count on any other collection is not a valid restriction.
+        const misbound = try a.dupe(schema.IntegerChoice, plain);
+        for (misbound) |*choice| if (choice.target == .path and std.mem.eql(u8, choice.target.path[0].property, "claim_dispositions")) {
+            choice.member_count = .native;
+        };
+        try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(a, selected, packet.excludedVariants(), misbound));
+    }
+}
+
 test "shared text choice refresh retains unrelated restrictions and replaces stale text IDs" {
     const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
     defer packets.release(base);

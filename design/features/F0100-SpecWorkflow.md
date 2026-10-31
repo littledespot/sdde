@@ -654,6 +654,9 @@ revision and exact accepted content; final full validation remains mandatory.
 - Summary and global candidate rejections enter the shared atomic contract before
   history append or reference acceptance.
 - Native authorizers select one field, a missing member, or an exactly redundant entry.
+  Dispositions are the exception: admission binds one per assigned claim and corrects
+  an omitted or repeated one with the whole assignment, so disposition repair only
+  replaces one disposition ([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)).
 - Related claims, partition/history membership and text/evidence facts remain read
   dependencies.
 - Every merge repeats summary validation or all global validators; changed
@@ -663,7 +666,7 @@ revision and exact accepted content; final full validation remains mandatory.
   confirmation.
 - Non-equivalent competing entries remain blocked; a repaired conflict
   representation remains unresolved.
-- Disposition repair derives fixed-sibling choices through the canonical relationship
+- Disposition replacement derives fixed-sibling choices through the canonical relationship
   checker and binds them in existing authorizations; unresolved choices retain normal
   constraints. Native automatic selection is not authorized.
 

@@ -123,7 +123,8 @@ Each generation request contains only what the current unit needs:
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
   and local validation. Three admission constraints are exceptions, because
-  provider schema syntax cannot express them: `exact_members` uniqueness (below),
+  provider schema syntax cannot express them: `exact_members` uniqueness, and with a
+  native count its completeness (`missing_member`; below, ADR 0046),
   ADR 0038's records coverage (`uncovered_member`) and ADR 0042's required items
   (`missing_required_item`, §12.7). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
@@ -139,7 +140,12 @@ Each generation request contains only what the current unit needs:
   An `exact_members` selector instead names an integer property of array items:
   - the array must contain exactly one item for each allowed value;
   - its item count is fixed to the member count, which the guidance schema states
-    (a provider structural projection may keep only its own array floor);
+    (a provider structural projection may keep only its own array floor), unless the
+    native owner declares the count native: the schema then keeps its canonical bounds
+    and admission rejects a member no item names as `missing_member`, located at the
+    array (ADR 0046, reconciliation dispositions and the conflict-group repair). An
+    owner declares the count native only where a decision requires the request
+    itself to stay unchanged; otherwise the count is stated;
   - a repeated member rejects natively as `duplicate_member`;
   - it applies only to a path ending in array items and one property, with a
     nonempty member set that fits the canonical item bounds;

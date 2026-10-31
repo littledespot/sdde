@@ -8375,6 +8375,29 @@ test "false conflicts repair a closed relation group with exact preconditions an
         const packet = try repair.packet(a, parsed, ctx, support, auth, &packet_guidance.marked);
         defer @import("domain/model_input_packet.zig").release(packet);
         try std.testing.expectEqualStrings("repair_conflict_group", packet.resultDefinition().?.bytes);
+        // ADR 0046: the group's answer binds each group claim once at admission, natively.
+        var members: ?@import("domain/model_result_schema.zig").IntegerChoice = null;
+        for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {
+            members = choice;
+        };
+        try std.testing.expectEqual(.native, members.?.member_count);
+        try std.testing.expectEqualStrings("claim_dispositions", members.?.target.path[0].property);
+        try std.testing.expectEqual(claims.len, members.?.allowed.len);
+        for (claims, members.?.allowed) |id, allowed| try std.testing.expectEqual(@as(i64, id.ordinal), allowed);
+        {
+            // An answer omitting a group claim is rejected at admission, for the
+            // repair's own correction, before merge could fail it.
+            const schema = @import("domain/model_result_schema.zig");
+            var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+            const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+            const restricted = try schema.restrict(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+            defer restricted.release();
+            const one = try std.fmt.allocPrint(a, "{{\"claim_dispositions\":[{{\"claim_id\":{d},\"disposition\":{{\"kind\":\"retained\"}}}}],\"conflict_groups\":[],\"conflicts\":[]}}", .{claims[0].ordinal});
+            const answer = try std.json.parseFromSlice(std.json.Value, a, one, .{ .parse_numbers = false });
+            const rejected = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&answer.value), restricted.selected().root()).?;
+            try std.testing.expectEqual(.missing_member, rejected.reason);
+            try std.testing.expectEqual(@as(i64, claims[1].ordinal), rejected.member.?);
+        }
         const changed = try a.dupe(r.ClaimDispositionProposal, auth.operation.replace.conflict_group.claim_dispositions);
         for (changed) |*value| value.disposition = .{ .retained = .{} };
         const replacement = try repair.parse(a, auth, packet, try json.encode(@import("domain/reference_reconciliation_repair.zig").ConflictGroup, a, .{ .claim_dispositions = changed, .conflicts = &.{} }));

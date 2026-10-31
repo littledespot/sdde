@@ -11,10 +11,7 @@ pub const Action = struct {
         try v.input(allocator, parsed.input);
         if (parsed.source.revision == 0) return error.InvalidReferenceReconciliation;
         var result = try dispositions.validate(allocator, parsed);
-        if (result == .invalid) {
-            result.invalid.relations = try dispositions.redundancy(allocator, parsed);
-            result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, null);
-        }
+        if (result == .invalid) result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, null);
         return result;
     }
 };

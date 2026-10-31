@@ -134,13 +134,22 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             for (0..count) |index| {
                 if (validateValue(value.array.at(index).?, contract.items)) |diagnostic| return diagnostic.within(.{ .index = index });
             }
-            // Each item already names one allowed member and the count equals the
-            // member count, so the only remaining defect is a repeat; a missing
-            // member then shows up as a repeat or as the item count.
+            // Each item already names one allowed member, so a defect is a repeat
+            // or, without repeats, a member no item names. When the schema states
+            // the member count, a missing member already failed as the item count.
             if (contract.members) |members| {
                 for (1..count) |index| {
                     const key = memberKey(value.array.at(index).?, members.property);
                     for (0..index) |prior| if (memberKey(value.array.at(prior).?, members.property) == key) return (reject(.duplicate_member, node)).item(index);
+                }
+                for (members.values) |wanted| {
+                    for (0..count) |index| {
+                        if (memberKey(value.array.at(index).?, members.property) == wanted) break;
+                    } else {
+                        var diagnostic = reject(.missing_member, node);
+                        diagnostic.member = wanted;
+                        return diagnostic;
+                    }
                 }
             }
             // ADR 0038: every value a covered item names needs a covering item

@@ -755,6 +755,22 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     try fixture.initWithCompiledSchema(members.selected());
     defer fixture.deinit();
     try checkFixture(&fixture, .{ .bytes = "{\"value\":[{\"ordinal\":2},{\"ordinal\":4},{\"ordinal\":2}]}", .rejection = .duplicate_member, .path = "/value/2", .expected_path = "/value" });
+    // FIX06 D2.3: with the count native, the schema keeps its canonical bounds, so a
+    // member no item names is reported at the array and named in the correction.
+    const native = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
+    defer native.release();
+    try std.testing.expectEqual(@as(u32, 1), native.selected().root().object[0].schema.array.minimum);
+    try std.testing.expectEqual(@as(u32, 8), native.selected().root().object[0].schema.array.maximum);
+    for ([_]Case{
+        .{ .bytes = "{\"value\":[{\"ordinal\":2},{\"ordinal\":6}]}", .rejection = .missing_member, .path = "/value" },
+        .{ .bytes = "{\"value\":[{\"ordinal\":6},{\"ordinal\":2},{\"ordinal\":6}]}", .rejection = .duplicate_member, .path = "/value/2", .expected_path = "/value" },
+        .{ .bytes = "{\"value\":[{\"ordinal\":6},{\"ordinal\":4},{\"ordinal\":2}]}" },
+    }) |case| {
+        var omitted: Fixture = undefined;
+        try omitted.initWithCompiledSchema(native.selected());
+        defer omitted.deinit();
+        try checkFixture(&omitted, case);
+    }
     // An uncovered value is located at itself; its correction names the compiled covering kinds.
     const variant = "{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"KIND\"},\"text\":{\"type\":\"string\",\"maxLength\":20}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}";
     const kinds = try std.mem.join(arena.allocator(), ",", &.{ try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "rule"), try std.mem.replaceOwned(u8, arena.allocator(), variant, "KIND", "check") });
@@ -767,7 +783,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     try checkFixture(&covered, .{ .bytes = "{\"value\":[{\"content\":{\"kind\":\"rule\",\"text\":\"t\"},\"ids\":[3]}]}", .rejection = .uncovered_member, .path = "/value/0/ids/0" });
 }
 
-test "only an uncovered value's correction carries a covering rule" {
+test "only an uncovered value's correction carries a covering rule, and only a missing member's names it" {
     var fixture: Fixture = undefined;
     try fixture.init();
     defer fixture.deinit();
@@ -780,6 +796,8 @@ test "only an uncovered value's correction carries a covering rule" {
     for ([_]@import("domain/model_schema_diagnostic.zig").Diagnostic{
         .{ .reason = .uncovered_member, .expected = root },
         .{ .reason = .type_mismatch, .expected = root, .covering = rule },
+        .{ .reason = .missing_member, .expected = root },
+        .{ .reason = .array_length, .expected = root, .member = 3 },
     }) |schema_diagnostic| {
         const source = try fixture.requestSource();
         try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, source, fixture.prepared.request.content, captured.evidence, .{ .schema = schema_diagnostic }, .unconfirmed, "Correct the response."));
@@ -837,7 +855,11 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
             // ADR 0038: only an uncovered value's correction names the compiled covering kinds.
-            try std.testing.expectEqual(@as(usize, 3) + @intFromBool(reason == .uncovered_member), guidance.value.object.count());
+            try std.testing.expectEqual(@as(usize, 3) + @intFromBool(reason == .uncovered_member) + @intFromBool(reason == .missing_member), guidance.value.object.count());
+            // FIX06 D2.3: only a missing member's correction names the member no item names.
+            if (result.invalid.member) |member| {
+                try std.testing.expectEqual(member, guidance.value.object.get("member").?.integer);
+            } else try std.testing.expect(!guidance.value.object.contains("member"));
             if (result.invalid.covering) |rule| {
                 const covering = guidance.value.object.get("covering").?.object;
                 try std.testing.expectEqualStrings(rule.kind_property, covering.get("kind_property").?.string);
@@ -860,6 +882,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 .duplicate_member => "repeats an assigned member",
                 .uncovered_member => "covering.kinds",
                 .missing_required_item => "needs at least one item",
+                .missing_member => "no item names this assigned member",
             };
             try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);
             try std.testing.expect(std.mem.indexOf(u8, wire, explanation) != null);

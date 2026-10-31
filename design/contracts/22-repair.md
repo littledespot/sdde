@@ -337,7 +337,11 @@ before appending any member; partial, duplicate, foreign or misbound responses
 cannot contribute coverage. Response admission first enforces the same membership
 through the packet's `exact_members` choice. A defect there uses the bounded
 protocol correction of the complete assignment, never insertion or deletion
-([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)). Native ledger order owns canonical ordering.
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
+Reconciliation dispositions and the source-omission conflict-group repair bind their
+claims the same way, with a native count, so an omitted or repeated disposition is
+corrected with the whole assignment and is never a repair target
+([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -601,8 +605,10 @@ defined response-level correction containing:
   discriminator values. The single complete schema retains every alternative and
   every constraint that schema syntax can express; `exact_members` uniqueness stays
   native and is reported as `duplicate_member` with parent scope on the enclosing
-  array. ADR 0038's coverage (`uncovered_member`) and ADR 0042's required items
+  array. A native-count member set's completeness (`missing_member`, at the array;
+  ADR 0046), ADR 0038's coverage (`uncovered_member`) and ADR 0042's required items
   (`missing_required_item`, at the array that needs an item) are native the same way.
+  A `missing_member` correction also names the first omitted member (`member`).
   An `uncovered_member` correction also names the compiled rule's covering kinds
   (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
   (FIX06 D4.1, decided 30 October 2026); no other correction changes. Correction does not repeat schema subtrees. Syntax correction uses that

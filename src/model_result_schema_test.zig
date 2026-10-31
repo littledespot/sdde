@@ -276,6 +276,31 @@ test "recorded exact members reconstruct native admission from provider schema b
         .{ .path = path, .allowed = &.{ 3, 9 } },
         .{ .path = &.{ .{ .property = "other" }, .{ .items = {} }, .{ .property = "ordinal" } }, .allowed = &.{ 3, 5 } },
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrictRecorded(std.testing.allocator, wire, &.{invalid}, &.{}, &.{}));
+    // ADR 0046: a native-count set leaves the canonical bounds in the wire bytes;
+    // replay restores admission's membership over those bounds, unchanged.
+    const native = try schema.restrict(std.testing.allocator, resource, &.{}, &.{
+        .{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .exact_members, .member_count = .native },
+    });
+    defer native.release();
+    const open_wire = try compile(a, native.selected().modelBytes());
+    try std.testing.expectEqual(@as(u32, 10), schema.findProperty(open_wire.root().object, "value").?.schema.array.maximum);
+    const reopened = try schema.restrictRecorded(std.testing.allocator, open_wire, native.selected().memberChoices(), &.{}, &.{});
+    defer reopened.release();
+    try std.testing.expectEqualStrings(native.selected().modelBytes(), reopened.selected().modelBytes());
+    for ([_]struct { bytes: []const u8, reason: ?check.Rejection }{
+        .{ .bytes = "{\"value\":[{\"ordinal\":3}]}", .reason = .missing_member },
+        .{ .bytes = "{\"value\":[{\"ordinal\":3},{\"ordinal\":3}]}", .reason = .duplicate_member },
+        .{ .bytes = "{\"value\":[{\"ordinal\":5},{\"ordinal\":3}]}", .reason = null },
+    }) |case| {
+        const answer = try std.json.parseFromSlice(std.json.Value, a, case.bytes, .{ .parse_numbers = false });
+        const live = check.validateValue(@import("domain/model_envelope.zig").value(&answer.value), native.selected().root());
+        const replayed = check.validateValue(@import("domain/model_envelope.zig").value(&answer.value), reopened.selected().root());
+        if (case.reason) |reason| {
+            try std.testing.expectEqual(reason, live.?.reason);
+            try std.testing.expectEqual(reason, replayed.?.reason);
+            try std.testing.expectEqual(live.?.member, replayed.?.member);
+        } else try std.testing.expect(live == null and replayed == null);
+    }
 }
 
 test "nullable terminal integer choices preserve absence and narrow only authorized values" {

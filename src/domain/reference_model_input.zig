@@ -233,10 +233,19 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
     try excluded.appendSlice(scratch, packet.excludedVariants());
     var choices: std.ArrayList(schema.IntegerChoice) = .empty;
     try choices.appendSlice(scratch, packet.integerChoices());
-    if (grouped) for ([_][]const schema.ChoiceStep{
-        &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } },
-        &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } },
-    }) |path| try choices.append(scratch, .{ .target = .{ .path = path }, .definition = packet.resultDefinition(), .allowed = try claimOrdinals(scratch, members) });
+    if (grouped) {
+        const ordinals = try claimOrdinals(scratch, members);
+        // One disposition for every assigned claim (FIX06 D2.3): admission rejects an
+        // omitted or repeated claim and corrects the whole assignment. The schema
+        // states no count, so the request is unchanged; an empty set admits only [].
+        var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = ordinals };
+        if (ordinals.len != 0) {
+            dispositions.collection = .exact_members;
+            dispositions.member_count = .native;
+        }
+        try choices.append(scratch, dispositions);
+        try choices.append(scratch, .{ .target = .{ .path = &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = packet.resultDefinition(), .allowed = ordinals });
+    }
     for ([_]struct { tag: []const u8, field: []const u8, ids: []const reconciliation.ClaimId }{
         .{ .tag = "duplicate", .field = "target_claim_id", .ids = if (selected) |value| value.duplicate_targets else members },
         .{ .tag = "superseded", .field = "related_claim_ids", .ids = if (selected) |value| value.superseded_targets else members },
