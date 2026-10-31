@@ -1211,22 +1211,24 @@ fn checkRequestProjection(allocator: std.mem.Allocator) !void {
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
     try std.testing.expectEqualSlices(u8, &entry.digest, &digest);
-    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{});
-    defer parsed.deinit();
-    for ([_][]const u8{ "version", "workflow_version", "request_step" }) |omitted| try std.testing.expect(parsed.value.object.get(omitted) == null);
-    for ([_][]const u8{ "content", "protocol_prompt", "schema", "response_mode", "controls", "sampling", "reasoning_effort", "members", "coverages", "required_items" }) |kept| try std.testing.expect(parsed.value.object.get(kept) != null);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const projection = try request_projection.Projection.decode(arena.allocator(), bytes);
+    try std.testing.expect(projection.content.len != 0 and projection.protocol_prompt.len != 0 and projection.schema.len != 0);
+    // An omitted member is unknown to the closed projection.
+    const versioned = try std.mem.concat(arena.allocator(), u8, &.{ "{\"version\":\"model-request-debug/v13\",", bytes[1..] });
+    try std.testing.expectError(error.InvalidJsonDocument, request_projection.Projection.decode(arena.allocator(), versioned));
     // The manifest counts what the freeze holds, so an empty or partial freeze never
     // diffs clean.
     try first.writeManifest(freeze.dir);
     const manifest_bytes = try freeze.dir.readFileAlloc(io, "manifest.json", allocator, .limited(4096));
     defer allocator.free(manifest_bytes);
-    const manifest = try std.json.parseFromSlice(struct { groups: usize, scenarios: usize, calls: usize }, allocator, manifest_bytes, .{});
-    defer manifest.deinit();
+    const manifest = try request_projection.Manifest.decode(arena.allocator(), manifest_bytes);
     var scenarios: usize = 0;
     for (first.entries.items, 0..) |item, index| scenarios += @intFromBool(index == 0 or first.entries.items[index - 1].scenario != item.scenario);
-    try std.testing.expectEqual(@as(usize, 1), manifest.value.groups);
-    try std.testing.expectEqual(scenarios, manifest.value.scenarios);
-    try std.testing.expectEqual(first.entries.items.len, manifest.value.calls);
+    try std.testing.expectEqual(@as(usize, 1), manifest.groups);
+    try std.testing.expectEqual(scenarios, manifest.scenarios);
+    try std.testing.expectEqual(first.entries.items.len, manifest.calls);
 }
 
 test "configured source preservation reviews before generation and repairs through the shared model slot" {

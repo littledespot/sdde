@@ -80,6 +80,51 @@ stays open in FIX06.
   changes no output): hello-world 89.3 in 3 of 3, loan-renewal 85.7 / 78.6 / 82.1 (one below
   the 80% threshold, inside the earlier builds' range).
 
+## T5. Brittleness counts
+
+**Implemented and taken 1 November 2026, on HEAD `30e0d2f` (the D10.2 tree), before D13.1;
+uncommitted.** `zig build code-heuristics -- --freeze <dir>` writes them to the
+`brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`).
+- **Definitions** (approved 1 November 2026; exact matches only):
+  - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
+  - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
+    bytes occur in a freeze's `guidance` content parts, `protocol_prompt` or `schema` (the
+    schema's decoded strings included), and whose collapsed bytes A lacks.
+  - Literal roles are syntactic: a direct argument of `eql`, `startsWith` or `endsWith`; a
+    direct argument of `indexOf`, `lastIndexOf` or `indexOfPos`, which is an absence
+    assertion when compared `== null`; or the `.bytes` value of a `DefinitionId`
+    initializer. An initializer is a typed declaration, a `return` from a function
+    returning `DefinitionId`, `DefinitionId.parse` or `DefinitionId{…}`, or an anonymous
+    `.{ .bytes = … }` argument at a position where a function of that name takes a
+    `DefinitionId`. A value chosen by a `switch` inside it counts as its value.
+- **User decisions, 1 November 2026:**
+  - The freeze is read strictly by `request_projection.Projection` and `Manifest`, without
+    a version check, because the freeze has none.
+  - M reads only `guidance` parts, as decoded values; `src/test_fixtures/` isn't
+    production.
+  - M takes T5.1's 3-run minimum. Without it, about 80 JSON-schema keywords count.
+  - T5.1 counts an absence assertion only when A or M holds its literal.
+  - T5.4 is counted by hand, because the compiled Spec graph needs the composition root's
+    native assembly.
+- **Baseline** (freeze `q10b-2026-10-31`):
+
+| Count | Value |
+| --- | --- |
+| T5.1 | 25 |
+| T5.2 | 22 in 8 files, among them `specification_session.zig:253-256` (4), `reference_reconciliation_repair.zig:747-750` (4) and `specification_support.zig` (6); 118 test sites |
+| T5.3 | 7 maximal repeats at 16 sites; 3 are variants of "conditions, negation and obligation strength." |
+| T5.4 | 6, by hand: `spec.workflow.yaml:376`, `:413`, `:609`, `:814`, `:899`, `:913`, each binding `repair-prompt`; `:721` takes its review's prompt |
+| T5.5 | 0 |
+| T5.6 | 15 in 4 files: `model_schema_diagnostic.zig` 11, `strict_json.zig` 2, `model_controls.zig` 1, `model_protocol_retry.zig` 1 |
+
+- **Limits:** a comparison through a helper isn't a direct operand
+  (`reference_reconciliation_stage.zig:87` compares `definition(stage)`). A name routed
+  through a local before `.{ .bytes = name }` isn't counted
+  (`reference_reconciliation_repair.zig:324-327`, `specification_repair.zig:267-269`).
+  Argument positions match functions by name only. Short absence
+  literals match A by substring (`"id"`, `"$defs"`). The "native code" diagnostic texts
+  reach requests only in `user` parts (2,832 in the freeze), so they aren't in M.
+
 ## E6. Producerless rejection reported as a harness error
 
 **Implemented 31 October 2026; committed in `dac4c4c`.** Three Q4 hello-world runs ended

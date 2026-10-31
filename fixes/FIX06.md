@@ -178,7 +178,8 @@ for now; D16.1 deferred; D17.1 records call only; T5 definitions approved; H2 co
 adopted; the provider defect recorded; §2 rules 3, 4 and 13 settled.
 
 **Build order** (each change set measured on its own committed build, §2.1 and §2.3):
-1. T5 counts taken (baseline for brittleness).
+1. T5 counts: baseline taken 1 November 2026 ([Z_FIX06](Z_FIX06.md)); each later change set
+   retakes them (§6 T5).
 2. D13.1: revert D10.2 in full, then remove both post-generation reviews in one change.
    Generation requests stay byte-identical, so §2.11's proof plus one live run per case.
 3. Q13 inline source lines; then Q7 D7.4 (both offline-proven once no request carries the
@@ -198,8 +199,7 @@ startup to E1); E1 in any gap, retaking its freeze on the commit before it lands
 any gap; E4 after E1, E2's measure and Q9's capture replays (ADR 0033:264); E5's closed
 reasons with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with
 E1, E4 or E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5 and E9 land only under §2.13.
-E1–E4 before the closing set is the user's call (ADR 0034:100-104). **Tests:** T2, T3 and T5's
-brittleness counts in any gap; T4 with E1–E4. **Human:** H1 for every set; H2 only if review
+E1–E4 before the closing set is the user's call (ADR 0034:100-104). **Tests:** T2 and T3 in any gap; T4 with E1–E4. **Human:** H1 for every set; H2 only if review
 returns; H3 when the user reviews the panels; H4 before any formal baseline freeze; H5 at
 the user's choice. **Closing set:** repeated runs of both cases on one committed, unmodified
 build (ADR 0034:64-65) unless the user amends ADR 0034; every counted published run
@@ -1001,28 +1001,10 @@ per-file pins (68 of 78 tests pin files). Prefer replaying retained captures ove
 
 ### T5. Brittleness counts
 
-Never taken, so no phase can report "brittleness reduced" or "increased". Proposed
-definitions (exact matches only, never word lists; the user reviews them before they are
-taken). Inputs: asset text A (every prompt `.md` and JSON string value under
-`design/workflows/**`, unescaped and whitespace-collapsed) and engine text M (production Zig
-literals, outside test declarations, whose exact bytes occur in a request-projection freeze's
-`guidance`, `protocol_prompt` or `schema` members and not in A). Provisional values come from
-read-only scans, not taken counts.
-
-| Count | Definition | Provisional |
-| --- | --- | --- |
-| T5.1 Model-facing text in tests | a test-scope literal of 3+ whitespace-separated runs that is an exact substring of A or M, plus absence assertions (`std.mem.indexOf(…, "<lit>") == null`) | 27 sites in 7 files (single-line literals; T2's hand count of 46 includes multiline ones) |
-| T5.2 Raw-string schema-name branches (E8) | a production literal equal to a registered schema's `$defs` key used as an `eql`/`startsWith`/`endsWith` operand or a `DefinitionId` initializer | 2 branches (`specification_review_retention.zig:80`; `reference_reconciliation_stage.zig:87`), 15 test-fixture lines |
-| T5.3 Instructions with more than one site | a maximal exact span of at least 40 bytes at 2+ sites across A ∪ M (misses paraphrases) | 4 instructions at 9 sites |
-| T5.4 Repair steps without step guidance | a `slot: repair` model step whose prompt resolves to a resource no non-repair step binds | 6 (`spec.workflow.yaml:376`, `:413`, `:609`, `:814`, `:899`, `:913`) |
-| T5.5 Model- or case-specific branches | a production decision whose literal operand equals a catalogue model ID or family (outside the provider adapters) or a case, feature or reference ID, or a 40-byte span of case sources | 0 |
-| T5.6 Model-facing English outside its owner | M literals outside the designated owner files (owners need a decision) | 46 literals in 8 files (lower bound) |
-
-`zig build code-heuristics` (`build.zig:140`) today runs only a Zig-AST pass (scope, decision
-tokens, exact duplicate bodies of 80+ tokens); T5.1–T5.3 and T5.5–T5.6 extend it, T5.4 needs the
-compiled workflow graph, and M takes a freeze path as an argument. **Approved 1 November
-2026**, with T5.6's single owner set to the workflow assets (`design/workflows/**`), so every
-engine-authored model-facing literal counts (baseline 46). Take the counts before D13.1.
+Baseline, definitions and decisions: [Z_FIX06](Z_FIX06.md). Each change set that a phase
+reports on retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>`
+with the freeze §2.11 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a
+`slot: repair` step whose prompt no non-repair step binds).
 
 ## 7. Human and decision track (H)
 

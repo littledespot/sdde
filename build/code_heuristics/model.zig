@@ -30,6 +30,39 @@ pub const Function = struct {
     }
 };
 
+/// How a literal is used, read from the tokens around it. Only direct operands count.
+pub const Role = enum {
+    plain,
+    /// An argument of `eql`, `startsWith` or `endsWith`.
+    equality,
+    /// An argument of `indexOf`, `lastIndexOf` or `indexOfPos`.
+    search,
+    /// A `search` operand whose call is compared `== null`.
+    absence,
+    /// The value of `.bytes` in a `DefinitionId` initializer.
+    definition_id,
+    /// The value of `.bytes` in an anonymous initializer passed as an argument; it is a
+    /// `DefinitionId` initializer when some parameter `Literal.call` names is one.
+    bytes_argument,
+};
+
+/// The function and argument position a `bytes_argument` literal is passed at.
+pub const Call = struct { function: []const u8, ordinal: usize };
+
+/// A function parameter whose type names `DefinitionId`. `receiver` marks a function
+/// whose first parameter is `self`, which a method call doesn't pass as an argument.
+pub const Parameter = struct { function: []const u8, ordinal: usize, receiver: bool };
+
+/// One string literal with its decoded bytes (a multiline literal's lines joined by
+/// newlines).
+pub const Literal = struct {
+    line: usize,
+    value: []const u8,
+    in_test: bool,
+    role: Role,
+    call: ?Call = null,
+};
+
 pub const File = struct {
     path: []const u8,
     scope: Scope,
@@ -38,6 +71,21 @@ pub const File = struct {
     code_lines: usize,
     test_blocks: usize,
     functions: []const Function,
+    /// Retained for the brittleness counts, omitted from report serialization.
+    literals: []const Literal = &.{},
+    definition_parameters: []const Parameter = &.{},
+
+    pub fn jsonStringify(self: File, writer: *std.json.Stringify) !void {
+        try writer.write(.{
+            .path = self.path,
+            .scope = self.scope,
+            .bytes = self.bytes,
+            .lines = self.lines,
+            .code_lines = self.code_lines,
+            .test_blocks = self.test_blocks,
+            .functions = self.functions,
+        });
+    }
 };
 
 pub fn scope(path: []const u8) ?Scope {

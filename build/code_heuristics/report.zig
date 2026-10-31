@@ -1,6 +1,7 @@
 //! Pure report assembly and rendering; no source reads or workflow operations.
 const std = @import("std");
 const model = @import("model.zig");
+const brittleness = @import("brittleness.zig");
 
 pub const thresholds = .{
     .file_code_lines = 500,
@@ -29,16 +30,17 @@ pub const Hotspot = struct {
 };
 pub const Duplicates = struct { body_tokens: usize, occurrences: []const Location };
 pub const Report = struct {
-    schema: []const u8 = "code-heuristics/v1",
+    schema: []const u8 = "code-heuristics/v2",
     advisory_only: bool = true,
     limits: @TypeOf(thresholds) = thresholds,
     summary: [3]Summary,
     files: []const model.File,
     hotspots: []const Hotspot,
     duplicate_groups: []const Duplicates,
+    brittleness: brittleness.Result,
 };
 
-pub fn build(a: std.mem.Allocator, input: []const model.File) !Report {
+pub fn build(a: std.mem.Allocator, input: []const model.File, counts: brittleness.Result) !Report {
     const files = try a.dupe(model.File, input);
     std.mem.sort(model.File, files, {}, fileLess);
     var summary = [3]Summary{ .{ .scope = .production }, .{ .scope = .tests }, .{ .scope = .tooling } };
@@ -87,7 +89,7 @@ pub fn build(a: std.mem.Allocator, input: []const model.File) !Report {
     }
     std.mem.sort(Hotspot, hotspots.items, {}, hotspotLess);
     std.mem.sort(Duplicates, duplicates.items, {}, duplicateLess);
-    return .{ .summary = summary, .files = files, .hotspots = try hotspots.toOwnedSlice(a), .duplicate_groups = try duplicates.toOwnedSlice(a) };
+    return .{ .summary = summary, .files = files, .hotspots = try hotspots.toOwnedSlice(a), .duplicate_groups = try duplicates.toOwnedSlice(a), .brittleness = counts };
 }
 
 fn fileLess(_: void, left: model.File, right: model.File) bool {
@@ -113,7 +115,7 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
     var output: std.Io.Writer.Allocating = .init(a);
     defer output.deinit();
     const w = &output.writer;
-    try w.writeAll("# Code heuristics report\n\nRerun: `zig build code-heuristics`. Full measurements: `report.json`.\n\n");
+    try w.writeAll("# Code heuristics report\n\nRerun: `zig build code-heuristics -- --freeze <request-projection freeze>`. Full measurements: `report.json`.\n\n");
     try w.writeAll("Advisory source-structure signals for review; no correctness, security, coverage or semantic-quality verdict is implied. Thresholds never fail CI.\n\n");
     try w.writeAll("## Scope and method\n\nGit-tracked and unignored untracked Zig files in the repository root, `src/`, `test/` and `build/`; tracked deletions are excluded. Generated outputs, dependencies, design examples and ignored files are excluded. Invalid or unreadable selected source fails the report.\n\n");
     try w.writeAll("Code lines contain non-comment Zig tokens, including multiline literal contents. Function spans include the signature and body. Decision tokens count `if`, `for`, `while`, `switch`, `catch`, `orelse`, `and`, `or`; this is a syntactic complexity proxy, not cyclomatic complexity (switch arms are not counted). Brace depth includes the outer body and initializer/container braces. Nested function tokens also contribute to enclosing functions.\n\n");
@@ -171,7 +173,55 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
             try w.print(" ({s})\n", .{@tagName(location.scope)});
         }
     }
+    try brittlenessSection(w, report.brittleness);
     return output.toOwnedSlice();
+}
+
+fn brittlenessSection(w: *std.Io.Writer, counts: brittleness.Result) !void {
+    try w.writeAll("\n## Brittleness counts (FIX06 T5)\n\nExact matches only. A is every prompt and JSON string value under `design/workflows/`, whitespace-collapsed. M is every production literal outside tests whose exact bytes the freeze sent in a `guidance` part, `protocol_prompt` or `schema` and whose collapsed bytes A lacks. Roles come from the tokens around a literal: a direct argument of `eql`, `startsWith` or `endsWith`; of `indexOf`, `lastIndexOf` or `indexOfPos`, an absence assertion when the call is compared `== null`; or the `.bytes` value of a `DefinitionId` initializer. T5.4 needs the compiled workflow graph and is counted by hand in the fix record.\n\n");
+    try w.writeAll("| Count | Total |\n| --- | ---: |\n");
+    try w.print("| T5.1 Model-facing text in tests | {d} |\n", .{counts.tests_copying_model_text.total});
+    try w.print("| T5.2 Raw-string schema-name branches | {d} (tests: {d}) |\n", .{ counts.schema_name_branches.total, counts.schema_name_branches_in_tests.total });
+    try w.print("| T5.3 Instructions with more than one site | {d} at {d} sites |\n", .{ counts.repeated_instructions.instructions, counts.repeated_instructions.sites });
+    try w.print("| T5.5 Model- or case-specific branches | {d} |\n", .{counts.model_or_case_branches.total});
+    try w.print("| T5.6 Model-facing English outside its owner | {d} in {d} files |\n", .{ counts.model_text_outside_owner.total, counts.model_text_outside_owner.files });
+    try sites(w, "T5.1 sites", counts.tests_copying_model_text.sites);
+    try sites(w, "T5.2 sites", counts.schema_name_branches.sites);
+    try sites(w, "T5.2 test sites", counts.schema_name_branches_in_tests.sites);
+    try w.writeAll("\n### T5.3 instructions\n\nMost sites first; every site is in JSON.\n");
+    for (counts.repeated_instructions.items) |item| {
+        try w.print("\n- {d} sites, {d} bytes: ", .{ item.sites.len, item.text.len });
+        try cell(w, clipped(item.text, 120));
+        try w.writeAll("\n");
+        for (item.sites) |site| {
+            try w.writeAll("  - ");
+            try cell(w, site.path);
+            if (site.line != 0) try w.print(":{d}", .{site.line});
+            try w.writeAll("\n");
+        }
+    }
+    try sites(w, "T5.5 sites", counts.model_or_case_branches.sites);
+    try sites(w, "T5.6 sites", counts.model_text_outside_owner.sites);
+}
+
+fn sites(w: *std.Io.Writer, title: []const u8, items: []const brittleness.Site) !void {
+    try w.print("\n### {s}\n\n", .{title});
+    if (items.len == 0) return w.writeAll("None.\n");
+    for (items) |site| {
+        try w.writeAll("- ");
+        try cell(w, site.path);
+        try w.print(":{d} — ", .{site.line});
+        try cell(w, clipped(site.text, 120));
+        try w.writeAll("\n");
+    }
+}
+
+/// At most `maximum` bytes of `text`, never ending inside a UTF-8 sequence.
+fn clipped(text: []const u8, maximum: usize) []const u8 {
+    if (text.len <= maximum) return text;
+    var end = maximum;
+    while (end > 0 and text[end] & 0xC0 == 0x80) end -= 1;
+    return text[0..end];
 }
 
 fn cell(w: *std.Io.Writer, value: []const u8) !void {
@@ -188,6 +238,15 @@ fn cell(w: *std.Io.Writer, value: []const u8) !void {
     };
 }
 
+const empty_counts: brittleness.Result = .{
+    .tests_copying_model_text = .{ .total = 0, .sites = &.{} },
+    .schema_name_branches = .{ .total = 0, .sites = &.{} },
+    .schema_name_branches_in_tests = .{ .total = 0, .sites = &.{} },
+    .repeated_instructions = .{ .instructions = 0, .sites = 0, .items = &.{} },
+    .model_or_case_branches = .{ .total = 0, .sites = &.{} },
+    .model_text_outside_owner = .{ .total = 0, .files = 0, .sites = &.{} },
+};
+
 test "report is deterministic across inventory ordering and scopes test functions separately" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -195,8 +254,8 @@ test "report is deterministic across inventory ordering and scopes test function
     const analyze = @import("analyze.zig").analyze;
     const engine = try analyze(a, "src/demo.zig", "fn alpha() void {}\ntest { const T = struct { fn helper() void {} }; _ = T; }\n");
     const tests = try analyze(a, "test/demo.zig", "fn beta() void {}\n");
-    const first = try build(a, &.{ engine, tests });
-    const second = try build(a, &.{ tests, engine });
+    const first = try build(a, &.{ engine, tests }, empty_counts);
+    const second = try build(a, &.{ tests, engine }, empty_counts);
     try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, first, .{}), try std.json.Stringify.valueAlloc(a, second, .{}));
     try std.testing.expectEqualStrings(try markdown(a, first), try markdown(a, second));
     try std.testing.expectEqual(@as(usize, 1), first.summary[0].functions);
@@ -221,7 +280,7 @@ test "inclusive review thresholds and exact duplicate body confirmation" {
     below.decision_tokens = 14;
     below.max_brace_depth = 4;
     below.body_tokens = 79;
-    const report = try build(a, &.{.{ .path = "src/a.zig", .scope = .production, .bytes = 0, .lines = 0, .code_lines = 0, .test_blocks = 0, .functions = &.{ base, other, different, below } }});
+    const report = try build(a, &.{.{ .path = "src/a.zig", .scope = .production, .bytes = 0, .lines = 0, .code_lines = 0, .test_blocks = 0, .functions = &.{ base, other, different, below } }}, empty_counts);
     try std.testing.expectEqual(@as(usize, 3), report.hotspots.len);
     try std.testing.expectEqual(@as(usize, 1), report.duplicate_groups.len);
     try std.testing.expectEqual(@as(usize, 2), report.duplicate_groups[0].occurrences.len);
@@ -232,8 +291,31 @@ test "inclusive review thresholds and exact duplicate body confirmation" {
 test "empty inventory produces valid report without review candidates" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const report = try build(arena.allocator(), &.{});
+    const report = try build(arena.allocator(), &.{}, empty_counts);
     try std.testing.expectEqual(@as(usize, 0), report.hotspots.len);
     try std.testing.expectEqual(@as(usize, 0), report.duplicate_groups.len);
     try std.testing.expect(std.mem.indexOf(u8, try markdown(arena.allocator(), report), "No file crosses") != null);
+}
+
+test "brittleness counts render with their sites, and retained literals stay out of JSON" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var counts = empty_counts;
+    const site: brittleness.Site = .{ .path = "src/domain/a.zig", .line = 7, .text = "Keep each `value`." };
+    counts.model_text_outside_owner = .{ .total = 1, .files = 1, .sites = &.{site} };
+    const literal: model.Literal = .{ .line = 7, .value = "Keep each `value`.", .in_test = false, .role = .plain };
+    const report = try build(a, &.{.{ .path = "src/domain/a.zig", .scope = .production, .bytes = 0, .lines = 0, .code_lines = 0, .test_blocks = 0, .functions = &.{}, .literals = &.{literal} }}, counts);
+    const md = try markdown(a, report);
+    try std.testing.expect(std.mem.indexOf(u8, md, "| T5.6 Model-facing English outside its owner | 1 in 1 files |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, md, "src/domain/a.zig:7 — Keep each \\`value\\`.") != null);
+    const json = try std.json.Stringify.valueAlloc(a, report, .{});
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"model_text_outside_owner\":{\"total\":1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, json, "\"literals\"") == null);
+}
+
+test "clipped text never splits a UTF-8 sequence" {
+    try std.testing.expectEqualStrings("ab", clipped("ab", 3));
+    try std.testing.expectEqualStrings("a", clipped("a\u{2014}b", 2));
+    try std.testing.expectEqualStrings("a\u{2014}", clipped("a\u{2014}b", 4));
 }
