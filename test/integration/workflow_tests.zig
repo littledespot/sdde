@@ -2539,6 +2539,9 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 // collection receipt remains unchanged and is never rebased.
                 assertion_context = "classification-missing-origin";
                 try std.testing.expect(diagnostic.?.token_classifications.origin == null);
+                // Observers attribute the producerless rejection to the assembled candidate.
+                assertion_context = "classification-candidate-attribution";
+                try std.testing.expectEqual(.candidate, diagnostic.?.attribution());
                 try std.testing.expectEqual(diagnostic.?.token_classifications.revision, retained.revision);
                 assertion_context = "classification-no-applied-repair";
                 try std.testing.expect(retained.last_repair == null);

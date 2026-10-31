@@ -1213,6 +1213,16 @@ test "step events keep the newer exchange usage separate from an older rejected 
     report.candidate_error.?.token_classifications.origin = null;
     try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    // A missing classification has no producer: the assembled candidate keeps
+    // its diagnostic without a call link, while a lost origin above still rejects.
+    report.candidate_error.?.token_classifications.issues = .{ .missing = &.{.{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 1 }}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} };
+    try std.testing.expectEqual(.candidate, report.candidate_error.?.attribution());
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expect(report.candidate_model_call == null and report.candidate_model_step == null);
+    try std.testing.expect(std.mem.indexOf(u8, try @import("../e2e/report.zig").renderMarkdown(a, report), "Validation applies to the assembled candidate") != null);
+    report.candidate_error.?.token_classifications.issues.unknown = &.{.{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 99 }};
+    try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
     // A correlation failure does not erase a successfully captured response.
     report.candidate_error = null;
     report.evidence_error = "MissingRequestEvidence";

@@ -39,8 +39,12 @@ pub const Diagnostic = union(enum) {
     }
 
     /// Coverage checks the assembled candidate before authorization selects a
-    /// replacement and its producer. Other live rejections belong to a response.
+    /// replacement and its producer, as does a classification rejection whose
+    /// validator rule assigns no producer; an origin there contradicts the rule.
+    /// Other live rejections belong to a response.
     pub fn attribution(self: Diagnostic) Attribution {
+        if (self == .token_classifications and @import("token_classification_validation.zig").producerless(self.token_classifications.issues))
+            return if (self.token_classifications.origin == null) .candidate else .missing_response;
         if (self.origin()) |value| return .{ .response = value };
         return switch (self) {
             .coverage, .source_catalogue => .candidate,
