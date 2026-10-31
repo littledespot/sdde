@@ -446,8 +446,7 @@ only.
   requirements, which is everything records uses. Files: `specification_session.zig:185-189`,
   `:289`, `:303-306`; delete `EntityDecision` and `entities()`
   (`specification_projection.zig:8`, `:21-23`); tests `specification_generation_test.zig:322-330`,
-  `:422-428`; `records.prompt.md:1`. Amends 17-specify.md:317-320 and diagram
-  `21-spec-model-call-tree.md:196-197`; no ADR. Risk: multi-group features lose feature-wide
+  `:422-428`; `records.prompt.md:1`. Amends 17-specify.md:317-320; no ADR. Risk: multi-group features lose feature-wide
   framing, which the single-group development cases can't test. **Keep if** FR weakening per
   loan-renewal run and FR text equal to an unpublished draft fall to zero, and restatement,
   lost source requirement and publication don't worsen. **Recommended:** yes, first of the
@@ -867,8 +866,7 @@ review-label measure, and before Q10c only if D10.3 changes model input.
 
 ### H3. Calibration panels (R8)
 
-The [Hello World](../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/REVIEW.md)
-and [loan-renewal](../test/integration/fixtures/wf-002-loan-renewal/calibration/REVIEW.md) panels
+The hello-world and loan-renewal panels (`test/integration/fixtures/*/calibration/`)
 have proposed labels only (`human-review.json`, `qualification.json` `pending`). They qualify
 only the standalone evaluator; neither the gate nor FIX06's sets need them.
 

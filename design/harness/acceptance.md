@@ -101,9 +101,6 @@ and wrong timezone) and fifteen loan-renewal specimens. Each includes two faithf
 paraphrases, omissions, contradictions, unsupported scope and embedded instructions.
 These are assistant-prepared diagnostic specimens, not golden workflow outputs.
 
-- [Hello World review packet](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/REVIEW.md)
-- [Loan renewal review packet](../../test/integration/fixtures/wf-002-loan-renewal/calibration/REVIEW.md)
-
 Each evaluation case names a `grading_qualification` panel, human-review record
 and qualification record. The panel binds source IDs/bytes, rubric bytes, specimen
 bytes and proposed verdicts by SHA-256. Human review must approve that exact panel,

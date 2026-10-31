@@ -20,8 +20,7 @@ SDDE against a target project.
 1, 3-6, 9-11, 15, 28, and 30-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); [F0004 — BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md);
-the [path contract](../paths.md); and the
-[toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.md).
+and the [path contract](../paths.md).
 The [`_structure.yaml`](../toolchainPresets/_structure.yaml) file is reviewed
 as source material in Section 5; it is not promoted to runtime authority.
 
@@ -428,6 +427,5 @@ Implementation tests cover the owning boundaries:
 | Exact `toolchain.yaml`, preset root, inheritance, merge, and safety | Design Sections 9.3-10 and 15 |
 | Path and command safety | Design Sections 11 and 26 |
 | Logging handoff | F0002; Design Sections 13.9, 26.5, and 27 |
-| Bootstrap ownership and sequencing | `design/diagrams/08-toolchain-preset-bootstrap.md` |
 | `_structure.yaml` and legacy-example status | Design Section 10; `design/toolchainPresets/_structure.yaml` |
 | Verification and clean packaging | Design Sections 28 and 30-31 |

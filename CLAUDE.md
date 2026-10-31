@@ -65,4 +65,3 @@ The user starts a live Spec case with `/live-e2e <case>`.
 - These files are policy, so every edit to them prompts: AGENTS.md, CLAUDE.md,
   accepted ADRs, and the Claude Code settings and hooks. Change them only when the
   request includes that policy change.
-- [.claude/README.md](.claude/README.md) describes this configuration for maintainers.

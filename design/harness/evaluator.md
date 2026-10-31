@@ -274,8 +274,7 @@ For scored criteria, the percentage is:
 - It does not demand Node/Vitest implementation details, invented entities or filler for
   empty sections.
 
-- The [calibration set and review
-  procedure](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/README.md)
+- The calibration panels (`test/integration/fixtures/*/calibration/panel.json`)
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in

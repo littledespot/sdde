@@ -2516,8 +2516,7 @@ progress are never serialized as a continuation.
 
 ## 33. Stage transition state machine
 
-The proposed SDD stage gates are summarized in the
-[workflow-state diagram](diagrams/02-workflow-state.md) and defined by
+The proposed SDD stage gates are defined by
 [Design §24](design.md#24-state-sequence-and-recovery-without-fingerprints).
 
 ```text

@@ -98,7 +98,6 @@ every fresh invocation starts at `start` with empty review history.
 
 [View the Stage transition state machine sample](../code.md#stage-transition-state-machine).
 
-[View the workflow-state diagram](../diagrams/02-workflow-state.md).
 
 - Each in-progress execution can terminate as `blocked`, `failed`, or `cancelled`.
 - `spec_incomplete`, with a closed cause (`failed` or `blocked`), records a Specify run

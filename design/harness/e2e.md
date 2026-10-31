@@ -446,8 +446,6 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
 - Offsets are zero-based; lines and columns are one-based.
 - These are parser cursor positions, not inferred field names.
 - The terminal links to the retained model text and event stream.
-- See the [prompt and response flow](../diagrams/17-model-prompt-response-flow.md) for
-  the instructions actually sent to the model.
 
 - Schema failures retain `schema_error.reason` and `schema_error.path`, an escaped JSON
   Pointer (for example `/statements/0/content/kind`), in the same event, report and

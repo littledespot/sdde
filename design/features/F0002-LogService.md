@@ -25,8 +25,7 @@ SDDE against a target project.
 5-6, 9, 13.2, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
 [ADR 0003](../decisions/0003-generic-workflow-engine.md); [ADR
-0005](../decisions/0005-workflow-defined-operations.md); and the
-[feature logging diagram](../diagrams/06-feature-logging.md).
+0005](../decisions/0005-workflow-defined-operations.md).
 
 ---
 

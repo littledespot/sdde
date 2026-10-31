@@ -14,7 +14,6 @@
     .minimum_zig_version = "0.16.0",
     .paths = .{
         ".zigversion",
-        "README.md",
         "build.zig",
         "build.zig.zon",
         "build_provenance.zig",

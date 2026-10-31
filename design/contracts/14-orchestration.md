@@ -5,7 +5,6 @@ Part of the [proposed design](../design.md#14-orchestrator-composition), as amen
 
 [View the Orchestrator composition sample](../code.md#orchestrator-composition).
 
-[View the validated-generation and atomic-repair diagram](../diagrams/03-validated-generation-repair.md).
 
 An orchestrator “contains” children through composition. It does not contain their logic. Actions expose no child collection or dispatcher, so an action cannot contain or call an orchestrator.
 

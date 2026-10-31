@@ -17,7 +17,6 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 
 [View the Observability events sample](../code.md#observability-events).
 
-[View the feature logging pipeline](../diagrams/06-feature-logging.md).
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
 

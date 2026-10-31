@@ -11,10 +11,9 @@ Part of the [proposed design](../design.md#10-development-environment-presets), 
   material only; runtime bootstrap never loads those source locations and has no
   packaged-example fallback.
 
-[View the toolchain-preset bootstrap diagram](../diagrams/08-toolchain-preset-bootstrap.md).
 
 **Current authoring boundary:** [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
-and the [authoring guide](../toolchainPresets/README.md) document the implemented
+documents the implemented
 closed package/project shapes and stable union of registered policy IDs. The richer
 policy concepts below are proposed design, not additional currently accepted YAML
 fields. The legacy examples remain useful source material; their format is not a
@@ -371,8 +370,6 @@ Preset compilation uses one portable matching contract:
 ### 10.9 Legacy preset source material
 
 - The files in `design/toolchainPresets/` are historical source examples reviewed by F0003.
-- The [authoring guide](../toolchainPresets/README.md) distinguishes those inputs from
-  the current closed runtime package contract.
 - They do not satisfy the current package contract merely by being present.
 - Runtime bootstrap accepts only the closed current project/preset schemas and performs no
   conversion, aliasing, migration or fallback.

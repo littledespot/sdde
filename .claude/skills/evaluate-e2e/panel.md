@@ -19,7 +19,7 @@ names give away the verdicts. Don't read either before you have scored.
 2. Score every blind specimen from its content alone, using steps 2–4 of section 2
    in [SKILL.md](SKILL.md). Score against the case's rubric and the numbered
    sources; the script has verified both against the panel's hashes. Don't open
-   `key.json`, `panel.json`, `README.md` or `REVIEW.md` yet. Record every score
+   `key.json` or `panel.json` yet. Record every score
    before continuing.
 3. Then read `key.json` and the labels. Report pass/fail agreement for each specimen,
    and the confusion counts. Never revise a score after seeing a label. State every

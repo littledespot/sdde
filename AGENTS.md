@@ -163,10 +163,11 @@ A small non-semantic documentation fix needs none of this.
 - Delete superseded code, flags, schemas, tests, fixtures and docs in the same
   change. No compatibility shims, aliases, migrations, dual readers or writers,
   deprecated entry points or fallbacks.
-- Write or update a document only if an LLM uses it: a model-facing workflow asset
-  the engine sends, or the one governing record (an ADR or contract clause) a coding
-  agent reads as authority. State each fact once, in its owner; add no summary,
-  index entry, changelog, status narrative or traceability that only documents.
+- Create or update a file only if it supports LLM coding: code, tests and the data
+  they read; a model-facing workflow asset the engine sends; or the one governing
+  record (an ADR, contract clause or fix record) a coding agent reads when generating
+  or deciding on code. State each fact once, in its owner; add no README, index,
+  diagram, summary, changelog, status narrative or traceability that only documents.
   Extend an existing file; create one only when no existing file can hold it.
   Delete closed work and superseded evidence; git history keeps it. Fix records follow
   [fixes/README.md](fixes/README.md).

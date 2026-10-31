@@ -1435,10 +1435,6 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
 
 ## 6. Diagrams
 
-- [Specify workflow logical topology](../diagrams/10-spec-workflow.md) shows
-  selection, typed generation, clarification, rendering, and commit.
-- [`spec.md` projection structure](../diagrams/11-spec-document-structure.md)
-  shows the mandatory hierarchy, optional sections and conditional entities.
 - [Reference ingestion and Specify completion](../diagrams/05-reference-ingestion.md)
   owns the detailed reference/generation publication flow.
 - [Clarification lifecycle](../diagrams/07-clarification-lifecycle.md) owns the
@@ -1575,7 +1571,7 @@ YAML definition.
   API (§16.5), and §5.5's failed-run incomplete publication (ADR 0041, accepted, on hold
   since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the
-  [harness](../harness/README.md) captures the exact published specification for
+  [harness](../harness/e2e.md) captures the exact published specification for
   separate human adjudication, and [FIX06](../../fixes/FIX06.md) tracks open work.
 
 ## 9. Traceability

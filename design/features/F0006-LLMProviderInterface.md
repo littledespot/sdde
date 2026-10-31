@@ -31,8 +31,7 @@ the contracts below; see
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) owns request handoff;
 the [packaging test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml) shows inference,
 validation, closure and pre-call failure handling. It is test/design source,
-never a runtime fallback. The [prompt/response diagram](../diagrams/17-model-prompt-response-flow.md)
-shows input projection, evidence selection and repair.
+never a runtime fallback.
 
 **Compatibility:** None. This is a pre-release contract. There is one exact
 provider filename and JSON shape, with no alias, migration, dual reader,
