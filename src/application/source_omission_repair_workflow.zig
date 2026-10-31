@@ -73,7 +73,7 @@ pub const BuildInput = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
-        const packet = self.action.execute(self.allocator, try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data), state) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data), state, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };

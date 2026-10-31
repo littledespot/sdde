@@ -53,11 +53,11 @@ pub fn run() !void {
         const first: authority.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = .acceptance_criterion, .ordinal = 1 } }, .slot = .given };
         const subjects = try support.assignmentSubjects(a, prepared.inputs, first);
         try std.testing.expectEqual(@as(usize, 3), subjects.len);
-        const record = try support.packetFor(a, prepared.inputs, prepared.context, .{ .assignment = first });
+        const record = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, .{ .assignment = first });
         defer packets.release(record);
         const single_requests = try a.alloc(Request, subjects.len);
         for (subjects, single_requests, 0..) |subject, *request, member| {
-            const single = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = subject });
+            const single = try support.packetFor(a, prepared.inputs, prepared.context, prepared.guidance, .{ .finding = subject });
             defer packets.release(single);
             try pairedAssignment(a, member, single, record);
             request.* = try exportRequest(a, schema, prompt, example.id, @tagName(subject.slot), single);
@@ -93,6 +93,7 @@ pub fn run() !void {
         "src/domain/model_schema_projection.zig",
         "src/adapters/provider/bedrock_request.zig",
         "design/workflows/spec/support.schema.json",
+        "design/workflows/spec/packet-guidance.json",
         "design/workflows/spec/support.prompt.md",
         root ++ "/cases.associated.json",
         root ++ "/scorecard.template.json",

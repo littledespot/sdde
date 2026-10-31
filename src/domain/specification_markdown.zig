@@ -39,9 +39,11 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try identity(w, record.id.?);
                     try write(w, "**: **Given** ");
                     try scalar(w, content.given);
-                    try write(w, ", **When** ");
+                    try write(w, clauseSeparator(content.given));
+                    try write(w, "**When** ");
                     try scalar(w, content.when);
-                    try write(w, ", **Then** ");
+                    try write(w, clauseSeparator(content.when));
+                    try write(w, "**Then** ");
                     try scalar(w, content.then);
                     try write(w, "\n\n");
                 } else if (comptime @hasField(@TypeOf(content), "text")) {
@@ -172,23 +174,42 @@ fn acceptance(allocator: std.mem.Allocator, input: []const u8) Error!@FieldType(
     const spans = try @import("markdown_code_spans.zig").scan(allocator, framed);
     defer allocator.free(spans);
     var positions: [3]usize = undefined;
+    var separators: [3]usize = .{ 0, 0, 0 };
     var found: usize = 0;
     var span_index: usize = 0;
     for (input, 0..) |_, offset| {
         while (span_index < spans.len and spans[span_index].end <= offset + frame.len) span_index += 1;
         if (span_index < spans.len and spans[span_index].start <= offset + frame.len) continue;
         for (labels, 0..) |marker, index| if (std.mem.startsWith(u8, input[offset..], marker)) {
-            if (index != found or (index != 0 and (offset < 2 or !std.mem.eql(u8, input[offset - 2 .. offset], ", ")))) return error.InvalidSpecification;
+            if (index != found) return error.InvalidSpecification;
+            // An escaped comma ends the clause's own text, so only an unescaped ", " separates.
+            if (index != 0) separators[index] = if (offset >= 2 and std.mem.eql(u8, input[offset - 2 .. offset], ", ") and !escaped(input, offset - 2)) 2 else if (offset >= 1 and input[offset - 1] == ' ') 1 else return error.InvalidSpecification;
             positions[index] = offset;
             found += 1;
         };
     }
     if (found != labels.len) return error.InvalidSpecification;
-    return .{
-        .given = try unescape(allocator, input[labels[0].len .. positions[1] - 2]),
-        .when = try unescape(allocator, input[positions[1] + labels[1].len .. positions[2] - 2]),
-        .then = try unescape(allocator, input[positions[2] + labels[2].len ..]),
-    };
+    if (positions[1] - separators[1] < labels[0].len or positions[2] - separators[2] < positions[1] + labels[1].len) return error.InvalidSpecification;
+    const given = try unescape(allocator, input[labels[0].len .. positions[1] - separators[1]]);
+    const when = try unescape(allocator, input[positions[1] + labels[1].len .. positions[2] - separators[2]]);
+    // Only the separator the renderer derives from each clause round-trips.
+    if (!std.mem.eql(u8, clauseSeparator(given), input[positions[1] - separators[1] .. positions[1]]) or
+        !std.mem.eql(u8, clauseSeparator(when), input[positions[2] - separators[2] .. positions[2]])) return error.InvalidSpecification;
+    return .{ .given = given, .when = when, .then = try unescape(allocator, input[positions[2] + labels[2].len ..]) };
+}
+
+/// Whether the byte at `index` follows an odd run of backslashes, so it is escaped text.
+fn escaped(input: []const u8, index: usize) bool {
+    var count: usize = 0;
+    while (count < index and input[index - count - 1] == '\\') count += 1;
+    return count % 2 == 1;
+}
+
+/// A clause that already ends in terminal punctuation is followed by a space, not a
+/// comma, so its own bytes, including an exact value such as `Done.`, stay unchanged.
+/// The boundary owner holds the one terminal-punctuation policy (§23).
+fn clauseSeparator(clause: spec.Scalar) []const u8 {
+    return if (@import("exact_value_boundary.zig").endsWithTerminal(clause.bytes)) " " else ", ";
 }
 
 fn label(comptime name: []const u8) []const u8 {

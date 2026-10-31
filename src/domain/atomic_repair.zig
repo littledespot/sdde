@@ -4,6 +4,7 @@ const std = @import("std");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const retry = @import("workflow_retry.zig");
+const presentation = @import("model_presentation.zig");
 pub const CanonicalText = @import("typed_text.zig").CanonicalText;
 pub const FieldSelection = union(enum) {
     replacement: json.FieldOptions,
@@ -79,7 +80,7 @@ pub fn snapshot(comptime T: type, a: std.mem.Allocator, value: T) std.mem.Alloca
 
 pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Dependencies: type, comptime Rule: type) type {
     return struct {
-        pub const Error = packets.Error || strict.Error || @import("naming_policy.zig").Error || error{InvalidAtomicRepair};
+        pub const Error = packets.Error || strict.Error || @import("naming_policy.zig").Error || presentation.Error || error{InvalidAtomicRepair};
         pub const Authorization = struct {
             id: identity.RepairAuthorizationId,
             owner: identity.ImmutableUnitOwnerId,
@@ -118,7 +119,24 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             if (!try eql(Dependencies, a, authorization.dependencies, current)) return error.InvalidAtomicRepair;
         }
 
+        /// The rule exactly as the model sees it.
+        const Shown = if (@hasDecl(Rule, "guidance")) @typeInfo(@TypeOf(Rule.guidance)).@"fn".return_type.? else Rule;
+        /// Whether the request presents stored values with the workflow's
+        /// packet guidance (model_presentation.zig).
+        pub const presents_guidance = presentation.required(Shown) or presentation.required(Replacement);
+
         pub fn packet(a: std.mem.Allocator, authorization: Authorization, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin, options: PacketOptions) Error!*packets.Packet {
+            if (comptime presents_guidance) @compileError("this repair presents stored values with packet guidance; use packetPresenting");
+            return assemble(a, authorization, null, base, definition, origin, options);
+        }
+
+        /// The request presents its rule and current value from the authorization
+        /// itself, with the run's packet guidance; it never takes a second rule.
+        pub fn packetPresenting(a: std.mem.Allocator, authorization: Authorization, guidance: *const @import("packet_guidance.zig").Guidance, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin, options: PacketOptions) Error!*packets.Packet {
+            return assemble(a, authorization, guidance, base, definition, origin, options);
+        }
+
+        fn assemble(a: std.mem.Allocator, authorization: Authorization, guidance: ?*const @import("packet_guidance.zig").Guidance, base: *const packets.Packet, definition: @import("model_result_schema.zig").DefinitionId, origin: ?Origin, options: PacketOptions) Error!*packets.Packet {
             if (!identity.unitOwnerEql(authorization.owner, base.unit())) return error.InvalidAtomicRepair;
             var arena: std.heap.ArenaAllocator = .init(a);
             defer arena.deinit();
@@ -133,14 +151,25 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             };
             if (!@import("model_text_field.zig").valid(bindings)) return error.InvalidAtomicRepair;
             const target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target;
-            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
+            const shown: Shown = if (comptime @hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule;
+            const rule = if (comptime presentation.required(Shown)) try presentation.present(Shown, scratch, guidance.?, shown) else shown;
+            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = rule };
             var repair = try strict.decode(std.json.Value, scratch, try json.encodeEvidence(@TypeOf(facts), scratch, facts), limits);
             // Only optional presentation fields are omitted. Evidence, old values
             // and the native authorization retain their complete contracts.
             packets.omitAbsent(repair.object.getPtr("target").?);
             packets.omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
-                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelectedEvidence(Replacement, scratch, authorization.operation.replace), limits);
+                // The selected old value is input evidence; its response contract
+                // still excludes derived nodes.
+                const encoded = switch (authorization.operation.replace) {
+                    inline else => |payload| encoded: {
+                        const Payload = @TypeOf(payload);
+                        const presented = if (comptime presentation.required(Payload)) try presentation.present(Payload, scratch, guidance.?, payload) else payload;
+                        break :encoded try json.encodeEvidence(presentation.Presentation(Payload), scratch, presented);
+                    },
+                };
+                const current_value = try strict.decode(std.json.Value, scratch, encoded, limits);
                 try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});

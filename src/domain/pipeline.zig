@@ -7,6 +7,7 @@ pub const DataKey = enum {
     captured_principles,
     principle_registry,
     prior_principle_registry,
+    packet_guidance,
     invocation_working_directory,
     exact_engine_config_file,
     raw_engine_config,

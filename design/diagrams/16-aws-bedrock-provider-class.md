@@ -1,35 +1,40 @@
-Main responsibilities and relationships at the AWS Bedrock provider boundary.
+Main responsibilities and relationships at the AWS Bedrock provider boundary. Bedrock is
+one per-family projection of the shared provider-port implementation
+([ADR 0028](../decisions/0028-anthropic-messages-provider.md)); its contract is the
+compiled family the catalogue entry names
+([ADR 0029](../decisions/0029-bedrock-model-families.md)).
 
 ```mermaid
 classDiagram
     direction LR
     class CompositionRoot
     class LLMProviderInterface
-    class AWSBedrockProvider
+    class ModelProvider
+    class BedrockProjection
     class IdentifiedProviderNeutralModelRequest
     class CompiledModelResultSchema
     class ValidatedProviderModelBinding
-    class AWSBedrockModelContract
+    class BedrockFamilyContract
     class ProviderAuthorizationLeasePort
     class InvokedProviderOperation
-    class TrustedEndpointResolver
-    class AWSBedrockRuntimePort
+    class ModelHttpExchange
     class ProviderInvocationObservation
 
-    CompositionRoot ..> AWSBedrockProvider : binds concrete dependencies
-    AWSBedrockProvider ..|> LLMProviderInterface : implements provider operations
-    AWSBedrockProvider ..> IdentifiedProviderNeutralModelRequest : receives the retained workflow request
+    CompositionRoot ..> ModelProvider : binds concrete dependencies
+    ModelProvider ..|> LLMProviderInterface : implements provider operations for every provider
+    ModelProvider --> BedrockProjection : dispatches the Bedrock family target
+    ModelProvider ..> IdentifiedProviderNeutralModelRequest : receives the retained workflow request
     IdentifiedProviderNeutralModelRequest --> CompiledModelResultSchema : retains the required response contract
-    AWSBedrockProvider ..> ValidatedProviderModelBinding : receives the selected model binding
-    ValidatedProviderModelBinding --> AWSBedrockModelContract : supplies registered model and routing policy
-    AWSBedrockProvider --> ProviderAuthorizationLeasePort : consumes single-use authorization
-    AWSBedrockProvider ..> InvokedProviderOperation : requires the authorized operation and deadline
-    AWSBedrockProvider --> TrustedEndpointResolver : resolves an allowed endpoint
-    AWSBedrockProvider --> AWSBedrockRuntimePort : performs one deadline-bound exchange
-    AWSBedrockProvider ..> ProviderInvocationObservation : returns response and usage evidence
+    ModelProvider ..> ValidatedProviderModelBinding : receives the selected model binding
+    ValidatedProviderModelBinding --> BedrockFamilyContract : supplies family request fields and Region policy
+    ModelProvider --> ProviderAuthorizationLeasePort : consumes single-use authorization
+    ModelProvider ..> InvokedProviderOperation : requires the authorized operation and deadline
+    BedrockProjection ..> BedrockFamilyContract : builds the compiled-Region endpoint and family request fields
+    ModelProvider --> ModelHttpExchange : performs one deadline-bound exchange
+    ModelProvider ..> ProviderInvocationObservation : returns response and usage evidence
 
     note for LLMProviderInterface "Supports inference"
-    note for AWSBedrockProvider "Credentials and transport capabilities stay inside authorized adapters"
+    note for ModelProvider "Credentials and transport capabilities stay inside authorized adapters"
     note for ProviderInvocationObservation "A provider response is candidate data; the engine owns validation and workflow outcomes"
 ```
 

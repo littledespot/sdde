@@ -51,7 +51,7 @@ test "pending human review preserves known native blocked and unexpected clarifi
     report.workflow_outcome = .needs_user;
     const clarification = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.unexpected_outcome, clarification.acceptance.failed);
-    report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
+    report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-10-17T00:00:00Z", .status = .generated };
     const ungraded = try human.evaluate(a, pending, try bytes(a, report));
     try std.testing.expectEqual(.missing_expected_outcome, ungraded.acceptance.unresolved);
 }
@@ -158,9 +158,9 @@ test "human declaration and original E2E report are closed explicitly versioned 
     }
     const pending = "{\"schema\":\"human-spec-adjudication/v2\",\"outcome\":{\"pending\":{}}}";
     for ([_][2][]const u8{
-        .{ "spec-e2e-report/v10", "spec-e2e-report/v9" },
+        .{ "spec-e2e-report/v11", "spec-e2e-report/v10" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v10\",", "" },
+        .{ "\"schema\":\"spec-e2e-report/v11\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
         // Retired advisory-grader fields are not readable report content.
         .{ "\"status\":", "\"evaluation\":null,\"status\":" },

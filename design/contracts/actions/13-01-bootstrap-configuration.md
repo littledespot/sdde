@@ -177,9 +177,9 @@ design; they do not extend the current YAML schema or claim implemented capabili
 - **Input:** layout candidate, bootstrap-root-registry evidence, portability policy, and
   reserved-child ownership rules
 - **Output:** workflow-authority-layout evidence
-- **Responsibility:** Prove exact root/capability joins, containment, distinct reserved
-  children, inclusion of their root entries, and exclusion of both complete reserved descendant
-  subtrees.
+- **Responsibility:** Prove exact root/capability joins, containment, the one reserved
+  `features/` child, inclusion of its root entry, and exclusion of its complete descendant
+  subtree.
 
 ## `EnumerateWorkflowAuthorityResourcesAction`
 
@@ -1243,9 +1243,10 @@ design; they do not extend the current YAML schema or claim implemented capabili
 
 > **ADR 0031 (not yet implemented).** The toolchain-preparation actions are the first planned
 > [stage-action](../../decisions/0031-stage-actions.md) conversion: one `prepare-toolchain`
-> stage action replaces the nine workflow steps that F0003 lists. When it lands, these entries
-> become its internal steps. Each keeps its input, output, responsibility and rejection rules,
-> and read versus parse still holds between functions.
+> stage action replaces the nine workflow steps that F0003 lists. When it lands, those nine
+> F0003 operations become its internal steps; the entries below are the broader proposed
+> decomposition. Each step keeps its input, output, responsibility and rejection rules, and read
+> versus parse still holds between functions.
 
 ## `CaptureProjectToolchainLayerAction`
 

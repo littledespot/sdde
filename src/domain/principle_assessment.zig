@@ -84,7 +84,7 @@ pub fn policyAuthority(value: registry.Registry) a.Authority {
 /// Errors forwarded from the support contract, whose assignment packet may also
 /// refuse an over-bound member set.
 pub const SupportError = Error || @import("model_result_schema.zig").ChoiceBoundError;
-pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.Context, scope: @import("specification_support.zig").Contract(.principles).Scope) SupportError!*packets.Packet {
+pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: @import("specification_support.zig").Contract(.principles).Scope) SupportError!*packets.Packet {
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -106,7 +106,7 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     const subject = selected orelse return error.InvalidRequiredAuthority;
     const business = try @import("specification_authority.zig").projectRecords(scratch, context.business.feature, context.business.references, context.business.content, context.business.brief);
     const payload = .{
-        .task = try @import("required_authority_description.zig").task(scratch, subject),
+        .task = try @import("required_authority_description.zig").task(scratch, guidance, subject),
         .subject = try @import("specification_review_subject.zig").projectBusiness(scratch, business, source_context, subject),
         .principles = try registry.guidance(scratch, context.registry, context.selection),
     };

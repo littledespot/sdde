@@ -44,7 +44,7 @@ pub const Authorize = struct {
             const context_value = try spec.readContext(&input.step.data);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            const authorization = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected) catch |err| {
+            const authorization = self.action.execute(selected, owner.arena.allocator(), source, context_value, try @import("packet_guidance_workflow.zig").read(&input.step.data), current.rejected) catch |err| {
                 const outcome = try authorizationRejectionOutcome(err);
                 owner.rejection = err;
                 return owned.publish(self.allocator, schema, owner, outcome) catch |operation_error| operation_error;
@@ -75,7 +75,7 @@ pub const BuildInput = struct {
             const state = try read(selected, &input.step.data);
             const current = try support.collection(selected, progress);
             if (current != .rejected or current.rejected.candidate == null) return error.OperationExecutionFailed;
-            return @import("model_request_workflow.zig").publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), current.rejected.candidate.?, state.authorization) catch |operation_error| return operation_error);
+            return @import("model_request_workflow.zig").publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data), current.rejected.candidate.?, state.authorization) catch |operation_error| return operation_error);
         };
         unreachable;
     }
@@ -122,8 +122,9 @@ pub const Merge = struct {
             const context_value = try spec.readContext(&input.step.data);
             const history = try owned.read(&input.step.data, support.history_schema, .review_history);
             const ledger = try values.read(&input.step.data, @import("model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-            const merged = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state, history, ledger) catch |native_failure| {
+            const merged = self.action.execute(selected, owner.arena.allocator(), source, context_value, guidance, current.rejected.candidate.?, state, history, ledger) catch |native_failure| {
                 owned.destroy(owner);
                 return native_failure;
             };

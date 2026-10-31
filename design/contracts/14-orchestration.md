@@ -28,29 +28,38 @@ An orchestrator “contains” children through composition. It does not contain
 This capability-free root orchestrator executes one explicitly requested
 workflow without branching on workflow names:
 
-1. invoke the preselection portion of `BootstrapOrchestrator` through its
-   runner-owned binding so configuration roots, the complete workflow
-   inventory, compiled graphs, and registry validate before workflow-specific
-   work; this portion acquires no workflow execution capability. Under
-   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), that portion
-   is the startup engine routine, which the composition root runs before the engine
-   starts, as the current code already does. The engine receives its validated result
-   and invokes no binding for it. Provider bootstrap, after selection, still runs through
-   a runner-owned binding;
+1. receive the validated result of the preselection portion of
+   `BootstrapOrchestrator`, which the composition root runs before the engine
+   starts so configuration roots, the complete workflow inventory, compiled
+   graphs, and registry validate before workflow-specific work; the engine
+   invokes no binding for it, and this portion acquires no workflow execution
+   capability. Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet
+   implemented), that portion becomes the startup engine routine;
 2. invoke `ParseWorkflowSelectionAction` and `ValidateWorkflowIdAction` through
    runner-owned bindings to obtain one explicit `WorkflowId` and the unchanged
    workflow-specific arguments;
 3. invoke `ResolveSelectedWorkflowAction` through its runner-owned binding for
    that validated `WorkflowId`;
 4. receive from the runner the selected graph's bound registered operations;
-5. invoke the selected graph's registered capability-free invocation-contract
+5. invoke the fixed `ModelProviderBootstrapOrchestrator` through its runner-owned
+   binding; it prepares provider authority only when the selected compiled graph
+   requires it ([ADR 0004](../decisions/0004-model-provider-bootstrap.md)). Under
+   ADR 0032 (not yet implemented), that binding reaches the provider-bootstrap routine;
+6. invoke the selected graph's registered capability-free invocation-contract
    node through its runner-owned binding to validate the remaining arguments
    and produce the typed run context;
-6. start at the compiled entry node with that context; the selected graph owns
+7. start at the compiled entry node with that context; the selected graph owns
    any later project, feature, toolchain, or other workflow-specific setup.
    After each applied child outcome, follow only the matching validated typed
    transition; and
-7. return the compiled terminal outcome.
+8. return the compiled terminal outcome. Under
+   [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6
+   (accepted, on hold since 30 October 2026; not implemented), after an eligible failure
+   (a YAML `failed`, `blocked` or `invalid` terminal, or a `retry_limit` or
+   `token_budget` runner rejection, once a validated reference snapshot exists), the
+   engine first runs the definition's declared `failure-output` steps through the same
+   runner-owned invocation in failure-output mode, then returns the original failure,
+   which stands even if the failure output fails.
 
 - It does not parse a workflow definition, compile a graph, construct a node or binding, invoke
   a node directly, inspect domain data, or receive any operation port.
@@ -110,6 +119,8 @@ The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
 independent retry identities; there is no hidden dispatcher. Extraction uses this
 shared implementation. Under ADR 0030 (not yet implemented), each part call site is one
 `request-model` step with its `composition-part`; its retry identity stays independent.
+Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), deterministic
+operations that a stage action absorbs are no longer visible operations.
 
 ### 14.2 `StageGateOrchestrator`
 

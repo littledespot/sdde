@@ -39,7 +39,10 @@ Execution-private pre-generation repair of source-backed candidate omissions is
 permitted. The owning contract must establish a
 unique defective producer and its smallest safe target from captured source and
 review evidence. Source absence, ambiguous ownership and stale evidence do not
-authorize repair. A review verdict itself is never a repair target.
+authorize repair. A review verdict itself is never a repair target. A source
+`candidate_invalid` finding or its nested authority gap
+([§12](12-model-boundary.md#source-invalid-content-finding)) authorizes no loss
+attribution, upstream rebuilding or semantic content repair.
 
 The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 does not relax that prohibition. In required pre-generation assessment, an inconclusive finding without an identifiable
@@ -95,7 +98,11 @@ outcome and blocks; no membership-changing rebuild permission exists, and the
 outcome cannot blame extraction or grouping. There is no post-generation
 reviewed-omission insertion (ADR 0023). A semantic omission note cannot authorize an invented association or
 cross-group insertion. Independently authorized native membership repair retains
-its current accepted group occurrence, complete selection and readback checks.
+its current accepted group occurrence, complete selection and readback checks. It
+establishes the source occurrence and writable unit independently of dispatch order;
+the final record task is not evidence of ownership, and an association the current
+authorized group cannot represent keeps an explicit ownership denial, with no
+cross-batch mutation or extra retry allowance.
 
 An omission must identify nonempty authorized sources at review admission, even
 when its subject also fixes claim evidence. Loss comparison retains that admitted
@@ -296,13 +303,10 @@ The repair algebra is closed:
 
 Every repaired text value
 passes the same [composition policy](text-field-composition.md) as initial
-authoring and readback. Canonical equality with the rejected old value, under
-the exact active permit and defect key, produces shared typed exhaustion
-`unchanged_repair`. The runner discards the tentative delta before application,
-retains actual consumption and prevents later work on the exhausted key. It does
-not advance candidate revision, invalidate dependents, request semantic review
-or resolve the defect. Changed repairs retain existing dependent/full validation.
-This adds no route-specific rule or retry allowance.
+authoring and readback. A replacement canonically equal to the rejected old value
+ends in the shared typed exhaustion `unchanged_repair`, defined in the
+[composition contract](text-field-composition.md#repair-and-reporting); it adds no
+route-specific rule or retry allowance.
 
 Composition defects (required prose, prohibited insertions and embedded insertion
 syntax) are no longer repair targets. They are rejected at response admission and
@@ -598,7 +602,10 @@ defined response-level correction containing:
   every constraint that schema syntax can express; `exact_members` uniqueness stays
   native and is reported as `duplicate_member` with parent scope on the enclosing
   array. ADR 0038's coverage (`uncovered_member`) and ADR 0042's required items
-  (`missing_required_item`, at the array that needs an item) are native the same way. Correction does not repeat schema subtrees. Syntax correction uses that
+  (`missing_required_item`, at the array that needs an item) are native the same way.
+  An `uncovered_member` correction also names the compiled rule's covering kinds
+  (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
+  (FIX06 D4.1, decided 30 October 2026); no other correction changes. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.
@@ -657,9 +664,10 @@ is the explicit exception described above: only its sealed current stop receipt
 may record incomplete advice, without another attempt or provider call. Otherwise,
 if JSON decoding or schema validation still fails when correction is unavailable
 or exhausted, the workflow reports an error and exits nonzero; it cannot publish
-a completed specification or a clarification pause. It publishes only the failed
-incomplete specification of its validated content
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)), marked and logged. Native finding-evidence or repair
+a completed specification or a clarification pause, and it publishes nothing. Under
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+since 30 October 2026; not implemented), it would publish only the failed incomplete
+specification of its validated content, marked and logged. Native finding-evidence or repair
 exhaustion and global-budget rejection remain terminal. Existing open
 clarifications do not override that failure. A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
@@ -842,41 +850,11 @@ If `task-a -> task-b -> task-a`, the diagnostic includes the cycle and selects o
 
 A code repair requires an undeclared second file. This is not treated as a larger code repair. It is a task/plan scope defect and blocks implementation until the upstream artifact is corrected.
 
-### Typed-content repair conformance
-
-Initial business values and selected value repairs share the
-[§7.1](07-domain-representations.md#71-shared-types) text wire. An invalid reference diagnostic retains its segment location and rejected IDs;
-permitted choices derive from the bound evidence under ADR 0020. Literal punctuation is not a
-repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
-full validation, retry identities and token accounting with their existing owners.
-Mechanical coverage defects have no independently supported repair target and
-block; nothing guesses substrings or rewrites meaning. The one exception is a records
-response whose functional-requirement claim no acceptance criterion or edge case
-names: it is a response-admission defect that takes the request's existing protocol
-correction, and exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
-
-### Meaning and repair ownership
-
-A source `candidate_invalid` finding (§12) reports unsupported additions or
-retained-obligation contradictions without claiming missing source meaning.
-Its optional nested authority gap remains bound to its own original evidence.
-Neither the invalid finding nor the nested gap authorizes loss attribution,
-upstream rebuilding or semantic content repair. Existing structural review repair
-may correct only its authorized explanation, evidence or question while preserving
-the invalid verdict and nested gap kind. An unsupported repair retains the defect
-and current evidence instead of manufacturing an omission or user question.
-
-Aggregate membership repair must establish the source occurrence and writable
-unit independently of dispatch order. The final record task is not evidence of
-ownership. If the established semantic association cannot be represented within
-the current authorized group, retain an explicit ownership denial. There is no
-cross-batch mutation, association change or extra retry allowance.
-
-The declared text wire conversion in §7.1 governs initial content and fixed
-value/record repair together. Strings denote ordinary prose; a named fragments
-object denotes exact composition. Canonical old-value and dependency comparisons,
-reference admission, identity allocation and rendering remain native. Model-facing
-fragments contain only their permitted passive/source references; native exact
-occurrences follow the approved raw-byte scope and contextual-boundary policy.
-There is no legacy array reader, automatic spacing or unscoped text-to-occurrence
-inference.
+Across §22, repairs of typed specification content use the
+[§7.1](07-domain-representations.md#71-shared-types) text wire, and Specify's
+coverage rule is owned by
+[F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair):
+its mechanical claim/token coverage defects have no independently supported repair
+target and block, while an
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) scenario gap is
+a response-admission defect corrected under §22.6.

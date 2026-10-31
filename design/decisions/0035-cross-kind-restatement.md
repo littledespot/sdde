@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026:
-  - "YES" to [FIX05](../../fixes/FIX05.md) B5's recommended option, cross-kind
+  - "YES" to [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B5's recommended option, cross-kind
     restatement in the native duplicate rule;
   - and three answers given during its preflight:
     - delete a restatement only "if the kept one covers it";

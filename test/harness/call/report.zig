@@ -2,7 +2,7 @@ const std = @import("std");
 const debug = @import("../../../src/domain/request_debugger.zig");
 
 pub const Report = struct {
-    schema: []const u8 = "call-diagnostic-report/v1",
+    schema: []const u8 = "call-diagnostic-report/v2",
     started_at_utc: []const u8,
     options: @import("options.zig").Options,
     parent_run: []const u8,
@@ -11,6 +11,8 @@ pub const Report = struct {
     effective_binding: debug.Description,
     context_path: []const u8,
     request_path: []const u8,
+    /// SHA-256 of the `--edit` file when one replaced the captured content and schema.
+    edit_sha256: ?[]const u8 = null,
     trials: []const @import("trial.zig").Trial = &.{},
     semantic_quality: enum { not_assessed } = .not_assessed,
     workflow: enum { not_run } = .not_run,
@@ -28,6 +30,8 @@ pub const Report = struct {
 /// Markdown renderer consumes the same sanitized data as the JSON report, so
 /// Markdown escaping cannot obscure a credential from the redaction owner.
 pub fn save(io: std.Io, allocator: std.mem.Allocator, output: @import("../e2e/report.zig").Output, report: Report, key: []const u8) !void {
+    // An edited run records its file's digest; an unedited run records none.
+    if ((report.options.edit == null) != (report.edit_sha256 == null)) return error.InvalidReport;
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -63,6 +67,13 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
     try escape(w, report.effective_binding.model);
     try w.writeAll("; reasoning: ");
     try escape(w, report.effective_binding.reasoning_effort orelse "none");
+    if (report.options.edit) |path| {
+        try w.writeAll("\n\nEdited content and schema: ");
+        try escape(w, path);
+        try w.writeAll(" (SHA-256 ");
+        try escape(w, report.edit_sha256 orelse "missing");
+        try w.writeAll(")");
+    }
     try w.print("\n\nTrials recorded: {d}/{d}. Protocol checks: {s}.\n\n", .{ report.trials.len, report.options.repeats, if (report.succeeded()) "passed" else "failed or incomplete" });
     try w.writeAll("Semantic quality is not assessed. Workflow execution, publication and rubric evaluation did not run.\n\n");
     for (report.trials) |trial| {

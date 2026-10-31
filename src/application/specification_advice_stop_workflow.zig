@@ -59,6 +59,7 @@ fn StopTypeFor(comptime transport_scope: stop_contract.Scope) type {
             const source = try support.inputs(&input.step.data, current);
             const scope = facts.request.packet().?.advisoryAssessment() orelse return error.OperationExecutionFailed;
             const context_value = try @import("specification_workflow.zig").readContext(&input.step.data);
+            const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
             if (authority.assessmentPolicy(source.projection) != .advisory or scope.candidate_revision != source.revision or
                 !std.mem.eql(u8, source.feature.bytes, scope.feature.bytes) or !context_value.inputs.corpus.state_id.eql(scope.reference_state)) return error.OperationExecutionFailed;
             const owner = try values.create(self.allocator, input.step.data);
@@ -67,7 +68,7 @@ fn StopTypeFor(comptime transport_scope: stop_contract.Scope) type {
                     values.destroy(owner);
                     return err;
                 };
-                if (!(@import("../domain/specification_support.zig").Contract(selected).matchesAdvicePacket(owner.arena.allocator(), source, context_value, prior, facts.request.packet().?) catch |err| {
+                if (!(@import("../domain/specification_support.zig").Contract(selected).matchesAdvicePacket(owner.arena.allocator(), source, context_value, guidance, prior, facts.request.packet().?) catch |err| {
                     values.destroy(owner);
                     return err;
                 })) {
@@ -141,7 +142,7 @@ pub fn validateCompletion(allocator: std.mem.Allocator, before: *const @import("
         const context_value = try @import("specification_workflow.zig").readContext(before);
         const prior = try support.prior(selected, previous);
         const contract = @import("../domain/specification_support.zig").Contract(selected);
-        if (!try contract.matchesAdvicePacket(a, source, context_value, prior, facts.request.packet().?)) return error.OperationExecutionFailed;
+        if (!try contract.matchesAdvicePacket(a, source, context_value, try @import("packet_guidance_workflow.zig").read(before), prior, facts.request.packet().?)) return error.OperationExecutionFailed;
         const expected = try contract.stop(a, source, context_value, prior, facts.reason, facts.origin);
         if (!std.mem.eql(u8, try @import("../domain/canonical_json.zig").encode(contract.Collection, a, expected), try @import("../domain/canonical_json.zig").encode(contract.Collection, a, value))) return error.OperationExecutionFailed;
         const stop = value.accepted.inputs.advice_stop orelse return error.OperationExecutionFailed;

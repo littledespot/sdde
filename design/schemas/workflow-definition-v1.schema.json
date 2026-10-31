@@ -52,7 +52,7 @@
     "steps": {
       "type": "object",
       "minProperties": 1,
-      "maxProperties": 256,
+      "maxProperties": 1024,
       "propertyNames": {
         "$ref": "#/$defs/localId"
       },
@@ -232,34 +232,56 @@
           "$ref": "#/$defs/operationId"
         },
         "with": {
-          "type": "object",
-          "maxProperties": 32,
-          "propertyNames": {
-            "$ref": "#/$defs/localId"
-          },
-          "additionalProperties": {
-            "oneOf": [
-              {
-                "$ref": "#/$defs/parameterValue"
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "param"
-                ],
-                "properties": {
-                  "param": {
-                    "$ref": "#/$defs/localId"
-                  }
-                }
-              }
-            ]
-          }
+          "$ref": "#/$defs/subgraphParameters"
         },
         "on": {
           "$ref": "#/$defs/outcomes"
         }
+      }
+    },
+    "subgraphCallStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "call",
+        "on"
+      ],
+      "properties": {
+        "with": {
+          "$ref": "#/$defs/subgraphParameters"
+        },
+        "on": {
+          "$ref": "#/$defs/outcomes"
+        },
+        "call": {
+          "$ref": "#/$defs/localId"
+        }
+      }
+    },
+    "subgraphParameters": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": {
+        "$ref": "#/$defs/localId"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/parameterValue"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "param"
+            ],
+            "properties": {
+              "param": {
+                "$ref": "#/$defs/localId"
+              }
+            }
+          }
+        ]
       }
     },
     "subgraph": {
@@ -276,12 +298,19 @@
         "steps": {
           "type": "object",
           "minProperties": 1,
-          "maxProperties": 256,
+          "maxProperties": 1024,
           "propertyNames": {
             "$ref": "#/$defs/localId"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/subgraphStep"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/subgraphStep"
+              },
+              {
+                "$ref": "#/$defs/subgraphCallStep"
+              }
+            ]
           }
         }
       }

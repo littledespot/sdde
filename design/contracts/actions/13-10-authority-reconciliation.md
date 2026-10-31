@@ -101,7 +101,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - Apply [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
   through existing question/reason fields: identify the requirement, relevant facts/evidence
   and exact permitted decision. Model review detail remains evidence, not an automatic
-  question. Reuse registered descriptions; add no summary call or answer-grouping authority.
+  question. Reuse the native question frames, which embed the subject's task from the
+  workflow's packet guidance; add no summary call or answer-grouping authority.
 
 
 These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.
@@ -121,7 +122,8 @@ model call. Both assessments use the same declared request and repair loop. Only
 completed review replaces the source authority inputs. No action selects a successor,
 invokes another action, or changes a negative verdict to obtain admission.
 
-The v2 canonical Specify state requires the assessment. Readback reconstructs the
+The canonical `specification-state` ([§24.1](../24-workflow-state.md#241-workflow-state))
+requires the assessment. Readback reconstructs the
 business requirements and policy ledger, re-admits evidence against the exact registry
 and selection, and compares the complete reconciled result. Missing, stale, foreign
 or erased obligations reject. `reference-context.md` renders this canonical handoff;

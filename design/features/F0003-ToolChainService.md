@@ -76,8 +76,8 @@ The single operation registry exposes the existing action IDs below. Each has
 `ok` and `failed` transitions, no parameters, and one action responsibility.
 The YAML graph owns ordering; no combined setup operation hides this sequence.
 
-> **ADR 0031 amendment (22 October 2026, not yet implemented).** The nine operations below
-> become the internal steps, in this order, of one registered `prepare-toolchain`
+> **ADR 0031 amendment (22 October 2026, not yet implemented).** The first nine operations
+> below, through `validate-toolchain-safety`, become the internal steps, in this order, of one registered `prepare-toolchain`
 > [stage action](../decisions/0031-stage-actions.md):
 >
 > - it has `ok` and `failed` outcomes and side effect `filesystem_read`;
@@ -88,7 +88,7 @@ The YAML graph owns ordering; no combined setup operation hides this sequence.
 > Every step only passes `ok` on and `failed` to the end, so the sequence hides no routed
 > choice. Each internal step keeps the rules below, and only the safety step can construct
 > `ValidToolchain`. The nine operation IDs and their intermediate keys are removed when it
-> lands. This is the first stage-action conversion and is measured before any other.
+> lands; `compile-naming-policy` stays a separate operation. This is the first stage-action conversion and is measured before any other.
 
 | Operation | Output key |
 | --- | --- |

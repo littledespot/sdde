@@ -116,6 +116,10 @@
       "destination": ".sddtoolkit/workflows/spec/repair.prompt.md"
     },
     {
+      "source": "design/workflows/spec/packet-guidance.json",
+      "destination": ".sddtoolkit/workflows/spec/packet-guidance.json"
+    },
+    {
       "source": "test/e2e/wf-002-loan-renewal/principles/architecture.md",
       "destination": ".sddtoolkit/principles/architecture.md"
     },

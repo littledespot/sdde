@@ -24,8 +24,10 @@ prove that inputs and execution were processed safely.
 - Scripted generation, prewritten specifications and golden-document comparison are
   not E2E evidence. Fakes test only individual mechanical boundaries.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0` from `ap-southeast-2`, for
-  generation and the standalone evaluator. It supplies no default and does not
+  permits only named tuples ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)):
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0` from `ap-southeast-2`, for generation and
+  the standalone evaluator, and `aws-bedrock` / `au.anthropic.claude-haiku-5-5`, for
+  generation only. The shipped cases select GPT-OSS-20B. The policy supplies no default and does not
   restrict the production model catalogue. The `/evaluate-e2e` Claude Code skill
   is advisory assistant analysis outside this harness and its cost policy.
 - Every live run needs explicit user approval
@@ -38,11 +40,11 @@ prove that inputs and execution were processed safely.
 | Command | Live? | Purpose |
 | --- | --- | --- |
 | `./scripts/e2e-spec.sh --case <case>` | Yes | Generate and publish one case, capturing it for adjudication |
-| `./scripts/e2e-call.sh ...` | Yes | Resend one captured request |
+| `./scripts/e2e-call.sh ...` | Yes | Resend one captured request, or its `--edit` replacement |
 | `./scripts/provider-compatibility.sh --case <case> --live` | Yes | Send one fresh first request (needs the frozen 16,384-token binding; shipped cases are rejected) |
 | `zig build evaluate-spec -- ... --live` | Yes | Grade a supplied specification |
 | `zig build adjudicate-spec -- ...` | No | Apply a human adjudication offline |
 | `/evaluate-e2e <run>` (Claude Code) | No | Advisory rubric assessment and defect-origin analysis of a retained run |
 | `zig build test-integration`, `test-rubric-evaluator`, `verify` | No | Offline mechanics, packaging and smoke checks |
 
-Open calibration and acceptance work is tracked in [FIX05](../../fixes/FIX05.md).
+Open calibration and acceptance work is tracked in [FIX06](../../fixes/FIX06.md).

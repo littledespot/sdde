@@ -160,9 +160,10 @@ Typed content covers these concerns; each concern does not require a separate ca
   against the single configured workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`, including during advice; it cannot become
-  incomplete advice or a completed specification. It publishes ADR 0041's failed
-  incomplete specification of the validated content
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). A provider `output_limit` stop is first re-sent once
+  incomplete advice or a completed specification. Today it publishes nothing.
+  Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+  (accepted, on hold since 30 October 2026; not implemented), it would publish a
+  failed incomplete specification of the validated content. A provider `output_limit` stop is first re-sent once
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A
   runaway on the re-send, other eligible provider stops, exhausted protocol correction
   or genuinely missing usage may record `assessment_incomplete`, with the exact
@@ -235,8 +236,8 @@ catalogue is availability, not semantic support. Positive associations cannot ma
 open questions; initial clarification questions have a separate native eligibility
 scope and select only their actual evidence. Existing missing/ambiguous/conflicting
 reasons and inconclusive outcomes remain. A question does not establish a genuine
-user gap merely by having valid IDs. Shared field purposes describe derivation
-from source-backed behavior, not a demand for prewritten titles, goals or stories.
+user gap merely by having valid IDs. Field purposes, owned by the workflow's
+packet guidance, describe derivation from source-backed behavior, not a demand for prewritten titles, goals or stories.
 Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
@@ -270,6 +271,10 @@ stored readback; its fields and records retain their actual producing origins.
 The batch presentation's scope remains `assembled_specification`; an individual
 group may remain empty, including after earlier groups have satisfied a family.
 This presentation introduces no per-group minimum or per-family cardinality cap.
+Family presence does not establish semantic coverage. An aggregate defect does not
+acquire an owner from the last dispatched group; repair retains its evidence and
+current authorized unit, and unsupported ownership produces an explicit diagnostic
+rather than an invented association.
 
 Initial brief/story/entity responses and clarification questions select groups;
 fixed value and record repairs do not. Protocol correction preserves the initial
@@ -277,13 +282,8 @@ catalogue and schema. Value-only repair preserves the existing authored associat
 `S`, effective evidence bounds, siblings, revision and retry identity. Changing
 group membership requires separately authorized authored-unit rebuilding, which
 does not exist. An unresolved association blocks; it cannot be
-rerouted to extraction, grouping or a removed role producer. A missing required
-entity may be inserted only in the feature entities unit,
-using the existing applicability basis's exact selected association; it cannot
-choose a new group or borrow a writable record batch. Contradictory entities under
-`not_applicable` are removed from that collection; they are never converted into
-another content family. Coupled entity correction preserves the fixed association,
-its native effective evidence bound, siblings and retry identity.
+rerouted to extraction, grouping or a removed role producer. Entity membership
+repair follows [§22.3](22-repair.md#223-repair-authorization).
 Upstream changes invalidate affected groups, authored associations and dependent
 review/attribution evidence. Canonical readback recomputes projections from captured
 groups and rejects inconsistency; no parallel binding store or legacy reader applies.
@@ -304,7 +304,8 @@ For each feature-brief or specification unit, the declared model operation retur
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
   repair task. Protocol correction retains that active assignment and its schema.
-  The primary story has its own concise prompt and uses the canonical story purpose.
+  The primary story has its own concise prompt and uses the story purpose from the
+  workflow's packet guidance.
   Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
@@ -314,8 +315,9 @@ For each feature-brief or specification unit, the declared model operation retur
   the brief, records receive the brief and entity decision. Brief and story requests
   receive neither sibling draft. Dependent drafts are resolved business text and
   applicability; their canonical provenance, fragment wrappers and display-span
-  bookkeeping remain native. Record-family purposes and response alternatives
-  use the same native unit ownership; entity applicability and records are decided
+  bookkeeping remain native. Record-family purposes come from the workflow's
+  packet guidance; they and the response alternatives use the same native unit
+  ownership; entity applicability and records are decided
   together in the feature entities unit. Batch records always exclude entities.
   Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
@@ -338,18 +340,16 @@ For each feature-brief or specification unit, the declared model operation retur
   and current snapshot/request eligibility. Multiple same-span eligible identities
   are ambiguity, never a model choice or catalogue-order tie breaker. Repair and
   correction retain their original narrower scope.
-  The canonical story purpose identifies an actor or system supported by the
-  source, rather than requiring an invented user persona or prewritten story.
-  Functional requirements express behavior and obligation; acceptance criteria
-  express precondition, triggering action and observable outcome. A rejected
+  Story, record-family and field purposes are the workflow's packet guidance
+  ([ADR 0016](../decisions/0016-configured-json-response-composition.md)
+  packet-guidance amendment). A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding
   content within its authorized scope, not the rejected value's omissions. Literal
   values alone do not replace the behavior involving them. This guidance is not a
   deterministic semantic validator or authority to widen a repair target.
   Record kinds remain closed schema variants; an optional family has no dedicated
-  call or required filler. Assumptions must be
-  supported premises, non-goals supported exclusions, and prohibited behaviors
-  forbidden actions. Positive requirements cannot satisfy those meanings merely
+  call or required filler. Positive requirements cannot satisfy the assumption,
+  non-goal or prohibited-behavior purposes merely
   by having valid citations. Semantic assessment remains with the existing review.
   Per-field validation, atomic repair, request identities and total-token accounting
   retain their existing owners. Request grouping grants no semantic repair authority.
@@ -405,6 +405,11 @@ preparation in §12.7 requires a concrete missing decision. Before generation,
 correcting an unsafe upstream candidate requires an authorized target and complete
 rebuilding. Post-generation semantic findings retain advisory status under
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
+Invalid additions use the source-only finding in
+[§12](12-model-boundary.md#source-invalid-content-finding), so a mixed source gap
+stays visible beside invalid candidate content. Native diagnostics bind the assessed
+subject, purpose, original evidence and permitted correction scope; models never
+select a repair producer or turn candidate assertions into source requirements.
 
 ### 17.3.1 Requirement–principle consistency review
 
@@ -498,8 +503,8 @@ existing policy path once its prerequisites hold; retain its cited advice.
 - On the next specify run, the engine first parses the exact registered form against the last
   committed clarification/reference binding.
 - A user closes it by changing only `requestedStatus` and the answer region.
-- The submission must name the current state/record revisions, match the configured select-one
-  or bounded-text schema, and be associated with an authenticated actor.
+- The submission must name the current state/record revisions, match the configured select-one,
+  select-many or bounded-text schema, and be associated with an authenticated actor.
 - [ADR 0025](../decisions/0025-clarification-answer-authentication.md) defines that actor as the
   operating-system account that runs the engine; running Specify with valid closed forms
   accepts them. If any closed form is invalid, the run accepts none of them, makes no model
@@ -542,7 +547,7 @@ The engine validates:
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
 - presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a functional requirement names is also named by an acceptance criterion or edge case ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
 - a record maps only the claims it names, not its whole group; an unnamed claim maps only through another target, such as a narrative field that selects its group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
-- absence of template placeholders and model-authored checklist state;
+- no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
 - artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
 - unsupported technical content: existing semantic review assesses whether code, filenames, paths, framework identifiers and implementation details belong in business requirements. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
@@ -554,7 +559,7 @@ The engine validates:
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 
-The technical-leakage validator is a strong lexical/static lint, not a complete semantic proof. A separate semantic-review action decides nuanced cases and labels them model-assisted.
+There is no technical-leakage lint: it was never built and was removed on 28 October 2026 by user decision, because lexical shape alone is not a semantic rejection. The semantic-review action decides these cases and labels them model-assisted.
 
 ### 17.6 Rendering and commit
 
@@ -574,21 +579,9 @@ After validation:
 The document follows the exact hierarchy in
 [F0100 §5.1](../features/F0100-SpecWorkflow.md#51-ownership-and-hierarchy): its H1
 is the display name, and the mandatory parents are `User Scenarios & Testing`
-and `Requirements`. The acceptance-criteria subsection is nested beneath the
-first parent and is always rendered in this form:
-
-```markdown
-### Acceptance Criteria
-
-- **AC-001**: **Given** <nonempty business precondition>, **When** <nonempty business event or action>, **Then** <nonempty observable business outcome>
-```
-
-- Every criterion has one engine-owned `AC-*` identity followed by the compact `Given`, `When`,
-  `Then` triplet.
-- The renderer owns labels, casing, separators, order and structure.
-- The editable parser rejects missing, duplicated, reordered or foreign labels and the
-  superseded multiline uppercase form.
-- Exact code spans may contain label-shaped text without becoming structure.
+and `Requirements`. Acceptance criteria are nested beneath the first parent in
+the compact form owned by
+[F0100 §5.3](../features/F0100-SpecWorkflow.md#53-acceptance-criterion-rendering).
 
 - The H1 uses the `Feature Specification:` title prefix, and inapplicable sections are
   omitted.
@@ -618,34 +611,10 @@ first parent and is always rendered in this form:
 
 - the specification IR and rendered `spec.md` pass all blocking rules;
 - every reference file is accounted for;
-- the sidecar exists and passes when required;
+- the mandatory `reference-context.md` exists and passes;
 - no behavior-changing reference conflict remains unresolved;
 - no specification clarification record remains open;
 - the current §17.3.1 advisory assessment, its native bindings, and required
   principle authority validate;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.
-
-### Shared authoring and diagnosis
-
-Model-assisted review distinguishes invalid additions from missing original
-meaning using the source-only finding in §12. A mixed source gap remains visible
-alongside invalid candidate content. Under ADR 0023, post-generation judgments
-alone authorize neither clarification nor content repair. Native diagnostics bind the assessed subject,
-purpose, original evidence and permitted correction scope; models never select a
-repair producer or turn candidate assertions into source requirements.
-
-Authoring and content repair use the shared typed-text wire representation in
-§7.1. Prose does not require manual segmentation. Native recognition constructs
-eligible exact occurrences from complete values in prose; explicit composition
-retains authorized passive references. Native code converts and renders admitted
-segments without adding separators or inventing an occurrence identity.
-
-Native record assembly presents required, present and unmet structural families
-from its existing policy and admitted state, without copying previous drafts into
-the request. These facts apply to the assembled specification; an individual
-group may return an empty batch. Presence does not establish semantic coverage.
-An aggregate defect does not acquire an owner from the last dispatched group.
-Repair must retain its evidence and current authorized unit; unsupported ownership
-produces an explicit diagnostic rather than an invented association. Alternative
-authoring units are evaluated under FIX05 B5; none is adopted here.

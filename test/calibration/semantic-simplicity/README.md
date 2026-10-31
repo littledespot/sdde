@@ -1,6 +1,6 @@
 # Semantic simplicity: protocol and baseline harness
 
-This is the offline evaluation foundation for [FIX05 B5](../../../fixes/FIX05.md#b5-authoring-follows-mechanical-source-groups)
+This is the offline evaluation foundation for [FIX05 B5, now FIX06 H4](../../../fixes/FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5)
 (former FIX04 §5.6).
 It prepares source-only fixtures and checks accounting of supplied semantic labels.
 The Phase 0 scenario neither classifies prose nor executes a provider or workflow.
@@ -256,7 +256,7 @@ evidence supports the declared budget. Otherwise it exits unsuccessfully with a
 blocked report and no API call. The currently observed budget-stopped diagnostics
 alone cannot meet this prerequisite. Resolving that prerequisite requires the
 user's budget and scope decision in
-[FIX05 B4](../../../fixes/FIX05.md#b4-fixed-per-call-overhead-exhausts-a-compiled-budget); the harness does not raise the workflow budget.
+[FIX05 B4, now FIX06 H4](../../../fixes/FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5); the harness does not raise the workflow budget.
 The explicit [publication rubric](rubric.json) is frozen separately from the
 template case. Its binary criteria require every material criterion to pass;
 source-specific Hello World expectations never assess other panel features.

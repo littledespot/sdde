@@ -27,8 +27,9 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v20, after ADR 0041's `spec_incomplete`
-variant) over canonical `specification/v3`
+`specification-state` contract (currently v19; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+(accepted, on hold since 30 October 2026; not implemented) advances it to v20 with its
+`spec_incomplete` variant) over canonical `specification/v3`
 content; stage discriminators distinguish the variants. Earlier versions reject
 without migration, aliases or a compatibility reader. The pending variant retains
 reference and clarification data without claiming completed attributed content.
@@ -102,7 +103,8 @@ every fresh invocation starts at `start` with empty review history.
 - `spec_incomplete`, with a closed cause (`failed` or `blocked`), records a Specify run
   that failed or was blocked but published its validated content as an incomplete
   specification
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). It is written
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
+  since 30 October 2026; not implemented). It is written
   last, replaces any earlier completion authority, blocks Plan and later stages, and is
   never resumed: the next run starts at `start`.
 - Prior published state remains subject to fresh gate validation; it cannot resume the abandoned
@@ -132,10 +134,9 @@ every fresh invocation starts at `start` with empty review history.
 
 State alone never authorizes a stage.
 
-- The complete clarification registry and responses are retained across successive executions,
-  including resolved records.
-- User-closed form bytes are retained; unresolved forms are completely overwritten under Section
-  23.2 without resetting their identities or canonical history.
+- The complete clarification registry and responses, including resolved records, persist
+  across executions; Section 23.2 and [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
+  own rerun form replacement and user-closed protection.
 - Reruns use applicable validated answers before proposing new questions.
 - Deduplication uses the stable target, earliest owner, requirement kind, subject selector and
   required slot; execution IDs, regenerated authority IDs, wording and transient gap reasons do

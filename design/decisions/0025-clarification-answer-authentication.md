@@ -1,7 +1,7 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
 - **Status:** Accepted amendment. Not yet implemented
-  ([FIX05 R2](../../fixes/FIX05.md#r2-clarification-answer-recovery)).
+  ([FIX05 R2, now FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
   asked for the proposal to be rewritten around this flow: run 1 generates

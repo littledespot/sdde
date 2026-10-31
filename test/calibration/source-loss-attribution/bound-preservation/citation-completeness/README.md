@@ -191,8 +191,9 @@ API/retained replay orchestration does this:
 5. Construct receipts from actual answers and identities, then invoke the first
    offline command for native admission. Score the frozen metrics independently.
 
-`scripts/e2e-call.sh` preserves captured content/schema and exposes no edit-file
-option; it cannot launch these modified frozen arms. Do not invent such a flag.
+`scripts/e2e-call.sh --edit` sends edited content and schema but checks no frozen
+request hash and keeps no pinned settings beyond the selected call's, so it cannot
+launch these modified frozen arms.
 The retained replay recipe uses the existing debugger API; adapt its manifest
 selection and both-current-owner aggregation, then review its preflight and exact
 approval bounds before dispatch. Neither README nor manifests grant permission.

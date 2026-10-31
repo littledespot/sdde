@@ -168,7 +168,7 @@ pub const ValueChoices = struct {
         return text.permitsExact(self.exact_copy, selected);
     }
 
-    pub fn correction(self: ValueChoices, a: std.mem.Allocator, issue: text.Issue) std.mem.Allocator.Error![]const u8 {
+    pub fn correction(self: ValueChoices, a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance, issue: text.Issue) std.mem.Allocator.Error![]const u8 {
         const rejected = switch (issue.reason) {
             .unknown_passive => if (issue.rejected_passive) |id|
                 try std.fmt.allocPrint(a, "passive reference ID {d}", .{id.ordinal})
@@ -190,7 +190,7 @@ pub const ValueChoices = struct {
             "Write source-backed prose or use a listed passive reference ID. Do not supply exact-copy handles."
         else
             "Write source-backed prose, preserving exact values verbatim; only listed passive reference IDs may be selected.";
-        return std.fmt.allocPrint(a, "Validation failed: {s} is unavailable for this field's authorized evidence. {s} Preserve the fixed evidence and source meaning.", .{ rejected, permitted });
+        return std.fmt.allocPrint(a, "Validation failed: {s} is unavailable for this field's authorized evidence. {s} {s}", .{ rejected, permitted, guidance.repair_tails.get(.value_choices) });
     }
 };
 

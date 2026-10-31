@@ -184,15 +184,15 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .principles => projection == .principle_assessment,
             };
         }
-        pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
-            if (scope == .assignment) return assignmentPacket(allocator, inputs, context, scope.assignment);
-            if (purpose == .principles) return principles.packet(allocator, inputs, context, scope);
-            return packetForContext(allocator, inputs, context, scope);
+        pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: Scope) Error!*packets.Packet {
+            if (scope == .assignment) return assignmentPacket(allocator, inputs, context, guidance, scope.assignment);
+            if (purpose == .principles) return principles.packet(allocator, inputs, context, guidance, scope);
+            return packetForContext(allocator, inputs, context, guidance, scope);
         }
 
         /// A stopped request must still belong to this exact current native
         /// assignment or authorized finding repair, not merely the same feature.
-        pub fn matchesAdvicePacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet) @import("specification_support_repair.zig").Contract(purpose).Error!bool {
+        pub fn matchesAdvicePacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, prior: ?Collection, packet: *const packets.Packet) @import("specification_support_repair.zig").Contract(purpose).Error!bool {
             if (!acceptsProjection(inputs.projection) or a.assessmentPolicy(inputs.projection) != .advisory) return false;
             const bound = packet.advisoryAssessment() orelse return false;
             const dependencies = try adviceDependencies(allocator, inputs);
@@ -203,9 +203,9 @@ pub fn Contract(comptime purpose: Purpose) type {
                 const current = prior orelse return false;
                 if (current != .rejected or current.rejected.candidate == null) return false;
                 const Repair = @import("specification_support_repair.zig").Contract(purpose);
-                const authorization = try Repair.authorize(allocator, inputs, context, current.rejected);
-                break :repaired try Repair.packet(allocator, inputs, context, current.rejected.candidate.?, authorization);
-            } else try packetFor(allocator, inputs, context, assignmentScope(inputs, try nextSubject(allocator, inputs, prior)));
+                const authorization = try Repair.authorize(allocator, inputs, context, guidance, current.rejected);
+                break :repaired try Repair.packet(allocator, inputs, context, guidance, current.rejected.candidate.?, authorization);
+            } else try packetFor(allocator, inputs, context, guidance, assignmentScope(inputs, try nextSubject(allocator, inputs, prior)));
             defer packets.release(expected);
             checkPacket(expected, packet) catch |err| return if (err == error.InvalidRequiredAuthority) false else err;
             return std.meta.eql(expected.repairPermit(), packet.repairPermit()) and
@@ -235,7 +235,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             return withheld;
         }
 
-        fn assignmentPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, id: a.Id) Error!*packets.Packet {
+        fn assignmentPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, id: a.Id) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
@@ -265,7 +265,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (withheld) |prior| if (!prior.eql(member)) return error.InvalidRequiredAuthority;
                     withheld = member;
                 }
-                const single = if (purpose == .source) try packetForContext(local, inputs, context, .{ .finding = target }) else try principles.packet(local, inputs, context, .{ .finding = target });
+                const single = if (purpose == .source) try packetForContext(local, inputs, context, guidance, .{ .finding = target }) else try principles.packet(local, inputs, context, guidance, .{ .finding = target });
                 defer packets.release(single);
                 var parsed = try @import("strict_json.zig").decode(std.json.Value, local, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
                 // Copy the shared body before the member entry below mutates aliased
@@ -352,7 +352,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             return if (purpose == .source) withQuestionText(allocator, selected_packet, context.inputs, true) else packets.withBody(allocator, selected_packet, selected_packet.body());
         }
 
-        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
+        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: Scope) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
@@ -369,7 +369,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             } else return error.InvalidRequiredAuthority;
             const required = try applicability(inputs, target);
             const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, target);
-            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, target), .permitted_not_applicable = if (permitsNotApplicable(required)) required.review else null, .evidence = evidence_rule.guidance() }};
+            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, guidance, target), .permitted_not_applicable = if (permitsNotApplicable(required)) required.review else null, .evidence = evidence_rule.guidance() }};
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject = try subjects.project(scratch, inputs, context, target);
@@ -378,7 +378,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
@@ -472,7 +472,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             });
         }
 
-        pub fn packetForLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) ComparisonError!*packets.Packet {
+        pub fn packetForLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, candidate: Candidate) ComparisonError!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
@@ -496,7 +496,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .comparisons = views,
                 .supporting_evidence = .{
                     .diagnostic_detail = assigned.finding.detail,
-                    .target_purpose = try @import("required_authority_description.zig").task(scratch, assigned.finding.subject),
+                    .target_purpose = try @import("required_authority_description.zig").task(scratch, guidance, assigned.finding.subject),
                     .deficient_subject = presentation.fixedSubject(try subjects.projectLoss(scratch, inputs, context, assigned.finding.subject)),
                     .producers = try presentation.comparisonSupport(scratch, assigned.facts.records, context, assigned.finding.source_ids, claim_ids.items),
                 },
@@ -549,14 +549,14 @@ pub fn Contract(comptime purpose: Purpose) type {
             return (try @import("atomic_repair.zig").snapshot(a.Inputs, allocator, native)).bytes;
         }
 
-        pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
+        pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, prior: Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
             if (purpose != .source) return error.InvalidRequiredAuthority;
             const candidate = switch (prior) {
                 .accepted => |value| value.candidate,
                 .pending => |value| value,
                 .rejected => return error.InvalidRequiredAuthority,
             };
-            const expected = try packetForLoss(allocator, inputs, context, candidate);
+            const expected = try packetForLoss(allocator, inputs, context, guidance, candidate);
             defer packets.release(expected);
             try checkPacket(expected, packet);
             const owner = @import("source_omission.zig").comparisons;
@@ -609,11 +609,11 @@ pub fn Contract(comptime purpose: Purpose) type {
         /// Bind every produced finding before advancing. Record responses must
         /// name exactly the complete native assignment; the full validator owns
         /// individual finding/evidence admission and narrow repair diagnostics.
-        pub fn collectFocused(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
+        pub fn collectFocused(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, prior: ?Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
             const id = try nextSubject(allocator, inputs, prior);
             const scope = assignmentScope(inputs, id);
             const grouped = scope == .assignment;
-            const expected = try packetFor(allocator, inputs, context, scope);
+            const expected = try packetFor(allocator, inputs, context, guidance, scope);
             defer packets.release(expected);
             try checkPacket(expected, packet);
             const previous: ?Candidate = if (prior) |result| result.pending else null;
@@ -623,16 +623,16 @@ pub fn Contract(comptime purpose: Purpose) type {
                 else => err,
             };
             if (added == .rejected) return .{ .rejected = .{ .candidate = null, .rejection = added.rejected } };
-            return appendAdmitted(allocator, inputs, context, prior, packet, added.findings, origin);
+            return appendAdmitted(allocator, inputs, context, guidance, prior, packet, added.findings, origin);
         }
 
         /// Current assignment membership and ordinary full admission are shared
         /// by model collection and execution-local retained native findings.
-        pub fn appendAdmitted(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet, findings: []const Finding, origin: ?Origin) Error!Collection {
+        pub fn appendAdmitted(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, prior: ?Collection, packet: *const packets.Packet, findings: []const Finding, origin: ?Origin) Error!Collection {
             const id = try nextSubject(allocator, inputs, prior);
             const scope = assignmentScope(inputs, id);
             const grouped = scope == .assignment;
-            const expected = try packetFor(allocator, inputs, context, scope);
+            const expected = try packetFor(allocator, inputs, context, guidance, scope);
             defer packets.release(expected);
             try checkPacket(expected, packet);
             const previous: ?Candidate = if (prior) |result| result.pending else null;

@@ -573,8 +573,9 @@ current registry. No separate resolver action or historical-schema registry is n
 - **Input:** one `SourceCitationProposal`, current `ReferenceChunk`, captured source blob, and
   validated source map
 - **Output:** validated citation proposal
-- **Responsibility:** Prove the source/block/location/verbatim tuple exists and lies inside the
-  exact chunk range supplied to this unit; accept no model-owned canonical ID.
+- **Responsibility:** Prove the source/block/location tuple exists and lies inside the exact
+  chunk range supplied to this unit, with any exact scalar (an extractor-owned token
+  citation's) copied from the captured source; accept no model-owned quotation or canonical ID.
 
 ## `AssignSourceCitationIdAction`
 

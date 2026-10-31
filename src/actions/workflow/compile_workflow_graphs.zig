@@ -189,6 +189,7 @@ fn compileResources(
         if (kind == .json_composition) continue;
         compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = switch (kind orelse return invalid()) {
             .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return invalid() },
+            .packet_guidance => .{ .packet_guidance = @import("../../domain/packet_guidance.zig").compile(allocator, captured) catch return invalid() },
             .prompt => .{ .prompt = captured },
             .example => .{ .example = captured },
             .data => .{ .data = captured },

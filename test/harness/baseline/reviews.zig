@@ -16,7 +16,8 @@ pub const Kind = union(Review) { source: source.Decision, principles: principles
 pub const ComparisonContext = struct {
     omission_ordinal: u32,
     omission_detail: []const u8,
-    view: comparison.View,
+    /// The `baseline-acquisition/v8` view: the request's presented comparison.
+    view: comparison.PresentedView,
     members: []const comparison_context.ClaimMeaning,
     sources: []const comparison.Span,
 };
@@ -84,9 +85,10 @@ pub const Tracker = struct {
             defer scratch.deinit();
             const a = scratch.allocator();
             const context = try @import("../../../src/application/specification_workflow.zig").readContext(view);
-            var complete = proof.response.assessments.len == proof.assignment.comparisons.len;
+            const presented = try proof.present(a, try @import("../../../src/application/packet_guidance_workflow.zig").read(view));
+            var complete = proof.response.assessments.len == presented.assignment.comparisons.len;
             for (proof.response.assessments, 0..) |assessment, index| {
-                const native_view = for (proof.assignment.comparisons) |assigned| {
+                const native_view = for (presented.assignment.comparisons) |assigned| {
                     if (assigned.id.ordinal == assessment.comparison_id.ordinal) break assigned;
                 } else {
                     complete = false;
@@ -108,7 +110,7 @@ pub const Tracker = struct {
 
     /// Inputs and verdicts are supplied by the native comparison owner; the
     /// same claim-meaning projector builds the actual production assignment.
-    pub fn retainComparison(self: *Tracker, origin: Origin, fixed: @FieldType(comparison.Assignment, "finding"), assigned: comparison.View, assessment: comparison.Assessment, members: []const comparison_context.ClaimMeaning, admission: @FieldType(Finding, "admission")) !void {
+    pub fn retainComparison(self: *Tracker, origin: Origin, fixed: @FieldType(comparison.Assignment, "finding"), assigned: comparison.PresentedView, assessment: comparison.Assessment, members: []const comparison_context.ClaimMeaning, admission: @FieldType(Finding, "admission")) !void {
         if (origin.kind != .inference or origin.request.value == 0 or origin.attempt.value == 0 or
             assigned.id.ordinal == 0 or assigned.id.ordinal != assessment.comparison_id.ordinal or
             assigned.members.len != members.len) return error.InvalidNativeReviewFinding;
@@ -668,7 +670,7 @@ test "native preservation findings retain compared meanings and verify exact ver
         .missing_obligation = "MOCK retain the required behavior.",
         .source_ids = &.{.{ .ordinal = 1 }},
     };
-    const assigned: comparison.View = .{ .id = .{ .ordinal = 1 }, .purpose = "MOCK native extraction collection", .members = &.{.{ .id = .{ .ordinal = 1 }, .claim_id = .{ .ordinal = 1 } }} };
+    const assigned: comparison.PresentedView = .{ .id = .{ .ordinal = 1 }, .purpose = "MOCK native extraction collection", .members = &.{.{ .id = .{ .ordinal = 1 }, .claim_id = .{ .ordinal = 1 } }} };
     const members = [_]comparison_context.ClaimMeaning{.{ .meaning = "MOCK actual compared source behavior.", .source_id = .{ .ordinal = 1 } }};
     const observed: comparison.Assessment = .{ .comparison_id = assigned.id, .result = .lost, .sources = &.{}, .explanation = "MOCK bound lost assessment." };
     try tracker.retainComparison(origin, fixed, assigned, observed, &members, .rejected);

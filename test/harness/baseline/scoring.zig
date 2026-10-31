@@ -23,22 +23,7 @@ const phase2 = @import("phase2_decision.zig");
 const upstream = @import("upstream.zig");
 const admission = @import("admission.zig");
 
-pub const StageResources = struct {
-    stage: stages.Stage,
-    physical_sends: u64 = 0,
-    known_actual_tokens: u64 = 0,
-    known_input_tokens: u64 = 0,
-    known_output_tokens: u64 = 0,
-    actual_tokens: ?u64 = 0,
-    actual_input_tokens: ?u64 = 0,
-    actual_output_tokens: ?u64 = 0,
-    usage_complete: bool = true,
-    send_share: ?f64 = null,
-    /// Denominator covers known consumption only when usage is incomplete.
-    known_accounted_token_share: ?f64 = null,
-    actual_token_share: ?f64 = null,
-};
-pub const FeatureResources = struct { feature_id: []const u8, stages: []const StageResources };
+pub const FeatureResources = struct { feature_id: []const u8, stages: []const stages.Resources };
 
 pub const Row = struct {
     trial: comparison.Trial,
@@ -59,7 +44,7 @@ pub const Row = struct {
     usage: ?comparison.Usage,
     elapsed_ns: ?u64,
     native_invocation_elapsed_ns: ?u64,
-    stage_resources: []const StageResources,
+    stage_resources: []const stages.Resources,
     finding_assessments: []const assessment.FindingResult,
     review_coverage: []const assessment.ReviewCoverage,
     final_current_fidelity: ?bool,
@@ -115,7 +100,7 @@ pub const Report = struct {
     rows: []const Row,
     scorecard: comparison.Scorecard,
     qualification: Qualification,
-    stage_resources: []const StageResources,
+    stage_resources: []const stages.Resources,
     finding_type_accuracy: finding_metrics.Report,
     correction_assisted_fidelity: final_metrics.Report,
     failure_attribution_complete: bool,
@@ -786,68 +771,24 @@ fn uncorrectedClarification(facts: acquisition.Facts) bool {
     return true;
 }
 
-fn emptyStages(a: std.mem.Allocator) ![]StageResources {
-    const result = try a.alloc(StageResources, std.meta.tags(stages.Stage).len);
-    for (std.meta.tags(stages.Stage), result) |stage, *value| value.* = .{ .stage = stage };
-    return result;
-}
-pub fn resourceStages(a: std.mem.Allocator, receipts: []const trace.Receipt) ![]const StageResources {
-    const result = try emptyStages(a);
+pub fn resourceStages(a: std.mem.Allocator, receipts: []const trace.Receipt) ![]const stages.Resources {
+    const result = try stages.empty(a);
     errdefer a.free(result);
-    for (receipts) |receipt| {
-        const stage = stages.classify(receipt.purpose, receipt.owner_kind);
-        const value = &result[@intFromEnum(stage)];
-        value.physical_sends = std.math.add(u64, value.physical_sends, 1) catch return error.AccountingOverflow;
-        if (receipt.usage) |usage| {
-            if (operation.ProviderUsage.init(usage.input_tokens, usage.output_tokens, usage.total_tokens) == null) return error.CaptureMismatch;
-            value.known_actual_tokens = std.math.add(u64, value.known_actual_tokens, usage.total_tokens) catch return error.AccountingOverflow;
-            value.known_input_tokens = std.math.add(u64, value.known_input_tokens, usage.input_tokens) catch return error.AccountingOverflow;
-            value.known_output_tokens = std.math.add(u64, value.known_output_tokens, usage.output_tokens) catch return error.AccountingOverflow;
-        } else value.usage_complete = false;
-        value.actual_tokens = if (value.usage_complete) value.known_actual_tokens else null;
-        value.actual_input_tokens = if (value.usage_complete) value.known_input_tokens else null;
-        value.actual_output_tokens = if (value.usage_complete) value.known_output_tokens else null;
-    }
-    try stageShares(result);
+    for (receipts) |receipt| try stages.add(result, receipt.purpose, receipt.owner_kind, receipt.usage);
+    try stages.share(result);
     return result;
 }
-
-fn stageShares(values: []StageResources) !void {
-    var sends: u64 = 0;
-    var tokens: u64 = 0;
-    var usage_complete = true;
-    for (values) |value| {
-        sends = std.math.add(u64, sends, value.physical_sends) catch return error.AccountingOverflow;
-        tokens = std.math.add(u64, tokens, value.known_actual_tokens) catch return error.AccountingOverflow;
-        usage_complete = usage_complete and value.usage_complete;
-    }
-    for (values) |*value| {
-        value.send_share = if (sends != 0) @as(f64, @floatFromInt(value.physical_sends)) / @as(f64, @floatFromInt(sends)) else null;
-        value.known_accounted_token_share = if (tokens != 0) @as(f64, @floatFromInt(value.known_actual_tokens)) / @as(f64, @floatFromInt(tokens)) else null;
-        value.actual_token_share = if (usage_complete) value.known_accounted_token_share else null;
-    }
-}
-fn combineStages(a: std.mem.Allocator, rows: []const Row) ![]const StageResources {
+fn combineStages(a: std.mem.Allocator, rows: []const Row) ![]const stages.Resources {
     return combineSelectedStages(a, rows, null);
 }
-fn combineSelectedStages(a: std.mem.Allocator, rows: []const Row, feature_id: ?[]const u8) ![]const StageResources {
-    const result = try emptyStages(a);
+fn combineSelectedStages(a: std.mem.Allocator, rows: []const Row, feature_id: ?[]const u8) ![]const stages.Resources {
+    const result = try stages.empty(a);
     errdefer a.free(result);
     for (rows) |row| {
         if (feature_id) |selected| if (!std.mem.eql(u8, selected, row.trial.feature_id)) continue;
-        for (row.stage_resources) |item| {
-            const target = &result[@intFromEnum(item.stage)];
-            target.physical_sends = std.math.add(u64, target.physical_sends, item.physical_sends) catch return error.AccountingOverflow;
-            target.known_actual_tokens = std.math.add(u64, target.known_actual_tokens, item.known_actual_tokens) catch return error.AccountingOverflow;
-            target.known_input_tokens = std.math.add(u64, target.known_input_tokens, item.known_input_tokens) catch return error.AccountingOverflow;
-            target.known_output_tokens = std.math.add(u64, target.known_output_tokens, item.known_output_tokens) catch return error.AccountingOverflow;
-            target.usage_complete = target.usage_complete and item.usage_complete;
-            target.actual_tokens = if (target.usage_complete) target.known_actual_tokens else null;
-            target.actual_input_tokens = if (target.usage_complete) target.known_input_tokens else null;
-            target.actual_output_tokens = if (target.usage_complete) target.known_output_tokens else null;
-        }
+        for (row.stage_resources) |item| try stages.merge(&result[@intFromEnum(item.stage)], item);
     }
-    try stageShares(result);
+    try stages.share(result);
     return result;
 }
 fn featureResources(a: std.mem.Allocator, rows: []const Row) ![]const FeatureResources {
@@ -960,7 +901,7 @@ test "native projection retains original generation independently of later block
     var facts: acquisition.Facts = .{
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
-        .workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
         .first_candidate = .{ .json = original, .sha256 = std.fmt.bytesToHex(first_hash, .lower), .first_pass = true },
         .final_candidate = .{ .json = final, .sha256 = std.fmt.bytesToHex(last_hash, .lower), .first_pass = false },
@@ -996,7 +937,7 @@ test "receipt hashes reject changed bytes and unknown usage never becomes zero c
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
+        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .specification_unit, .request_step = "generate", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .uncertain_delivery = true }},
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -1015,7 +956,7 @@ test "native genuine clarification targets include registered question bytes wit
         .trial = .{ .ordinal = 1, .case_id = "approval-gap", .feature_id = "approval", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
+        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .request_step = "understand", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = .{ .input_tokens = 5, .output_tokens = 3, .total_tokens = 8 } }},
         .published_output = "Urgent requests require manager sign-off. Ordinary approval remains unresolved.",
         .clarification_outputs = &.{.{ .path = "specs/approval/clarify/spec-01.md", .bytes = question, .sha256 = try frozen_inputs.hash(a, question) }},
@@ -1127,7 +1068,7 @@ test "native purposes count failed first repair sends and preserve unknown per-s
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -1183,7 +1124,7 @@ test "upstream projection binds original and corrected raw sends and retains nat
     try std.testing.expect(upstreamMechanicalFailure(rejected));
 }
 
-fn testRow(feature_id: []const u8, resources: []const StageResources) Row {
+fn testRow(feature_id: []const u8, resources: []const stages.Resources) Row {
     return .{
         .trial = .{ .ordinal = 1, .case_id = feature_id, .feature_id = feature_id, .arm = .A, .repetition = 1 },
         .acquisition_sha256 = "native-record",
@@ -1236,7 +1177,7 @@ test "partial setup without invocation stays unattempted while native exchanges 
     var facts: acquisition.Facts = .{ .trial = row.trial, .freeze_sha256 = "freeze", .directory = "trials/0001/partial", .inputs_sha256 = "reserved-input-identity", .diagnostic = "InputUnavailable" };
     try std.testing.expect(try invocationUnstarted(facts));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(facts));
-    facts.workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .input_invalid };
+    facts.workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(!try invocationUnstarted(facts));
     facts.workflow = null;
     facts.receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .experiment_send = .{ .ordinal = 1 }, .request_step = "extract", .context_sha256 = @splat(0), .request_sha256 = @splat(0) }};
@@ -1280,7 +1221,7 @@ test "representation attribution stays separate from native paid-resource stages
     const receipt: trace.Receipt = .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .specification_unit, .experiment_send = .{ .ordinal = 1 }, .request_step = "generation", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = operation.ProviderUsage.init(4, 3, 7) };
     const resources = try resourceStages(a, &.{receipt});
     try std.testing.expectEqual(@as(?u64, 7), resources[@intFromEnum(stages.Stage.generation)].actual_tokens);
-    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
+    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
     const metric = try admissionMetric(a, facts);
     try std.testing.expectEqual(.measured, metric.status);
     facts.workflow.?.admission_escape.?.escaped_values = 1;
@@ -1294,7 +1235,7 @@ test "native admission workload incidence includes zero-send invocations and exc
     try std.testing.expect(!acquisition.nativeInvocationObserved(never_invoked));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(never_invoked));
     var invoked = never_invoked;
-    invoked.workflow = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .input_invalid };
+    invoked.workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(acquisition.nativeInvocationObserved(invoked));
     const missing = try admissionMetric(a, invoked);
     try std.testing.expectEqual(.unavailable, missing.status);

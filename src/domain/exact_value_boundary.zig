@@ -146,6 +146,20 @@ fn previous(prose: []const u8, index: usize) Scalar {
     while (prose[cursor] & 0xc0 == 0x80) cursor -= 1;
     return next(prose, cursor);
 }
+/// Whether prose ends with terminal punctuation: the one closed policy that exact-value
+/// boundaries and the acceptance-criterion clause join share (§23). Invalid or
+/// truncated UTF-8 at the end is not terminal.
+pub fn endsWithTerminal(prose: []const u8) bool {
+    var start = prose.len;
+    while (start > 0) {
+        start -= 1;
+        if (prose[start] & 0xc0 != 0x80) break;
+    }
+    if (start == prose.len) return false;
+    const size = std.unicode.utf8ByteSequenceLength(prose[start]) catch return false;
+    if (prose.len - start != size) return false;
+    return terminal(std.unicode.utf8Decode(prose[start..]) catch return false);
+}
 fn terminal(scalar: u21) bool {
     return switch (scalar) {
         '.', ',', ';', ':', '!', '?', 0x2026, 0x3001, 0x3002, 0xff0c, 0xff1b, 0xff1a, 0xff01, 0xff1f => true,
@@ -179,4 +193,13 @@ fn wrapper(scalar: u21) bool {
         ')', ']', '}', 0x00bb, 0x2019, 0x201d, 0x203a, 0x3009, 0x300b, 0x300d, 0x300f, 0x3011, 0xff09, 0xff3d, 0xff5d => true,
         else => false,
     };
+}
+
+test "terminal ends follow the one closed table, and no byte sequence panics" {
+    for ([_][]const u8{ ".", "a,", "a;", "a:", "a!", "a?", "a\u{2026}", "a\u{3001}", "a\u{3002}", "a\u{ff0c}", "a\u{ff1b}", "a\u{ff1a}", "a\u{ff01}", "a\u{ff1f}" }) |ended|
+        try std.testing.expect(endsWithTerminal(ended));
+    // Not terminal: no punctuation, a closing wrapper, truncated or stray continuation
+    // bytes, an overlong ".", a surrogate, code points above U+10FFFF, an invalid start byte.
+    for ([_][]const u8{ "", "a", "(a)", "a\"", "\xe2\x80", "\x80", "a\x80", "\xc0\xae", "\xed\xa0\x80", "\xf4\x90\x80\x80", "\xf7\xbf\xbf\xbf", "\xff" }) |open|
+        try std.testing.expect(!endsWithTerminal(open));
 }

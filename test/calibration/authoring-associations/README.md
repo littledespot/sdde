@@ -68,8 +68,9 @@ the synthetic/captured requirements, derived evidence, non-public guidance and
 schemas. Reuse the authenticated native request debugger's `/api/replay`
 modified-request route with each complete frozen `edit.json` object. Select one
 actual parent call by its retained run/id, preserve the pinned settings and check
-the actual serialized provider request against each request hash. The existing
-`scripts/e2e-call.sh` has no edit-file input; it cannot launch this panel.
+the actual serialized provider request against each request hash. `scripts/e2e-call.sh
+--edit` sends an edited request but checks no frozen request hash and keeps no pinned
+settings beyond the selected call's, so it cannot launch this panel.
 No separate network client or production fallback is introduced here.
 
 Journal each send before dispatch. Retain authentic parent/replay linkage, response

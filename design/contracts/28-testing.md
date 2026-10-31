@@ -181,7 +181,15 @@ Required cases include:
   - Prove deterministic pipe-delimited escaping/null encoding.
   - Reject heading/row-width corruption.
   - Exercise threshold filtering and prior-tail recovery.
-  - Redact before truncation; fail closed on sink failure.
+  - Redact before splitting into lossless ordered fragments; never truncate; fail closed
+    on sink failure.
+  - Cover the [ADR 0019](../decisions/0019-single-request-debugger.md) request debugger
+    offline: exact reconstruction, wrong/missing chunks, attribution, retry/repair
+    chains, closed replay input, unchanged exact wire bytes, modified
+    prompt/context/schema, current provider authorization, one-call behavior, immutable
+    parent records, pre/post-dispatch storage failure and HTTP access checks. Native
+    packaging embeds the UI and exercises debugger startup without the source tree. Live
+    provider replay remains separately authorized; offline evidence is not E2E evidence.
 - `red_then_green` intended-failure matching and required later green evidence;
 - post-command declared, ephemeral, and undeclared delta handling;
 - **Execution leases and locks:**
@@ -194,16 +202,23 @@ Required cases include:
   view, descendant/runtime/evidence invalidation, cleared downstream pointers
   and reference-dominant bootstrap mutation form one complete validated output
   set under §25.
-- **Prior-run logging:**
-  - Exercise active, already-closed, mixed, duplicate, missing-release,
-    wrong-binding and orphan-release groups.
-  - Keep fresh policy/binding construction unreachable until total finalization
-    evidence validates.
+- **Prior-run logging** ([ADR 0026](../decisions/0026-header-identity-log-retention.md)):
+  - Retention runs after the current activation's recovery and rotation and before
+    `run.started`; the current run is never pruned.
+  - Validate every prior segment by its segment-header identity; an invalid one blocks
+    the run and is never skipped, while stray regular files are left alone.
+  - Keep a run with an active tail in either stream whole; prior-tail finalization
+    (§14.10) is not yet implemented.
+  - Prune only each group's expired ordinal prefix, under that run's lock, after
+    revalidating the group under the lock.
 - transient unauthorized command writes that are restored before exit, which must still terminate the command and invalidate its evidence;
 - **Publication:**
   - Validate output before publication.
   - Unrepaired JSON/schema rejection with existing open forms ends in error with no
-    publication calls. A successful correction may reach a valid clarification pause.
+    publication calls ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md),
+    accepted, on hold since 30 October 2026; not implemented, would publish a failed
+    incomplete specification instead). A successful correction may reach a valid
+    clarification pause.
   - Source, generation, candidate-review and residual open-registry pauses all publish
     the validated incomplete specification through the same path, remain ungraded,
     and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.

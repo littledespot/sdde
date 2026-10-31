@@ -63,7 +63,8 @@ The internal test environment supplies the evaluation selection:
 - It is not forwarded to production credential loading.
 - No environment values are compiled into either executable.
 - The shared [cost policy](../../test/harness/model_cost_policy.zig) allows only
-  `aws-bedrock` / `openai.gpt-oss-20b-1:0`.
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0` for judging
+  ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)).
   Environment selection checks it before credentials are read, and shared live
   composition checks it before constructing a provider adapter. Sonnet, Sol,
   Haiku, Luna, direct OpenAI and other model IDs or aliases cannot reach a live request.
@@ -278,7 +279,7 @@ For scored criteria, the percentage is:
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in
-  judge inputs. Human review and live calibration are tracked in FIX05 R8.
+  judge inputs. Human review and live calibration are tracked in FIX06 (H1, H3; former FIX05 R8).
 
 ## Attempts and failures
 

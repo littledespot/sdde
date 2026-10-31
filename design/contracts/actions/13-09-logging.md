@@ -119,9 +119,10 @@ owner and cannot finalize twice or discard an earlier logging failure.
 
 ## `EvaluateLogThresholdAction`
 
-- **Input:** canonical event level and configured canonical threshold
+- **Input:** resolved event definition and configured canonical threshold
 - **Output:** emit/drop decision
-- **Responsibility:** Emit exactly when `rank(event) >= rank(threshold)` using `fatal=60`,
+- **Responsibility:** Apply §26.5's emission rule: emit an event the registry marks
+  `always`; otherwise emit exactly when `rank(event) >= rank(threshold)` using `fatal=60`,
   `error=50`, `warning=40`, `info=30`, `debug=20`, `trace=10`.
 
 ## `AssignLogEventSequenceAction`

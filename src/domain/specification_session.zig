@@ -134,16 +134,17 @@ pub fn ownerFor(allocator: std.mem.Allocator, current: Session, index: usize) Er
     };
 }
 
-pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context) Error!*packets.Packet {
-    return packetFor(allocator, current, context, current.completed);
+pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance) Error!*packets.Packet {
+    return packetFor(allocator, current, context, current.completed, guidance);
 }
-pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize) Error!*packets.Packet {
-    return packetForOptions(allocator, current, context, index, .{});
+pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, guidance: *const @import("packet_guidance.zig").Guidance) Error!*packets.Packet {
+    return packetForOptions(allocator, current, context, index, .{ .presentation = .{ .authoring = guidance } });
 }
 
 pub const PacketOptions = struct {
     exact_claims: ?[]const @import("reference_reconciliation.zig").ClaimId = null,
-    task: ?[]const u8 = null,
+    /// Authoring presents the workflow's purposes; a repair presents only its task.
+    presentation: union(enum) { authoring: *const @import("packet_guidance.zig").Guidance, task: []const u8 },
 };
 
 /// Present the aggregate contract without imposing a floor on each source group.
@@ -217,7 +218,10 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     }
     // Completed units are repaired under an atomic target and its evidence.
     // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items, record_kinds.items);
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), switch (options.presentation) {
+        .authoring => |guidance| .{ .authoring = guidance },
+        .task => .repair,
+    }, requirements.items, record_kinds.items);
     var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
     for (requirements.items) |requirement| {
         if (assigned) |selection| {
@@ -272,15 +276,12 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const offered = try packets.withPresentationOmissions(allocator, result, omissions.items);
     packets.release(result);
     result = offered;
-    if (options.task) |task| {
-        const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
-        packets.release(result);
-        result = contextual;
-    } else {
-        const contextual = try packets.withContext(enum { write }, allocator, result, "operation", .write);
-        packets.release(result);
-        result = contextual;
-    }
+    const contextual_operation = switch (options.presentation) {
+        .task => |task| try packets.withContext([]const u8, allocator, result, "task", task),
+        .authoring => try packets.withContext(enum { write }, allocator, result, "operation", .write),
+    };
+    packets.release(result);
+    result = contextual_operation;
     // Only dependent units receive earlier drafts. The evidence catalogue and
     // native dependency snapshots remain complete for generation and repair.
     switch (selected) {
@@ -295,7 +296,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const input = @import("reference_model_input.zig");
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
-        if (assigned != null and options.task == null) {
+        if (assigned != null and options.presentation == .authoring) {
             const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", try recordRequirements(a, current, context));
             packets.release(result);
             result = contextual;
@@ -309,14 +310,14 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     defer packets.release(fixed);
     const choices = try input.withTextChoices(allocator, fixed, passive_ids);
     defer packets.release(choices);
-    if (options.task != null or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
+    if (options.presentation == .task or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
 }
 
 /// ADR 0038: every claim a functional requirement names needs an acceptance
 /// criterion or edge case that names it too. Response admission enforces it, so a
 /// gap takes the request's existing protocol correction.
-const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
+pub const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
     .kind_property = "content",
     .covered = &.{@tagName(g.spec.Kind.functional_requirement)},
     .covering = &.{ @tagName(g.spec.Kind.acceptance_criterion), @tagName(g.spec.Kind.edge_case) },

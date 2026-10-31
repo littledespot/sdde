@@ -29,7 +29,7 @@ and publication evidence control workflow authority.
   workload and publication assurance work are open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [current FIX05 review and remaining work](fixes/FIX05.md).
+  [current FIX06 rollout and remaining work](fixes/FIX06.md).
 - The development harness runs real generation and retains the actual published
   specification, with its sources and rubric, for human adjudication; no model
   grades an E2E run. An adjudicated live run, a scored live baseline, human rubric
@@ -339,16 +339,17 @@ remain separate from E2E and workflow authority.
 | [Contract samples](design/code.md) | Illustrative shapes and links to their owners; not an alternate runtime schema. |
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
-| [Harness overview](design/harness/README.md) | Harness purpose, authority boundary and commands; open work is in FIX05. |
-| [FIX05](fixes/FIX05.md) | Architecture review, current corrective focus, remaining work and required acceptance evidence. |
+| [Harness overview](design/harness/README.md) | Harness purpose, authority boundary and commands; open work is in FIX06. |
+| [FIX06](fixes/FIX06.md) | Phased rollout of all open work, its decisions and the evidence each phase needs. |
 | [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 
 ### Fix records
 
-[FIX05](fixes/FIX05.md) is the sole active fix record. Keep outstanding work and
+[FIX06](fixes/FIX06.md) is the sole active fix record. Keep outstanding work and
 its implementation/verification status there; remove completed tasks from active
 tracking. Completed work and its supporting dated reviews live in
-[Z_FIX01](fixes/Z_FIX01.md) and [Z_FIX02](fixes/Z_FIX02.md); older records and
+[Z_FIX01](fixes/Z_FIX01.md), [Z_FIX02](fixes/Z_FIX02.md) and
+[Z_FIX05](fixes/Z_FIX05.md), which also records FIX05's retirement; older records and
 experiments remain under `fixes/archive/`. Historical proposals and status statements do not
 create current work, grant approval or establish successful live acceptance.
 

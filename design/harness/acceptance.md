@@ -17,10 +17,9 @@ expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
 registered open clarification handles.
 
-The user chose **GPT-OSS-20B advisory grading with human adjudication for
-acceptance**. Raw model grades cannot authoritatively accept or reject a published
+Raw model grades cannot authoritatively accept or reject a published
 specification. The existing cost policy is unchanged; no alternate model,
-calibration call or new workflow diagnostic is authorized by this change.
+calibration call or new workflow diagnostic is authorized by this policy.
 
 **Amended 19 October 2026 (user decision):** the advisory grader is removed from
 E2E. An E2E run makes no judge call; human adjudication of its retained report is
@@ -142,7 +141,8 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
   grader/acceptance evidence with an always-unresolved decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v10`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v11`: the single total token budget and aggregate actual usage,
+  each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.
 - `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and

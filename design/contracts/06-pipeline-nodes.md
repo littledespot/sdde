@@ -105,10 +105,9 @@ Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec
 The pipeline runner validates node contracts before execution, applies immutable deltas after a successful node, and refuses a chain with missing inputs, undeclared writes, incompatible schema versions, duplicate producers, or invalid side-effect ordering. An orchestrator schedules nodes; the runner performs contract/data plumbing.
 
 The registered `workflow_publication` effect ends execution. The shared compiled
-graph validator and registry admission require each publication outcome to target
-its matching workflow terminal directly, including after subgraph expansion.
-Preparing the final outcome and every fallible or telemetry-producing operation
-must precede publication; even a capability-free step is not a valid successor.
+graph validator and registry admission enforce the publication-terminal rule in
+[§25.1](25-publication.md#251-one-execution-one-output-boundary) and the
+[F0005 compilation checks](../features/F0005-WorkflowDefinitionRegistryService.md#compilation-checks).
 
 - Runtime execution guards use the [F0005 execution-guard
   contract](../features/F0005-WorkflowDefinitionRegistryService.md#execution-guards).
@@ -124,7 +123,12 @@ An unexpected binding error terminates execution without applying a delta or
 following a YAML outcome edge. Rejected input, delta, accounting or dependency-renewal
 contracts likewise return a terminal typed runner rejection, never an `invalid` or
 `failed` operation outcome. Only a declared operation outcome whose delta and runner
-transitions have been accepted and applied may select a YAML successor.
+transitions have been accepted and applied may select a YAML successor. After an
+eligible terminal failure, the engine may run the definition's declared model-free
+`failure-output` subgraph in the runner's failure-output mode; it follows no transition
+from the failing step and returns the original failure
+([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6, accepted,
+on hold since 30 October 2026; not implemented).
 
 An applied `invalid`, `needs_user`, `blocked`, `failed` or `cancelled` outcome
 remains associated with its canonical native subject (including the complete
@@ -268,7 +272,8 @@ Every orchestrator must:
 - [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented) names the
   stage sequence of one model request as an ADR 0005 kernel responsibility. A fixed,
   capability-free kernel orchestrator implements the registered `request-model` operation,
-  with the stage actions as its runner-owned child bindings.
+  with each request stage's action as a runner-owned child binding (these are not ADR 0031
+  stage actions).
   ADR 0030 narrowly amends the previous rule for it: its child graph may contain exactly one
   retry, the request's protocol correction, bounded by the step's declared `retry-limit`. It
   still cannot conceal workflow transitions, repair policy, slot or resource selection, or a

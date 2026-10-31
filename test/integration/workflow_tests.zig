@@ -11,6 +11,7 @@ const workflow = @import("../../src/domain/workflow.zig");
 const workflow_compilation = @import("../../src/domain/workflow_compilation.zig");
 const workflow_execution = @import("../../src/domain/workflow_execution.zig");
 const telemetry = @import("../../src/domain/telemetry.zig");
+const request_projection = @import("../../src/test_fixtures/request_projection.zig");
 const model_provider_requirement = @import("../../src/domain/model_provider_requirement.zig");
 const llm_provider_identity = @import("../../src/domain/llm_provider_identity.zig");
 const bootstrap_orchestrator = @import("../../src/application/bootstrap_orchestrator.zig");
@@ -1156,6 +1157,78 @@ test "configured specification generation YAML executes native references models
     try testSpecificationWorkflows(.existing);
 }
 
+test "request projection records every provider invocation, keyed and deterministic" {
+    try untraced_allocator.run(checkRequestProjection, .{});
+}
+
+fn checkRequestProjection(allocator: std.mem.Allocator) !void {
+    const io = std.testing.io;
+    var freeze = std.testing.tmpDir(.{});
+    defer freeze.cleanup();
+    var first: request_projection.Sink = .{ .allocator = allocator, .io = io, .root = freeze.dir };
+    defer first.entries.deinit(allocator);
+    var second: request_projection.Sink = .{ .allocator = allocator, .io = io };
+    defer second.deinit();
+    try runSpecificationWorkflows(allocator, .source_preservation, &first);
+    try runSpecificationWorkflows(allocator, .source_preservation, &second);
+    // The same scenarios project byte-identical requests.
+    try std.testing.expect(first.entries.items.len != 0);
+    try std.testing.expectEqualDeep(first.entries.items, second.entries.items);
+    // Each invocation is keyed by its call order within its scenario.
+    for (first.entries.items, 0..) |entry, index| try std.testing.expectEqual(if (index != 0 and first.entries.items[index - 1].scenario == entry.scenario) first.entries.items[index - 1].call + 1 else 1, entry.call);
+    // Extraction, reconciliation, generation, repair and review are all projected.
+    const Kind = struct { owner: std.meta.Tag(@import("../../src/domain/model_request_identity.zig").ImmutableUnitOwnerId), purpose: @import("../../src/domain/model_request_identity.zig").RequestPurposeKind };
+    for ([_]Kind{
+        .{ .owner = .reference_chunk, .purpose = .initial_generation },
+        .{ .owner = .reference_global, .purpose = .initial_generation },
+        .{ .owner = .specification_unit, .purpose = .initial_generation },
+        .{ .owner = .semantic_review, .purpose = .semantic_review },
+    }) |kind| {
+        const found = for (first.entries.items) |entry| {
+            if (entry.owner == kind.owner and entry.purpose == kind.purpose) break true;
+        } else false;
+        if (!found) std.debug.print("request projection lacks {s}/{s}\n", .{ @tagName(kind.owner), @tagName(kind.purpose) });
+        try std.testing.expect(found);
+    }
+    const repaired = for (first.entries.items) |entry| {
+        if (entry.purpose == .atomic_repair) break true;
+    } else false;
+    try std.testing.expect(repaired);
+    // Each reconciliation phase (dispositions, signals, conflicts) is its own global
+    // unit, whose first request opens its ordinals.
+    var phases: usize = 0;
+    for (first.entries.items) |entry| {
+        if (entry.scenario == first.entries.items[0].scenario and entry.owner == .reference_global and entry.purpose == .initial_generation and entry.request == 1 and entry.attempt == 1) phases += 1;
+    }
+    try std.testing.expect(phases >= 3);
+    // A written projection keeps the request's model-visible members and omits the
+    // three that refactors change by design.
+    const entry = first.entries.items[0];
+    const path = try std.fmt.allocPrint(allocator, "source_preservation/scenario-{d:0>3}/call-{d:0>4}.json", .{ entry.scenario, entry.call });
+    defer allocator.free(path);
+    const bytes = try freeze.dir.readFileAlloc(io, path, allocator, .limited(16 * 1024 * 1024));
+    defer allocator.free(bytes);
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+    try std.testing.expectEqualSlices(u8, &entry.digest, &digest);
+    const parsed = try std.json.parseFromSlice(std.json.Value, allocator, bytes, .{});
+    defer parsed.deinit();
+    for ([_][]const u8{ "version", "workflow_version", "request_step" }) |omitted| try std.testing.expect(parsed.value.object.get(omitted) == null);
+    for ([_][]const u8{ "content", "protocol_prompt", "schema", "response_mode", "controls", "sampling", "reasoning_effort", "members", "coverages", "required_items" }) |kept| try std.testing.expect(parsed.value.object.get(kept) != null);
+    // The manifest counts what the freeze holds, so an empty or partial freeze never
+    // diffs clean.
+    try first.writeManifest(freeze.dir);
+    const manifest_bytes = try freeze.dir.readFileAlloc(io, "manifest.json", allocator, .limited(4096));
+    defer allocator.free(manifest_bytes);
+    const manifest = try std.json.parseFromSlice(struct { groups: usize, scenarios: usize, calls: usize }, allocator, manifest_bytes, .{});
+    defer manifest.deinit();
+    var scenarios: usize = 0;
+    for (first.entries.items, 0..) |item, index| scenarios += @intFromBool(index == 0 or first.entries.items[index - 1].scenario != item.scenario);
+    try std.testing.expectEqual(@as(usize, 1), manifest.value.groups);
+    try std.testing.expectEqual(scenarios, manifest.value.scenarios);
+    try std.testing.expectEqual(first.entries.items.len, manifest.value.calls);
+}
+
 test "configured source preservation reviews before generation and repairs through the shared model slot" {
     try testSpecificationWorkflows(.source_preservation);
 }
@@ -1250,11 +1323,19 @@ const SpecificationCases = enum { existing, source_preservation, reuse_regenerat
 // Every scenario allocates through one leak-checked untraced allocator; the
 // sweep's allocations would otherwise each pay for a stack trace.
 fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
-    return untraced_allocator.run(runSpecificationWorkflows, .{workflow_cases});
+    return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
 }
 
-fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases) !void {
+/// `projection` collects the request projection (FIX06 T5(e)); without one, a sink
+/// that writes a freeze only when the environment names one.
+fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases, projection: ?*request_projection.Sink) !void {
     const io = std.testing.io;
+    var environment_sink: ?request_projection.Sink = if (projection == null) try request_projection.Sink.fromEnvironment(allocator, io) else null;
+    defer if (environment_sink) |*sink| sink.deinit();
+    const sink = projection orelse &environment_sink.?;
+    // Each case group writes its own subdirectory, so groups sharing a freeze never
+    // overwrite each other's scenario numbers.
+    sink.group = @tagName(workflow_cases);
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
         .{ .stage = .generation, .shape = .inconclusive },
         .{ .stage = .extraction, .shape = .alternating_missing, .repetition = .{ .every_request = 2 } },
@@ -1481,7 +1562,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -1498,9 +1579,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var feature_inputs: @import("../../src/adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var reference_contents: @import("../../src/adapters/filesystem/reference_corpus_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         var markdown_reader: @import("../../src/adapters/parsers/markdown_reference.zig").Adapter = .{ .io = io };
-        var reference_ids: @import("../../src/adapters/system/reference_state_identity.zig").Adapter = .{ .io = io };
+        // Counted state namespaces keep model-visible request bytes reproducible for the
+        // request projection; the random adapter is covered by the other suites.
+        var reference_ids: @import("../../src/reference_evidence_test.zig").IdSource = .{};
         var native: @import("../../src/composition/native_workflow_operations.zig").Assembly = undefined;
-        native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
+        native.init(allocator, project_source.projectCapturer(), project_source.presetEnumerator(), project_source.presetCapturer(), document_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, reference_source.inspector(), feature_source.inspector(), feature_inputs.capturer(), @import("../../src/adapters/parsers/clarification_inputs.zig").stateParser(), @import("../../src/adapters/parsers/clarification_inputs.zig").formParser(), reference_contents.enumerator(), reference_contents.capturer(), markdown_reader.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, reference_ids.port(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         cost.enter(.bootstrap);
         var boot = runInProjectWithRegistry(io, allocator, project.dir, .{}, &native.registry);
         cost.enter(.runner);
@@ -1540,7 +1623,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         var authorization: @import("../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = allocator };
         native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
         var fake = @import("../../src/model_request_workflow_test.zig").invocationProvider(&runner, allocator);
-        native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
+        var recorder: request_projection.Recorder = .{ .sink = sink, .scenario = scenario, .inner = fake.interface() };
+        native.model_requests.invoke_model.action = .{ .provider = recorder.interface() };
         var driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .allocator = allocator, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
         if (story_scenario) {
             driver.story_omission = switch (workflow_cases) {
@@ -1685,6 +1769,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         driver.trace = &trace;
         const result = driver.run();
         cost.enter(.assertions);
+        assertion_context = "request-projection";
+        try std.testing.expectEqual(fake.invocation_call_count, recorder.recorded);
         assertion_context = "step-trace";
         try writeStepTrace(io, allocator, project.dir, @tagName(workflow_cases), scenario, &trace, &driver, &runner, result);
         assertion_context = "workflow-outcome";

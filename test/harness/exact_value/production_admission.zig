@@ -200,7 +200,8 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
             },
         };
     }
-    const packet = try sessions.packet(a, current, context);
+    const guidance = try @import("../../../src/domain/packet_guidance.zig").compile(a, @embedFile("../../../design/workflows/spec/packet-guidance.json"));
+    const packet = try sessions.packet(a, current, context, &guidance.guidance);
     defer @import("../../../src/domain/model_input_packet.zig").release(packet);
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const canonical = try compiler.compiler().compile(a, @embedFile("../../../design/workflows/spec/generation.schema.json"));

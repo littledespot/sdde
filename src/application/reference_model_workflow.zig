@@ -92,7 +92,7 @@ pub const BuildReconciliationInput = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
-        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_input, (try readInputs(&input.step.data)).*, (try readLiterals(&input.step.data)).*) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_input, (try readInputs(&input.step.data)).*, (try readLiterals(&input.step.data)).*, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return requests.publishPacket(self.allocator, packet);
     }
 };

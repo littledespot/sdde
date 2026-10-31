@@ -24,7 +24,7 @@ skill.
    implementations. State the general violated invariant, not only the symptom.
 4. **Check known work.** Read [known-work.md](../../known-work.md). Note any item
    that already covers this failure class, with its status and approval. Apply
-   CLAUDE.md's evidence rules to any contract change.
+   AGENTS.md's evidence rules to any contract change.
 5. **Report** under the AGENTS.md "Before editing" headings:
    1. Observable outcome and explicit non-goals.
    2. Owning abstraction: the narrowest shared contract that owns the whole failure

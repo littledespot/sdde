@@ -6,7 +6,7 @@
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
   documentation with the recommendations for option B". It decides
-  [FIX05](../../fixes/FIX05.md) A2 after a comparison of two forms. The user ranked the
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A2 after a comparison of two forms. The user ranked the
   criteria: "this is a proof of concept and refactoring to best possible outcomes is the
   most important". The approved recommendation included three rules: single
   responsibility and narrow ports per function, function-local intermediate values, and
@@ -241,14 +241,14 @@ output and rejection rules.
 
 ### Evidence
 
-CLAUDE.md's "Evidence for a contract change" applies. A conversion claims no semantic
+AGENTS.md's "Model output, prompts and evidence" applies. A conversion claims no semantic
 change, so its evidence is offline:
 
 - frozen-behaviour equivalence on two unrelated workflows that use the stage: for
   `prepare-toolchain`, the Specify definition and the `toolchain-check` fixture;
 - the measures under Acceptance.
 
-Each conversion reports CLAUDE.md's statements separately: implementation complete,
+Each conversion reports AGENTS.md's statements separately: implementation complete,
 mechanical checks passed, brittleness reduced (the A2 measure), and semantic benefit
 demonstrated, which is "none claimed". Live E2E runs and the replayed two-case semantic
 rule apply only if a conversion claims a semantic or reliability effect.

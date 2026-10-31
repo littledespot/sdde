@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/FIX05.md) B5: "implement B5 as per recommendation", then
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B5: "implement B5 as per recommendation", then
   "APPROVED. Implement B5" for four choices:
   1. each record names the claims it supports, picked from its batch's claims, with the
      group staying the record's link to the source;
@@ -86,6 +86,17 @@ only block.
     - a narrative field that selects a group still maps every claim in it, so a
       corrected response that drops the functional requirement naming a claim passes
       coverage without a scenario.
+  - **Business rules restating requirements (amended 26 October 2026).** With one claim
+    per list item, every run of both cases from the first live pair on wrote business
+    rules that restate a functional requirement claim by claim, and organization scores
+    fell. On 26 October a records-prompt line was added against it ("A business rule
+    states a constraint that no functional requirement in this response already states;
+    never restate a requirement claim by claim."). It was a single-run patch, and the
+    27 October 08:31 and 09:40 hello-world runs still restated FR-001 claim by claim, so
+    it was removed on 28 October 2026 ([FIX06](../../fixes/FIX06.md) Q1a, D1.2).
+    Claim-by-claim restatement is left unpatched; FIX06 Q6 and Q8 measure it. The list
+    split stays for now: it is what gives a refusal requirement its own claim and
+    scenario.
   - **Identical records naming different claims** are not evidence-equivalent, so the
     native duplicate rule blocks them as `competing_records` instead of deleting one
     (ADR 0035 Decision 3).

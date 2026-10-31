@@ -78,7 +78,7 @@ React, Node, Java, and .NET should not be four flat, monolithic alternatives. Re
   objects, explicit required fields, enums, anchored patterns, and semantic-version validation.
 - The project `toolchain.yaml` layer uses its own closed schema and pins exact preset package
   identities/versions; ranges and implicit `latest` are invalid.
-- Preset `metadata.layer` is one of `language`, `runtime`, `framework`, `build`, `test`, or
+- Preset `layer` is one of `language`, `runtime`, `framework`, `build`, `test`, or
   `environment`; project-specific inheritance and overrides belong only to the separately typed
   project toolchain layer and are not a package kind.
 - The inherited composition graph must be acyclic; a preset identity may occur only once in its
@@ -105,7 +105,7 @@ React, Node, Java, and .NET should not be four flat, monolithic alternatives. Re
 
 ### 10.2 Project discovery
 
-A preset must support multiple manifests and project roots rather than the sample's single `package.configFiles.manifest` field. Manifest semantics vary too much for generic keys such as `sourceDirectoriesKey`, `structureType`, and `directoryTransformer` (`design/toolchainPresets/_structure.yaml:6-14`). Use registered, non-executable adapters:
+A preset must support multiple manifests and project roots rather than the sample's single `package.configFiles.manifest` field. Manifest semantics vary too much for generic keys such as `sourceDirectoriesKey`, `structureType`, and `directoryTransformer` (`design/toolchainPresets/_structure.yaml:11-16`). Use registered, non-executable adapters:
 
 - `npm-package-json`
 - `npm-workspaces`
@@ -129,7 +129,7 @@ For a monorepo, environment resolution uses the longest matching configured root
 
 ### 10.3 File-kind policies
 
-The sample has general source patterns and physical policies only for config and style (`design/toolchainPresets/_structure.yaml:26-38,81-91`). Filename validation needs an extensible role-aware map:
+The sample has general source patterns and physical policies only for config and style (`design/toolchainPresets/_structure.yaml:31-40,86-96`). Filename validation needs an extensible role-aware map:
 
 [View the File-kind policies sample](../code.md#file-kind-policies).
 
@@ -250,7 +250,7 @@ Every pattern matches its complete declared target; partial matching is not conf
 
 ### 10.4 Structured commands
 
-Raw command strings in `_structure.yaml` are shell-dependent and unsafe to template (`design/toolchainPresets/_structure.yaml:15-25,40-77,93-95`). Commands must be structured, capability-based values:
+Raw command strings in `_structure.yaml` are shell-dependent and unsafe to template (`design/toolchainPresets/_structure.yaml:20-30,46-48,60-62,73-75,99-100`). Commands must be structured, capability-based values:
 
 [View the Structured commands sample](../code.md#structured-commands).
 
@@ -280,7 +280,7 @@ Bootstrap wires each descriptor through `ValidateCommandWorkingDirectoryAction`,
 
 ### 10.5 AST and parser policy
 
-The sample's extension-to-string AST maps do not identify parser versions, query captures, resolution rules, or missing-resource behavior (`design/toolchainPresets/_structure.yaml:97-101`). Use explicit parser descriptors:
+The sample's extension-to-string AST maps do not identify parser versions, query captures, resolution rules, or missing-resource behavior (`design/toolchainPresets/_structure.yaml:102-106`). Use explicit parser descriptors:
 
 [View the AST and parser policy sample](../code.md#ast-and-parser-policy).
 

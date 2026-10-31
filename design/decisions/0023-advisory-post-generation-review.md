@@ -367,4 +367,4 @@ assessment bindings, provenance and coverage. It rejects forged deterministic
 method tags, forged advisory bindings, semantic-success outcomes and stale candidates.
 Execution-local receipts and their origins remain separate from persisted
 workflow authority; a fresh invocation starts at `start`. Implementation and live
-evidence are recorded in [FIX05](../../fixes/FIX05.md).
+evidence are recorded in [Z_FIX05](../../fixes/Z_FIX05.md) and [FIX06](../../fixes/FIX06.md).

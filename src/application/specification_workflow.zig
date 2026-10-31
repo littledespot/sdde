@@ -91,7 +91,7 @@ pub const BuildInput = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const packet = self.action.execute(self.allocator, try readSession(&input.step.data), try readContext(&input.step.data)) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, try readSession(&input.step.data), try readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return requests.publishPacket(self.allocator, packet);
     }
 };

@@ -1,0 +1,83 @@
+{
+  "schema": "packet-guidance/v1",
+  "feature_purposes": {
+    "display_name": "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
+    "description": "A description of intended user-visible behavior.",
+    "primary_goal": "The intended user benefit derived from the source-backed behavior and outcome.",
+    "primary_user_story": "One narrative describing the actor or system identified by the source, its action and intended result. Preserve conditions and obligations; do not invent a persona or benefit or require a prewritten story.",
+    "scenario_coverage": "Source-required triggers, outcomes and exact copy.",
+    "entities": "The disposition states whether required behavior needs business entities or relationships. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary."
+  },
+  "record_families": {
+    "acceptance_criterion": "An observable pass/fail flow with a precondition, trigger and expected result.",
+    "user_visible_outcome": "A result, confirmation or response directly observable by the user.",
+    "edge_case": "A boundary or exceptional condition and its expected outcome.",
+    "functional_requirement": "Required application behavior, preserving its trigger, conditions and obligation strength.",
+    "business_rule": "A rule or constraint governing business decisions or outcomes.",
+    "assumption": "A supported premise on which the described behavior depends.",
+    "non_goal": "Behavior explicitly excluded from the feature's scope.",
+    "prohibited_behavior": "An action or behavior that must not occur.",
+    "entity": "A business data concept with its meaning and relationships."
+  },
+  "record_fields": {
+    "given": "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites.",
+    "when": "The action or event that triggers the behavior.",
+    "then": "The observable consequences after the trigger, including the obligations being tested.",
+    "condition": "The boundary or exceptional condition.",
+    "expected_outcome": "The observable result, preserving conditions and obligations.",
+    "name": "The business entity's name.",
+    "business_meaning": "The entity's business purpose.",
+    "relationship": "The business relationship to another entity, including its meaning."
+  },
+  "reference_tasks": {
+    "source": {
+      "before": "All meaningful facts in source ",
+      "after": " survive extraction and reconciliation, including identity, obligations, conditions and constraints. Preserve source uncertainty; assess loss, not whether specification fields can be generated."
+    },
+    "signal": {
+      "before": "Source meaning preserved by signal ",
+      "after": "."
+    },
+    "token": {
+      "before": "Exact token ",
+      "after": " and its source-required use."
+    },
+    "conflict": {
+      "before": "Source evidence and unresolved meaning of conflict ",
+      "after": "."
+    }
+  },
+  "review_scope": {
+    "original_sources": "Original sources establish business obligations and unresolved decisions. Candidate assertions cannot establish source requirements.",
+    "derived_evidence": "Claims, associations, signals and dispositions are derived evidence. Their omissions or labels do not remove original obligations.",
+    "source_preservation": "Assess whether original sources establish the assigned business purpose before authoring. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
+    "candidate_field": {
+      "in_record": "Assess subject.text for its assigned field purpose within subject.record. Sibling fields may supply joint conditions and results; each field need not repeat the whole flow.",
+      "standalone": "Assess the behavior or decision expressed by subject.text for its assigned purpose, including its qualifying triggers, conditions, negation and obligation strength. Unrelated feature duties belong to their collection assessments."
+    },
+    "collection": "Assess the selected records together for complete source-required coverage of the assigned collection purpose, including obligations absent from current claims or associations. Surrounding context cannot replace missing selected records.",
+    "entity_applicability": "Assess the entity disposition and its explanation together for their assigned purpose. Other feature behavior remains in force and is checked by its own field and collection assignments.",
+    "reference": {
+      "source": "Assess extraction and reconciliation against the complete assigned original source, including meaning with no surviving claim. Current candidate associations do not limit this assignment.",
+      "signal": "Assess the selected signal's represented meaning against its original sources, preserving its own conditions and obligations. An exact value retains its cited source-required use and conditions; it does not assign other source duties to that signal. Selected claims identify candidate evidence, not source truth. Generated fields and collections have their own assessments.",
+      "token": "Assess the selected exact token and its source-required use and conditions against the original source. This assignment does not require the token to express other source obligations or assess generated fields and collections. Matching bytes or citations alone do not establish support.",
+      "conflict": "Assess the selected conflict and its participating meanings against their original sources. Establish whether those original meanings are incompatible; a candidate conflict label or explanation is not source truth. Preserve the assigned conflict's conditions and unresolved meaning without assessing unrelated generated fields or collections."
+    }
+  },
+  "summary_purpose": "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.",
+  "support_evidence": {
+    "selection": "Select original sources where required for the assigned finding. Readiness source-purpose support before authoring requires nonempty original source IDs and carries no authored claim association. Native code fixes claim evidence for the assigned subject. A retained authority_gap selects its own source evidence under the existing negative rule. Eligibility alone is not support.",
+    "detail": "Preserve the retained finding. Put known facts/preconditions and the reason in detail. Nonempty text must be nonblank UTF-8; only tab/newline controls are allowed.",
+    "obligation": "For candidate_omission, state only the omitted source obligation in missing_obligation. Preserve its conditions, negation, obligation strength and exact values. Keep the defect explanation in detail. Other findings omit missing_obligation.",
+    "authority_gap": "Retain candidate_invalid and the presence or absence of authority_gap. A retained gap keeps its kind and original source evidence; correct only the authorized explanation, question or source selection. Never invent a missing obligation or turn a candidate defect into a user gap.",
+    "question": {
+      "retained_gap": "Omit a top-level question. A retained authority_gap keeps its question about the missing user choice; do not ask for a review verdict.",
+      "required": "In detail, explain how the missing choice affects required behavior. Ask only for that choice, with an answer format that resolves it, including needed details beyond yes/no. The user answers; do not ask for a review verdict.",
+      "omitted": "Omit question; preserve the finding and meaning."
+    }
+  },
+  "repair_tails": {
+    "entity_record_meaning": "preserving its source meaning",
+    "value_choices": "Preserve the fixed evidence and source meaning."
+  }
+}

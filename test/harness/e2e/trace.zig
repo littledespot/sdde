@@ -466,13 +466,11 @@ pub const Trace = struct {
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         const handoff = try requests.readCurrent(&view, requests.prepared_schema);
         const request = handoff.prepared() orelse return error.MissingRequestEvidence;
-        // Composition parts keep their semantic assignment on the immutable
-        // native base packet; the child request may have a workflow-step owner.
-        // Resource-only requests use their canonical ledger identity. Neither
-        // branch inspects prompt text, step names or model content.
+        // The request identity carries its packet's purpose and owner (a composed
+        // request's, its base packet's), as the E2E report's attempts read them.
+        self.request_purpose = std.meta.activeTag(handoff.id().purpose);
+        self.request_owner_kind = std.meta.activeTag(handoff.id().immutable_unit_owner_id);
         const packet = handoff.packet() orelse if (handoff.part()) |part| part.base else null;
-        self.request_purpose = std.meta.activeTag(if (packet) |value| value.purpose() else handoff.id().purpose);
-        self.request_owner_kind = std.meta.activeTag(if (packet) |value| value.unit() else handoff.id().immutable_unit_owner_id);
         self.request_repair_origin = if (packet) |value| value.repairOrigin() else null;
         self.request_result_definition = handoff.selectedResultDefinition();
         if (self.purpose == .single_exchange or self.experiment != null) {
@@ -568,7 +566,7 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
         if (self.pending) |pending| {
             const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
@@ -837,8 +835,8 @@ test "experiment trace charges only current native usage across serial workflow 
     const current: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } };
     const known = operation.ProviderUsage.init(9, 4, 13).?;
     const records = [_]c.Attempt{
-        .{ .origin = first, .step = "unit-first", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(1, 1, 2).? },
-        .{ .origin = current, .step = "unit-current", .accounting = .exact_usage, .usage = known },
+        .{ .origin = first, .step = "unit-first", .purpose = .initial_generation, .owner_kind = .specification_unit, .accounting = .exact_usage, .usage = operation.ProviderUsage.init(1, 1, 2).? },
+        .{ .origin = current, .step = "unit-current", .purpose = .initial_generation, .owner_kind = .specification_unit, .accounting = .exact_usage, .usage = known },
     };
     var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
     const send = try gate.beforeSend();
@@ -855,7 +853,7 @@ test "experiment trace charges only current native usage across serial workflow 
 test "experiment trace cannot substitute older native usage for an unknown exchange" {
     const previous: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
     const current: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
-    const records = [_]c.Attempt{.{ .origin = previous, .step = "unit-previous", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? }};
+    const records = [_]c.Attempt{.{ .origin = previous, .step = "unit-previous", .purpose = .initial_generation, .owner_kind = .specification_unit, .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? }};
     for ([_]bool{ false, true }) |uncertain| {
         var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
         const retained = try reconcileExperiment(&gate, try gate.beforeSend(), current, &records, uncertain);
@@ -871,7 +869,7 @@ test "experiment trace cannot substitute older native usage for an unknown excha
 
 test "experiment trace rejects ambiguous native origin and preserves send accounting" {
     const origin: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
-    const record: c.Attempt = .{ .origin = origin, .step = "unit-ambiguous", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? };
+    const record: c.Attempt = .{ .origin = origin, .step = "unit-ambiguous", .purpose = .initial_generation, .owner_kind = .specification_unit, .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? };
     var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
     const send = try gate.beforeSend();
     try std.testing.expectError(error.MissingRequestEvidence, reconcileExperiment(&gate, send, origin, &.{ record, record }, false));
@@ -985,7 +983,7 @@ test "native receipt failure proofs preserve intermediate upstream rejections af
     var log: CaptureLog = .init(std.testing.allocator);
     defer log.deinit();
     for (1..4) |call| try appendReceiptFixture(&log, call);
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_failed };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed };
     report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
     try log.observeRejections(report);
     report.last_protocol_rejection = null;
@@ -1011,7 +1009,7 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
     var log: CaptureLog = .init(a);
     defer log.deinit();
     try appendReceiptFixture(&log, 1);
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v10", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
         .call = 1,
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",

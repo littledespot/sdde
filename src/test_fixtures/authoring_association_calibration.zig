@@ -230,7 +230,7 @@ pub fn run() !void {
         const projected = try @import("../domain/specification_authority.zig").project(a, current.feature, prepared.context.references, candidate.content, current.units[0].?.response.content.brief);
         const review = @import("../domain/specification_support.zig").Source;
         const id: @import("../domain/required_authority.zig").Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .description };
-        const review_packet = try review.packetFor(a, projected, prepared.context, .{ .finding = id });
+        const review_packet = try review.packetFor(a, projected, prepared.context, prepared.guidance, .{ .finding = id });
         defer packets.release(review_packet);
         try shared.writeAt(a, output, example.id, "seed-review.packet.json", review_packet.body());
         try shared.writeAt(a, output, example.id, "seed.json", try std.json.Stringify.valueAlloc(a, .{ .session = current, .brief = current.units[0].?.response.content.brief, .candidate = candidate.content }, .{}));
@@ -251,7 +251,7 @@ pub fn run() !void {
         "src/domain/specification_support_evidence.zig",           "src/domain/model_result_schema.zig",            "src/domain/model_schema_projection.zig",
         "src/adapters/provider/bedrock_request.zig",               "design/workflows/spec/generation.schema.json",  "design/workflows/spec/generation.context.json",
         "design/workflows/spec/generation.prompt.md",              "design/workflows/spec/story.prompt.md",         "design/workflows/spec/entities.prompt.md",
-        "design/workflows/spec/records.prompt.md",                 "design/workflows/spec.workflow.yaml",
+        "design/workflows/spec/records.prompt.md",                 "design/workflows/spec.workflow.yaml",           "design/workflows/spec/packet-guidance.json",
     };
     var dependencies: std.ArrayList(File) = .empty;
     for (paths) |path| try dependencies.append(a, try pin(a, path));
@@ -382,7 +382,7 @@ fn admittedSeed(a: std.mem.Allocator, schema: *const schema_owner.Schema, curren
 /// One exact current request's native candidate checks, without minting a
 /// provider origin, execution delta, repair permission or successful workflow.
 pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, bytes: []const u8) !g.Validation {
-    const packet = try session.packet(a, current, context);
+    const packet = try session.packet(a, current, context, try shippedGuidance(a));
     defer packets.release(packet);
     const restricted = try schema_owner.restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
     defer restricted.release();
@@ -494,7 +494,7 @@ fn consumeTrial(a: std.mem.Allocator, directory: []const u8, schema: *const sche
     var current = start;
     var native: std.ArrayList(g.CanonicalResponse) = .empty;
     for (trial.requests, receipts, facts.items) |request, receipt, fact| {
-        const packet = try session.packet(a, current, state.context);
+        const packet = try session.packet(a, current, state.context, try shippedGuidance(a));
         defer packets.release(packet);
         if (!std.mem.eql(u8, packet.body(), receipt.input)) return .{ .trial_id = trial.id, .status = .rejected, .received = result.received, .costs_complete = result.costs_complete, .rejection = "StaleCalibrationAssignment", .origins = origins.items, .costs = costs.items, .responses = native.items };
         if (fact.rejection) |rejection| return .{ .trial_id = trial.id, .status = .rejected, .received = result.received, .costs_complete = result.costs_complete, .rejection = rejection, .origins = origins.items, .costs = costs.items, .responses = native.items };
@@ -581,7 +581,7 @@ fn reviewPackets(a: std.mem.Allocator, context: @import("../domain/specification
     for (inputs.seeds) |seed| {
         const selected = if (std.mem.eql(u8, unit_name, "brief")) seed.id.kind == .feature_intent and seed.id.unit == .feature and (seed.id.slot == .display_name or seed.id.slot == .description or seed.id.slot == .primary_goal) else if (std.mem.eql(u8, unit_name, "primary_user_story")) seed.id.kind == .feature_intent and seed.id.unit == .feature and seed.id.slot == .primary_user_story else if (std.mem.eql(u8, unit_name, "entities")) seed.id.kind == .entity_applicability or (seed.id.unit == .record and seed.id.unit.record.kind == .entity) else (seed.id.unit == .record and seed.id.unit.record.kind != .entity) or (seed.id.kind == .feature_intent and seed.id.unit == .feature and @import("../domain/specification_authority.zig").collectionFamily(seed.id.slot) != null);
         if (!selected) continue;
-        const packet = try @import("../domain/specification_support.zig").Source.packetFor(a, inputs, context, .{ .finding = seed.id });
+        const packet = try @import("../domain/specification_support.zig").Source.packetFor(a, inputs, context, try shippedGuidance(a), .{ .finding = seed.id });
         defer packets.release(packet);
         try projections.append(a, try a.dupe(u8, packet.body()));
     }
@@ -591,7 +591,7 @@ fn exportRequest(a: std.mem.Allocator, schema: *const schema_owner.Schema, id: [
     return exportRequestAt(a, output, schema, id, current, context, try shared.read(a, "design/workflows/spec/generation.context.json"));
 }
 fn exportRequestAt(a: std.mem.Allocator, directory: []const u8, schema: *const schema_owner.Schema, id: []const u8, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, guidance: []const u8) !Request {
-    const packet = try session.packet(a, current, context);
+    const packet = try session.packet(a, current, context, try shippedGuidance(a));
     defer packets.release(packet);
     const selected = try session.unit(current.completed);
     const group: ?u32 = if (selected == .records) (try session.currentBinding(a, current, context)).records.signal.ordinal else null;
@@ -654,4 +654,9 @@ fn receiptChecks(a: std.mem.Allocator, request: Request, answer: []const u8) !vo
 fn pin(a: std.mem.Allocator, path: []const u8) !File {
     const bytes = try shared.read(a, path);
     return .{ .path = path, .sha256 = try shared.sha256(a, bytes), .bytes = bytes.len };
+}
+
+/// Current production packets carry the shipped workflow guidance.
+fn shippedGuidance(a: std.mem.Allocator) !*const @import("../domain/packet_guidance.zig").Guidance {
+    return &(try @import("packet_guidance.zig").shipped(a)).guidance;
 }

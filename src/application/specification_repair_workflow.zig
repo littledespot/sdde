@@ -32,9 +32,10 @@ pub const Authorize = struct {
         const self = context.?;
         const rejection = owned.read(&input.step.data, spec.checked_schema, .unit_rejected) catch |operation_error| return operation_error;
         const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
+        const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const authorized = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err);
+        const authorized = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection, guidance) catch |err| return reject(self.allocator, authorization_schema, owner, err);
         owner.payload = .{ .repair_authorization = .{ .authorization = authorized } };
         var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.OperationExecutionFailed };
@@ -48,7 +49,7 @@ pub const BuildInput = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
-        const packet = self.action.execute(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };

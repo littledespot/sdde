@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/FIX05.md) B7:
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B7:
   - "YES" to source-quoted claim wording;
   - "apply the best option" for one claim per source requirement, recorded as a native
     list-item split and later withdrawn (Decision 3);
@@ -33,6 +33,9 @@
   [ADR 0024](0024-native-exact-token-authority.md)'s forcing rule is unchanged; it now
   reads quoted text. Reconciliation statements and signals stay model text. The overall
   design remains **Proposed design**.
+- **Amended by:** [ADR 0045](0045-entity-description-exact-values-as-code-spans.md)
+  (on hold; entity meaning and each relationship are incidental, so Decision 6 turns their
+  recognised exact values into exact copies).
 
 ## Context
 

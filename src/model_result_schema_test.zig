@@ -970,6 +970,8 @@ test "coverage requires every value a covered item names to be named by a coveri
         try std.testing.expectEqual(check.Rejection.uncovered_member, rejected.reason);
         try std.testing.expectEqualStrings(case.path, (try rejected.describe(a)).path);
         try std.testing.expectEqualStrings(case.path, (try rejected.describeExpected(a)).path);
+        // The rejection carries the compiled rule, so its correction names the covering kinds.
+        try std.testing.expectEqualDeep(covered.selected().coverageChoices()[0].coverage, rejected.covering.?);
         // The provider schema can't express coverage; replay restores it from the record.
         const wire = try compile(a, covered.selected().modelBytes());
         try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), wire.root()) == null);

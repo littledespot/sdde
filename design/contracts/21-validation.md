@@ -17,9 +17,11 @@ This catalogue is normative for the first engine version. A project may add vali
 | Predecessor validity | Reparse editable spec; load canonical generated state; compare deterministic views; run stage validators | Current predecessor no longer passes | Prior-stage repair |
 | Path containment | Canonical path and symlink resolution | Escape/absolute/forbidden path | Usually not model-repairable; path field may be repaired only when otherwise safe |
 | Model protocol | Exact runner-bound call association, then closed compact result schema | Unbound/stale observation or malformed result | Invalid association fails closed; malformed bound content follows only explicit YAML protocol retry/repair. Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), protocol retry is a stage of the `request-model` step, bounded by its declared `retry-limit`; repair stays explicit YAML. |
-| Placeholder | Template/model sentinel scan | Unresolved placeholder remains | Model atomic |
 | Authority reconciliation | Closed required-slot ledger, current evidence, admitted gap and candidate-defect classification under §12.8.1 | Unresolved required authority or candidate/review defect | Shared §12.8.1 precedence: authorized candidate repair, terminal rejection, admitted earliest-owner clarification, upstream rework or administrative block |
 | Publication boundary | Staged-set path and membership checks | Missing/extra/outside write | Engine/workflow |
+
+Removed 28 October 2026 by user decision: the placeholder sentinel scan, which was never
+built. Typed rendering emits no placeholder, and readback accepts only its closed grammar.
 
 ### 21.2 Specify validators
 
@@ -30,17 +32,25 @@ This catalogue is normative for the first engine version. A project may add vali
 | Reference root | Configured-root containment, readable directory, no symlink escape | None |
 | Reference accounting | Stable inventory equals processed-status inventory | Relevance of content |
 | Reader support | MIME sniff plus installed reader | Meaning of decoded content |
-| Citation | Source ID, bounds, and verbatim text exist | Whether citation proves claim |
+| Citation | Source ID and bounds exist; an extraction claim cites supplied nonblank line IDs, whose text the engine quotes ([ADR 0036](../decisions/0036-source-quoted-claims.md)) | Whether citation proves claim |
 | Required sections | Typed required fields and renderer contract | Whether prose is adequate |
 | Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
 | Acceptance form | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order | Whether scenario is truly testable |
 | Clarification state | Only admitted needs reach forms; no unresolved typed clarification at success | Whether a proposed decision is genuinely absent and every ambiguity was discovered |
-| Business-only lint | No obvious code/path/framework/CSS leakage | Nuanced business/technical classification |
 | Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
 | Field composition | Shared field policy requires nonblank prose, permits insertion kinds and restricts exact-copy coverage; encoded insertion syntax in prose rejects unless its exact bytes occur in original captured sources | Whether admitted prose expresses the correct meaning and uses its insertions correctly |
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
 | Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
 | Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction, repair and readback bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
+
+[§17.5](17-specify.md#175-deterministic-specification-validation) also lists the
+duplicate check, which [ADR 0035](../decisions/0035-cross-kind-restatement.md) extends
+to covered cross-kind restatements
+([F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair)), and
+claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
+
+Removed 28 October 2026 by user decision: the business-only keyword lint, which was never
+built. Semantic review owns business/technical classification ([§17.5](17-specify.md)).
 
 ### 21.3 Plan validators
 

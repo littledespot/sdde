@@ -7949,6 +7949,137 @@ test "production Bedrock missing credentials follow explicit pre-call terminatio
     }
 }
 
+/// ADR 0039 Decision 4 and §26.5: one ordered record of what the production log
+/// policy keeps. Events pass the registry and the threshold action; prompt
+/// fragments pass the capture action, so the levels decide exactly as in production.
+const PolicyLog = struct {
+    const telemetry = @import("domain/telemetry.zig");
+    const prompt = @import("domain/sanitized_prompt_log.zig");
+    const stream = @import("domain/feature_log_stream.zig");
+    const Record = union(enum) {
+        event: struct { event_type: telemetry.EventType, attempt: ?u64, diagnostic: []const u8 },
+        fragment: struct { attempt: u32, direction: prompt.PromptDirection, provenance: []const u8 },
+    };
+    allocator: std.mem.Allocator,
+    policy: @import("domain/log_policy.zig").CompiledLoggingPolicy,
+    records: std.ArrayList(Record) = .empty,
+
+    fn barrier(self: *PolicyLog) @import("ports/telemetry_barrier.zig").Barrier {
+        return .{ .context = self, .process_fn = process, .select_prompt_fn = select, .process_prompt_fn = processPrompt };
+    }
+    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) stream.Outcome {
+        const self: *PolicyLog = @ptrCast(@alignCast(context));
+        const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        if ((@import("actions/log/evaluate_log_threshold.zig").Action{}).execute(self.policy, definition) == .drop) return .dropped;
+        const diagnostic = if (fact.fact.fields.diagnostic_code) |code| self.allocator.dupe(u8, code.bytes) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE } else "";
+        self.records.append(self.allocator, .{ .event = .{ .event_type = fact.fact.event_type, .attempt = fact.fact.attempt, .diagnostic = diagnostic } }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        return .dropped;
+    }
+    fn select(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) bool {
+        const self: *PolicyLog = @ptrCast(@alignCast(context));
+        return (@import("actions/log/evaluate_prompt_log_capture.zig").Action{}).execute(self.policy, fragment) == .capture;
+    }
+    /// The engine-owned fragment ID names the body's provenance in its third segment
+    /// (ADR 0018), for example `inference-request-request_description-utf8-…`.
+    fn processPrompt(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) stream.Outcome {
+        const self: *PolicyLog = @ptrCast(@alignCast(context));
+        var segments = std.mem.splitScalar(u8, fragment.fragment_id.bytes, '-');
+        _ = segments.next();
+        _ = segments.next();
+        const provenance = self.allocator.dupe(u8, segments.next() orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        self.records.append(self.allocator, .{ .fragment = .{ .attempt = fragment.attempt, .direction = fragment.direction, .provenance = provenance } }) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+        return .{ .persisted = .{ .sequence = self.records.items.len, .segment_ordinal = 1, .bytes_written = fragment.content.len, .flushed = true } };
+    }
+};
+
+/// A provider-applied stop at the model's output maximum: a runaway (ADR 0039).
+const bedrock_runaway_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+
+test "ADR 0039: a repeated runaway is captured in full at debug before its failure, and only its events survive higher levels" {
+    for (std.enums.values(@import("domain/telemetry.zig").CanonicalLogLevel)) |level| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithProvider(std.testing.allocator, .{ .bedrock = .converse }, false);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const source = try runawayYaml(&fixture, "2");
+        var graph = (try fixture.compile(source)).*;
+        graph.source = .{ .path = "request.workflow.yaml", .content = source };
+        var environment = try bedrockEnvironment(std.testing.allocator);
+        defer environment.deinit();
+        var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
+            .environment = &environment,
+            .operations = &fixture.native,
+            .authorization = .{ .allocator = std.testing.allocator },
+            .transport = .{ .io = std.testing.io, .clock = fixture.clock.port(), .runtime = .{} },
+        };
+        defer runtime.deinit();
+        var runner = fixture.runner(&graph, std.testing.allocator);
+        defer runner.deinit();
+        const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+        runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+            .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+            .root_observation = .absent,
+            .observation = .absent,
+        });
+        var log: PolicyLog = .{ .allocator = a, .policy = .{ .level = .{ .threshold = level, .alias_evidence = .none }, .console = false } };
+        runner.barrier = log.barrier();
+        runner.model_capture.logs = log.barrier();
+        try runtime.bind(&runner);
+        var wire: @import("model_transport_test_fixture.zig").Wire = .{ .inference_body = bedrock_runaway_body };
+        runtime.provider.?.transport = wire.port();
+        var harness: Harness = .{ .runner = &runner };
+        const outcome = harness.result();
+        // Required work stops on the re-send's runaway, after both attempts were sent.
+        try std.testing.expectEqual(.failed, outcome.executionStatus().?);
+        try std.testing.expectEqual(@as(usize, 2), wire.calls);
+        try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
+        var repeated_buffer: [64]u8 = undefined;
+        const repeated = @import("application/workflow_event_capture.zig").diagnostic(&repeated_buffer, @errorName(error.RunawayRepeated)).?.bytes;
+        const capture = @import("domain/log_policy.zig").promptCaptureEnabled(log.policy);
+        var stops: [2]?usize = .{ null, null };
+        var resent: ?usize = null;
+        var failure: ?usize = null;
+        var last_fragment: ?usize = null;
+        var bodies: [2][3]bool = .{ .{ false, false, false }, .{ false, false, false } };
+        for (log.records.items, 0..) |record, index| switch (record) {
+            .event => |event| switch (event.event_type) {
+                .model_provider_stopped => {
+                    const attempt = event.attempt.?;
+                    try std.testing.expect(attempt == 1 or attempt == 2);
+                    try std.testing.expect(stops[attempt - 1] == null);
+                    stops[attempt - 1] = index;
+                },
+                .model_runaway_resent => {
+                    try std.testing.expect(resent == null);
+                    try std.testing.expectEqual(@as(?u64, 1), event.attempt);
+                    resent = index;
+                },
+                else => if (failure == null and std.mem.eql(u8, event.diagnostic, repeated)) {
+                    failure = index;
+                },
+            },
+            .fragment => |fragment| {
+                try std.testing.expect(capture);
+                last_fragment = index;
+                const attempt = &bodies[fragment.attempt - 1];
+                if (fragment.direction == .request and std.mem.eql(u8, fragment.provenance, "request_description")) attempt[0] = true;
+                if (fragment.direction == .request and std.mem.eql(u8, fragment.provenance, @tagName(.provider_body))) attempt[1] = true;
+                if (fragment.direction == .response and std.mem.eql(u8, fragment.provenance, @tagName(.provider_body))) attempt[2] = true;
+            },
+        };
+        // §26.5: both stops and the re-send are logged at every level, in order.
+        try std.testing.expect(stops[0].? < resent.? and resent.? < stops[1].?);
+        // The failure carrying RunawayRepeated is an error-level event.
+        try std.testing.expectEqual(level != .fatal, failure != null);
+        if (capture) {
+            // ADR 0018 at debug and trace: each attempt's description, request and
+            // complete returned output, all captured before the failure is logged.
+            for (bodies) |attempt| for (attempt) |captured| try std.testing.expect(captured);
+            try std.testing.expect(last_fragment.? < failure.?);
+        } else try std.testing.expect(last_fragment == null);
+    }
+}
+
 const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
 test "production missing-answer observation retains usage and can close without correction" {
@@ -8484,7 +8615,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const current = if (kind == .summary) try references.build_input.execute(a, progress) else try references.summaries(a, progress, evidence.context());
         const packets = @import("domain/model_input_packet.zig");
         const packet = if (kind == .summary) summary: {
-            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry);
+            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry, @import("test_fixtures/packet_guidance.zig").marked.summary_purpose);
             defer packets.release(base);
             break :summary try packets.withAssignmentContext(std.testing.allocator, base, .{ .bytes = "summary" });
         } else signals: {

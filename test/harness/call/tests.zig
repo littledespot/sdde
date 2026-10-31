@@ -235,3 +235,62 @@ test "call report distinguishes protocol success from semantic and workflow acce
     report.trials = &.{.{ .ordinal = 1, .request_id = "trial-1", .outcome = .protocol_invalid, .diagnostic = "MOCK failure" }};
     try std.testing.expect(!report.succeeded());
 }
+
+test "an edit file replaces the captured content and schema through a closed contract" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    try std.testing.expectEqualStrings("evaluations/q2/edit.json", (try options.parse(&(args ++ .{ "--edit", "evaluations/q2/edit.json" }))).edit.?);
+    try std.testing.expect((try options.parse(&args)).edit == null);
+    for ([_][]const u8{ "../edit.json", "/abs/edit.json", "" }) |path| {
+        try std.testing.expect(std.meta.isError(options.parse(&(args ++ .{ "--edit", path }))));
+    }
+    var root = std.testing.tmpDir(.{});
+    defer root.cleanup();
+    const edited_schema = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":128}},\"required\":[\"answer\"],\"additionalProperties\":false}";
+    const edit = try std.json.Stringify.valueAlloc(a, debug.Edit{ .content = &.{ .{ .guidance = "MOCK edited guidance" }, .{ .user = "MOCK request" } }, .schema = edited_schema }, .{});
+    try root.dir.writeFile(io, .{ .sub_path = "edit.json", .data = edit });
+    const loaded = try @import("cli.zig").loadEdit(io, a, root.dir, "edit.json");
+    // The trial sends the edited content and schema once; provider, model and settings stay.
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    var edited_parent = parent;
+    edited_parent.description = @import("cli.zig").applyEdit(description, loaded.edit);
+    const result = trial.execute(a, io, fixture.service(), edited_parent, identity);
+    try std.testing.expectEqual(.completed, result.outcome);
+    try std.testing.expectEqual(@as(usize, 1), fixture.wire.calls);
+    try std.testing.expectEqualStrings("MOCK edited guidance", fixture.request.?.description.content[0].guidance);
+    try std.testing.expectEqualStrings(edited_schema, fixture.request.?.description.schema);
+    try std.testing.expectEqualStrings(description.model, fixture.request.?.description.model);
+    try std.testing.expectEqualDeep(description.controls, fixture.request.?.description.controls);
+    try std.testing.expectEqualStrings(description.reasoning_effort.?, fixture.request.?.description.reasoning_effort.?);
+    // The canonical path rejects what it would reject for the browser replay, before a send.
+    for ([_]debug.Edit{
+        .{ .content = &.{.{ .guidance = "MOCK guidance only" }}, .schema = description.schema },
+        .{ .content = description.content, .schema = "{}" },
+        .{ .content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = "MOCK-secret-never-log" } }, .schema = description.schema },
+    }) |rejected| {
+        try std.testing.expect(std.meta.isError(fixture.provider.provider().prepare(a, @import("cli.zig").applyEdit(description, rejected))));
+        var rejected_fixture: Fixture = undefined;
+        try rejected_fixture.init(a);
+        defer rejected_fixture.environment.deinit();
+        var rejected_parent = parent;
+        rejected_parent.description = @import("cli.zig").applyEdit(description, rejected);
+        _ = trial.execute(a, io, rejected_fixture.service(), rejected_parent, identity);
+        try std.testing.expectEqual(@as(usize, 0), rejected_fixture.wire.calls);
+        try std.testing.expect(rejected_fixture.request == null);
+    }
+    // The edit file is closed: no other member and no unknown content kind.
+    for ([_][]const u8{
+        "{\"content\":[{\"guidance\":\"x\"}]}",
+        "{\"content\":[{\"guidance\":\"x\"}],\"schema\":\"{}\",\"model\":\"other\"}",
+        "{\"content\":[{\"prompt\":\"x\"}],\"schema\":\"{}\"}",
+        "not json",
+    }, 0..) |bytes, index| {
+        const name = try std.fmt.allocPrint(a, "bad-{d}.json", .{index});
+        try root.dir.writeFile(io, .{ .sub_path = name, .data = bytes });
+        try std.testing.expectError(error.InvalidEdit, @import("cli.zig").loadEdit(io, a, root.dir, name));
+    }
+}

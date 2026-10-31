@@ -1,7 +1,7 @@
 #!/bin/sh
 # PreToolUse (Bash): keep live provider credentials out of the conversation and
 # route billed or engine-execution commands to an explicit user decision
-# (AGENTS.md "Work authorization" and "Testing expectations"). The permission
+# (AGENTS.md "Commands"). The permission
 # rules in .claude/settings.json are the declarative baseline; this hook also
 # matches forms those rules cannot express, such as a live step named after an
 # offline one in a single `zig build` invocation.

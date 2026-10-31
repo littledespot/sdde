@@ -18,7 +18,7 @@ Renderers own:
 - fixed mandatory headings and relative order of applicable optional sections;
 - front matter/header fields;
 - dates and engine-known links;
-- `AC/FR/BR/EC` and `TNNN` identifiers;
+- `AC/UO/EC/FR/BR/AS/NG/PB/EN-*` specification and `TNNN` task identifiers;
 - the exact F0100 §5.1 heading tree, including `### Acceptance Criteria`
   beneath `## User Scenarios & Testing _(mandatory)_`, and compact title-case
   `Given`, `When`, `Then` labels in that order for every `AC-*` record;
@@ -113,6 +113,11 @@ Renderers own:
   remain protected by validation.
 - Each acceptance criterion must remain an explicit compact `Given`/`When`/`Then` triplet;
   free-form or partially labeled criteria do not normalize into authority.
+- The renderer joins a clause to the next label with ", " unless the clause already ends in
+  terminal punctuation, when a single space joins them, so no clause's own bytes change.
+  Terminal punctuation is the closed policy of the
+  [exact-value boundary owner](../../src/domain/exact_value_boundary.zig), shared with
+  exact-value recognition; readback accepts only the separator the renderer derives.
 - Surviving IDs stay attached to their records; an un-ID'd new record receives the next
   monotonic ID; deleted IDs are not reused.
 - A duplicate, malformed, or reassigned ID blocks with targeted guidance.
@@ -148,7 +153,7 @@ Renderers own:
   generated-record links. The editable `spec.md` grammar is unchanged.
 - When any post-generation review is incomplete, `spec.md` renders one engine-owned
   status line under its title, `**Review status: Incomplete — N of M review subjects
-  were not assessed.**`, pointing to `reference-context.md`, whose "Review status"
+  were not assessed.**`, pointing to `reference-context.md`, whose `## Review Status`
   section lists each incomplete source or principle review's reason and unassessed
   subjects ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
   A fully reviewed specification renders neither.
@@ -184,14 +189,17 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   output-exists failure, or separate overwrite approval.
 - Specify therefore overwrites `spec.md` and `reference-context.md`, including prior user edits
   to `spec.md`; it does not delete and recreate the feature directory.
-- Validation and predecessor/review gates still apply before commit. A Specify run that
-  fails because model work couldn't be completed, or ends `blocked`, publishes an
-  incomplete specification of its validated content: `spec.md` starts with
+- Validation and predecessor/review gates still apply before commit. Today a failed,
+  blocked or invalid execution publishes nothing. Under
+  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+  since 30 October 2026; not implemented), a Specify run that fails because model work
+  couldn't be completed, or ends `blocked`, would publish an incomplete specification of
+  its validated content: `spec.md` starts with
   `**Status: Incomplete — the run failed.**` or `**Status: Incomplete — the run was
-  blocked.**` and names the step and diagnostic, each section not produced is marked not generated, and
-  `reference-context.md` has a "Run status" section
-  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Other failed
-  executions publish nothing. A clarification pause (`needs_user`)
+  blocked.**` and names the step and diagnostic, validated records appear without final
+  requirement IDs, each section not produced is marked not generated, and
+  `reference-context.md` has a "Run status" section. Other failed executions would
+  still publish nothing. A clarification pause (`needs_user`)
   publishes the validated incomplete projection authorized by
   [ADR 0017](../decisions/0017-incomplete-specification-publication.md), together with
   current reference context, forms/registry and pending state. It cannot publish

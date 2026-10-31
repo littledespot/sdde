@@ -42,6 +42,13 @@ transition. The internal steps are functions, not workflow operations or a secon
 workflow graph, so they are no longer addressable or composable from YAML. Composing
 them differently needs a new stage action and an engine rebuild.
 
+**Failure-output amendment (27 October 2026, not yet implemented):**
+[ADR 0041](0041-failed-run-incomplete-publication.md) lets a definition declare one
+model-free `failure-output` subgraph. After an eligible failure, the engine kernel runs
+it through the runner and then returns the original failure. The member is declared in
+YAML, so no publication runs hidden, and it moves the definition contract to
+`workflow/v2`.
+
 ## Context
 
 A fixed catalogue such as `spec.section.generate` or

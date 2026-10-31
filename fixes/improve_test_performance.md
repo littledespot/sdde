@@ -10,10 +10,10 @@ macOS 27.0, Zig 0.16.0. **Reviewed twice the same day:**
   gaps in P2 and P9. It corrected T7, T8 and T12, and added T15 and P12. §7 lists the
   changes.
 
-**Status:** investigation note, not an active fix record. [FIX05](FIX05.md) remains the
+**Status:** investigation note, not an active fix record. [FIX06](FIX06.md) is the
 sole active fix record ([README](README.md)). This note holds findings and proposals only.
 It authorizes no code, build or test change. Adopting a proposal means recording it in
-FIX05 first. P1 and P9 were adopted and implemented on 24 October 2026; their record is
+FIX06 first. P1 and P9 were adopted and implemented on 24 October 2026; their record is
 [Z_FIX05 §18](Z_FIX05.md#18-offline-test-performance-p1-and-p9--24-october-2026). The
 other proposals remain unadopted.
 

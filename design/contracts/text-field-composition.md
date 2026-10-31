@@ -1,7 +1,11 @@
 # Text-field composition
 
 User-approved amendments to §§7.1, 17.3, 22 and ADR 0020 (field composition,
-16 October 2026; native exact values, 17 October 2026). ADR 0019 records the
+16 October 2026; native exact values, 17 October 2026), as amended by
+[ADR 0036](../decisions/0036-source-quoted-claims.md) (source-quoted claims and
+exact-value code delimiters, 25 October 2026) and the
+[ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
+amendment (workflow-owned purposes, 30 October 2026). ADR 0019 records the
 debug-description/replay serialization that retains their native witnesses.
 
 ## Native exact values
@@ -44,8 +48,11 @@ sibling, `S` and effective-evidence preconditions.
 
 ## Field inventory and insertion roles
 
-One closed native field registry owns composition policy, issue explanations and
-model-facing presentation. Initial authoring, protocol correction, all repair
+One closed native field registry owns composition policy, mechanical issue
+explanations and model-facing presentation. Field and record purposes are
+workflow-owned packet guidance
+([ADR 0016](../decisions/0016-configured-json-response-composition.md)
+packet-guidance amendment), which the native builders place. Initial authoring, protocol correction, all repair
 routes, collection coverage and stored readback consume the same policy. A field
 has `required | optional` prose and a `prohibited | incidental |
 obligation_bearing` role for each insertion kind. Presence of prose is mechanical
@@ -202,22 +209,9 @@ A new target or foreign permit cannot borrow that decision. Changed repairs reta
 impacted and full validation, normal limits and all existing publication gates; no
 new allowance is granted.
 
-The harness calls its first mechanically recorded rejection `first_native_rejection`.
-Representation/admission is a separate failure-attribution category, not a paid
-model stage. Admission-escape reporting rechecks admitted native fields with the
-canonical composition/wire owners, preserves exact field/origin evidence, and
-distinguishes measured zero, observed escape and unavailable coverage. Downstream
-sends/tokens describe exposure after the first observed escape; chronology alone
-does not prove that every later call was caused by it. The primary escape
-denominator is invoked native workflows, including recorded invocations that fail
-before their first model send. Missing audits remain unknown. The comparison
-scorer's dispatched generation-arm convention is unchanged; distinct observed
-producers provide a secondary admission diagnostic. Producer evidence is a closed
-model/native/unavailable union. Native summary reuse links to an earlier audited
-value and its validation digest; refreshed engine-owned questions retain validated
-clarification-state identity. Neither creates a model receipt. Complete audits
-containing native producers can report measured zero; missing model receipts and
-missing native parents remain unavailable.
+Harness admission-escape reporting, including `first_native_rejection` and the
+admission audit, is defined in [the E2E harness](../harness/e2e.md#retained-results).
+It reruns these composition and wire owners and grants no workflow authority.
 
 Offline tests must cover the complete field inventory, legitimate in-sentence and
 identity insertions, source exceptions, wire syntax, all repair/readback paths,

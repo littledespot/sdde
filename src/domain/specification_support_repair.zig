@@ -27,8 +27,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
-            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8, obligation_rule: ?[]const u8, missing_obligation: ?[]const u8, authority_gap_rule: ?[]const u8, authority_gap: ?authority.AuthorityGap } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(review.decisionOf(self.finding.?).finding()) else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) admission.obligation_instruction else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null, .authority_gap_rule = if (purpose == .source and self.finding != null and review.decisionOf(self.finding.?) == .candidate_invalid) admission.authority_gap_instruction else null, .authority_gap = if (purpose == .source and self.finding != null) self.finding.?.authority_gap else null };
+            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?@import("specification_support_evidence.zig").Instruction, obligation_rule: ?@import("specification_support_evidence.zig").Instruction, missing_obligation: ?[]const u8, authority_gap_rule: ?@import("specification_support_evidence.zig").Instruction, authority_gap: ?authority.AuthorityGap } {
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) .{ .entry = .{ .question = @import("specification_support_evidence.zig").questionRule(review.decisionOf(self.finding.?).finding()) } } else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) .{ .entry = .obligation } else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null, .authority_gap_rule = if (purpose == .source and self.finding != null and review.decisionOf(self.finding.?) == .candidate_invalid) .{ .entry = .authority_gap } else null, .authority_gap = if (purpose == .source and self.finding != null) self.finding.?.authority_gap else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -86,7 +86,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             return .resolved;
         }
 
-        pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, rejected: @FieldType(review.Collection, "rejected")) Error!Authorization {
+        pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, rejected: @FieldType(review.Collection, "rejected")) Error!Authorization {
             const candidate = rejected.candidate orelse return error.UnsafeSupportRepair;
             const current = if (candidate.working) try review.validateWorking(a, inputs, context.inputs, candidate) else try review.validate(a, inputs, context.inputs, candidate);
             if (current != .rejected or !std.meta.eql(try shared.snapshot(review.Rejection, a, current.rejected.rejection), try shared.snapshot(review.Rejection, a, rejected.rejection))) return error.InvalidAtomicRepair;
@@ -95,7 +95,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             const id = rejection.requirement orelse return error.UnsafeSupportRepair;
             if (authority.policy(id) == null) return error.UnsafeSupportRepair;
             const ordinal = rejection.ordinal orelse return error.UnsafeSupportRepair;
-            const base = try review.packetFor(a, inputs, context, .{ .finding = id });
+            const base = try review.packetFor(a, inputs, context, guidance, .{ .finding = id });
             defer packets.release(base);
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };
             if (rejection.issue == .missing_finding) return bindRetry(a, try atomic.authorizeInsert(a, base.unit(), candidate.revision, .{ .requirement = id, .ordinal = ordinal, .index = candidate.review.entries.len }, .finding, facts, .{ .rejection = rejection, .finding = null }));
@@ -129,21 +129,21 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             };
             return bindRetry(a, try atomic.authorize(a, base.unit(), candidate.revision, target, expected, facts, .{ .rejection = rejection, .finding = value }));
         }
-        pub fn packet(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization) Error!*packets.Packet {
+        pub fn packet(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, candidate: review.Candidate, authorization: Authorization) Error!*packets.Packet {
             try atomic.checkDependencies(a, authorization, .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate });
             const kind = switch (authorization.operation) {
                 .replace => |value| std.meta.activeTag(value),
                 .insert => |value| value,
                 .delete => return error.InvalidAtomicRepair,
             };
-            const base = try review.packetFor(a, inputs, context, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
+            const base = try review.packetFor(a, inputs, context, guidance, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
             defer packets.release(base);
             const definition = switch (kind) {
                 .finding => base.resultDefinition().?.bytes,
                 .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
                 .selection => if (purpose == .principles) "principle_selection" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
             };
-            const raw_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
+            const raw_input = try atomic.packetPresenting(a, authorization, guidance, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
             defer packets.release(raw_input);
             // A narrowed result schema owns its prose paths. It cannot inherit
             // question paths from the complete finding when they are absent.
@@ -188,10 +188,10 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 },
             };
         }
-        pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
+        pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, inputs: authority.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
             if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
             const target = authorization.target;
-            const base = try review.packetFor(a, inputs, context, .{ .finding = target.requirement });
+            const base = try review.packetFor(a, inputs, context, guidance, .{ .finding = target.requirement });
             defer packets.release(base);
             const expected: ?Replacement = if (authorization.operation == .insert) null else valueAt(candidate, target.index, std.meta.activeTag(if (authorization.operation == .replace) authorization.operation.replace else authorization.operation.delete));
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };

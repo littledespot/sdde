@@ -29,6 +29,7 @@ resources:
   loss-prompt: spec/support-loss.prompt.md
   principle-prompt: spec/principle.prompt.md
   support-schema: spec/support.schema.json
+  packet-guidance: spec/packet-guidance.json
 steps:
   review-history:
     use: initialize-specification-review-history
@@ -45,6 +46,10 @@ steps:
       failed: end.failed
   principles:
     use: capture-principle-registry
+    on: {ok: guidance, failed: end.failed}
+  guidance:
+    use: capture-packet-guidance
+    with: {guidance: packet-guidance}
     on: {ok: references, failed: end.failed}
   references:
     call: prepare-references

@@ -52,7 +52,8 @@ encoding-tagged base64. Reconstruction preserves the complete sanitized body wit
 truncation; a storage failure follows the existing fail-closed path after required
 provider usage accounting. `logs.level` alone selects capture; higher thresholds
 emit metadata only and the removed `promptCapture` field rejects. Prompt records
-keep their registered `debug` severity and the configured event threshold.
+keep their registered `debug` severity and the configured event threshold. Emission follows
+[§26.5](26-security.md): an event an ADR requires to be logged is emitted at every level.
 
 - Candidate diagnostics retain typed rule, target, rejected value and admissible scope.
 - The shared diagnostic projection distinguishes a response origin, an assembled-candidate
@@ -154,17 +155,24 @@ Logging rejection prevents the re-send. The temperature each attempt sent is rec
 its request description (`model-request-debug/v13`), not in a log field. A re-send that
 succeeds removes neither event.
 
+At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt
+stream, for the runaway attempt and for its re-send: the assembled request, its request
+description (both configured temperatures and the sampling), the provider request with
+the temperature sent, and the complete returned output with its stop reason and token
+counts. A repeated runaway's output is captured before the failure events and the stop.
+Higher levels log only the events.
+
 When post-generation advice closes incomplete, the runner emits one warning
 `review.incomplete`, with the incomplete-advice reason as its diagnostic code and the
 number of unassessed subjects as its count
 ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). Its
 logging rejection prevents publication.
 
-When a failed Specify run publishes its validated content as a failed incomplete
-specification, the runner emits one warning `run.incomplete_published` after the failure
-events and before the publication writes, with the failure's diagnostic code
-([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)). Its logging
-rejection prevents publication.
+Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
+hold since 30 October 2026; not implemented), when a failed Specify run publishes its
+validated content as a failed incomplete specification, the runner emits one warning
+`run.incomplete_published` after the failure events and before the publication writes,
+with the failure's diagnostic code. Its logging rejection prevents publication.
 
 Useful metrics:
 

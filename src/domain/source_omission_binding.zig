@@ -26,8 +26,7 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
         } else false;
         if (!present) return error.InvalidRequiredAuthority;
     }
-    const purpose = try @import("required_authority_description.zig").task(a, target);
-    var builder: ComparisonBuilder = .{ .allocator = a, .records = records, .purpose = purpose };
+    var builder: ComparisonBuilder = .{ .allocator = a, .records = records };
     var extracted: std.ArrayList(r.ClaimId) = .empty;
     for (records.items.entries) |item| {
         if (authority.contains(r.extraction.identity.SourceId, finding.source_ids, item.source_id)) try extracted.append(a, item.claim.id);
@@ -125,7 +124,6 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
 const ComparisonBuilder = struct {
     allocator: std.mem.Allocator,
     records: Records,
-    purpose: []const u8,
     last: comparison.Reference = .source_premise,
     views: std.ArrayList(comparison.View) = .empty,
     boundaries: std.ArrayList(comparison.Boundary) = .empty,
@@ -134,8 +132,8 @@ const ComparisonBuilder = struct {
         try r.unique(r.ClaimId, ids);
         const members = try self.allocator.alloc(comparison.Member, ids.len);
         for (ids, members, 1..) |id, *member, ordinal| member.* = .{ .id = .{ .ordinal = @intCast(ordinal) }, .claim_id = (try r.item(self.records.items, id)).claim.id };
-        // Only identical occurrences, values, purpose and current dependency
-        // binding share a view. Equal text from different claims never merges.
+        // Only identical occurrences, values and current dependency binding
+        // share a view. Equal text from different claims never merges.
         if (self.last == .comparison) {
             const previous = self.views.items[self.last.comparison.ordinal - 1];
             const before = try @import("atomic_repair.zig").snapshot([]const comparison.Member, self.allocator, previous.members);
@@ -143,7 +141,7 @@ const ComparisonBuilder = struct {
             if (std.mem.eql(u8, &before.bytes, &after.bytes)) return;
         }
         const id: comparison.Id = .{ .ordinal = @intCast(self.views.items.len + 1) };
-        try self.views.append(self.allocator, .{ .id = id, .purpose = self.purpose, .members = members });
+        try self.views.append(self.allocator, .{ .id = id, .members = members });
         try self.boundaries.append(self.allocator, .{ .input = self.last, .output = .{ .comparison = id }, .owner = owner });
         self.last = .{ .comparison = id };
     }

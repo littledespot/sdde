@@ -93,7 +93,7 @@ pub const BuildInput = struct {
         const self = context.?;
         const authorized = readAuthorization(&input.step.data) catch |operation_error| return operation_error;
         const prior = try extraction.read(&input.step.data, rec.parsed_schema, .reconciliation_parsed);
-        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), authorized) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_parsed, try rec.textContext(&input.step.data), authorized, try @import("packet_guidance_workflow.zig").read(&input.step.data)) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };

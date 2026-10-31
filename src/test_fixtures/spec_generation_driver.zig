@@ -492,7 +492,12 @@ pub const Driver = struct {
                     const path = diagnostic.get("path").?.string;
                     std.testing.expect(std.mem.startsWith(u8, path, "/records/") and std.mem.indexOf(u8, path, "/claim_ids/") != null) catch unreachable;
                     std.testing.expectEqualStrings(path, correction.value.object.get("expected").?.object.get("path").?.string) catch unreachable;
-                    std.testing.expect(std.mem.indexOf(u8, correction.value.object.get("explanation").?.string, "covering kind") != null) catch unreachable;
+                    // The correction names the compiled covering kinds (FIX06 D4.1), from their owner.
+                    const covering = correction.value.object.get("covering").?.object;
+                    const rule = @import("../domain/specification_session.zig").scenario_coverage;
+                    std.testing.expectEqualStrings(rule.kind_property, covering.get("kind_property").?.string) catch unreachable;
+                    std.testing.expectEqual(rule.covering.len, covering.get("kinds").?.array.items.len) catch unreachable;
+                    for (rule.covering, covering.get("kinds").?.array.items) |kind, listed| std.testing.expectEqualStrings(kind, listed.string) catch unreachable;
                 }
                 if (matches_stage and fault.shape == .uncited_verdict and attempt > 1) {
                     // ADR 0042: a verdict the domain rule requires citations for,

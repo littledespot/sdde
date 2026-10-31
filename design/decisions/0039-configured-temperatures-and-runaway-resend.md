@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decisions on 26 October 2026 on
-  [FIX05](../../fixes/FIX05.md) B9:
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B9:
   - "if a run away issue occurs, then the the retry tempreture should be set to 1 and
     the same request should be tried again, if that fails then the workflow should stop
     executing";
@@ -14,7 +14,14 @@
   - "temperture must be configurable and should be loaded out of the .sddtoolkit, there
     should be temperture and temperture_runaway_retry";
   - "it must be logged if ht model fail on the first attempt and then retryed, the retry
-    responses must all pass through the same validation checks".
+    responses must all pass through the same validation checks";
+  - on 27 October 2026: "if a run away error occurs on the first run then all the details
+    should be logged of loglevel is debug then the same request should be tried with
+    temperatureRunawayRetry and if the same issue occurs again then with workflow should
+    be stopped and all the info should be logged if log level is debug" (Decision 4's
+    debug capture). Asked whether a second runaway in a review step should also stop
+    the run, the user accepted the recommendation that it doesn't ("update the docs with
+    the above recommendations"): review keeps Decision 3 and ADR 0040.
 - **Amended by:** [ADR 0040](0040-incomplete-review-published-marked-logged.md) (26
   October 2026, the user's "incomplete results must be published, but it must be
   indicated that the results are incompelete, and it must also be logged"): in advisory
@@ -42,7 +49,7 @@
     `model-request-debug/v13`;
   - [ADR 0029](0029-bedrock-model-families.md): the `gpt-oss` family sends the
     configured temperature instead of `0.1`;
-  - the CLAUDE.md evidence rule against sampling changes and extra retries, which
+  - the evidence rule (now in AGENTS.md) against sampling changes and extra retries, which
     records this as an explicit engine-policy exception;
   - §9 (configuration shape and retry defaults), §12 (model controls, stops and
     `model-request-debug/v13`), the §13 model actions (a new
@@ -88,7 +95,8 @@ temperature was a compiled engine constant, so projects couldn't choose it.
      `temperatureRunawayRetry` to `1`.
 2. **A runaway is re-sent once.** A runaway is a response the provider stopped with
    `output_limit`.
-   - Its partial text is discarded, as before; it never becomes a candidate.
+   - Its partial text never becomes a candidate and is never sent back to the model; at
+     `debug` it is logged in full (Decision 4).
    - The engine sends the identical request again: the same messages, schema, guidance,
      binding and maximum output, with `temperatureRunawayRetry` as the only change.
    - The re-send isn't a protocol correction. It carries no diagnostic, doesn't include
@@ -142,6 +150,15 @@ temperature was a compiled engine constant, so projects couldn't choose it.
      authorization and token-budget checks pass and immediately before the send, so a
      refused re-send is never logged as re-sent and a logging rejection prevents the
      send.
+   - **At `debug` or `trace`, every runaway is logged in full**, through
+     [ADR 0018](0018-debug-model-exchange-logging.md)'s capture. For the runaway attempt
+     and for its re-send, the prompt log keeps the complete assembled request, its request
+     description (both configured temperatures and the sampling), the provider request
+     with the temperature it sent, and the complete returned output with the provider's
+     stop reason and token counts. A repeated runaway's output is logged before the
+     failure events and the stop. Higher levels log only the events above. The 26 October
+     hello-world run shows it: the runaway attempt sent at `0.1` and its full output
+     (`max_tokens`, 16,384 output tokens), then the re-send sent at `1` and its response.
    - Each request and provider operation records its sampling: `configured` or
      `runaway_resend`. The temperature sent follows from it and the binding's two
      configured temperatures. Request descriptions record both temperatures and the
@@ -162,7 +179,7 @@ temperature was a compiled engine constant, so projects couldn't choose it.
 
 ## Consequences
 
-- **Evidence policy.** CLAUDE.md forbids working around a model limitation with
+- **Evidence policy.** AGENTS.md forbids working around a model limitation with
   "sampling changes, extra retries". This rule is the user's explicit exception to it,
   recorded like the 18 October 2026 evaluator correction. It covers only a provider
   `output_limit` stop: it gives no other model limitation a retry or a sampling change.
@@ -179,7 +196,8 @@ temperature was a compiled engine constant, so projects couldn't choose it.
   - `model-request-debug/v12` descriptions no longer decode, so earlier captures can't
     be replayed.
   - `spec-e2e-report` v9 reports no longer decode, so `adjudicate-spec` on this build
-    can't adjudicate the retained v9 runs; several were made by uncommitted builds.
+    can't adjudicate the retained v9 runs; several were made by uncommitted builds. On
+    27 October 2026 the user accepted that they stay unadjudicated (FIX05 R8).
   - Frozen calibration protocols keep their recorded `0.1`, and their binding checks
     compare the recorded temperature value and reject a re-send capture, so a runaway in
     a frozen experiment fails before its re-send is sent.
@@ -198,6 +216,9 @@ temperature was a compiled engine constant, so projects couldn't choose it.
   - Logging: one `model.runaway_resent` warning before each re-send, after the
     runaway's `model.provider_stopped`; none for any other stop; a logging rejection
     prevents the re-send; the failure events carry `RunawayRepeated`.
+  - Debug capture: at `debug`, a repeated runaway leaves both attempts' requests, request
+    descriptions and complete returned outputs in the prompt log before the failure
+    events; at a higher level, only the events.
   - Same checks: a re-sent response is rejected exactly as a first response would be
     for malformed JSON, a schema violation, a missing assignment member and an
     uncovered scenario claim, and the E2E report marks the re-send attempt.

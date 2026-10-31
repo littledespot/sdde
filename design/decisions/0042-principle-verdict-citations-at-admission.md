@@ -13,8 +13,9 @@
   - [ADR 0019](0019-single-request-debugger.md): request descriptions record the new
     constraint, in the same `model-request-debug/v13` as
     [ADR 0039](0039-configured-temperatures-and-runaway-resend.md);
-  - §12.2 (native admission constraints), §12.7, §17.3, §22.6, the principle prompt,
-    F0100 and the §32 index.
+  - §12.2 (native admission constraints), §12.7, §17.3, §22.6, F0100 and the §32 index.
+    A principle-prompt line (Decision 4) was tried and withdrawn; the prompt is
+    unchanged.
 
   The overall design remains **Proposed design**.
 
@@ -60,9 +61,15 @@ only uncited non-compatible verdict among 489 findings (481 `compatible`; 4
    review ends incomplete and is published, marked and logged
    ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). Invalid, foreign
    and duplicate citations keep their current native validation and repair.
-4. **The prompt defines `uncertain`.** The principle prompt gains: "Use uncertain only
-   when a supplied principle applies but compliance can't be decided; if no principle
-   addresses the subject, it is compatible."
+4. **No prompt line (withdrawn 27 October 2026).** Two wordings of a principle-prompt
+   line defining `uncertain` were tried on 26 October. The first stopped the title failure
+   but cut citations on `compatible` findings from 481 of 481 to 17 of 76; the second
+   brought them back in one run of four, and the principle review then wrote a templated
+   "No supplied principle addresses …" for every subject, 20 false statements in one pair.
+   False statements are worse than blanket citations, and the admission constraint
+   already turns the 25 October failure into a whole-response correction, so the user
+   directed on 27 October to revert the line ("apply the follow recommendations"). The
+   principle prompt is the pre-ADR text.
 
 ## Consequences
 

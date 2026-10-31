@@ -3,7 +3,7 @@
 [design.md](design.md) is the **Proposed design** baseline. Accepted
 [ADRs](decisions/) amend only their stated scope; the index is
 [§32](design.md#32-accepted-and-deferred-implementation-choices). Open work and
-implementation gaps live in [FIX05](../fixes/FIX05.md), not here.
+implementation gaps live in [FIX06](../fixes/FIX06.md), not here.
 
 Start with the [executive summary](design.md#1-executive-summary),
 [invariants](design.md#3-goals-non-goals-and-invariants) and
@@ -25,7 +25,7 @@ then follow the section links in design.md.
 | Example configuration and the Spec workflow | [examples/](examples/), [workflows/](workflows/) |
 | Target-project source material | [preset examples](toolchainPresets/), [principle templates](templates/) |
 
-Schemas, examples, presets and templates are source material, never runtime
-configuration or fallback. Templates are not an instantiated engine constitution.
+Examples, presets and templates are source material; schemas document contracts.
+None of them is runtime configuration or fallback. Templates are not an instantiated engine constitution.
 Tests load [workflows/](workflows/) and `examples/.sddproviders.json` directly.
 Keep diagram `.md` files and their Mermaid fences so they render in Markdown preview.

@@ -8,8 +8,9 @@ production invocation path, not only the E2E evidence wrapper. See
 [implementation status](#implementation-status).
 
 **Compatibility:** None. This is a pre-release proof of concept with no
-deployed predecessor. `feature-log/v2` and its two column schemas are updated
-in place; the implementation MUST NOT contain migrations,
+deployed predecessor. `feature-log/v2` and its two column schemas,
+`event-columns/v2` and `prompt-columns/v3`, are the only accepted shapes; the
+implementation MUST NOT contain migrations,
 aliases, dual readers/writers, historical conversion, or compatibility
 fallbacks. Recovery accepts only the exact current headings and contracts.
 After a contract is explicitly accepted for release, subsequent incompatible
@@ -21,7 +22,7 @@ changes require a new version.
 SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
-5-6, 9, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
+5-6, 9, 13.2, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
 [ADR 0003](../decisions/0003-generic-workflow-engine.md); [ADR
 0005](../decisions/0005-workflow-defined-operations.md); and the
@@ -65,7 +66,7 @@ The graph returns the existing common `Outcome` and composite `NodeDelta`:
 
 | Result | Required meaning |
 | --- | --- |
-| `ok` with drop evidence | The event is below threshold; no event identity, sequence, lock, or write is created. |
+| `ok` with drop evidence | Section 26.5's emission rule drops the event; no event identity, sequence, lock, or write is created. |
 | `ok` with persistence evidence | The complete safe record was appended, any required flush completed, and the stream lock was released. |
 | `blocked` | Logging failed; cleanup, emergency reporting, and execution cleanup completed before new work was blocked. |
 
@@ -84,7 +85,7 @@ F0002 never reads `.sddtoolkit.json` and never receives `SDDToolKitConfig` or
 ```text
 F0001 immutable config
   -> logging-policy compiler reads config.logs
-  -> compiled fragment enters persisted bootstrap authority
+  -> compiled fragment enters persisted bootstrap authority (not yet implemented; ADR 0026)
   -> active FeatureLogPolicy and FeatureLogBinding
   -> F0002
 ```
@@ -168,7 +169,7 @@ The example roles above are under consideration. This is a consideration list, n
 
 | Authority | Sole owner |
 | --- | --- |
-| Event level, template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
+| Event level, emission (§26.5), template, field schema, and sensitivity | `LogEventDefinitionRegistry` |
 | Four-character workflow shortcode source and validation | Workflow definition; canonical `WorkflowShortcode` parser; workflow-registry uniqueness validation |
 | Workflow-shortcode/fact binding | `WorkflowLog.log` and delta validation |
 | Emit/drop comparison | `EvaluateLogThresholdAction` |
@@ -258,7 +259,7 @@ defined in governing Section 13.9:
    runner-bound workflow's `WorkflowTelemetryFact`;
 2. resolve the one registered event definition;
 3. project only its allowed typed fields and apply required redaction;
-4. evaluate the definition's canonical level against the canonical threshold;
+4. apply Section 26.5's emission rule to the definition and the canonical threshold;
 5. if admitted, assign the workflow shortcode, the same canonical level,
    trusted time, event identity, and sequence to the record;
 6. validate and serialize one bounded fixed-column pipe-delimited data row;
@@ -308,6 +309,8 @@ Logging-internal nodes are not recursively observed.
   governing Section 26.5.
 - F0002 uses those types and does not define a second enum or alias table.
 - The registry owns an event's level; the configured level is the emission threshold.
+- The registry also owns each event's emission, marking the events an ADR requires to be
+  logged; governing Section 26.5 holds the rule.
 - A producer supplies neither value.
 
 - Every serialized log record MUST contain one canonical `level` value from Section
@@ -355,8 +358,9 @@ Logging-internal nodes are not recursively observed.
 | `run.completed` | `info` | `outcome` | `duration_ms` |
 | `run.blocked` | `error` | `diagnostic_code`, `outcome` | — |
 | `run.failed` | `error` | `diagnostic_code`, `outcome` | — |
-| `run.incomplete_published` | `warning` | `diagnostic_code` | — |
+| `run.incomplete_published` ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold since 30 October 2026; not implemented) | `warning` | `diagnostic_code` | — |
 | `run.cancelled` | `info` | `outcome` | — |
+| `publication.prepared` | `info` | `outcome` | — |
 | `stage.started` | `info` | — | — |
 | `stage.completed` | `info` | `outcome` | `duration_ms` |
 | `stage.blocked` | `error` | `diagnostic_code`, `outcome` | — |
@@ -379,6 +383,8 @@ Logging-internal nodes are not recursively observed.
 | `repair.applied` | `info` | `repair_unit_kind`, `outcome` | — |
 | `repair.rejected` | `warning` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |
 | `repair.exhausted` | `error` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |
+| `retry.admitted` | `debug` | `count` | — |
+| `retry.exhausted` | `error` | `count`, `diagnostic_code`, `outcome` | — |
 | `review.incomplete` | `warning` | `diagnostic_code` | `count` |
 | `review.requested` | `info` | — | — |
 | `review.approved` | `info` | `outcome` | — |
@@ -391,7 +397,7 @@ Logging-internal nodes are not recursively observed.
 | `task.blocked` | `warning` | `task_id`, `diagnostic_code`, `outcome` | — |
 | `task.failed` | `error` | `task_id`, `diagnostic_code`, `outcome` | `duration_ms` |
 | `security.denied` | `warning` | `rule_id`, `diagnostic_code`, `outcome` | — |
-| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | — |
+| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | `workflow_id`, `action_id`, `call_id`, `call_kind`, `original_call_id`, `parent_call_id`, `body_bytes` ([ADR 0019](../decisions/0019-single-request-debugger.md)) |
 
 - `model.prompt_fragment` exists only in the prompt stream, enabled automatically by
   `debug`/`trace` under ADR 0018.
@@ -592,8 +598,8 @@ joins raw path strings. There is no shared or global persistent log.
 - A validated optional console mirror may display only the already-safe data row using
   the exact delimited bytes defined in Section 6.4.
 - File permissions, exclusive locking, sequence, flush, rotation, retention, prior-tail
-  recovery, and policy transition behavior are governed once by Sections 13.9, 14.10,
-  and 26.5 and are not redefined here.
+  recovery, and policy transition behavior are governed once by Sections 13.2, 13.9,
+  14.10, and 26.5 and are not redefined here.
   [ADR 0026](../decisions/0026-header-identity-log-retention.md) amends how a fresh run
   retains prior runs' segments.
 
@@ -666,7 +672,7 @@ F0002 does not:
    event-definition registry, never raw configuration or unvalidated shortcode
    text.
 2. F0001 structurally decodes the closed logging shape; the logging-policy
-   compiler alone validates its three choices and injects all operational
+   compiler alone validates its two choices and injects all operational
    constants, and configured level conversion has one owner.
 3. Each workflow definition supplies exactly one four-character
    case-sensitive ASCII alphanumeric shortcode; schema validation delegates to
@@ -722,7 +728,8 @@ F0002 does not:
     compiled policy injects every fixed behavior in Section 6.4, including the
     2,000 ms one-attempt lock deadline, exact pipe-delimited console mirror, and exact
     bounded emergency-line grammar.
-20. Only the current proof-of-concept v2 headings and contracts are accepted;
+20. Only the current proof-of-concept `feature-log/v2` headings (`event-columns/v2`
+    and `prompt-columns/v3`) and contracts are accepted;
     no compatibility or migration branch exists.
 
 ## 11. Verification
@@ -799,7 +806,7 @@ rather than copied into this feature document.
 **Implementation**
 
 - The logging service and stream lifecycle are implemented; production Specify
-  integration remains open ([FIX05](../../fixes/FIX05.md)).
+  integration remains open ([FIX06](../../fixes/FIX06.md#wider-scope-retained)).
 - The workflow-definition schema supplies `WorkflowShortcode`, the registry validates
   uniqueness, and the runner-created `WorkflowLog` producer binding carries it.
 - The F0001 logging shape supplies every configurable user choice, and all operational
@@ -807,7 +814,7 @@ rather than copied into this feature document.
   constants.
 - ADR 0005 replaces route/profile attribution with compiled
   workflow-operation/model-slot attribution.
-- The current event registry and fixed v2 headings use workflow-operation and model-slot
+- The current event registry and fixed `feature-log/v2` headings use workflow-operation and model-slot
   attribution; see [the format owner](../../src/domain/feature_log_format.zig).
 ## 12. Traceability
 
@@ -815,7 +822,7 @@ rather than copied into this feature document.
 | --- | --- |
 | Config read/decode and handoff | F0001; Design Sections 9 and 13.1 |
 | Workflow shortcode source, syntax, validation, and fact binding | Workflow definition; canonical `WorkflowShortcode` parser; workflow registry; runner-created `WorkflowLog`; `WorkflowLog.log` |
-| Action and orchestrator boundaries | Design Sections 5-6, 13.9, and 14.9-14.10 |
+| Action and orchestrator boundaries | Design Sections 5-6, 13.2, 13.9, and 14.9-14.10 |
 | Levels, privacy, paths, storage, and recovery | Design Section 26.5 |
 | Runner-owned observability | Design Section 27 |
 | Verification and delivery | Design Sections 28, 30-31 |

@@ -1,8 +1,9 @@
 # Z_FIX05 — Completed FIX05 work and dated evidence
 
-Moved from [FIX05](FIX05.md) on 23 and 26 October 2026. FIX05 keeps the open work; this file keeps
-completed implementation, dated live diagnostics and the full decision records, under
-their original FIX05 IDs and headings.
+Moved from FIX05 on 23 and 26 October 2026, and on 28 October 2026 when FIX05 was retired
+(§21, with an ID map). [FIX06](FIX06.md) keeps the open work; this file keeps completed
+implementation, dated live diagnostics and the full decision records, under their original
+FIX05 IDs and headings.
 
 This record is historical. Its proposals, status statements and checklists grant no
 approval and establish no live acceptance. Accepted contracts and ADRs remain the
@@ -3893,3 +3894,592 @@ emission point, the compiler rule). Final checks: `zig build verify` 164 of 164 
 - Across the four: principle citations on `compatible` findings fell to 17 of 76 (FIX05
   B11); business rules restated FR-001 in every run; "may renew" persisted in
   loan-renewal's story; review took 41–58% of tokens and passed defects.
+
+## 21. FIX05 retired — 28 October 2026
+
+By the user's direction of 28 October 2026 ("review outstanding items that need to be
+implemented in FIX05 and move them to FIX06 … move the closed items in FIX05 to Z_FIX05
+and delete FIX05"), FIX05 was retired. Its open items moved to [FIX06](FIX06.md), the sole
+active fix record, under their original IDs and in one ordered sequence; its closed items,
+state snapshots and history are below. The last committed FIX05 text is at `28ff156`
+(`git show 28ff156:fixes/FIX05.md`); its 27–28 October additions were never committed and
+are preserved here. Section and item references inside the copied text are FIX05's.
+
+### FIX05 item map
+
+| FIX05 ID | Now |
+| --- | --- |
+| §1 Verdict | [FIX06 §1](FIX06.md#1-why) (summary); [verdict record](#fix05-verdict-and-measures-17-october-2026) |
+| §1 Current state | [state on 26–27 October](#fix05-state-on-2627-october-2026) |
+| A1 | [FIX06 E1](FIX06.md#e1-engine-owned-model-request-a1-adr-0030-slice-4), [R-A1](FIX06.md#r-a1-engine-owned-release); records: [A1 decision record](#a1-decision-record), [slices 1–3](#a1-settled-choices-and-slices-13) |
+| A2 | [FIX06 E2](FIX06.md#e2-stage-actions-a2-adr-0031-and-identical-sibling-steps-w5); [A2 decision record](#a2-decision-record) |
+| A3 | [FIX06 E3](FIX06.md#e3-engine-routines-a3-adr-0032); [A3 decision record](#a3-decision-record) |
+| A4 | [FIX06 E5](FIX06.md#e5-rejections-say-why-a4) |
+| A5 | [FIX06 T4](FIX06.md#t4-architecture-rules-and-replay-a5) |
+| A6 | Closed (ADR 0034): [A6 record](#a6-adr-0034-and-gate-status-26-october-2026), [A6 decision record](#a6-decision-record); gate status in [FIX06 §1](FIX06.md#1-why) and [H1](FIX06.md#h1-adjudication-r8) |
+| B1 | Merged into [FIX06 §2](FIX06.md#2-rules-for-every-phase) measures; [B1 record](#b1-a-long-fail-closed-chain-of-model-judgments) |
+| B2 | [FIX06 Q10a](FIX06.md#q10a-publish-source-review-findings-as-advice-b2), [Q10b](FIX06.md#q10b-simplify-the-source-review-taxonomy-b2), [H2](FIX06.md#h2-review-label-confirmation-b2); [B2 records](#b2-records), [B2 measurement, 26–27 October](#b2-measurement-and-the-reverted-support-line-2627-october-2026) |
+| B3, B8 | Closed earlier: [B3](#b3-exact-value-bookkeeping-is-left-to-the-model), [B8](#b8-the-model-classifies-and-disposes-exact-value-tokens) |
+| B4 | [FIX06 H4](FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5); [B4 records](#b4-records), [B4 configured budget](#b4-configured-budget-record), [B4 to B6 notes](#b4-b5-and-b6-26-october-2026) |
+| B5 | [FIX06 Q1](FIX06.md#q1-remove-the-rejected-patches-and-take-the-clean-baseline) (D1.2), [Q6](FIX06.md#q6-scope-the-obligation-instruction), [Q8](FIX06.md#q8-source-claim-granularity-b7), [H4](FIX06.md#h4-experiment-stops-qualified-scope-and-the-formal-baseline-b4-b5), [T3](FIX06.md#t3-coverage-gaps-b5-b7); [B5 records](#b5-records-2425-october-2026), [B4 to B6 notes](#b4-b5-and-b6-26-october-2026) |
+| B6 | [FIX06 §2](FIX06.md#2-rules-for-every-phase) measures and §9; [B6 envelope prefix](#b6-gpt-oss-envelope-prefix), [B4 to B6 notes](#b4-b5-and-b6-26-october-2026) |
+| B7 | [FIX06 Q1](FIX06.md#q1-remove-the-rejected-patches-and-take-the-clean-baseline) (D1.1), [Q7](FIX06.md#q7-exact-values), [Q8](FIX06.md#q8-source-claim-granularity-b7), [T3](FIX06.md#t3-coverage-gaps-b5-b7), [R leftovers](FIX06.md#b7-contract-review-leftovers); [B7 records, 26–27 October](#b7-records-2627-october-2026) |
+| B9 | [FIX06 T1](FIX06.md#t1-repeated-runaway-debug-capture-b9), [H5](FIX06.md#h5-model-choice-r7); [B9 records, 26–27 October](#b9-records-2627-october-2026) |
+| B10 | [FIX06 E0](FIX06.md#e0-failed-and-blocked-runs-publish-validated-content-b10-adr-0041); [B10 decision history](#b10-decision-history-2627-october-2026) |
+| B11 | Closed (prompt line withdrawn): [B11 record](#b11-principle-citations-2627-october-2026); principle-citation precision continues as [FIX06 Q10c](FIX06.md#q10c-principle-review-citations-b11) |
+| B12 | [FIX06 Q1](FIX06.md#q1-remove-the-rejected-patches-and-take-the-clean-baseline) (hold), [Q7](FIX06.md#q7-exact-values) (D7.2), [Q11](FIX06.md#q11-remaining-rules-and-design-text) (D11.2); [B12 record](#b12-renderer-artefacts-27-october-2026) |
+| W1, W2 | Closed earlier: [W1](#w1-review-can-restart-the-whole-pipeline), [W2](#w2-the-upstream-repair-path-exists-twice) |
+| W3 | [FIX06 E4](FIX06.md#e4-generic-repair-operations-w3-adr-0033); [W3 decision record](#w3-decision-record) |
+| W4 | [FIX06 Q9](FIX06.md#q9-reconciliation-call-structure-w4) |
+| W5 | [FIX06 E2](FIX06.md#e2-stage-actions-a2-adr-0031-and-identical-sibling-steps-w5) |
+| §4 stage review | [Spec workflow stage review](#spec-workflow-stage-review-17-october-2026) |
+| R1 | [FIX06 R1](FIX06.md#r1-group-level-provenance-precision) |
+| R2 | [FIX06 E7](FIX06.md#e7-clarification-answer-recovery-r2-adr-0025) |
+| R6 | [FIX06 R6](FIX06.md#r6-semantic-repair-attribution-and-recovery) |
+| R7 | [FIX06 H5](FIX06.md#h5-model-choice-r7) |
+| R8 | [FIX06 H1](FIX06.md#h1-adjudication-r8), [H3](FIX06.md#h3-calibration-panels-r8); [R8 record](#r8-record) |
+| Summary hierarchy | [FIX06 summary hierarchy](FIX06.md#summary-hierarchy-and-cross-model-variation) |
+| Wider scope retained | [FIX06 wider scope](FIX06.md#wider-scope-retained) |
+| Follow-up: schema selection (§10) | [FIX06 Q10b](FIX06.md#q10b-simplify-the-source-review-taxonomy-b2) |
+| Follow-ups: provider-stop visibility (§11), logging gaps (§17) | [FIX06 E6](FIX06.md#e6-logging-and-visibility-gaps) |
+| §6 Recommended order | Superseded by [FIX06 §3](FIX06.md#3-sequence); [order as of 27 October](#fix05-recommended-order-27-october-2026) |
+| §7 Acceptance and evidence rules | Merged into [FIX06 §2](FIX06.md#2-rules-for-every-phase) |
+| §8 Record history | [history, 26–28 October](#fix05-record-history-2628-october-2026) |
+
+### FIX05 verdict and measures, 17 October 2026
+
+The deterministic core works. Since Phase 1A no value breaking a declared native rule
+has escaped admission, and every failure ends as a typed outcome. Duplication is low
+(five pairs of repeated function bodies, two of which W2 removes), and production
+code has no `@constCast` and nine
+`catch unreachable`. The engine is not hard to build or brittle because of local code
+quality.
+
+Two structural properties cause both problems:
+
+1. **The architecture makes every concept expensive.** One idea is spread across an
+   action, a binding, a registry entry, global data keys, YAML nodes and pinned
+   tests. The generic runner also has to police the model-request lifecycle that
+   the YAML exposes (§2).
+2. **The Spec workflow is a long serial chain of strict, fail-closed judgments by one
+   small model.** End-to-end success is roughly the product of per-call success, and
+   fixed per-call overhead exhausts the token budget before review finishes (§3).
+
+A stronger model would likely hide these weaknesses rather than remove them.
+
+| Measure, at the 17 October review | Value |
+| --- | --- |
+| Hello-world reference | 189 bytes, three requirements ([stories.md](../test/e2e/wf-001-hello-world/reference/stories.md)) |
+| Code | 63,889 production and 82,792 test lines, for one of four planned workflows |
+| Spec workflow | 1,168 YAML lines; 282 steps in 33 graphs (205 operation nodes, 77 subgraph calls); 185 distinct operations; 18 model-request sites (§4) |
+| History | 199 commits in 8 weeks; 297,901 Zig lines inserted and 148,709 surviving; 22 ADRs between 26 August and 6 October |
+
+The dated live diagnostics of 16–18 October are in
+[Z_FIX05 §1](Z_FIX05.md#1-live-diagnostics-1618-october-2026).
+
+### FIX05 state on 26–27 October 2026
+
+**Done, committed and moved to Z_FIX05.** Everything below is on `39a06ea`, merged as
+PR #10 (`1261106`), and verified offline. Live semantic benefit is not demonstrated
+unless a row says so (§7).
+
+| Item | State | Record |
+| --- | --- | --- |
+| B2 | Advisory post-generation review (ADR 0023); one record family per source-review call | [B2 records](Z_FIX05.md#b2-records) |
+| B3, B8 | Native exact-value recognition and bookkeeping (ADR 0024) | [B3](Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model), [B8](Z_FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens) |
+| B4 | One principle assignment per principle set; one budget, configured as `workflowTokenBudget` (ADR 0037, 125,000 for E2E) | [B4 records](Z_FIX05.md#b4-records), [B4 configured budget](Z_FIX05.md#b4-configured-budget-record) |
+| B5 | No batch for token-only groups (ADR 0024); cross-kind restatement deleted natively (ADR 0035); records name their claims and functional requirements need a scenario (ADR 0038) | [B5 token-only batches](Z_FIX05.md#b5-token-only-record-batches), [B5 records](Z_FIX05.md#b5-records-2425-october-2026) |
+| B6 | GPT-OSS envelope prefix normalized | [B6 envelope prefix](Z_FIX05.md#b6-gpt-oss-envelope-prefix) |
+| B7 | Source-quoted claim wording and code-delimiter removal (ADR 0036); list-item claim split (ADR 0038) | [B7 records](Z_FIX05.md#b7-records-2125-october-2026) |
+| B9 | Feature-owned entity records; no output allowance; one re-send after a runaway at the configured `temperatureRunawayRetry`, logged (ADR 0039) | [B9 records](Z_FIX05.md#b9-records), [B9 runaway evidence](Z_FIX05.md#b9-runaway-evidence-and-re-send-decision) |
+| Review publication | Incomplete review published, marked and logged (ADR 0040); principle verdicts need citations at admission (ADR 0042) | [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) |
+| Vocabulary | Model-facing `exact_text` names (ADR 0043) | [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) |
+| A1 | ADR 0030 slices 1–3 (freeze, token counting removed, catalogue deadline) | [A1 slices 1–3](Z_FIX05.md#a1-settled-choices-and-slices-13) |
+| W1, W2 | No post-generation upstream rebuild; the duplicate path is deleted | [W1](Z_FIX05.md#w1-review-can-restart-the-whole-pipeline), [W2](Z_FIX05.md#w2-the-upstream-repair-path-exists-twice) |
+| R8 | Acceptance policy implemented offline; adjudication and calibration open (R8 below) | [R8 record](Z_FIX05.md#r8-record) |
+| Test performance P1, P9 | Untraced leak-checking allocator and opt-in test-run reuse | [Z_FIX05 §18](Z_FIX05.md#18-offline-test-performance-p1-and-p9--24-october-2026) |
+
+The 21–25 October runs and the record as it stood on 25 October are in
+[Z_FIX05](Z_FIX05.md#current-state-as-of-25-october-2026).
+
+**Live runs on 26 October 2026 (AEDT), GPT-OSS-20B on Bedrock, each user-approved.**
+Advisory scores are `/evaluate-e2e` analysis under `evaluations/e2e/`, not grades or
+acceptance.
+
+| Run | Build | Calls / tokens | Outcome |
+| --- | --- | --- | --- |
+| Hello-world and loan-renewal, 17:57 | `54ce8fa`, modified | 1 / 0 each | `authorization_denied`: the Bedrock API key had expired |
+| [Hello-world](../zig-out/e2e-spec/2026-10-26T07-06-24Z-2bcbb4d769b998b2249210be1e590348/report.json), 18:06 | `54ce8fa`, modified (the ADR 0038–0043 tree) | 24 / 66,358 | Published; advisory 82.14% |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-26T07-06-25Z-a5ac7cc3a13b9dc94d84828648c7eaba/report.json), 18:06 | `54ce8fa`, modified | 26 / 91,129 | Published; advisory 78.57%, below threshold, no critical failure |
+| [Hello-world](../zig-out/e2e-spec/2026-10-26T08-09-02Z-314509c4e65f3bb4bc6a15fc2d3dd4ed/report.json), 19:09 | `39a06ea` | 25 / 84,951 | Published; advisory 82.14%; one source-review runaway recovered by the re-send |
+| [Loan-renewal](../zig-out/e2e-spec/2026-10-26T08-09-03Z-a89fd748b0ce942ddd496ba3e42469c3/report.json), 19:09 | `39a06ea` | 26 / 89,887 | Published; advisory 78.57%, below threshold, no critical failure |
+
+- **Completion since 21 October**, counting every attempt: hello-world published 15 of
+  17, loan-renewal 7 of 17. All four completed 26 October runs published, every call was
+  admitted first time apart from the one runaway, and no review ended incomplete.
+- **What held across the four runs:**
+  - loan-renewal's refusal behaviour has its own acceptance criterion (AC-002), written
+    on the first records attempt, which no earlier build achieved (B5);
+  - the 25 October `uncertain` title verdict that failed loan-renewal didn't recur, but
+    principle citations collapsed (B11);
+  - business rules restate the functional requirement in every run of both cases (B5);
+  - invented or restating entities (B6), "may renew" in loan-renewal's story (B7), the
+    renderer artefacts (B12), and source review passing defects (B2).
+- **The re-send worked once.** Hello-world's source review of `Hello, World!` ran to the
+  16,384-token maximum (18,823 tokens). The identical request at temperature 1 returned
+  an admitted finding, and the log recorded `model.provider_stopped` then
+  `model.runaway_resent` (B9).
+- **Vocabulary.** "The preserved token" is gone from both cases (ADR 0043). Hello-world's
+  brief now says "display the exact text …", which reads as plain English; watch it.
+- **Evidence status.** One pair ran on an unmodified committed build of the current engine
+  (`39a06ea`). No run has been adjudicated (R8, A6).
+
+**Decided 27 October 2026, awaiting implementation:** ADR 0041's four mechanism choices
+(B10) and B12's entity exact values (ADR 0045). Also decided: a second runaway in review
+doesn't stop the run (B9), the retained v9 reports stay unadjudicated (R8), and B9's two
+output caps are withdrawn. **Awaiting the user's decision:** B4's experiment stops and
+B7's two citation questions. B5's business-rule guidance, B12's clause join, ADR 0044's
+rule and its 27 October fix (B7) are implemented; B11's prompt line is withdrawn.
+
+**Providers.** ADR 0028 (Anthropic Messages API) and ADR 0029 (Bedrock model families) are
+implemented. All live evidence so far comes from GPT-OSS-20B; the account has no Claude
+Haiku 5.5 access, and model choice is the user's decision (R7).
+
+### Closed FIX05 item records
+
+#### A6, ADR 0034 and gate status, 26 October 2026
+
+- There were 22 ADRs between 26 August and 6 October.
+- Design and fix records saw 139,051 lines written and 91,493 deleted.
+- Phases 1A.2 and 1A.3 were each opened by a single hello-world run, while
+  near-identical requests produced opposite failures (F13).
+
+AGENTS.md requires every fix at the shared owning contract, with no backward
+compatibility, so each amendment becomes a large cross-cutting diff.
+
+**Proposal:** apply the evidence rules in §7 to every contract change.
+
+**Decided 22 October 2026, with a higher bar.**
+[ADR 0034](../design/decisions/0034-spec-quality-gate.md): no Plan, Tasks or Implement
+contracts, workflow definitions or code until the Spec workflow is stable and producing
+high-quality output on both development cases. Quality means each counted published
+specification passes R8 human adjudication. Stability means repeated runs of both cases
+on one committed build, counting every attempted run. There is no fixed run threshold;
+the user judges the evidence and decides when Plan is actioned. The full record is in
+[Z_FIX05](Z_FIX05.md#a6-decision-record).
+
+**Status on 26 October.** The gate isn't met:
+- no run has been adjudicated (R8);
+- four pairs used an unmodified committed build: `7a88804`, `8a600d7`, `269410b` and,
+  for the current engine, `39a06ea` (26 October 19:09);
+- since 21 October loan-renewal published in 7 of 17 attempts and hello-world in 15 of 17,
+  with all four completed 26 October runs published (§1).
+
+#### B1. A long fail-closed chain of model judgments
+
+Publication requires the whole workflow to pass every validator across 40 or more
+sends. As an illustration, not a measurement: if each call produced acceptable
+output 97% of the time after its retries, 41 calls would succeed together about 29%
+of the time; at 95%, about 12%. Splitting work into more calls lengthens the chain
+unless each call's success rate rises enough to compensate (former F5 and F7).
+
+**Proposal:** treat call count per feature as a reliability cost. B2, B4 option 3, B5 and
+W1 have shortened the chain. Of the open items, W4 and B5's collection authoring would
+shorten it further; ADRs 0030–0033 change workflow steps, not model calls. Judge progress
+by useful completion per attempted workload (§7), never by per-call admission.
+
+#### B2 measurement and the reverted support line, 26–27 October 2026
+
+Post-generation review took 75–80% of workflow tokens, reported invented content as
+omissions, judged byte-identical text both supported and omitted, accepted an
+obligation-strength change, and once wrote a harmful repair that re-review accepted. The
+evidence and records are in [Z_FIX05](Z_FIX05.md#b2-records).
+
+**Done.** Approved on 17 October and implemented offline under
+[ADR 0023](../design/decisions/0023-advisory-post-generation-review.md): every
+post-generation semantic finding is advice, reviewed as whole units or collections. It
+never authorizes content repair, an upstream rebuild, a mandatory Plan obligation or a
+clarification. Source review assigns one record family per call (approved 18 October,
+built 20 October, `specification-state/v19`).
+
+**Still open: accuracy and waste.** On 25 October the user set quality above cost and
+approved the 125,000-token budget instead of making source review optional, so source
+review stays. On 26 October review took 41–58% of each run's tokens and:
+- passed "may renew" in loan-renewal's story (B7), invented timing words in hello-world's
+  story and invented entities (B6);
+- made false statements, such as that the source defines an entity or that it says
+  "may renew";
+- filed unsupported additions as `candidate_omission`, a harmful diagnosis under §7;
+- in loan-renewal returned `supported` for every source-review subject.
+
+**Measured 26 October 2026 (offline, advisory labels;
+[summary](../evaluations/b2-review-accuracy/2026-10-26/summary.md)).** All 240 review
+findings from the six published 26 October runs were labelled against the source:
+- **Source review:** 132 findings; 77% finding-type accuracy, but it caught 1 of 28
+  defective subjects with the right type (4% recall), missed 26, raised 4 false positives
+  and wrote 26 false statements. Loan-renewal's source review never reported a real
+  defect: "may renew" passed in 8 subjects.
+- **Principle review:** 108 findings; verdicts 97% right, but no citation names the rule
+  that governs the subject (31 blanket, 77 none, with a rule applying in 71), and 4 false
+  "no principle applies" statements.
+- **Cost:** review was 79% of loan-renewal's tokens over the three runs; 26% of its review
+  tokens went to subjects whose defect it then approved.
+- **Uncovered:** no review subject checks repetition across records or rendering.
+
+**Tried and reverted (26–27 October 2026).** A `support.prompt.md` line telling source
+review to check each statement against the source ("must never becomes may") was added on
+26 October and removed on 27 October by the user's direction ("apply the follow
+recommendations"). **Measured on one pair (26 October 10:23; [hello-world](../evaluations/b2-review-accuracy/2026-10-26-after-support-prompt/hello-world/notes.md),
+[loan-renewal](../evaluations/b2-review-accuracy/2026-10-26-after-support-prompt/loan-renewal/notes.md)):
+no improvement.** Source review caught 0 of 6 defective subjects; it approved "may renew"
+although the new line names that case, and raised a new false positive claiming the source
+omits UTC. The principle review wrote a templated "No supplied principle addresses …" for
+every subject in both runs (20 false statements).
+
+#### B4, B5 and B6, 26 October 2026
+
+**B4.**
+**Done.** One principle assignment per principle set, and one total budget, configured
+since ADR 0037 as `.sddtoolkit.json`'s `workflowTokenBudget` (125,000 for E2E). The records
+are in [Z_FIX05](Z_FIX05.md#b4-records) and
+[Z_FIX05](Z_FIX05.md#b4-configured-budget-record).
+
+Since 25 October no run has stopped on the budget: the 26 October runs used 66,358–91,129
+tokens.
+
+**B5.**
+**Done.** Token-only groups get no record batch (ADR 0024), covered cross-kind
+restatements are deleted natively (ADR 0035), and each non-entity record names the
+claims it supports, with every claim a functional requirement names also named by an
+acceptance criterion or edge case (ADR 0038). One records call per feature was not
+adopted. The records are in [Z_FIX05](Z_FIX05.md#b5-token-only-record-batches) and
+[Z_FIX05](Z_FIX05.md#b5-records-2425-october-2026).
+
+**Live effect, 26 October.** Loan-renewal's refusal behaviour has its own acceptance
+criterion in both runs, on the first records attempt; the scenario rule didn't need to
+fire. ADR 0038's limit stands: the rule checks links, not meaning.
+
+Open:
+
+- **Business rules restate functional requirements** (every 26 October run of both cases;
+  loan-renewal states one requirement up to five times across the story, FR-001, business
+  rules and the entity). ADR 0035 deletes only exact, covered restatements.
+  **Implemented 26 October 2026 (prompt only, ADR 0038 amended):** the records prompt says
+  "A business rule states a constraint that no functional requirement in this response
+  already states; never restate a requirement claim by claim." Next: confirm on an
+  approved pair that organization recovers without losing the refusal scenario.
+
+**B6.**
+- **Entity applicability.** No native rule can judge it. Hello-world has invented a
+  required entity in most publications ("Application Start", "Greeting", "Application",
+  and "HelloWorldApplication" in both 26 October runs). Loan-renewal's entity restates
+  the behaviour, and source review has passed it with false claims about the source.
+- The GPT-OSS envelope-prefix malformation is resolved
+  ([Z_FIX05](Z_FIX05.md#b6-gpt-oss-envelope-prefix)).
+
+Measure entity applicability as its own class in the baseline and in B2's labelling.
+Don't narrow the entity-name exception without a decision.
+
+#### B7 records, 26–27 October 2026
+
+**Done.** Claims are a category and admission-bounded source lines whose wording the engine
+quotes (ADR 0036, with Decision 6 dropping code delimiters around exact values), and list
+sources yield one claim per top-level item (ADR 0038). Per-item chunking (ADR 0027) stays
+withdrawn. The records are in [Z_FIX05](Z_FIX05.md#b7-original-record) and
+[Z_FIX05](Z_FIX05.md#b7-records-2125-october-2026).
+
+Open:
+
+- **Weakened obligation, now at generation.** Claims carry the source's "must be able to
+  renew" since ADR 0036, yet generation still writes "may renew": the brief, story and
+  FR-001 in the first 26 October run, the story only in the second. Source review passed
+  it each time. The owner is now ADR 0044's native rule (below); measure its catches and
+  false positives on live runs.
+- **Markdown in claim wording** reaches later calls. Backticks around exact values are
+  removed at admission (Decision 6); other effects are unmeasured.
+
+**Decided 27 October 2026 (ADR 0044, deleted on 28 October by FIX06 Q1a; its text is at `git show d74fc1f:design/decisions/0044-generated-text-keeps-obligation-strength.md`):**
+a native unit-validation rule flags a generated field that weakens a linked claim's
+`must`/`shall` into `may`/`might`/`should`/`could`, for the existing unit repair. It is a
+closed word list, chosen by the user despite its brittleness; measure its false positives
+on live runs.
+
+**First live pair (27 October 2026, [loan-renewal](../evaluations/e2e/2026-10-27T05-06-43Z-338b9bb45bdc146d5696675404a8b7d1/evaluation.md)):
+both triggers did harm.** The story's "may renew" was a true weakening, but the repair
+("changing nothing else") turned it into "A borrower must renew", a duty the source doesn't
+state. The entity relationship "A loan may be renewed only once." is the source's own
+restriction (source L8, no "must"), flagged through another claim in the same group; the
+repair replaced it with FR-001's text. Hello-world didn't trigger.
+
+**Fix implemented 27 October 2026 (ADR 0044 amended; uncommitted).** In
+`obligation_strength.zig`, the repair requirement quotes the linked claim's text and no
+longer says "changing nothing else". A whole field sentence that is a whole sentence of a
+linked claim (ignoring case, whitespace, a list marker and the closing break) has its
+weaker markers ignored; its mandatory markers still count. A contract review found that
+the first version matched part of a claim's sentence (so "a borrower may renew" passed as
+the tail of a conditional claim) and dropped a copied sentence's "must"; both were
+corrected, with tests, before verification. `zig build verify`: 164 of 164 steps, 1,980 of
+1,980 tests. Next: measure catches, false positives and repair outcomes on the next
+approved pair.
+
+**Second live pair (27 October 2026, 08:31, the fix tree): loan-renewal failed.** The story
+again said "may renew"; the check fired with the quoted requirement, and the repair (call
+9) returned the story unchanged, so the run ended `RepairNoProgress` after 9 calls and
+13,900 tokens ([analysis](../evaluations/e2e/2026-10-27T08-31-41Z-c6ffd06de92ac4d1241102b5fa595c87/evaluation.md)).
+The model's trace reads the requirement's last clause as the goal ("prose reflecting claim
+1 as \"may\""); the requirement ends on "weakens its \"must\" to \"may\"", and nothing says an
+unchanged value fails. Before ADR 0044 this run would very likely have published with "may
+renew"; under ADR 0041 it would publish its brief, marked incomplete. Hello-world published
+(82.14% advisory) and didn't trigger. The copied-sentence exemption wasn't exercised.
+**Implemented 27 October 2026 (wording within Decision 4, uncommitted):** the requirement
+leads with the action: "Restate linked claim N's obligation as the claim states it:
+\"…\". This text uses \"may\" where the claim uses \"must\"." The quote closes with its own
+full stop, so an unpunctuated claim can't run into the next sentence. Next: an approved
+pair, to see whether the repair now restores "must be able to renew" and, separately,
+whether it keeps the field's other content (the requirement no longer says to keep the
+rest; a repair that replaced the field with the quote would pass native validation). If
+the model still returns the text unchanged, the generic repair-prompt line "an unchanged
+replacement fails" (every repair route) is the next candidate and needs evidence from both
+cases.
+
+**Third live pair (27 October 2026, 09:40): the repair replaced the story with the quote.**
+Loan-renewal published (85.71% advisory). The check fired once, on the story's "may renew"
+(true positive), and the repair returned only the quoted claim, list marker included:
+"\- A borrower must be able to renew an active loan that has not previously been renewed."
+The story lost its outcomes (FR-001 and AC-001/002 still carry them); native revalidation
+passed it and both reviews approved it. No false positives: the copied "may be renewed only
+once" in the entity basis and FR-001 passed. The three wordings have now failed three ways
+on single runs: a one-word duty swap, an unchanged value (`RepairNoProgress`), and wholesale
+replacement ([analysis](../evaluations/e2e/2026-10-27T09-40-42Z-e1d68c88d8f613700d047807691f0187/evaluation.md)).
+**Decisions proposed:** (1) a generic repair guard in revalidation, rejecting a repair whose
+new value loses linked-claim coverage or exact values the old value had, unless the defect
+concerns them (amends contract 22 and ADR 0044 Decision 4); (2) quote the claim without its
+list marker and ask for the current text to be corrected, not replaced. Per CLAUDE.md, decide
+on repeated runs across both cases.
+
+**Hello-world, same pair: the UTC requirement was lost at reconciliation.** The dispositions
+call returned one of four claims; the insert repair for "must also output date and time in
+UTC" answered `duplicate` of "must start successfully". The repair request carried only the
+three-line `repair.prompt.md`, not the dispositions prompt that defines `duplicate`
+(`repair-reconciliation-candidate`, `spec.workflow.yaml:595-608`). Source review flagged the
+loss three times, but ADR 0023 publishes no source advice, so the spec omits UTC (60.71%
+advisory, critical failure). One runaway was recovered by its re-send, and debug logs hold
+both attempts in full ([analysis](../evaluations/e2e/2026-10-27T09-40-42Z-26e5a21c5438c853bbfb338b62d42247/evaluation.md)).
+
+#### B9 records, 26–27 October 2026
+
+**Done.** Entity records are authored once per feature; no request carries an output
+allowance below the model's documented maximum; and since ADR 0039 a runaway is re-sent
+once with the identical request at the configured `temperatureRunawayRetry`, outside
+`retry-limit`, and logged. A runaway on the re-send fails required work with
+`RunawayRepeated` and ends advice incomplete (ADR 0040). The records are in
+[Z_FIX05](Z_FIX05.md#b9-records) and
+[Z_FIX05](Z_FIX05.md#b9-runaway-evidence-and-re-send-decision).
+
+**Live effect.** One runaway in the four 26 October runs, on hello-world's `Hello, World!`
+(call 21), was recovered by its re-send. Every completed source-review runaway so far
+has been on an exact-value subject (`Renewal refused.`, `Loan renewed!`, `Hello, World!`).
+One recovery is one sample: keep reporting each runaway, its re-send and what the re-send
+returned.
+
+**Debug logging (27 October 2026).** The user directed that every runaway, and a repeated
+one before the stop, be logged in full at `debug`. ADR 0018's capture already does this,
+and ADR 0039 Decision 4 and §27 now say so: the 26 October hello-world log keeps the
+runaway's request at `0.1`, its full output (`max_tokens`, 16,384 tokens), and the re-send
+at `1` with its response. No live run has had a repeated runaway, and no offline test
+asserts its capture: add ADR 0039's debug-capture test.
+
+Open:
+
+- **Withdrawn 27 October 2026.** The two earlier output caps, a lower per-slot output
+  allowance and a per-family records cardinality bound, conflicted with the user's
+  directions of 18 October (no output token limits) and 25–26 October (no limits that
+  discard useful output); the user accepted their withdrawal.
+- **Decided 27 October 2026:** a second runaway in a review step doesn't stop the run; the
+  advice ends incomplete and is published, marked and logged (ADR 0039 Decision 3, ADR
+  0040). Required work still stops with `RunawayRepeated`.
+- **Claude Haiku 5.5's deadline.** Its catalogue maximum is 128,000 tokens under an
+  interim 180,000 ms deadline; measure it only if the user selects that model.
+
+#### B10 decision history, 26–27 October 2026
+
+**Decided 26 October 2026 ([ADR 0041](../design/decisions/0041-failed-run-incomplete-publication.md));
+mechanism accepted 27 October 2026; docs updated, implementation pending.** A Specify run that fails because
+model work couldn't be completed, or ends `blocked`, should publish only its validated
+content as an incomplete specification, marked in `spec.md` and `reference-context.md` and
+logged as `run.incomplete_published`, while still ending `failed` or `blocked`.
+
+A read-only design pass found that the commonest loan-renewal failures (exhausted
+correction, `RepairNoProgress`, the token budget) are runner rejections that end the run
+before any YAML edge, and that publication today requires `ok` or `needs_user`. The user
+accepted all four of its decisions on 27 October 2026 ("update the docs with the above
+recommendations"), and ADR 0041 records them:
+
+1. **Mechanism:** a YAML-declared workflow-level `failure-output` subgraph, run by the
+   engine through the runner after an eligible failure, with a model-free runner
+   failure-output mode. It amends ADRs 0005, 0009 and 0030.
+2. **Eligibility:** YAML `failed`, `blocked` and `invalid` terminals and the
+   `retry_limit` and `token_budget` rejections; cancellation, authority, logging,
+   capture, operational and deadline failures publish nothing.
+3. **No final requirement IDs** in the incomplete view, as ADR 0017's view already does.
+4. **`workflow/v2`** for the new definition member.
+
+When implemented, two tests that assert a required repeated runaway publishes nothing must
+flip, and `spec.md`'s reader needs a slot for the failure status line beside ADR 0040's.
+
+#### B11 principle citations, 26–27 October 2026
+
+ADR 0042 added "if no principle addresses the subject, it is compatible" to the principle
+prompt, and the 25 October `uncertain` title verdict didn't recur. But citations on
+`compatible` findings fell from 481 of 481 in 33 earlier principle-review responses to 17 of
+76 in the four 26 October runs (three runs cited none). Loan-renewal's second run gave a
+false reason, "No principle governs user-visible behavior descriptions", although the
+supplied user-interface principle covers them.
+
+**Resolved 27 October 2026: the line is withdrawn** (ADR 0042 Decision 4). A reworded
+line brought citations back in one run of four, and the principle review then wrote a
+templated "No supplied principle addresses …" for every subject (20 false statements in
+one pair). The principle prompt is the pre-ADR text; ADR 0042's admission constraint still
+turns an uncited `conflicting` or `uncertain` verdict into a whole-response correction.
+Principle-citation precision (blanket or missing citations) stays a B2 accuracy measure.
+
+#### B12 renderer artefacts, 27 October 2026
+
+Deterministic and present in most runs: the acceptance-criterion clause join renders
+"…\., **When**" (`specification_markdown.zig:40-44`), and exact values appear as quoted
+code spans with an extra full stop. These are code defects at the renderer with no
+contract change; they need only the user's go-ahead.
+
+**27 October 2026:** the clause join is fixed (renderer). Exact values in an entity's
+meaning are plain prose by contract: `text-field-composition.md` gives entity meaning and
+relationship a **prohibited** exact-copy role, and ADR 0036 Decision 6 strips the model's
+backticks, which leaves "Renewal refused.." in loan-renewal's entity.
+
+**Decided 27 October 2026 ([ADR 0045](../design/decisions/0045-entity-description-exact-values-as-code-spans.md)):**
+entity meaning and each relationship take the incidental role, rendered as code spans
+with no coverage credit; the contract is updated. **Implementation pending**, at the field
+policy owner (`src/domain/text_field_policy.zig`), with ADR 0045's tests. Readability
+only: it removes one recurring clarity defect and changes no score while bigger defects
+hold clarity down, so it can go with the next engine change.
+
+#### Spec workflow stage review, 17 October 2026
+
+This section reviews [spec.workflow.yaml](../design/workflows/spec.workflow.yaml) at
+`b2f10a3`. The workflow has 282 steps in 33 graphs. Of those, 157 (56%) only pass
+`ok` to the next step and `failed` to the end. It has 18 model-request sites, 8 of
+them repairs.
+
+| Stage | Steps | Run-time cost in the measured runs |
+| --- | ---: | --- |
+| Deterministic preparation (toolchain, inputs, references) | 43 | No model calls; three subgraphs are fully linear |
+| Extraction | 40 | One or two calls per chunk (classification is skipped when native code can classify it), plus text and selection repairs |
+| Reconciliation | 54 | Four calls (summary, dispositions, signals and conflicts), even for a three-line source |
+| Source-review gate and source-omission repair | 28 | See note below |
+| Generation | 20 | Three calls plus one per source group |
+| Review | 42 | 29 calls and about 77% of tokens |
+| Publication and clarification | 30 | No model calls |
+| Model-request plumbing | 25 | Runs on every call, plus 15 explicit release steps |
+
+Note on the source-review row: the pre-generation review did not run in any measured
+case. Both cases share a configuration with `sourcePreservationCheck: false`, and
+otherwise it runs only when references aren't ready for generation. Its repair
+subgraphs are shared with W1's post-generation path.
+
+What already applies, and what to keep:
+
+- A1 (request plumbing) and A2 (stage-level operations) apply here unchanged. A2
+  covers the decision-free preparation and publication steps. Under ADR 0031, A2 covers
+  the read-only parts of publication preparation, such as rendering and validation; the
+  publication writes stay their own action.
+- W1 and W4 reduce model calls; W2, W3 and W5 only reduce implementation effort.
+- Keep typed outcomes, closed admission, all-or-nothing publication and
+  clarification persistence as they are.
+
+W1 and W2 are done; their records are in [Z_FIX05](Z_FIX05.md#w1-review-can-restart-the-whole-pipeline).
+
+### FIX05 recommended order, 27 October 2026
+
+Earlier sequences are in [Z_FIX05 §6](Z_FIX05.md#6-recommended-order-as-of-22-october-2026)
+and [Z_FIX05](Z_FIX05.md#6-recommended-order-as-of-26-october-2026). Under ADR 0034, Spec
+quality is the critical path, and Plan starts only when the user declares the gate passed.
+Accuracy comes first; token cost is never a reason to drop a check, and spending that buys
+no quality is removed at its owner. Nothing below authorizes a live call; each E2E run
+needs its own approval.
+
+1. **Adjudicate (R8).** No run counts toward the gate until a human adjudicates one. The
+   26 and 27 October v10 reports can be adjudicated; the retained v9 runs stay
+   unadjudicated.
+2. **Implement the 27 October decisions**, each with `/preflight`:
+   - B7, ADR 0044's fix: done 27 October (uncommitted);
+   - B12, ADR 0045's incidental entity meaning and relationships (readability only; it
+     can go with the next engine change);
+   - B9, ADR 0039's debug-capture test for a repeated runaway;
+   - B10, ADR 0041 with its accepted mechanism (about the size of ADR 0039);
+   - then measure ADR 0044's catches and false positives, B5's business-rule guidance and
+     the clause-join fix on the next approved pair.
+3. **Measure on a committed build.** Repeat both cases on one committed, unmodified build,
+   counting every attempt and reporting runaways, re-sends and incomplete reviews
+   separately (§7). One pair has run on `39a06ea`. Use `/evaluate-e2e` for advisory defect
+   origins.
+4. **Measure review accuracy (B2)** by offline labelling before any change that lets review
+   alter output; label B7's obligation weakening and B6's entity applicability as their
+   own classes.
+5. **Model choice is the user's decision (R7).** All live evidence comes from GPT-OSS-20B.
+6. **Close the remaining Spec decisions:** B4's experiment stops and qualified scope before
+   any baseline freeze; B7's fenced-block and duplicate-citation questions.
+7. **Architecture, in ADR order and independent of 1–6.** ADR 0030 slice 4 (A1), which
+   absorbs ADR 0039's re-send steps, before adding operations for another workflow; then
+   `prepare-toolchain` (ADR 0031) with its measure, startup (ADR 0032) and repairs
+   (ADR 0033). Fold A4's closed reasons and A5's rule style into each conversion, and check
+   whether a conversion absorbs W5's pairs.
+8. **Separate work.** R2 (ADR 0025) is a required feature that hasn't started. Decide R1
+   before promising stronger provenance. Freeze the Phase 2 baseline only after B4's
+   decision. Gather R6 evidence after B2's labelling.
+
+### FIX05 record history, 26–28 October 2026
+
+- **26 October 2026, decisions:** the user decided ADR 0039 (configured `temperature` and
+  `temperatureRunawayRetry`; one re-send after a runaway, logged; every retry response
+  passes the same checks), ADR 0040 (incomplete review published, marked and logged),
+  ADR 0041 (failed and blocked runs publish their validated content, marked and logged),
+  ADR 0042 (principle verdicts need citations at admission; the prompt defines
+  `uncertain`) and ADR 0043 (model-facing `exact_text` names). CLAUDE.md and §7 record the
+  re-send as the one engine exception to the rule against sampling changes and extra
+  retries.
+- **26 October 2026, implementation:** ADRs 0039, 0042, 0040 and 0043 implemented in that
+  order, then a contract review's two major and four minor findings fixed (a false
+  missing-final-text log on a first runaway, exact-value harness measurement, a compiler
+  rule for the re-send route, full re-send identity, logging only an actual re-send,
+  harness temperatures). `zig build verify`: 164 of 164 steps, 1,968 of 1,968 tests.
+  Committed as `39a06ea` and merged as PR #10. ADR 0041 awaits its decisions (B10).
+  [Z_FIX05 §20](Z_FIX05.md#20-adrs-00390043-and-live-runs--26-october-2026) holds the
+  record.
+- **26 October 2026, live runs:** two attempts denied by an expired Bedrock key, then two
+  published pairs (§1).
+- **26 October 2026, record review:** by user direction, completed work moved to Z_FIX05
+  §§19–20 (the 25 October state and runs, A1's settled choices and slices 1–3, B4's
+  configured budget, B5's and B7's records, B9's runaway evidence and decision, the
+  23–26 October §6 sequence and the 23–25 October history). The open items were checked
+  for relevance and alignment: B10–B12 are new; B9's lower output allowance and
+  cardinality bound are flagged as conflicting with the user's no-limits direction; B2's
+  separate assessment model is recorded as the user's model choice.
+- **27 October 2026, decision:** the user chose B12's option 1, recorded as ADR 0045 (entity
+  meaning and each relationship show exact values as code spans, with no coverage credit).
+  The contract, ADRs 0020 and 0036 and the §32 index are updated; the code is not.
+- **27 October 2026, direction:** runaways are logged in full at `debug`, the first and a
+  repeated one before the stop. Already true under ADR 0018; ADR 0039 Decision 4, §12 and
+  §27 now state it, and a debug-capture test for a repeated runaway is to be added (B9).
+- **27 October 2026, decisions** ("update the docs with the above recommendations"):
+  ADR 0044 is fixed rather than withdrawn (the repair quotes the linked claim; a sentence
+  copied verbatim from a linked claim is exempt); a second runaway in review doesn't stop
+  the run; ADR 0041's four mechanism choices are accepted; the retained v9 runs stay
+  unadjudicated; B9's two output caps are withdrawn. ADRs 0039, 0041 and 0044, contract 17,
+  F0100, the §32 index, known-work and the ADR 0041 governing documents are updated.
+- **27 October 2026, implementation:** ADR 0044's fix (B7), after a contract review's two
+  major findings were corrected; `zig build verify` 164 of 164 steps, 1,980 of 1,980
+  tests. Uncommitted.
+- **28 October 2026, direction:** the user rejected ADR 0044 as "an extremely poor
+  direction"; the 27 October audits found the same single-run pattern in prompts, fragile
+  text rules and tests. [FIX06](FIX06.md) was written as a phased rollout, each phase
+  validated by repeated E2E runs on a committed build, and FIX05's open items were moved
+  into it in one ordered sequence. FIX05 was retired; this section holds its closed items.

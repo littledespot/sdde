@@ -102,8 +102,9 @@ Initial readers should cover:
 - Only canonicalized blocks then receive chunks and source maps and may enter a model request.
 - Each extracted claim must cite one or more real source locations.
 - The citation validator resolves `(referenceStateId, sourceId, blockId, location)`, requires
-  the location to lie inside the exact `ReferenceChunk` supplied to the call, and validates any
-  returned verbatim scalar against the canonical captured blob and source map.
+  the location to lie inside the exact `ReferenceChunk` supplied to the call, and derives any
+  exact scalar, such as an extractor-owned token citation's, only from the canonical captured
+  blob and source map; models return no quotation (§16.3).
 
 - The complete manifest, closed source/decoded budget ledgers, captured source blobs,
   decoded/accounted block bytes, identified chunks, source maps, unique `SourceCitation` ledger,
@@ -185,8 +186,9 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
 - explicit numeric values, units, and color literals where a format adapter defines them.
 
 - Ordinary structured facts are supplied as evidence to the chunk's typed claim proposals,
-  through which the LLM may classify their meaning as business, design, technical, validation,
-  assumption, scope, open question, or irrelevant-to-feature.
+  through which the LLM may classify their meaning as `business`, `design`, `technical`,
+  `validation`, `implementation_assumption`, `open_question` or `scope_guard` claims, or
+  return `no_feature_claim` for the chunk.
 - Separately, only extractor facts whose closed descriptor marks them preservation-eligible
   exact values become `StructuredTokenCandidate`s.
 - For those candidates the model supplies a semantic `PreservedTokenKind` for
@@ -201,7 +203,8 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
   and renderers emit the exact scalar sequence through deterministic Markdown escaping without
   Unicode normalization.
 
-- [§7.1](07-domain-representations.md#71-shared-types) registers `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
+- The shared [extractor registry](../../src/domain/structured_tokens.zig) registers
+  `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
   `markdown_link_destination_v1`: raw inline interiors, fenced bodies and explicit
   inline-link destinations. Ordinary prose or quotation marks do not create candidates.
 - The bounded source-range parser does not claim a complete Markdown AST. Opaque

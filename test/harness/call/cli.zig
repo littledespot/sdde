@@ -1,4 +1,5 @@
 const std = @import("std");
+const debug = @import("../../../src/domain/request_debugger.zig");
 const options_module = @import("options.zig");
 const binding_module = @import("../diagnostic_binding.zig");
 const report_module = @import("report.zig");
@@ -17,8 +18,8 @@ fn command(init: std.process.Init) !bool {
     const a = init.arena.allocator();
     const args = try init.minimal.args.toSlice(a);
     if (args.len == 2 and std.mem.eql(u8, args[1], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: scripts/e2e-call.sh --run <captured-E2E-directory> --workflow <workflow-id> --call <positive-ordinal> --model <model-id> --reasoning-effort <effort|none> [--repeats <positive-count>]\n" ++
-            "Makes one live diagnostic call per repeat (default 1), using unchanged captured input/schema. Explicit model and reasoning are validated against the retained project's provider catalogue and registered provider capabilities. Preserves temperature and response mode; sends no output-token allowance. No retries, repair, workflow continuation, publication or rubric grading.\n" ++
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: scripts/e2e-call.sh --run <captured-E2E-directory> --workflow <workflow-id> --call <positive-ordinal> --model <model-id> --reasoning-effort <effort|none> [--repeats <positive-count>] [--edit <edit-file.json>]\n" ++
+            "Makes one live diagnostic call per repeat (default 1), using unchanged captured input/schema, or with --edit the file's {\"content\":[...],\"schema\":\"...\"} in their place (modified replay; validated before any call). Explicit model and reasoning are validated against the retained project's provider catalogue and registered provider capabilities. Preserves temperature and response mode; sends no output-token allowance. No retries, repair, workflow continuation, publication or rubric grading.\n" ++
             "Live diagnostics permit only the cost policy's generation models (openai.gpt-oss-20b-1:0 or au.anthropic.claude-haiku-5-5) with supported reasoning and compatible retained controls. Requires TEST_AWS_BEARER_TOKEN_BEDROCK. The shell launcher loads .env.e2e; direct Zig invocation does not. Results: zig-out/e2e-call/<UTC-run>/report.md and report.json.\n");
         return true;
     }
@@ -33,7 +34,8 @@ fn command(init: std.process.Init) !bool {
         try std.Io.File.stderr().writeStreamingAll(io, "Live diagnostic model rejected by the test cost policy. Select openai.gpt-oss-20b-1:0 or au.anthropic.claude-haiku-5-5 with supported reasoning and compatible retained controls. No API call made.\n");
         return false;
     };
-    const binding = try binding_module.rebind(a, original, captured.provider_catalogue, options.model, options.reasoning_effort);
+    var binding = try binding_module.rebind(a, original, captured.provider_catalogue, options.model, options.reasoning_effort);
+    const edited = if (options.edit) |path| try loadEdit(io, a, .cwd(), path) else null;
     var authority: binding_module.Authorization = .{ .binding = original };
     var environment: std.process.Environ.Map = .init(a);
     defer environment.deinit();
@@ -55,6 +57,7 @@ fn command(init: std.process.Init) !bool {
     // Reconstruct the original with the canonical encoder before overriding it.
     try binding_module.validateBinding(original);
     if (!std.mem.eql(u8, try provider.provider().prepare(a, original), captured.call.request.?)) return error.CaptureMismatch;
+    if (edited) |value| binding = applyEdit(binding, value.edit);
     authority.binding = binding;
     // Validate schema, serialization and credential exclusion before dispatch.
     _ = try provider.provider().prepare(a, binding);
@@ -73,6 +76,7 @@ fn command(init: std.process.Init) !bool {
         .effective_binding = binding,
         .context_path = captured.context_path,
         .request_path = captured.request_path,
+        .edit_sha256 = if (edited) |value| try a.dupe(u8, &value.sha256) else null,
     };
     const plan = try std.json.Stringify.valueAlloc(a, .{ .selection = report, .source_snapshot = captured.call.source_snapshot }, .{ .whitespace = .indent_2 });
     var sanitized = try @import("../../../src/domain/model_log_redaction.zig").sanitize(a, plan, &.{key});
@@ -99,4 +103,26 @@ fn command(init: std.process.Init) !bool {
     try report_module.save(io, a, output, report, key);
     try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(a, "Report: {s}/{s}/report.md\nProtocol checks only; semantic quality not assessed.\n", .{ output_root, &run.name }));
     return report.succeeded();
+}
+
+pub const Edited = struct { edit: debug.Edit, sha256: [64]u8 };
+
+/// Modified replay (ADR 0019) replaces only content and schema; the canonical schema
+/// compiler and provider serializer validate the result before any send.
+pub fn applyEdit(description: debug.Description, edit: debug.Edit) debug.Description {
+    var result = description;
+    result.content = edit.content;
+    result.schema = edit.schema;
+    return result;
+}
+
+/// Reads an edit file: the closed `{"content":[...],"schema":"..."}` a modified replay
+/// sends instead of the captured content and schema.
+pub fn loadEdit(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, path: []const u8) !Edited {
+    const bytes = try @import("../files.zig").read(io, a, root, path);
+    const edit = @import("../../../src/domain/strict_json.zig").decode(debug.Edit, a, bytes, .{ .maximum_depth = 64 }) catch |err|
+        return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidEdit;
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+    return .{ .edit = edit, .sha256 = std.fmt.bytesToHex(digest, .lower) };
 }

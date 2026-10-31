@@ -42,7 +42,7 @@ storage does not change retry eligibility or the execution-wide token ledger.
   and its logging are defined in [§22.6](22-repair.md#226-unparseable-output).
 - JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
   `end.invalid`; non-complete observations keep their failure/cancellation outcome without
-  parsing.
+  parsing. Response admission, not the decoder, applies ADR 0039's runaway mapping (§12.7).
 - The [composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit)
   also checks each native-bound text field at this shared admission boundary.
   A rejection retains every violating field's concrete pointer and typed reason
@@ -61,7 +61,9 @@ authority is implicit.
 and publish the existing envelope and payload results in one runner-validated
 delta. It accepts only the decoder's existing inputs, preserves syntax/schema
 diagnostics and non-complete outcomes, and retains the exact observation/tree
-association. Detailed operations remain available. This grants no semantic,
+association. The one exception is a provider `output_limit` stop: a first runaway
+admits as `invalid` with no candidate, and a runaway on a re-send as `failed` with
+`RunawayRepeated` ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Detailed operations remain available. This grants no semantic,
 provider, retry, lifecycle or accounting authority (ADR 0012).
 
 ### 12.2 Initial guidance packet
@@ -120,9 +122,11 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. The one exception is `exact_members` uniqueness (below):
-  provider schema syntax cannot express it, so local admission, request
-  descriptions and replay apply it natively from the same restriction. Unknown locations or definitions reject; a carried sibling
+  and local validation. Three admission constraints are exceptions, because
+  provider schema syntax cannot express them: `exact_members` uniqueness (below),
+  ADR 0038's records coverage (`uncovered_member`) and ADR 0042's required items
+  (`missing_required_item`, §12.7). Local admission, request descriptions and replay
+  apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
   existing behavior. No field-name search crosses unrelated ID namespaces.
@@ -233,12 +237,16 @@ output projects the existing compiled schema into `outputConfig.textFormat`;
 `structure.jsonSchema.schema` is a JSON string. Prompt-only models still receive
 the exact closed schema as guidance and pass the same native candidate validators.
 
-The compiled provider/model contract owns the typed additional-control policy:
-no additional fields, GPT-OSS reasoning effort, or Luna strict native JSON. The external
-catalogue can select a supported tuple but cannot supply a serializer or control
-policy. Unknown models, regions, controls and unsupported schema modes reject at
-the existing binding boundary. Model switching therefore requires a registered
-contract and explicit configuration, rather than a model-name branch or fallback.
+The compiled Bedrock family named by the catalogue entry owns the typed
+additional-control policy: no additional fields (`converse`), GPT-OSS reasoning effort
+(`gpt-oss`), Luna strict native JSON (`luna`) or Claude `output_config.effort`
+(`claude`) ([ADR 0029](../decisions/0029-bedrock-model-families.md)). The external
+catalogue selects a family but cannot supply a serializer or control policy. Unknown
+Regions, families, controls and unsupported schema modes reject at the existing binding
+boundary. Any Bedrock model or inference-profile ID is accepted and never interpreted;
+Bedrock's rejection of a wrong one is a typed provider failure, never retried with
+another family or model. Model switching is therefore a catalogue change; a new
+request shape needs a new compiled family, never a model-name branch or fallback.
 
 Only an `end_turn` response with valid assistant text is candidate-eligible. Join
 text fragments in order without inserting characters. Provider-supplied reasoning
@@ -260,12 +268,49 @@ repair and grading, the configured temperature (`0.1` in the shipped E2E configu
 `1` for a runaway re-send; ADR 0039), and its documented maximum of
 16,384 output tokens sent on every inference request
 ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-The separately registered Luna profile retains its strict-output field and omitted
+The `luna` family retains its strict-output field and omitted
 temperature/reasoning controls.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
 Historical captures follow the immutable inspection/replay boundary in
 [ADR 0019](../decisions/0019-single-request-debugger.md#replay).
+
+#### 12.3.2 Anthropic Messages
+
+[ADR 0028](../decisions/0028-anthropic-messages-provider.md) makes the Anthropic
+Messages API a peer of Bedrock on shared provider owners: one native JSON-schema
+capability and projection, transport, credential snapshot, retry classifier and
+provider port. Only the endpoint, request encoder and response decoder are
+Anthropic-specific. ADR 0028 owns the dated wire contract.
+
+- Provider `anthropic` joins its models `claude-haiku-5-5`, `claude-sonnet-5-5` and
+  `claude-opus-5-5` by exact model. Each needs its own approved compatibility probe
+  before live use.
+- `config` is exactly `maxOutputTokens`, the documented maximum (128,000 for each
+  model) sent unchanged as `max_tokens`, and `requestTimeoutMs`
+  ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
+- Requests `POST https://api.anthropic.com/v1/messages` with the compiled
+  `anthropic-version: 2023-06-01` header and no beta header. Production reads exactly
+  `ANTHROPIC_API_KEY`, once after binding validation and only for a family bound to
+  the selected workflow's slots; a missing key fails that family's authorization as
+  `authentication_failed`.
+- System, guidance, response-format and schema guidance become `system` text blocks;
+  user and evidence parts become one `user` message. `reasoningEffort` maps to
+  `output_config.effort`. Native mode sends `output_config.format = {type:
+  "json_schema", schema}` from the shared projection; prompt-only mode keeps the full
+  schema in system guidance. `temperature` and the other fields ADR 0028 lists are
+  never sent, so the configured temperatures (§12.5) are omitted.
+- Only `end_turn` yields a candidate. `max_tokens` is `output_limit` (ADR 0039's one
+  re-send applies), `model_context_window_exceeded` is `context_limit`, `refusal` is
+  `content_filtered`, `tool_use` and `pause_turn` are `unsupported_tool_request`, and
+  `stop_sequence` is `malformed_output`. Thinking blocks are provider reasoning, never
+  candidate text.
+- Inclusive input is `input_tokens` plus both cache counters; total is inclusive input
+  plus `output_tokens`. An error is classified only when its HTTP status and
+  `error.type` both match; `402 billing_error` and a spend-limit `429` are
+  `authorization_denied` and never retried.
+- Each call keeps its slot's binding through retries and protocol corrections; there
+  is no cross-provider fallback or model-name branching.
 
 ### 12.4 Context requests
 
@@ -349,14 +394,8 @@ reuse, not provider caching or deterministic semantic proof.
 > the one step. Each stage's rules are otherwise unchanged. `retry-limit` moves to the
 > `request-model` step. Retry counting keeps its scopes, with the compiled operation now
 > being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
-> The 23 October amendment also:
-> - removed provider token counting (implemented): no count operation remains, and actual
->   inference usage still feeds the one workflow token budget;
-> - moved the provider-operation deadline to the bound catalogue entry's required
->   `requestTimeoutMs` (implemented): authorization preparation takes no parameter;
-> - lets only a step marked `advisory: allowed` map `more` and `blocked`; such a step may
->   carry ordinary requests too, and an advisory request at an unmarked step fails
->   preparation as a terminal runner rejection, not a YAML outcome, before any attempt.
+> Its 23 October amendment (token counting removed, the catalogue deadline and the
+> `advisory: allowed` marking) is stated once in ADR 0030.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
@@ -371,6 +410,22 @@ reuse, not provider caching or deterministic semantic proof.
   current sources and repair evidence remain dynamic user content. Both initial
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
+- Semantic guidance that native packet builders present is workflow-owned (FIX06
+  D3.1; ADR 0016 packet-guidance amendment). A workflow declares one closed
+  `packet-guidance/v1` resource with exactly one text for each registered key; the
+  compiler rejects a missing, extra, duplicate, mistyped or empty entry and an
+  unsupported version. One `capture-packet-guidance` step publishes it as run data,
+  and each consuming operation declares `.packet_guidance` and receives it
+  explicitly, never the resource. The builder places each text at its fixed packet
+  position. Native code keeps rules, mechanical diagnostics and composition frames,
+  including clarification question frames that embed a subject's task. A moved
+  entry still restates some native rules, which FIX06 Q4 removes there. Stored
+  evidence holds no guidance text: a stored type whose request form shows guidance,
+  such as a source-omission comparison, requires presentation, and model input
+  encodes only its presented form. A native repair authorizer composes its
+  requirement frame with the run's repair tail when it authorizes, and the run-local
+  authorization carries the composed requirement. No native copy of an entry remains,
+  so editing the resource entry changes the request.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
@@ -410,10 +465,13 @@ findings. Only complete native collection validation permits authority advanceme
 - Provider APIs own request, response and context-size limits under ADR 0011.
 - The engine, operation, slot and model contract add no engine-enforced byte/token
   capacity ceilings, intersections or size-fit gates, and no request carries an
-  output allowance below the model's own maximum: Bedrock requests send the
-  catalogue's documented maximum. A provider-applied stop is logged with its reason
+  output allowance below the model's own maximum: every inference request, for every
+  provider, sends the catalogue's documented maximum (Bedrock `inferenceConfig.maxTokens`,
+  Anthropic `max_tokens`; [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
+  A provider-applied stop is logged with its reason
   under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output).
-- A runaway, a provider `output_limit` stop, discards its partial text and re-sends the
+- A runaway, a provider `output_limit` stop, discards its partial text as a candidate
+  (at `debug` it is logged in full, §27) and re-sends the
   identical request once, changing only the temperature to the configured
   `temperatureRunawayRetry`
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). The
@@ -454,7 +512,8 @@ findings. Only complete native collection validation permits authority advanceme
   advice and required work; it cannot become incomplete advice.
 
 - Native `advance-model-attempt-accounting` consumes the retained prepared request through an
-  explicit YAML step and requires `retry-limit` (`0` means initial execution only).
+  explicit YAML step and requires `retry-limit` (`0` permits only the initial attempt and
+  its ADR 0039 runaway re-send).
 - Its accounting permission is compiled from the registered contract, never authored in YAML.
 - The runner binds the attempt and provider-operation ledgers to the request's fresh execution
   identity, applies the proposed accounting transition, and publishes sealed
@@ -655,7 +714,8 @@ findings. Only complete native collection validation permits authority advanceme
 **Shared clarification preparation:** the existing need builders prepare a concise
 question and reason naming the affected structural requirement, established facts
 and current evidence, exact unresolved decision and permitted answer. Reuse the
-registered requirement descriptors and existing `question`/`why_required` fields.
+native question frames, which embed each subject's task from the workflow's packet
+guidance (above), and the existing `question`/`why_required` fields.
 Admitted model explanations remain attributed evidence; diagnostic prose is not
 automatically a question. Both generation needs and authority-gap needs follow this
 contract. Preparation performs no semantic reassessment, model call, publication or
@@ -754,9 +814,10 @@ nonempty `claim_ids`; optional and claim-or-source rules retain the generic shap
 Initial and inserted `supported`/`not_applicable` findings reference that same
 nonempty provenance shape. Conformance tests compare configured shapes with the
 native evidence minimum; schemas do not create a separate evidence policy.
-The same evidence owner supplies concise guidance to initial review, insertion
-and repair: `not_applicable` still needs supporting claims. Native validation and
-persisted readback retain eligibility, exact-set and current-provenance checks;
+The same evidence owner places concise guidance in initial review, insertion
+and repair; its text is the workflow's packet guidance, which a repair rule names
+and model input presents. `not_applicable` still needs supporting claims. Native
+validation and persisted readback retain eligibility, exact-set and current-provenance checks;
 schema cardinality never establishes semantic support or selects citations.
 Review insertion and replacement reuse the initial guidance for the **same
 assessment purpose**, returning only the authorized replacement and retaining
@@ -765,8 +826,8 @@ assessment to share semantic instructions; §17.3.1 owns the policy boundary. A
 `missing_finding` diagnostic identifies an absent assessment, not missing source
 information or candidate content. Insertion must assess the supplied content;
 it must not infer a candidate omission from the mechanical diagnostic.
-For entity applicability, the shared requirement description asks whether required
-business behavior needs entities. An entity heading or explicit declaration of
+For entity applicability, the workflow's entities purpose (packet guidance) asks
+whether required business behavior needs entities. An entity heading or explicit declaration of
 absence is unnecessary; displayed values alone do not establish business entities.
 A genuine missing data decision must state its behavioral effect and request the
 details needed to resolve it, rather than a bare yes/no about entities. This guidance
@@ -1037,11 +1098,11 @@ the source-loss owner selects targets and the runner executes declared operation
 
 | Current state | Required continuation |
 | --- | --- |
-| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; no completed specification or clarification publication. A failure of model work publishes [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)'s failed incomplete specification of the validated content, marked and logged |
-| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass. The blocked run publishes its validated content as an incomplete specification, marked and logged ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published. Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented), a failure of model work would publish its failed incomplete specification of the validated content, marked and logged |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published. Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented), the blocked run would publish its validated content as an incomplete specification, marked and logged |
 | Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
 | One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
-| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause. ADR 0041's failed incomplete specification publishes the validated content without the unresolved unit |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published. Under ADR 0041 (accepted, on hold since 30 October 2026; not implemented), its failed incomplete specification would publish the validated content without the unresolved unit |
 | No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
 | All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
 

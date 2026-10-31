@@ -17,8 +17,9 @@ are never part of this skill.
 4. **Full offline suite.** Run `zig build verify`. It covers lint, all unit and
    integration tests, architecture, test registration and the clean packaged-executable
    smoke tests. It can take several minutes: use a long timeout, or run it in the
-   background and wait for completion. AGENTS.md requires it before completing
-   cross-cutting work. It is also the packaging smoke evidence for runtime, build,
+   background and wait for completion. AGENTS.md requires it on the final tree for
+   every change that needs the "Before editing" analysis. It is also the packaging
+   smoke evidence for runtime, build,
    asset, configuration, filesystem or process changes.
 5. **Diff review.** Ask the `contract-reviewer` agent to review the change. Resolve
    or report every confirmed finding.

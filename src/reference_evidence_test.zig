@@ -11,7 +11,7 @@ const feature: @import("domain/feature_identity.zig").FeatureId = .{ .bytes = "C
 pub const IdSource = struct {
     calls: u8 = 0,
     fail: bool = false,
-    fn port(self: *IdSource) @import("ports/reference_state_identity.zig").Source {
+    pub fn port(self: *IdSource) @import("ports/reference_state_identity.zig").Source {
         return .{ .context = self, .next_fn = next };
     }
     fn next(context: *anyopaque) @import("ports/reference_state_identity.zig").Error![16]u8 {

@@ -1,9 +1,9 @@
 # Known failure classes and open work
 
-Dated snapshot, last updated 26 October 2026. It mirrors the repository's active fix
-record, [FIX05](../fixes/FIX05.md), which stays authoritative; completed work is in
+Dated snapshot, last updated 28 October 2026. It mirrors the repository's active fix
+record, [FIX06](../fixes/FIX06.md), which stays authoritative (FIX05 was retired on 28 October 2026); completed work is in
 [Z_FIX05](../fixes/Z_FIX05.md). Recheck the code before relying on an item. The
-evidence rules for contract changes are in CLAUDE.md.
+evidence rules for contract changes are in AGENTS.md.
 
 All live evidence so far comes from one model, GPT-OSS-20B on Bedrock. The live-test
 policy also permits Claude Haiku 5.5 for generation (ADRs 0028 and 0029), through the
@@ -44,7 +44,14 @@ already made.
     into one claim per top-level list item. It was withdrawn after records inflated, but
     the same five-claim input later produced 2 records, so claim count wasn't the
     driver; B5's scenario rule needs it. ADR 0027's per-item chunking stays withdrawn.
-  - Details are in FIX05 B7.
+  - *Tried and removed, 27–28 October 2026:* ADR 0044, a native must/may word-list
+    check with a model repair, did harm on all three live firings (an invented
+    "must renew" duty, an unchanged repair that failed the run, and a story replaced
+    by the quoted claim). The user rejected it as "an extremely poor direction"; the
+    code, tests and ADR were removed on 28 October (FIX06 Q1a), and weakening in
+    generated text is recorded as a model limitation. Never police wording with word
+    lists or phrase rules (AGENTS.md).
+  - Details are in Z_FIX05 §21 (B7); the open work is FIX06 Q1, Q7 and Q8.
 - **Review dominates cost and misreports finding types.** Post-generation review
   takes about 75–80% of workflow tokens. It files invented or unsupported content as
   `candidate_omission`, has judged byte-identical text both supported and omitted,
@@ -106,15 +113,17 @@ already made.
   marked as incomplete and logs as `review.incomplete`; under ADR 0041 a failed required
   step still fails the run but publishes its validated content marked incomplete and
   logged as `run.incomplete_published`. It's the user's exception to
-  "don't tune sampling or add retries", for `output_limit` only. Lower allowances and cardinality bounds still need a decision.
+  "don't tune sampling or add retries", for `output_limit` only. Lower allowances and
+  cardinality bounds were withdrawn on 27 October 2026 (no caps that discard output), and
+  a second runaway in review doesn't stop the run.
   - On 25 October 21:20 (B5 tree) source review ran away again, on `Loan renewed!`
     (19,270 tokens): the fourth runaway on a loan-renewal exact-value subject.
   - On 25 October (step 0, `269410b`) a source-review runaway on `Renewal refused.` cost
     19,404 tokens and the run failed on budget.
   - On 25 October 14:31 (uncommitted B7 tree) a records call ran away instead: 294 edge
     cases (9,318 output tokens) enumerating loan-state combinations. Source review of
-    them exhausted the budget. A native cardinality bound per records batch is the
-    open choice that would stop it before review.
+    them exhausted the budget. A native cardinality bound per records batch was
+    considered and withdrawn on 27 October 2026.
   - It's the second completed runaway on that same subject, so the subject-linked
     trigger has more support but isn't established.
 - **Budget headroom.** Loan-renewal has exhausted the 100,000-token budget in review
@@ -128,7 +137,7 @@ already made.
     - Never drop a check to save tokens.
     - Remove spending that buys no quality, at its owner.
   - On its own, a larger budget doesn't make review cheaper or runs more reliable.
-  - Experiment stops and qualified scope stay open before any baseline freeze (FIX05 B4).
+  - Experiment stops and qualified scope stay open before any baseline freeze (FIX05 B4, now FIX06 H4).
 
 ## Other open work
 

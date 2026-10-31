@@ -8,7 +8,9 @@ suffixes and separate operation-version fields, with no aliases. See
 [implementation status](#implementation-status).
 
 **Compatibility:** None. This pre-release increment accepts only the exact
-concise v1 YAML contract. It has no verbose tagged-parameter form, JSON or
+concise v1 YAML contract; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+(accepted, on hold since 30 October 2026; not implemented) replaces it with `workflow/v2`
+when implemented ([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit
 default, source example, or packaged fallback.
 
@@ -198,6 +200,16 @@ Every definition contains these exact concise fields:
 | `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
 
+**`workflow/v2` (ADR 0041 Decision 6, accepted 27 October 2026; on hold since 30 October 2026; not implemented).**
+`schema` becomes the constant `workflow/v2`, and the root gains one optional member:
+
+| Field | Meaning |
+| --- | --- |
+| `failure-output` | Local ID of one `subgraphs` entry that the engine runs through the runner after an eligible failure, then returns the original failure. It holds no model capability, uses only registered snapshot and incomplete-publication operations, and ends in its publication step. Only Specify declares one. |
+
+Every definition, the formal schema and every fixture move to v2 together; `workflow/v1`
+then rejects, with no compatibility reader.
+
 - `sourceInventoryOrdinal` is engine-derived provenance and is not accepted in a file.
 - A resource name is declarative input resolved only beneath the authorized
   workflow-resource root; it is normalized and captured by the compiler and is never
@@ -273,7 +285,9 @@ required inputs and define the `parse` successor, as in the
   steps.
 - Each alias resolves to exactly one bounded captured resource under the authorized
   workflow root.
-- An operation parameter that expects a prompt, schema, or example accepts only a
+- An operation parameter that expects a prompt, schema, example, JSON-composition
+  ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
+  `packet-guidance/v1` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - Two workflows may bind the same captured resource, but one workflow cannot declare two
   aliases for the same source.
@@ -619,8 +633,10 @@ service is published.
 - Compilation implements ADR 0006's [closed result-schema
   profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
   through one narrow compiler port bound at composition.
-- Only result-schema resources are decoded; their tagged compiled values carry an opaque
-  immutable schema and exact captured bytes.
+- Result-schema resources are decoded; their tagged compiled values carry an opaque
+  immutable schema and exact captured bytes. JSON-composition resources (§3.2) and
+  `packet-guidance/v1` resources (ADR 0016 packet-guidance amendment) are also decoded
+  and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with
   `WORKFLOW_GRAPH_COMPILE_INVALID`, without publishing a partial registry or reading any
@@ -765,6 +781,10 @@ transitions and their existing native authority.
   terminal for every declared outcome, including after subgraph expansion. No
   later pure, filesystem, model, logging or publication operation is permitted;
   preparation selects the validated `ok` or `needs_user` terminal before writing;
+- under ADR 0041 (on hold), a declared `failure-output` names an existing
+  subgraph that holds no model capability, uses only registered snapshot and
+  incomplete-publication operations, and ends in its publication step, whose terminal
+  is the recorded failure;
 - every terminal target preserves its source tag exactly, and graph policy
   cannot discard a failure, invalid result, user-input need, block, or
   cancellation along a later branch;

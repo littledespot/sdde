@@ -12,10 +12,16 @@ existing composition boundary, runner ledgers and pinned Zig HTTP transport.
 (one unversioned contract per operation), [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
 (no provider-effect persistence or cross-execution recovery),
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md) (provider-owned size
-limits; actual usage against the workflow budget) and
+limits; actual usage against the workflow budget),
 [ADR 0013](../decisions/0013-workflow-input-reuse.md) (compact transport derived from
 the captured schema; `result-selection: input` binds the packet's named result view
-once). Production Bedrock uses the contracts below; see
+once), [ADR 0028](../decisions/0028-anthropic-messages-provider.md) (the Anthropic
+Messages API as a peer provider on shared provider owners),
+[ADR 0029](../decisions/0029-bedrock-model-families.md) (Bedrock entries name a
+compiled family) and
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)
+(configured temperatures; one runaway re-send). Production Bedrock and Anthropic use
+the contracts below; see
 [Implementation status](#implementation-status).
 
 **Reading route:** [binding, §6](#6-providermodel-binding-and-workflow-token-accounting)
@@ -75,10 +81,14 @@ architectural port. There is no alias or parallel gateway.
 - Providers receive only validated typed bindings; they never locate, read, parse, or
   reinterpret the file.
 
-- `AWSBedrockProvider` is the first implementation.
+- Two peer providers are implemented as per-family wire projections on one shared
+  provider-port implementation: Amazon Bedrock Converse ([F0007](F0007-AWSBedrockProvider.md))
+  and the Anthropic Messages API
+  ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
 - A later provider requires a new compiled discriminator, closed configuration variant,
-  provider/model contracts, concrete adapter, exhaustive dispatch branch,
-  composition-root binding, and positive and negative conformance tests.
+  provider/model contracts, its own endpoint, encoder and decoder projections, an
+  exhaustive target branch, and positive and negative conformance tests; it reuses
+  the shared owners (ADR 0028).
 - Project data cannot add executable code, dynamically load a provider, or create a
   capability.
 
@@ -154,8 +164,10 @@ facts remain local to the abandoned or completed execution.
 
 10. Prepare authorization from a preloaded, non-refreshing, no-I/O lease.
 
-    - Only a narrowly defined environment preloader may obtain material; Bedrock uses
-      `AWS_BEARER_TOKEN_BEDROCK`.
+    - Only a narrowly defined environment preloader may obtain material. Each provider
+      family reads one exact variable (Bedrock `AWS_BEARER_TOKEN_BEDROCK`, Anthropic
+      `ANTHROPIC_API_KEY`), only for families bound to the selected workflow's model
+      slots ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
     - Repository-selected secrets, files, processes, metadata, STS and refresh effects
       are prohibited.
     - Contract: [F0007 credentials and
@@ -277,7 +289,8 @@ ProviderModelDefinition {
   value is `LLM_PROVIDER_REGISTRY_INVALID`, not a partial decode.
 - This staged raw-to-validated boundary rejects any unsupported sibling before
   publishing the registry.
-- The current source example selects the registered Sydney Bedrock model; it is still
+- The current source example configures the Sydney GPT-OSS-20B Bedrock entry (family
+  `gpt-oss`); it is still
   not an automatic runtime configuration or fallback.
 
 - There are no common (provider-independent) catalogue `endpoint`, `contextWindow`,
@@ -290,15 +303,19 @@ ProviderModelDefinition {
   runner binds it to every provider operation of a request that selects the entry,
   including protocol corrections.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
-  No slot, binding or request carries an output allowance below the model's own maximum; a Bedrock catalogue entry records that documented maximum ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-- The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
+  No slot, binding or request carries an output allowance below the model's own maximum; every provider's catalogue entry records that documented maximum, and every inference request sends it ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output), [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
+- The provider catalogue may declare only a known provider, a model its provider
+  admits (any Bedrock model or inference-profile ID with a compiled family, ADR 0029;
+  a registered Anthropic model, ADR 0028), explicit `json` selection, and the fields
   permitted by that provider's closed `config` variant.
 - Catalogue membership alone does not make that model repository-authorized.
 
 `RegisteredProviderModelConfig` is a closed tagged union selected by the
 validated enclosing provider. For example, `provider: "aws-bedrock"` requires
 the exact F0007 configuration `{ "region": <validated-region>, "family": <compiled-family>,
-"maxOutputTokens": <documented-model-maximum>, "requestTimeoutMs": <deadline-ms> }`.
+"maxOutputTokens": <documented-model-maximum>, "requestTimeoutMs": <deadline-ms> }`, and
+`provider: "anthropic"` requires exactly `{ "maxOutputTokens": <documented-model-maximum>,
+"requestTimeoutMs": <deadline-ms> }` ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
 
 - Every root, provider, model, and resolved provider-specific configuration object is
   closed at its owning boundary.
@@ -316,9 +333,12 @@ The accepted pre-release resource limits are:
 - a non-empty provider-validated `ProviderModelId` of at most 512 UTF-8 bytes.
 
 Provider and model matching is exact and case-sensitive. The tuple
-`(provider, model)` is globally unique. A model string is an identifier to join
-against a compiled contract, not an arbitrary endpoint, URL, resource
-capability, library symbol, or dynamically loaded implementation.
+`(provider, model)` is globally unique. A Bedrock entry joins the compiled contract
+of the family it names; an Anthropic entry joins by exact model
+([ADR 0029](../decisions/0029-bedrock-model-families.md)). A model string is never
+an arbitrary endpoint, URL, resource capability, library symbol, or dynamically
+loaded implementation, and no prefix or substring of it selects a family,
+capability or encoding.
 
 - Configuration contains no API key, access key, secret key, session token, bearer
   token, credential material, credential file, environment-variable name, credential
@@ -327,7 +347,7 @@ capability, library symbol, or dynamically loaded implementation.
 - Provider-specific features may add only narrowly typed, explicitly accepted fields.
 
 The provider and [toolkit source example](../examples/.sddtoolkit.json) select
-the registered Sydney `openai.gpt-oss-20b-1:0` Bedrock model. Multiple repository
+the Sydney `openai.gpt-oss-20b-1:0` Bedrock model with family `gpt-oss`. Multiple repository
 slots may reference it without duplicating its provider configuration. These
 files are source examples, never runtime fallbacks.
 
@@ -349,8 +369,12 @@ ProviderModelContract {
 ```
 
 - Provider-specific versions may add only closed typed facts.
-- Project configuration can select a deployment fact such as a registered source region,
-  and may narrow accepted choices where its variant says so.
+- A Bedrock contract is keyed by its compiled family, not by a model: every configured
+  Bedrock model joins the contract of the family it names
+  ([ADR 0029](../decisions/0029-bedrock-model-families.md)). An Anthropic contract
+  names its exact model ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
+- Project configuration can select a deployment fact such as a registered source region
+  or a compiled Bedrock family, and may narrow accepted choices where its variant says so.
 - It cannot claim model support for an operation, tokenizer, control, structured schema,
   endpoint, region, partition, or data-routing policy.
 
@@ -371,21 +395,26 @@ Registry ownership is separated as follows:
 - They never contain a provider object, client, function pointer,
   credential/authorization handle, or operation capability.
 
-The infrastructure-private dispatch implementation is an exhaustive closed tagged union,
-not `anyopaque`, a service locator, callback map, or project-extensible factory:
+The infrastructure-private dispatch is one shared provider-port implementation over an
+exhaustive closed tagged union of per-family wire projections
+([ADR 0028](../decisions/0028-anthropic-messages-provider.md)), not `anyopaque`, a
+service locator, callback map, or project-extensible factory:
 
 ```text
 LLMProviderDispatch = union(enum) {
-  aws_bedrock: AWSBedrockProvider
+  aws_bedrock   // Bedrock endpoint, request encoder and response decoder
+  anthropic     // Anthropic endpoint, request encoder and response decoder
   // A future compiled provider adds a new exhaustive variant.
 }
 ```
 
-- Production installs the Bedrock contracts in
+- Production installs the Bedrock and Anthropic contracts in
   `composition/provider_model_contracts.zig` with the closed
-  `aws_bedrock { region, maxOutputTokens }` configuration and exhaustive concrete
-  dispatch.
-- The exact supported models, regions and modes are listed in F0007.
+  `aws_bedrock { region, family, maxOutputTokens, requestTimeoutMs }` and
+  `anthropic { maxOutputTokens, requestTimeoutMs }` configurations and exhaustive
+  concrete dispatch.
+- The compiled Bedrock families and Regions are listed in ADR 0029 and F0007; the
+  Anthropic models in ADR 0028.
 - The empty-object variant belongs only to private test contracts, not production.
 - External catalogue and slot selection remain mandatory; registration supplies support
   facts, never a default or repository authorization.
@@ -400,24 +429,25 @@ LLMProviderDispatch = union(enum) {
 - An internally consistent but insufficient contract may remain catalogued, but cannot
   produce a usable model binding.
 
-- Response support admits `unavailable | prompt_only | bedrock_json_schema`.
+- Response support admits `unavailable | prompt_only | native_json_schema`, one
+  native JSON-schema capability for every provider (ADR 0028).
 - Only the registered native profile permits native mode.
 - Its projection preserves closed fields, required members, types, enums and disjoint
   tagged alternatives.
-- Bedrock receives supported structural constraints; the complete schema, including all
-  bounds, remains in guidance and deterministic validation.
+- Each provider receives supported structural constraints; the complete schema,
+  including all bounds, remains in guidance and deterministic validation.
 - Unsupported modes reject without fallback.
 - Provider grammar never establishes candidate validity.
-- The compiled `BedrockRequestProfile` owns verified model-specific wire fields,
-  independently of those neutral capabilities. Luna's native profile requires
+- The compiled Bedrock family owns its verified wire fields, independently of those
+  neutral capabilities (ADR 0029). The `luna` family's native mode requires
   an additional strict-format flag and admits only omitted temperature and
   reasoning overrides. Provider-default medium reasoning is documented in
   [F0007](F0007-AWSBedrockProvider.md); it is not a locally supplied control or
-  evidence of semantic quality. The development live-test policy selects only
-  that exact Bedrock Luna tuple and leaves production catalogue authority separate.
+  evidence of semantic quality. Live-test model selection is the separate development
+  cost policy (F0007), which grants no production catalogue authority.
 
-- Every union variant conforms directly to `LLMProviderInterface`; dispatch forwards
-  exactly one operation and introduces no second port.
+- The shared implementation conforms directly to `LLMProviderInterface`; its
+  per-family dispatch forwards exactly one operation and introduces no second port.
 - Adding a provider therefore requires a source change and architecture tests.
 - Unused entries do not become callable: only a compiled YAML model operation whose
   originating request slot resolves to a validated fact-only binding can reach the
@@ -542,8 +572,9 @@ Resources and outcomes remain in the existing concise workflow structure.
   size estimates.
 - Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
   reject; do not replace them with another engine capacity limit.
-- No request carries an output allowance below the model's own maximum; Bedrock
-  requests send the catalogue's documented maximum. A provider stop at that maximum,
+- No request carries an output allowance below the model's own maximum; every
+  inference request sends the catalogue's documented maximum (Bedrock
+  `inferenceConfig.maxTokens`, Anthropic `max_tokens`; ADR 0028). A provider stop at that maximum,
   or for any other non-candidate reason, is logged as `model.provider_stopped` with
   its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
   An `output_limit` stop is re-sent once by the runner's request flow, never by the
@@ -609,7 +640,9 @@ One ordinal represents one provider attempt:
 
 1. validate request identity, binding, supported controls and schema;
 2. reserve the initial ordinal, or a later ordinal only under the YAML-selected
-   operation's explicit compiler-validated `retry-limit`;
+   operation's explicit compiler-validated `retry-limit` or for ADR 0039's single
+   runaway re-send of an `output_limit` attempt, which uses no `retry-limit` and is
+   bounded at one per attempt;
 3. assign the inference operation from its exact binding/input identity and prepare
    its single-use authorization;
 4. check actual execution token usage, apply the in-memory invoked transitions,
@@ -1031,7 +1064,7 @@ undone; it does not make any candidate workflow output successful.
 | `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
 | `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
 | `BuildModelRequestAction` | Build one identified provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
-| `AdvanceModelAttemptAccountingAction` | Reserve the initial complete provider-attempt ordinal, or a later ordinal only under the YAML-selected operation instance's explicit compiler-validated `retry-limit`; it applies no workflow-global attempt ceiling. |
+| `AdvanceModelAttemptAccountingAction` | Reserve the initial complete provider-attempt ordinal, or a later ordinal only under the YAML-selected operation instance's explicit compiler-validated `retry-limit` or for ADR 0039's single runaway re-send of an `output_limit` attempt, outside `retry-limit`; it applies no workflow-global attempt ceiling. |
 | `CheckWorkflowTokenBudgetAction` | Read the execution's actual-usage ledger and reject further provider calls when the total is at or above budget or usage is unavailable; reserve nothing. |
 | `ReconcileWorkflowTokenUsageAction` | Propose once-only recording of validated API input/output usage or a proven not-sent/unavailable disposition; the runner retains an overshoot before returning the budget error. |
 | `AdvanceModelRequestLifecycleAction` | Propose the amended logical request compare-and-swap transition. |
@@ -1130,7 +1163,7 @@ F0006 does not:
    common object and resolved provider variant is closed at its owning boundary.
 4. Capabilities, operations, tokenization, structured response, target,
    endpoint, and data-routing facts come only from compiled model contracts.
-5. The repository example selects a registered Bedrock model/configuration and
+5. The repository example selects a Bedrock model with a compiled family and
    validates against the production contracts. It is never a runtime default
    or fallback.
 6. If the selected compiled graph has neither model-binding requirements nor the exact
@@ -1179,7 +1212,8 @@ F0006 does not:
     full-attempt ordinal.
 
     - Every later ordinal requires a YAML-selected retry operation with its explicit
-      compiler-validated `retry-limit`.
+      compiler-validated `retry-limit`, except ADR 0039's single runaway re-send of an
+      `output_limit` attempt, which uses no `retry-limit`.
     - Provider size rejection consumes the attempted operation and retains its response
       delivery classification.
     - Each inference operation has a distinct execution-local identity/lifecycle
@@ -1275,7 +1309,9 @@ F0006 does not:
     operation, and every retry-capable operation instance supplies its own
     bounded `retry-limit`; no workflow policy, configuration file, provider, or
     runner supplies a retry default. Every retry uses a new ordinal, and an
-    accepted-or-unknown delivery never auto-replays.
+    accepted-or-unknown delivery never auto-replays. The one exception is ADR 0039's
+    runaway re-send of an `output_limit` attempt: one per attempt, outside
+    `retry-limit`.
 17. Provider failures never enter model-content repair or become `invalid`.
 18. Only `complete` UTF-8 content reaches envelope decoding, where the complete compact
     result remains untrusted and authoritatively validated under ADR 0006.

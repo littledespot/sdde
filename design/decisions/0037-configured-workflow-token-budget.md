@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/FIX05.md) B4:
+  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B4:
   - "make budget configurable and increase to 125000", with the priority "quality over
     cost, but never waste";
   - "make the token cap an external setting, that is stored and loaded from

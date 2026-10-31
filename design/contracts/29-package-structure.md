@@ -22,6 +22,12 @@ The logical dependency boundaries map to this Zig source/build layout:
   in the harness; execution still follows runner-owned child bindings.
 - The workflow compiler alone constructs immutable executable project-workflow graph descriptors
   from validated definitions and registered contracts.
+- The [ADR 0019](../decisions/0019-single-request-debugger.md) request debugger is a native
+  diagnostic entry point, not a workflow operation or registry entry. Its core modules and
+  browser UI live in `src/debugger/`, its HTTP server, record store and replay transport in
+  `src/adapters/`, and its assembly in `composition/request_debugger.zig`. The executable
+  embeds its browser UI, so debugger startup needs no source tree, and it adds no production
+  dependency.
 
 - Zig unit tests may remain beside the owning declarations.
 - Cross-module architecture, fixture, failpoint, packaged-executable, and end-to-end tests live

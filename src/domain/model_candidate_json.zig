@@ -142,6 +142,8 @@ pub fn encode(comptime T: type, allocator: std.mem.Allocator, value: T) json.Err
 /// Native input evidence retains engine-derived identities as sealed facts.
 /// This purpose never changes model response schemas or decoding authority.
 pub fn encodeEvidence(comptime T: type, allocator: std.mem.Allocator, value: T) json.Error![]const u8 {
+    // Model input carries presented values only (model_presentation.zig).
+    comptime if (@import("model_presentation.zig").required(T)) @compileError(@typeName(T) ++ " reaches model input without its required presentation");
     return encodeFor(T, allocator, value, .native_evidence);
 }
 
@@ -173,14 +175,6 @@ pub fn decodeSelected(comptime T: type, allocator: std.mem.Allocator, tag: std.m
 pub fn encodeSelected(comptime T: type, allocator: std.mem.Allocator, value: T) json.Error![]const u8 {
     return switch (value) {
         inline else => |payload| encode(@TypeOf(payload), allocator, payload),
-    };
-}
-
-/// A native authorization may expose the selected old value as evidence while
-/// its independently selected response contract still excludes derived nodes.
-pub fn encodeSelectedEvidence(comptime T: type, allocator: std.mem.Allocator, value: T) json.Error![]const u8 {
-    return switch (value) {
-        inline else => |payload| encodeEvidence(@TypeOf(payload), allocator, payload),
     };
 }
 

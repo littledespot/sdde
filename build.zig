@@ -189,6 +189,37 @@ fn define(b: *std.Build) Graph {
     adjudicator_smoke.dependOn(&adjudicator_help.step);
     adjudicator_smoke.dependOn(&adjudicator_denied.step);
     test_step.dependOn(adjudicator_smoke);
+    const measures_executable = b.addExecutable(.{ .name = "sdde-e2e-measures", .root_module = b.createModule(.{
+        .root_source_file = b.path("e2e_measures.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_measures = b.addRunArtifact(measures_executable);
+    if (b.args) |args| run_measures.addArgs(args);
+    b.step("e2e-measures", "Write deterministic measures of retained E2E runs and a set summary offline, without model calls").dependOn(&run_measures.step);
+    b.step("build-e2e-measures", "Build the offline retained-run measures tool").dependOn(&measures_executable.step);
+    const measures_directory = b.addTempFiles();
+    const measures_binary = measures_directory.addCopyFile(measures_executable.getEmittedBin(), measures_executable.out_filename);
+    const measures_help = std.Build.Step.Run.create(b, "run standalone offline measures help");
+    measures_help.addFileArg(measures_binary);
+    measures_help.addArg("--help");
+    measures_help.setCwd(measures_directory.getDirectory());
+    measures_help.clearEnvironment();
+    measures_help.expectExitCode(0);
+    measures_help.expectStdErrEqual("");
+    const measures_denied = std.Build.Step.Run.create(b, "reject standalone measures output inside a retained run");
+    measures_denied.addFileArg(measures_binary);
+    measures_denied.addArgs(&.{ "--run", "evaluations/run", "--out", "evaluations/run/measures" });
+    measures_denied.setCwd(measures_directory.getDirectory());
+    measures_denied.clearEnvironment();
+    measures_denied.expectExitCode(1);
+    measures_denied.expectStdOutEqual("");
+    measures_denied.expectStdErrEqual("Invalid arguments; use --help. No API call is possible.\n");
+    const measures_smoke = b.step("smoke-e2e-measures", "Test isolated retained-run measures startup without model calls");
+    measures_smoke.dependOn(&measures_help.step);
+    measures_smoke.dependOn(&measures_denied.step);
+    test_step.dependOn(measures_smoke);
     const call_module = b.createModule(.{
         .root_source_file = b.path("e2e_call.zig"),
         .target = target,
@@ -922,6 +953,7 @@ fn define(b: *std.Build) Graph {
     lint_command.addFileArg(b.path("code_heuristics.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("adjudicate.zig"));
+    lint_command.addFileArg(b.path("e2e_measures.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("attribution_replay.zig"));

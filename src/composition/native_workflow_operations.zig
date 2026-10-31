@@ -49,6 +49,7 @@ const specification_rendering = @import("../application/specification_rendering_
 const output = @import("../application/workflow_output_binding.zig");
 const clarification_refresh = @import("../application/clarification_refresh_workflow.zig");
 const principles = @import("../application/principle_workflow.zig");
+const packet_guidance = @import("../application/packet_guidance_workflow.zig");
 const incomplete = @import("../application/incomplete_specification_workflow.zig");
 const publication = @import("../application/specification_publication_workflow.zig");
 
@@ -60,6 +61,7 @@ pub const Assembly = struct {
     capture_principles: principles.Capture,
     capture_principle_registry: principles.CaptureRegistry,
     build_principles: principles.Build,
+    capture_packet_guidance: packet_guidance.Capture,
     capture_project: runners.CaptureProject,
     inventory_presets: runners.InventoryPresets,
     capture_presets: runners.CapturePresets,
@@ -226,7 +228,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 170 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 171 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -236,6 +238,7 @@ pub const Assembly = struct {
             .capture_principles = .{ .allocator = allocator, .action = .{} },
             .capture_principle_registry = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
             .build_principles = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
+            .capture_packet_guidance = .{ .allocator = allocator },
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
             .capture_presets = .{ .allocator = allocator, .action = .{ .source = preset_capture } },
@@ -412,6 +415,7 @@ pub const Assembly = struct {
             entry(principles.Capture, &self.capture_principles),
             entry(principles.CaptureRegistry, &self.capture_principle_registry),
             entry(principles.Build, &self.build_principles),
+            entry(packet_guidance.Capture, &self.capture_packet_guidance),
             entry(runners.CaptureProject, &self.capture_project),
             entry(runners.InventoryPresets, &self.inventory_presets),
             entry(runners.CapturePresets, &self.capture_presets),
@@ -618,7 +622,7 @@ pub const Assembly = struct {
     }
 };
 
-const schemas = principles.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
+const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },

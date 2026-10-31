@@ -155,6 +155,7 @@ pub const Reuse = struct {
         if (purpose(current) == .principles) return .{ .outcome = .more, .history = history };
         const source = try inputs(&step.data, current);
         const source_context = try spec.readContext(&step.data);
+        const guidance = try @import("packet_guidance_workflow.zig").read(&step.data);
         const ledger = try values.read(&step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
         const population = try a.build(owner.arena.allocator(), source);
         var previous = try prior(.source, current);
@@ -168,11 +169,11 @@ pub const Reuse = struct {
                 else => return error.OperationExecutionFailed,
             } else 0;
             const target = try purpose_contract.Source.nextSubject(owner.arena.allocator(), source, previous);
-            const packet = try purpose_contract.Source.packetFor(self.allocator, source, source_context, purpose_contract.Source.assignmentScope(source, target));
+            const packet = try purpose_contract.Source.packetFor(self.allocator, source, source_context, guidance, purpose_contract.Source.assignmentScope(source, target));
             defer @import("../domain/model_input_packet.zig").release(packet);
             const selection = try requests.selectionForPacket(self.allocator, owner.arena.allocator(), step, packet);
             defer selection.deinit();
-            const reused = try self.action.execute(owner.arena.allocator(), retained_history, source, source_context, previous, selection.value, ledger) orelse
+            const reused = try self.action.execute(owner.arena.allocator(), retained_history, source, source_context, guidance, previous, selection.value, ledger) orelse
                 return .{ .outcome = .more, .history = retained_history };
             const candidate = switch (reused.collection) {
                 .accepted => |value| value.candidate,
@@ -201,7 +202,7 @@ pub const BuildInput = struct {
             var arena = std.heap.ArenaAllocator.init(self.allocator);
             defer arena.deinit();
             const target = purpose_contract.Contract(selected).nextSubject(arena.allocator(), source, try prior(selected, current)) catch |operation_error| return operation_error;
-            return requests.publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), target) catch |operation_error| return operation_error);
+            return requests.publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data), target) catch |operation_error| return operation_error);
         };
         unreachable;
     }
@@ -220,6 +221,7 @@ pub const Collect = struct {
         const admitted = try @import("model_candidate_handoff.zig").readAccepted(&input.step.data);
         const handoff = admitted.candidate;
         const source_context = try spec.readContext(&input.step.data);
+        const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
         const history = try owned.read(&input.step.data, history_schema, .review_history);
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const ledger = try values.read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
@@ -229,7 +231,7 @@ pub const Collect = struct {
                 owned.destroy(owner);
                 return err;
             };
-            const result = self.action.execute(selected, owner.arena.allocator(), source, source_context, previous, packet, handoff.body, handoff.origin, history, request, admitted.evidence, ledger) catch |native_failure| {
+            const result = self.action.execute(selected, owner.arena.allocator(), source, source_context, guidance, previous, packet, handoff.body, handoff.origin, history, request, admitted.evidence, ledger) catch |native_failure| {
                 owned.destroy(owner);
                 return native_failure;
             };
@@ -262,7 +264,7 @@ pub const BuildLossInput = struct {
         const self = context.?;
         const current = try progress(&input.step.data);
         if (current != .source) return error.OperationExecutionFailed;
-        return requests.publishPacket(self.allocator, self.action.execute(self.allocator, try inputs(&input.step.data, current), try spec.readContext(&input.step.data), current.source) catch |operation_error| return operation_error);
+        return requests.publishPacket(self.allocator, self.action.execute(self.allocator, try inputs(&input.step.data, current), try spec.readContext(&input.step.data), try @import("packet_guidance_workflow.zig").read(&input.step.data), current.source) catch |operation_error| return operation_error);
     }
 };
 pub const CollectLoss = struct {
@@ -279,10 +281,11 @@ pub const CollectLoss = struct {
         const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
         const source = try inputs(&input.step.data, current);
         const source_context = try spec.readContext(&input.step.data);
+        const guidance = try @import("packet_guidance_workflow.zig").read(&input.step.data);
         const history = try owned.read(&input.step.data, history_schema, .review_history);
         const ledger = try values.read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-        const result = self.action.execute(owner.arena.allocator(), source, source_context, current.source, packet, handoff.body, handoff.origin, history, ledger) catch |native_failure| {
+        const result = self.action.execute(owner.arena.allocator(), source, source_context, guidance, current.source, packet, handoff.body, handoff.origin, history, ledger) catch |native_failure| {
             owned.destroy(owner);
             return native_failure;
         };

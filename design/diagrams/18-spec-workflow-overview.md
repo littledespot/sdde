@@ -16,6 +16,7 @@ flowchart TD
     GENERATE --> REVIEW["Source and principle review by whole native assignment;<br/>retain original semantic findings as advice"]
     REVIEW --> RESULT{"Native candidate valid and<br/>bound assessments complete?"}
     RESULT -->|Yes, including adverse advice| OUTPUT["Render, reparse and validate outputs,<br/>canonical state and current inputs"]
+    RESULT -->|Advice incomplete: marked and logged| OUTPUT
     OUTPUT --> PUBLISH["Replace registered outputs;<br/>write workflow state last"]
     PUBLISH -->|All writes succeed| DONE["Specification available for user review and Plan gate"]
     AUTHORITY -->|Required business decision missing| CLARIFY
@@ -35,6 +36,8 @@ flowchart TD
 
 - Semantic review is advisory, including principle findings. It supplies no
   automatic content repair, upstream rebuild, question or mandatory Plan obligation.
+  Incomplete review is still published, marked and logged
+  ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
 - Native requiredness, provenance, exact coverage, citations, current authority
   and publication gates remain mandatory. Source repair rejects once generation
   starts, including direct use through a custom workflow.

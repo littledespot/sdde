@@ -40,10 +40,12 @@ live case from the repository root:
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0`. E2E preflight checks
-  every configured generation slot before reading credentials or starting the
-  workflow. Sonnet, Sol, Haiku, Luna, direct OpenAI
-  and other aliases reject; no target is substituted.
+  permits only named tuples ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)):
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0` for generation and judging, and
+  `aws-bedrock` / `au.anthropic.claude-haiku-5-5` for generation only. E2E preflight
+  checks every configured generation slot before reading credentials or starting the
+  workflow. Sonnet, Sol, Luna, direct OpenAI and other aliases reject; no target is
+  substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -79,7 +81,14 @@ is repository-relative; there is no automatic latest-run selection. `--workflow`
 is the captured workflow ID: the supplied Spec definition uses `spec-generation`.
 `--call` is the positive physical call ordinal in the selected run, not a YAML step
 number. All five selectors are required. `--repeats` is an optional positive
-count and defaults to `1`. `--reasoning-effort none` explicitly omits reasoning
+count and defaults to `1`. `--edit <file>` optionally names a repository-relative
+closed JSON file, `{"content":[...],"schema":"..."}` in the captured `context.json`
+content shape, that every repeat sends instead of the captured content and schema:
+the debugger's modified replay
+([ADR 0019](../decisions/0019-single-request-debugger.md)), validated by the same
+canonical schema compiler and provider serializer before any call. Provider, model
+and settings stay as selected; the report (`call-diagnostic-report/v2`) records the
+edit file's SHA-256. `--reasoning-effort none` explicitly omits reasoning
 effort; other values must be supported by the selected model.
 
 The selected run must retain its project/configuration, generation context and
@@ -127,7 +136,8 @@ serializer or grants a capability.
 
 Each dispatched repeat makes exactly one provider request. There are no automatic
 retries, repairs, upstream nodes, workflow continuation, publication or evaluator
-calls. Repeats are independent diagnostics against the selected captured request.
+calls. Repeats are independent diagnostics against the selected captured request, or its
+`--edit` replacement.
 Responses remain untrusted diagnostic data and never become workflow authority.
 Transport failure, cancellation or storage failure stops the remaining repeats;
 the report records the completed count and incomplete result. A failed exchange
@@ -178,8 +188,8 @@ The direct executable uses the caller's environment. Only
 or evaluation request is used.
 
 Configuration preflight requires complete `trace` or `debug` capture and checks
-every configured slot against the shared GPT-OSS-20B-only cost policy before
-credential access. Production preparation validates the catalogue and selected request;
+every configured slot against the shared cost policy and the frozen GPT-OSS-20B
+binding before credential access. Production preparation validates the catalogue and selected request;
 the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
@@ -351,9 +361,11 @@ credentials. No model answer means no evidence yet about schema conformance.
   renders candidates to manufacture a specification.
 - A failed run that publishes a failed incomplete specification
   ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)) still fails the
-  case. The report records the published incomplete set, its failed step and
-  diagnostic, and retains its bytes for inspection. Like ADR 0017's pending view, it is
-  not scored, and `spec-e2e-report/v10` records it.
+  case. The report records the published incomplete set as `incomplete_publication`
+  (the artifacts written), beside its failed step and diagnostic, and the run retains
+  its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
+  scored. The member is in `spec-e2e-report/v11`; it stays null until ADR 0041 is
+  implemented (FIX06 E0).
 
 ### Rubric assessment
 
@@ -362,8 +374,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 - A readable poor specification is retained unchanged after the engine's own gates
   accept it. There is no harness semantic prefilter or retry-until-good loop.
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
-- Rubric revision 2 includes the user-added UTC date/time requirement and remains an
-  uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
+- The Hello World rubric, now revision 3 (revision 2 added the user's UTC date/time
+  requirement), remains an uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
   assessment is correct.
 - The [`/evaluate-e2e`](../../.claude/skills/evaluate-e2e/SKILL.md) Claude Code skill
   reads a retained run, scores the captured specification against its rubric with line
@@ -528,8 +540,13 @@ when it is a runaway re-send
 ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), and the
 report records each incomplete review's reason and unassessed count
 ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)), so runaways,
-re-sends and incomplete reviews are counted separately. Together with ADR 0041's failed
-incomplete publication, they advanced `spec-e2e-report` to v10; v9 reports stay readable only by the build that made them. `model_calls` counts reconciled inference operations,
+re-sends and incomplete reviews are counted separately. Each attempt's request
+`purpose` and `owner_kind` are read from its native request identity, so stage costs
+can be measured ([Format history](#format-history) records the versions these members
+advanced). A composed request's
+identity carries its base packet's purpose and owner, so these match the baseline
+trace's receipts, and baseline acquisition rejects a report whose attempt and receipt
+differ. Reports of earlier versions stay readable only by the build that made them. `model_calls` counts reconciled inference operations,
 including proven non-delivery; `not_sent_operations` identifies that subset.
 Captured exchanges separately count physical sends. Missing receipts are permitted
 only for explicit non-delivery or captured-evidence failure, never to invent paid
@@ -592,8 +609,8 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v10`,
-`baseline-freeze/v3`, `baseline-acquisition/v7`, `baseline-score/v4` and
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v11`,
+`baseline-freeze/v3`, `baseline-acquisition/v8`, `baseline-score/v4` and
 `baseline-budget-feasibility/v2`. Step events remain
 `e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
 not yet implemented, model-request stages become events of one `request-model` step,
@@ -602,6 +619,13 @@ before then stay readable only by the build that made them); evaluator packets r
 `baseline-assessment-inputs/v2` and
 assessor documents use numeric schema `3`. These versions advanced with
 `rubric-judgment/v2` because they embed its judgments or the E2E report.
+The compatibility report's outer
+format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
+historical evidence; current readers reject superseded report versions and fields.
+Feasibility evidence retains the single total budget and aggregate actual usage.
+
+### Format history
+
 `spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
 `evaluation-report/v5`, which records per-attempt purpose and diagnostics, and
 `spec-e2e-report/v8`, `baseline-acquisition/v6` and `evaluation-report/v6` with the
@@ -612,16 +636,19 @@ adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
 `spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
 needed for each. `evaluation-report/v7` then removed the standalone evaluator's
 judge-independence field and its never-produced passed or failed model decision.
+The runaway re-send and incomplete-review members
+([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
+[ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)) advanced
+`spec-e2e-report` to v10. Each attempt's request `purpose` and `owner_kind` and the
+`incomplete_publication` member advanced it to v11 (user decision of 29 October 2026);
+ADR 0041 adds no later version.
+`baseline-acquisition/v8` advanced with `spec-e2e-report/v11`, which it embeds.
 `baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
 budget became the configured `workflowTokenBudget`
 ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Every configuration
 now requires that member, so a retained run's captured `.sddtoolkit.json` without it can
 no longer be replayed by `e2e-call` or used as budget-feasibility evidence; adjudication
 doesn't decode configuration and is unaffected.
-The compatibility report's outer
-format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
-historical evidence; current readers reject superseded report versions and fields.
-Feasibility evidence retains the single total budget and aggregate actual usage.
 
 ### Reliability assessment
 
@@ -633,10 +660,70 @@ Feasibility evidence retains the single total budget and aggregate actual usage.
   including failed attempts.
 - Report runs that are published but not yet adjudicated separately.
 - Different cases/models need separate results before aggregation.
+- Finding-type accuracy is the share of review findings whose type matches a frozen,
+  source-based label. A real defect reported with the wrong type is a harmful
+  diagnosis.
 - Mechanical tests establish contracts; repeated live completion and acceptable
   published output are separate evidence.
 - A few successful runs do not establish reliability across unimplemented workflows or
   unseen inputs.
+
+### Run measures
+
+`zig build e2e-measures -- --run <run> [--run ...] --out <dir> [--set <file>]` reads
+retained runs offline, without the engine or a model call. It writes
+`<dir>/<run>/measures.json` (`e2e-measures/v1`) and, with `--set`, one
+`e2e-measures-set/v1` summary, never overwriting a file. `--out` and `--set` must lie
+under `evaluations/`, and neither may equal, contain or lie inside a `--run` directory.
+A missing report, call output or feature event log leaves its measures empty. A
+record that can't be read or trusted makes the run `unmeasurable`, naming which kind
+(`unreadable`, `configuration`, `report`, `call_evidence`, `feature_log` or
+`ambiguous_feature_log`); the run still counts as attempted, and nothing else is
+measured from it (FIX06 DT5). A run without a readable `case.json` can't be attributed
+to a case, and an operational failure of the measurement itself (cancellation,
+exhausted resources or an unexpected system error) isn't a property of the run; either
+stops the command. Every run is measured and summarized before anything is written, so
+a stop leaves no partial output.
+
+- From `report.json`: outcome, terminal step, diagnostic and publication (`native`
+  when the outcome is `ok` and the publication check passed, `incomplete` when the
+  report marks ADR 0041's incomplete publication, otherwise `none`); sends and proven
+  non-deliveries; actual tokens; protocol corrections (later attempts that aren't
+  runaway re-sends); re-sends; the admission escape; repair merges; and each stage's
+  sends, input, output and total tokens and shares, from each sent attempt's request
+  purpose and owner through the baseline scorer's stage classification and
+  accumulation. Only the `schema` member is read first. A missing report, or one of a
+  known older version (v1 to v10), is recorded as `unavailable`, and the run still
+  counts as attempted. A current-version report that doesn't decode, or any other
+  version, makes the run unmeasurable.
+- From the retained project's `.sddtoolkit.json`: the configured `logs.level`, read by
+  the engine's configuration decoder, as `log_threshold`.
+- From call evidence: records per records call, the `records` array length of each
+  response whose `kind` is `records`, read by the production envelope parser.
+- From the feature event log: runaways (`model.provider_stopped` for the output
+  limit), re-sends, normalized responses, admission rejections by code
+  (`model.protocol_failed`, `model.schema_failed`), validation failures by code, and
+  latency, the monotonic span of the event records. Each segment must be the feature
+  log format's own: its heading, a segment header, event records with consecutive
+  sequences and, once closed, its trailer, every row complete and of the current
+  schema, stream and column versions. Any other row, such as a last row cut off
+  mid-write, makes the run unmeasurable. Runaways,
+  re-sends and normalized responses are logged at every level (§26.5); the other
+  counts and the latency hold only events the run's `log_threshold` kept.
+- The set summary gives each case's minimum, median and maximum of each measure, and
+  pools event counts with their opportunities: native publications per attempted run,
+  with the attempts whose outcome is unknown counted beside it in `unmeasurable` and
+  `report_unavailable`; corrections, re-sends, runaways and admission rejections per
+  send; escaped values per admitted value; and changed repairs per repair. Each stage
+  has its own sends and actual-token spreads: every measured run gives each stage a
+  sends value, zero included, and a stage of unknown usage gives no token value. A
+  case's measured runs must share one log threshold, which the summary records: the
+  counts that depend on it compare only at one level, so a case of mixed thresholds
+  stops the command, naming the case and both levels.
+- An incomplete publication is never a publication; it is measured once ADR 0041 writes
+  its marker (FIX06 E0). A marker on a run that isn't failed or blocked, or an empty or
+  repeated artifact set, makes the run unmeasurable, as does an attempt whose usage
+  total isn't its input plus output.
 
 ## Candidate validation and atomic repair
 
@@ -666,6 +753,34 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   published output can receive a rubric grade.
 - Unit tests of repair contracts and fake-provider integration tests are not live E2E
   evidence.
+
+## Request projection
+
+A change that must leave model input unchanged is proved offline by a byte diff of two
+request-projection freezes, not by a live run.
+
+- The offline Spec scenarios record every request the fake provider receives, at the
+  provider port, as its `model_request_description` without `version`,
+  `workflow_version` and `request_step`, which refactors change by design. Member order
+  and number spelling stay the description's own.
+- `SDDE_REQUEST_PROJECTION=<dir> zig build test-integration` writes
+  `<dir>/<group>/scenario-NNN/call-NNNN.json`, one file per invocation in provider-call
+  order within each scenario, grouped by scenario case so groups never overwrite each
+  other's numbers, and `<dir>/manifest.json`, the group, scenario and call counts of
+  the whole directory. Unset, projections stay in memory. Set to an empty value or a
+  directory that can't be created or opened, each recording scenario panics, naming
+  the value, and the run fails.
+- A freeze needs a fresh run. `-Dreuse-test-runs` passes the test process only `PATH`
+  and `HOME`, so a reused or fresh opt-in run writes no freeze.
+- Take each freeze in a new directory, such as
+  `evaluations/request-projection/<commit>/`: one on the base commit, one on the
+  change. Both must contain `manifest.json`; then `diff -r <base> <change>` printing
+  nothing is the proof. A missing manifest means the freeze didn't run.
+- Call order keys each file because request ordinals restart for each unit. A change
+  that only reorders requests therefore still shows as a diff.
+- The projection is an observation and is never asserted against expected content.
+  These scenarios count reference state namespaces rather than drawing them at random,
+  so repeated freezes of one tree are byte-identical.
 
 ## Verification
 
@@ -722,4 +837,4 @@ eligible non-budget stop does not establish acceptance: R8's rubric thresholds,
 expected publication and human adjudication remain independent.
 
 Human calibration and broader rerun/failure acceptance are tracked in
-[FIX05](../../fixes/FIX05.md).
+[FIX06](../../fixes/FIX06.md).
