@@ -340,18 +340,7 @@ remain separate from E2E and workflow authority.
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
 | [Harness overview](design/harness/README.md) | Harness purpose, authority boundary and commands; open work is in FIX06. |
-| [FIX06](fixes/FIX06.md) | Phased rollout of all open work, its decisions and the evidence each phase needs. |
-| [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
-
-### Fix records
-
-[FIX06](fixes/FIX06.md) is the sole active fix record. Keep outstanding work and
-its implementation/verification status there; remove completed tasks from active
-tracking. Completed work and its supporting dated reviews live in
-[Z_FIX01](fixes/Z_FIX01.md), [Z_FIX02](fixes/Z_FIX02.md) and
-[Z_FIX05](fixes/Z_FIX05.md), which also records FIX05's retirement; older records and
-experiments remain under `fixes/archive/`. Historical proposals and status statements do not
-create current work, grant approval or establish successful live acceptance.
+| [FIX06](fixes/FIX06.md) | The open work and its pending user decisions; [fixes/README.md](fixes/README.md) sets its convention. |
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)
 and [configuration examples](design/examples/) are design inputs. They are not

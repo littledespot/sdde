@@ -148,7 +148,7 @@ the engine, its prompts or its deterministic code.
 
 ## 4. Recommend changes that generalize
 
-Read [known-work.md](../../known-work.md) first. For each group of defects that share
+Read the open work in [fixes/FIX06.md](../../../fixes/FIX06.md) first. For each group of defects that share
 an origin, propose one change at the owning abstraction, with:
 
 - **The failure class.** Name the general class and the invariant it breaks, never a
@@ -157,7 +157,7 @@ an origin, propose one change at the owning abstraction, with:
 - **The owner.** Name the prompt, schema, composition, renderer, validator or review
   assignment to change, with its `path:line`. Prefer deterministic code for anything
   computable.
-- **Existing work.** Cite any known-work item that already covers the defect, and
+- **Existing work.** Cite any FIX06 item that already covers the defect, and
   prefer its approved or proposed fix.
 - **Authority.** Check the accepted ADRs (`design/decisions/`, indexed in design.md
   §32) for any rule the change would break, or ask the `design-router` agent. Label

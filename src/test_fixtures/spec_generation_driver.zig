@@ -56,6 +56,7 @@ pub const Driver = struct {
     /// Records every executed step for structural-equivalence evidence.
     trace: ?*@import("workflow_step_trace.zig").Trace = null,
     source_gaps: bool = false,
+    review_omissions: bool = false,
     source_loss: ?@import("spec_generation_responses.zig").SourceLoss = null,
     source_repair_calls: usize = 0,
     evidence_fault: @FieldType(@import("spec_generation_responses.zig").Options, "evidence_fault") = null,
@@ -110,8 +111,16 @@ pub const Driver = struct {
         if (self.fault) |fault| if (fault.stage == .support or fault.stage == .candidate_review or fault.stage == .principle_review) {
             if (fault.repetition == .persistent or fault.shape == .review_dropped or fault.shape == .review_changed) return true;
         };
-        return self.support_fault == .question_exhaust or self.support_fault == .question_evidence_exhaust or
-            self.support_fault == .question_evidence_alternating or self.evidence_fault == .empty_correction;
+        // A scripted verdict post-generation advice withholds (ADR 0023,
+        // D10.2) fails response admission on every attempt and exhausts the
+        // bounded protocol correction.
+        if (self.source_gaps or self.support_fault == .inconclusive) return true;
+        if (self.advisory_control) |control| switch (control) {
+            .inconclusive, .unsupported, .ambiguous, .conflicting => return true,
+            .false_omission, .candidate_invalid, .unbound_association => {},
+        };
+        return self.support_fault == .obligation_exhaust or self.support_fault == .obligation_evidence_exhaust or
+            self.support_fault == .obligation_evidence_alternating or self.evidence_fault == .empty_correction;
     }
     pub fn run(self: *Driver) @import("../domain/run_outcome.zig").Outcome {
         return @import("../application/workflow_engine_orchestrator.zig").run(.{ .context = self, .vtable = &.{ .validate_operation_registry = selected, .parse_invocation = selected, .select_workflow = selected, .prepare_workflow = ready, .selected_graph = graph, .invoke_invocation = invocation, .invoke_step = step, .finalize = finalize } });
@@ -206,7 +215,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .review_omissions = self.review_omissions, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .advisory_control = self.advisory_control, .record_review = self.record_review, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             if (self.runaway_displaced) |plan| {
                 self.fake.invocation_plan = .{ .complete = plan };
                 self.runaway_displaced = null;
@@ -369,7 +378,7 @@ pub const Driver = struct {
                                 self.required_subjects_resolved += 1;
                             }
                         }
-                        assertReviewShape(schema.value, permits_applicability, native.projection == .source_preservation, true) catch unreachable;
+                        assertReviewShape(schema.value, permits_applicability, native.projection == .source_preservation, true, @import("../domain/required_authority.zig").assessmentPolicy(native.projection) == .advisory) catch unreachable;
                     }
                 }
             }
@@ -469,7 +478,7 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
                     const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
                     const path = correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string;
-                    const suffix = if (fault.shape == .review_forbidden) "/provenance" else if (fault.shape == .review_moving and attempt % 2 == 1) "/detail" else "/question";
+                    const suffix = if (fault.shape == .review_forbidden) "/provenance" else if (fault.shape == .review_moving and attempt % 2 == 1) "/detail" else "/missing_obligation";
                     const expected_path = std.fmt.allocPrint(arena.allocator(), "{s}{s}", .{ if (std.mem.indexOf(u8, body, "\"findings\"") != null) "/findings/0/value" else "", suffix }) catch unreachable;
                     std.testing.expectEqualStrings(expected_path, path) catch unreachable;
                     const repeated = attempt > 2 and fault.shape != .review_moving;
@@ -919,7 +928,7 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     if (packet.resultDefinition()) |definition| {
         if (std.mem.eql(u8, definition.bytes, "preservation_finding") or std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
-            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"), true);
+            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"), true, packet.advisoryAssessment() != null);
         }
         const payload: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "business_text")) "segments" else if (std.mem.eql(u8, definition.bytes, "reference_text")) "nodes" else null;
         if (payload) |field| {
@@ -1016,7 +1025,7 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     if (purpose == .source) {
         // Native applicability narrows the shared value schema for the whole
         // assignment; member admission still enforces it independently.
-        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, permits_applicability, false, resolves_positive);
+        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, permits_applicability, false, resolves_positive, @import("../domain/required_authority.zig").assessmentPolicy(inputs.projection) == .advisory);
     } else {
         const value = finding_schema.get("properties").?.object.get("value").?.object.get("properties").?.object;
         try std.testing.expectEqual(@as(usize, 3), value.count());
@@ -1024,9 +1033,12 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     }
 }
 
-fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool, resolves_supported: bool) !void {
+/// Post-generation advice offers `supported`, `candidate_omission` and a
+/// gapless `candidate_invalid` (ADR 0023, D10.2); required review offers its
+/// definition's complete set.
+fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool, resolves_supported: bool, advisory: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (preservation) 4 else (if (permits_applicability) @as(usize, 8) else 7) - @intFromBool(!resolves_supported)), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 4 else (if (advisory) @as(usize, 3) else if (permits_applicability) @as(usize, 8) else 7) - @intFromBool(!resolves_supported)), variants.len);
     var has_supported = false;
     var has_inconclusive = false;
     var has_not_applicable = false;
@@ -1037,13 +1049,14 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         const decision = std.meta.stringToEnum(@import("../domain/specification_support.zig").Source.Decision, tag).?;
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
         if (preservation) try std.testing.expect(@import("../domain/source_preservation.zig").permits(decision.finding()) and decision != .not_applicable);
+        if (advisory) try std.testing.expect(@import("../domain/specification_support_evidence.zig").advisoryPermits(decision.finding()) and decision != .not_applicable);
         try std.testing.expect(!properties.contains("provenance"));
         try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission or decision == .candidate_invalid) 4 else 3), properties.count());
         try std.testing.expectEqual(decision == .candidate_omission, properties.contains("missing_obligation"));
         try std.testing.expectEqual(decision == .candidate_invalid, properties.contains("authority_gap"));
         if (decision == .candidate_invalid) {
             const declared_gap = properties.get("authority_gap").?.object;
-            if (preservation) {
+            if (preservation or advisory) {
                 try std.testing.expectEqualStrings("null", declared_gap.get("type").?.string);
                 try std.testing.expectEqual(@as(usize, 1), declared_gap.count());
             } else {
@@ -1073,7 +1086,7 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         has_not_applicable = has_not_applicable or decision == .not_applicable;
         has_candidate_invalid = has_candidate_invalid or decision == .candidate_invalid;
     }
-    try std.testing.expect(has_inconclusive);
+    try std.testing.expectEqual(!advisory, has_inconclusive);
     try std.testing.expect(has_candidate_invalid);
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
     if (!preservation) try std.testing.expectEqual(resolves_supported, has_supported);
@@ -1153,10 +1166,10 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
             if (value.getPtr("provenance")) |provenance| try provenance.object.put(allocator, "claim_ids", selected) else try value.put(allocator, "source_ids", selected);
         } else if (shape == .review_forbidden) {
             try value.put(allocator, "kind", .{ .string = "supported" });
-            _ = value.orderedRemove("question");
+            _ = value.orderedRemove("missing_obligation");
             try value.put(allocator, "provenance", .{ .object = .{} });
         } else {
-            if (!value.orderedRemove(if (shape == .review_moving and attempt % 2 == 0) "detail" else "question")) return error.InvalidFixture;
+            if (!value.orderedRemove(if (shape == .review_moving and attempt % 2 == 0) "detail" else "missing_obligation")) return error.InvalidFixture;
         }
     } else if (shape == .mixed_variant) {
         try parsed.value.object.put(allocator, "foreign_variant", .{ .object = .{} });

@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decisions on 26 October 2026 on
-  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B9:
+  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B9:
   - "if a run away issue occurs, then the the retry tempreture should be set to 1 and
     the same request should be tried again, if that fails then the workflow should stop
     executing";

@@ -791,6 +791,11 @@ bypasses.
   Native missing-family obligations remain invalid even after a positive
   review. Genuine source gaps route under §12.8.1 only after candidate/interpretation
   defects are resolved. `inconclusive` findings grant no question or repair authority.
+- Post-generation source review offers only `supported`, `candidate_omission` and
+  `candidate_invalid` with a null `authority_gap`; source-gap and `inconclusive`
+  verdicts are required-review verdicts. Any other verdict fails response admission
+  and takes protocol correction; exhaustion publishes incomplete advice (ADR 0023,
+  31 October 2026 amendment).
 - Malformed review repair changes one authorized detail or evidence selection,
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.

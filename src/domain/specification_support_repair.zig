@@ -27,8 +27,11 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
+            /// Whether the subject's request offers an authority gap. Gap and
+            /// question guidance is presented only when it does (ADR 0023, D10.2).
+            gap: bool,
             pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?@import("specification_support_evidence.zig").Instruction, obligation_rule: ?@import("specification_support_evidence.zig").Instruction, missing_obligation: ?[]const u8, authority_gap_rule: ?@import("specification_support_evidence.zig").Instruction, authority_gap: ?authority.AuthorityGap } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) .{ .entry = .{ .question = @import("specification_support_evidence.zig").questionRule(review.decisionOf(self.finding.?).finding()) } } else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) .{ .entry = .obligation } else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null, .authority_gap_rule = if (purpose == .source and self.finding != null and review.decisionOf(self.finding.?) == .candidate_invalid) .{ .entry = .authority_gap } else null, .authority_gap = if (purpose == .source and self.finding != null) self.finding.?.authority_gap else null };
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) .{ .entry = .{ .question = @import("specification_support_evidence.zig").questionRule(review.decisionOf(self.finding.?).finding(), self.gap) } } else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) .{ .entry = .obligation } else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null, .authority_gap_rule = if (purpose == .source and self.gap and self.finding != null and review.decisionOf(self.finding.?) == .candidate_invalid) .{ .entry = .authority_gap } else null, .authority_gap = if (purpose == .source and self.finding != null) self.finding.?.authority_gap else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -98,7 +101,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             const base = try review.packetFor(a, inputs, context, guidance, .{ .finding = id });
             defer packets.release(base);
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };
-            if (rejection.issue == .missing_finding) return bindRetry(a, try atomic.authorizeInsert(a, base.unit(), candidate.revision, .{ .requirement = id, .ordinal = ordinal, .index = candidate.review.entries.len }, .finding, facts, .{ .rejection = rejection, .finding = null }));
+            const offers_gap = try offersGap(a, inputs, context.inputs, id);
+            if (rejection.issue == .missing_finding) return bindRetry(a, try atomic.authorizeInsert(a, base.unit(), candidate.revision, .{ .requirement = id, .ordinal = ordinal, .index = candidate.review.entries.len }, .finding, facts, .{ .rejection = rejection, .finding = null, .gap = offers_gap }));
             const first = for (candidate.review.entries, 0..) |finding, index| {
                 if (finding.requirement_ordinal == ordinal) break index;
             } else return error.InvalidAtomicRepair;
@@ -118,7 +122,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                     if (finding.requirement_ordinal != ordinal) continue;
                     if (!try atomic.equal(a, .{ .finding = value }, .{ .finding = finding.value })) return error.UnsafeSupportRepair;
                     target.index = index;
-                    return bindRetry(a, try atomic.authorizeDelete(a, base.unit(), candidate.revision, target, .{ .finding = value }, facts, .{ .rejection = rejection, .finding = value }));
+                    return bindRetry(a, try atomic.authorizeDelete(a, base.unit(), candidate.revision, target, .{ .finding = value }, facts, .{ .rejection = rejection, .finding = value, .gap = offers_gap }));
                 }
                 return error.InvalidAtomicRepair;
             }
@@ -127,7 +131,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .invalid_evidence => .{ .selection = selection(value) },
                 .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_finding, .invalid_decision => return error.UnsafeSupportRepair,
             };
-            return bindRetry(a, try atomic.authorize(a, base.unit(), candidate.revision, target, expected, facts, .{ .rejection = rejection, .finding = value }));
+            return bindRetry(a, try atomic.authorize(a, base.unit(), candidate.revision, target, expected, facts, .{ .rejection = rejection, .finding = value, .gap = offers_gap }));
         }
         pub fn packet(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, candidate: review.Candidate, authorization: Authorization) Error!*packets.Packet {
             try atomic.checkDependencies(a, authorization, .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate });
@@ -138,29 +142,81 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             };
             const base = try review.packetFor(a, inputs, context, guidance, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
             defer packets.release(base);
-            const definition = switch (kind) {
+            const shape = try correction(authorization, kind);
+            const definition = switch (shape) {
                 .finding => base.resultDefinition().?.bytes,
-                .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
-                .selection => if (purpose == .principles) "principle_selection" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
+                .detail => |value| value.definition(),
+                .selection => |value| value.definition(),
             };
             const raw_input = try atomic.packetPresenting(a, authorization, guidance, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
             defer packets.release(raw_input);
             // A narrowed result schema owns its prose paths. It cannot inherit
             // question paths from the complete finding when they are absent.
             const Field = @import("model_text_wire.zig").ProseField;
-            const prose_fields: []const Field = if (purpose == .source and kind == .detail)
-                (if (std.mem.eql(u8, definition, "gap_detail")) &.{.{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }} else if (std.mem.eql(u8, definition, "invalid_detail")) &.{.{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }} else &.{})
-            else if (kind == .finding) base.proseFields() else &.{};
+            const prose_fields: []const Field = switch (shape) {
+                .finding => base.proseFields(),
+                .detail => |value| if (purpose != .source) &.{} else switch (value.source) {
+                    .gap_detail => &.{.{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }},
+                    .invalid_detail => &.{.{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }},
+                    .detail, .omission_detail => &.{},
+                },
+                .selection => &.{},
+            };
             const prepared_input = try packets.withProseFields(a, raw_input, prose_fields);
-            if (purpose != .source or kind != .selection) return prepared_input;
+            if (purpose != .source or shape != .selection) return prepared_input;
             defer packets.release(prepared_input);
             const rule = (authorization.rule.rejection.evidence orelse return error.InvalidAtomicRepair).rule;
             const ids = try a.alloc(i64, rule.eligible_source_ids.len);
             defer a.free(ids);
             for (ids, rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
             const choices: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids };
-            if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) return packets.withIntegerChoices(a, prepared_input, &.{ choices, .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids } });
-            return packets.withIntegerChoices(a, prepared_input, &.{choices});
+            return switch (shape.selection.source) {
+                .invalid_selection => packets.withIntegerChoices(a, prepared_input, &.{ choices, .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids } }),
+                .selection => packets.withIntegerChoices(a, prepared_input, &.{choices}),
+            };
+        }
+
+        /// The result shape of a correction. A retained source verdict and
+        /// whether its request offers an authority gap select it, so an
+        /// advisory `candidate_invalid` is corrected without a gap (ADR 0023,
+        /// D10.2). Policy review has one detail and one selection shape.
+        const Shape = union(enum) {
+            finding,
+            detail: Choice(source_model.DetailCorrection, "detail"),
+            selection: Choice(source_model.SelectionCorrection, "principle_selection"),
+
+            fn Choice(comptime SourceShape: type, comptime policy: []const u8) type {
+                return struct {
+                    source: if (purpose == .source) SourceShape else void,
+                    fn definition(self: @This()) []const u8 {
+                        return if (purpose == .source) @tagName(self.source) else policy;
+                    }
+                };
+            }
+        };
+        /// Whether the subject's request offers an authority gap: always under
+        /// required policy, never after generation.
+        fn offersGap(a: std.mem.Allocator, inputs: authority.Inputs, sources: evidence.Inputs, id: authority.Id) Error!bool {
+            if (purpose != .source) return true;
+            var arena: std.heap.ArenaAllocator = .init(a);
+            defer arena.deinit();
+            return source_model.carriesGap(try review.offeredVerdicts(arena.allocator(), inputs, sources, id));
+        }
+        fn correction(authorization: Authorization, kind: std.meta.Tag(Replacement)) Error!Shape {
+            if (kind == .finding) return .finding;
+            if (purpose == .principles) return switch (kind) {
+                .detail => .{ .detail = .{ .source = {} } },
+                .selection => .{ .selection = .{ .source = {} } },
+                .finding => unreachable,
+            };
+            const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
+            const decision = review.decisionOf(retained);
+            const gap = authorization.rule.gap;
+            return switch (kind) {
+                .detail => .{ .detail = .{ .source = source_model.DetailCorrection.of(decision, gap) } },
+                .selection => .{ .selection = .{ .source = source_model.SelectionCorrection.of(decision, gap) } },
+                .finding => unreachable,
+            };
         }
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
             if (purpose == .principles) return atomic.parse(a, authorization, input, bytes);
@@ -172,17 +228,21 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 },
                 .selection => blk: {
                     const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
-                    if (retained.kind == .candidate_invalid) {
-                        const selected = try @import("model_candidate_json.zig").decode(source_model.InvalidSelection, a, bytes);
-                        if ((retained.authority_gap == null) != (selected.authority_gap_source_ids == null)) return error.UnsafeSupportRepair;
-                        break :blk .{ .selection = .{ .provenance = retained.provenance, .source_ids = selected.source_ids, .authority_gap_source_ids = selected.authority_gap_source_ids } };
+                    switch ((try correction(authorization, kind)).selection.source) {
+                        .invalid_selection => {
+                            const selected = try @import("model_candidate_json.zig").decode(source_model.InvalidSelection, a, bytes);
+                            if ((retained.authority_gap == null) != (selected.authority_gap_source_ids == null)) return error.UnsafeSupportRepair;
+                            break :blk .{ .selection = .{ .provenance = retained.provenance, .source_ids = selected.source_ids, .authority_gap_source_ids = selected.authority_gap_source_ids } };
+                        },
+                        .selection => {
+                            const selected = try source_model.decodeSelection(a, bytes, retained.provenance.claim_ids);
+                            break :blk .{ .selection = .{ .provenance = selected.provenance, .source_ids = selected.source_ids } };
+                        },
                     }
-                    const selected = try source_model.decodeSelection(a, bytes, retained.provenance.claim_ids);
-                    break :blk .{ .selection = .{ .provenance = selected.provenance, .source_ids = selected.source_ids } };
                 },
                 .detail => blk: {
                     const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
-                    const selected = try source_model.decodeDetail(a, bytes, review.decisionOf(retained));
+                    const selected = try source_model.decodeDetail(a, bytes, (try correction(authorization, kind)).detail.source);
                     try checkDetail(retained, selected);
                     break :blk .{ .detail = selected };
                 },

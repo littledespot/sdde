@@ -76,6 +76,29 @@ pub fn minimum(finding: a.Finding) Minimum {
         .ambiguous, .conflicting, .unsupported, .inconclusive => .optional,
     };
 }
+/// Post-generation source advice offers only these findings (ADR 0023,
+/// D10.2). Source-decision gaps and `inconclusive` belong to required review.
+/// Request restriction and admission share this owner. It judges findings, so
+/// it does not own `not_applicable`, a decision that maps to `supported`: the
+/// native applicability owner withholds that after generation
+/// (`permitsNotApplicable`; admission rejects it as `invalid_decision`).
+pub fn advisoryPermits(finding: a.Finding) bool {
+    return switch (finding) {
+        .supported, .candidate_omission, .candidate_invalid => true,
+        .ambiguous, .conflicting, .unsupported, .inconclusive => false,
+    };
+}
+/// The evidence-guidance rule that presents each finding's minimum. A rule is
+/// presented only while some verdict it governs is offered.
+pub const RuleKey = enum { supported, candidate_omission, candidate_invalid, negative };
+pub fn ruleKey(finding: a.Finding) RuleKey {
+    return switch (finding) {
+        .supported => .supported,
+        .candidate_omission => .candidate_omission,
+        .candidate_invalid => .candidate_invalid,
+        .ambiguous, .conflicting, .unsupported, .inconclusive => .negative,
+    };
+}
 pub const ClaimSet = union(enum) { eligible: []const r.ClaimId, exact: []const r.ClaimId };
 pub const Rule = struct {
     minimum: Minimum,
@@ -156,6 +179,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
         const snapshot = @import("atomic_repair.zig").snapshot;
         if (!std.meta.eql(try snapshot(r.evidence.Inputs, allocator, original), try snapshot(r.evidence.Inputs, allocator, sources))) return reject(.stale_authority, rule);
     }
+    if (a.assessmentPolicy(inputs.projection) == .advisory and (!advisoryPermits(finding) or authority_gap != null)) return reject(.invalid_finding, rule);
     if (!validObligation(finding, missing_obligation)) return reject(.invalid_obligation, rule);
     if (authority_gap) |gap| {
         if (finding != .candidate_invalid or id.unit == .source) return reject(.invalid_finding, rule);
@@ -243,9 +267,10 @@ pub fn questionRequired(finding: a.Finding) bool {
         .ambiguous, .conflicting, .unsupported => true,
     };
 }
-/// The question guidance entry for a retained finding.
-pub fn questionRule(finding: a.Finding) packet_guidance.QuestionRule {
-    if (finding == .candidate_invalid) return .retained_gap;
+/// The question guidance entry for a retained finding. A `candidate_invalid`
+/// whose request offers no authority gap carries no question at all.
+pub fn questionRule(finding: a.Finding, gap: bool) packet_guidance.QuestionRule {
+    if (finding == .candidate_invalid) return if (gap) .retained_gap else .omitted;
     return if (questionRequired(finding)) .required else .omitted;
 }
 pub const QuestionIssue = enum { missing_question, invalid_question, forbidden_question };

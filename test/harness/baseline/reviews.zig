@@ -288,9 +288,11 @@ pub fn verifyWithHistory(a: std.mem.Allocator, finding: Finding, raw: []const u8
     switch (finding.kind) {
         .source => |kind| {
             if (is_detail) {
-                const expected_definition = if (kind == .candidate_invalid) "invalid_detail" else if (kind == .candidate_omission) "omission_detail" else if (@import("../../../src/domain/specification_support_evidence.zig").questionRequired(kind.finding())) "gap_detail" else "detail";
-                if (!std.mem.eql(u8, selected.bytes, expected_definition)) return error.ReviewOutputMismatch;
-                const value = try model.decodeDetail(temporary, envelope.content, kind);
+                // Required review offers an authority gap; post-generation
+                // advice does not (ADR 0023, D10.2), so either shape may apply.
+                const shape = std.meta.stringToEnum(model.DetailCorrection, selected.bytes) orelse return error.ReviewOutputMismatch;
+                if (shape != model.DetailCorrection.of(kind, true) and shape != model.DetailCorrection.of(kind, false)) return error.ReviewOutputMismatch;
+                const value = try model.decodeDetail(temporary, envelope.content, shape);
                 expected.detail = value.detail;
                 expected.missing_obligation = value.missing_obligation;
                 expected.question = value.question;
@@ -300,17 +302,21 @@ pub fn verifyWithHistory(a: std.mem.Allocator, finding: Finding, raw: []const u8
                     if (prior_gap.kind != current_gap.kind) return error.ReviewOutputMismatch;
                     @import("../../../src/domain/reference_reconciliation.zig").sameSet(@import("../../../src/domain/reference_identity.zig").SourceId, prior_gap.source_ids, current_gap.source_ids) catch return error.ReviewOutputMismatch;
                 } else if (value.authority_gap != null) return error.ReviewOutputMismatch;
-            } else if (kind == .candidate_invalid) {
-                if (!std.mem.eql(u8, selected.bytes, "invalid_selection")) return error.ReviewOutputMismatch;
-                const value = try codec.decode(model.InvalidSelection, temporary, envelope.content);
-                expected.source_ids = value.source_ids;
-                if (expected.authority_gap) |*gap| {
-                    gap.source_ids = value.authority_gap_source_ids orelse return error.ReviewOutputMismatch;
-                } else if (value.authority_gap_source_ids != null) return error.ReviewOutputMismatch;
-            } else {
-                if (!std.mem.eql(u8, selected.bytes, "selection")) return error.ReviewOutputMismatch;
-                const value = try model.decodeSelection(temporary, envelope.content, &.{});
-                expected.source_ids = value.source_ids;
+            } else switch (std.meta.stringToEnum(model.SelectionCorrection, selected.bytes) orelse return error.ReviewOutputMismatch) {
+                .invalid_selection => {
+                    if (kind != .candidate_invalid) return error.ReviewOutputMismatch;
+                    const value = try codec.decode(model.InvalidSelection, temporary, envelope.content);
+                    expected.source_ids = value.source_ids;
+                    if (expected.authority_gap) |*gap| {
+                        gap.source_ids = value.authority_gap_source_ids orelse return error.ReviewOutputMismatch;
+                    } else if (value.authority_gap_source_ids != null) return error.ReviewOutputMismatch;
+                },
+                .selection => {
+                    // A gapless advisory contradiction is corrected without a gap.
+                    if (expected.authority_gap != null) return error.ReviewOutputMismatch;
+                    const value = try model.decodeSelection(temporary, envelope.content, &.{});
+                    expected.source_ids = value.source_ids;
+                },
             }
         },
         .principles => {
@@ -567,15 +573,20 @@ test "native source partial repairs prove inherited verdict and exact changed an
     const original: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
     const corrected: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
     const other_sources = [_]@import("../../../src/domain/reference_identity.zig").SourceId{.{ .ordinal = 2 }};
-    for ([_]struct { kind: source.Decision, definition: []const u8, detail: bool }{
+    // A gapless contradiction is post-generation advice (ADR 0023, D10.2),
+    // corrected with the plain detail and selection shapes.
+    for ([_]struct { kind: source.Decision, definition: []const u8, detail: bool, gap: bool = true }{
         .{ .kind = .supported, .definition = "detail", .detail = true },
         .{ .kind = .unsupported, .definition = "gap_detail", .detail = true },
         .{ .kind = .candidate_omission, .definition = "omission_detail", .detail = true },
         .{ .kind = .candidate_invalid, .definition = "invalid_detail", .detail = true },
+        .{ .kind = .candidate_invalid, .definition = "detail", .detail = true, .gap = false },
         .{ .kind = .supported, .definition = "selection", .detail = false },
         .{ .kind = .candidate_invalid, .definition = "invalid_selection", .detail = false },
+        .{ .kind = .candidate_invalid, .definition = "selection", .detail = false, .gap = false },
     }) |example| {
-        const previous = sourceHistoryFixture(example.kind, original);
+        var previous = sourceHistoryFixture(example.kind, original);
+        if (!example.gap) previous.authority_gap = null;
         const full = try fullSourceFixture(a, previous);
         const history = [_]VerifiedFinding{.{ .finding = previous, .verification = try verifyRaw(a, previous, full, .{ .bytes = "finding" }) }};
         var current = previous;
@@ -588,7 +599,9 @@ test "native source partial repairs prove inherited verdict and exact changed an
                     current.missing_obligation = "MOCK corrected missing restriction.";
                     break :detail try codec.encode(struct { detail: []const u8, missing_obligation: []const u8 }, a, .{ .detail = current.detail, .missing_obligation = current.missing_obligation.? });
                 },
-                .candidate_invalid => {
+                .candidate_invalid => if (!example.gap) {
+                    break :detail try codec.encode(struct { detail: []const u8 }, a, .{ .detail = current.detail });
+                } else {
                     current.authority_gap.?.detail = "MOCK corrected gap explanation.";
                     current.authority_gap.?.question = "MOCK corrected decision question?";
                     break :detail try codec.encode(struct { detail: []const u8, authority_gap: ?authority.AuthorityGap }, a, .{ .detail = current.detail, .authority_gap = current.authority_gap });
@@ -602,7 +615,7 @@ test "native source partial repairs prove inherited verdict and exact changed an
             }
         } else selection: {
             current.source_ids = &other_sources;
-            if (example.kind == .candidate_invalid) {
+            if (example.kind == .candidate_invalid and example.gap) {
                 current.authority_gap.?.source_ids = &other_sources;
                 break :selection try codec.encode(model.InvalidSelection, a, .{ .source_ids = current.source_ids, .authority_gap_source_ids = current.authority_gap.?.source_ids });
             }
@@ -622,6 +635,15 @@ test "native source partial repairs prove inherited verdict and exact changed an
         changed.kind = .{ .source = if (example.kind == .supported) .inconclusive else .supported };
         try std.testing.expectError(error.ReviewOutputMismatch, verifyWithHistory(a, changed, raw, definition, original, &history));
         try std.testing.expectError(error.ReviewOutputMismatch, verifyWithHistory(a, current, raw, definition, corrected, &history));
+        // A retained gap is never corrected through a gapless shape.
+        if (example.kind == .candidate_invalid and !example.gap) {
+            var gapped = sourceHistoryFixture(example.kind, original);
+            gapped.origin = corrected;
+            gapped.admission = .accepted;
+            const gapped_history = [_]VerifiedFinding{.{ .finding = sourceHistoryFixture(example.kind, original), .verification = try verifyRaw(a, sourceHistoryFixture(example.kind, original), try fullSourceFixture(a, sourceHistoryFixture(example.kind, original)), .{ .bytes = "finding" }) }};
+            if (example.detail) gapped.detail = current.detail else gapped.source_ids = current.source_ids;
+            try std.testing.expectError(error.ReviewOutputMismatch, verifyWithHistory(a, gapped, raw, definition, original, &gapped_history));
+        }
     }
 }
 

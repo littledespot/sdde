@@ -187,7 +187,7 @@ pub fn Contract(comptime purpose: Purpose) type {
         pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: Scope) Error!*packets.Packet {
             if (scope == .assignment) return assignmentPacket(allocator, inputs, context, guidance, scope.assignment);
             if (purpose == .principles) return principles.packet(allocator, inputs, context, guidance, scope);
-            return packetForContext(allocator, inputs, context, guidance, scope);
+            return packetForContext(allocator, inputs, context, guidance, scope, .policy);
         }
 
         /// A stopped request must still belong to this exact current native
@@ -224,15 +224,59 @@ pub fn Contract(comptime purpose: Purpose) type {
             return @import("strict_json.zig").decode(std.json.Value, scratch, try std.json.Stringify.valueAlloc(scratch, value, .{}), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
         }
 
-        /// Positive verdicts a source member may not take: `not_applicable` outside
-        /// an applicability review, and any positive verdict to which no claim
-        /// set can be bound (ADR 0023 route 4). Negative verdicts always resolve.
-        fn withheldVerdicts(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, target: a.Id) Error!std.EnumSet(source_model.Decision) {
-            var withheld = std.EnumSet(source_model.Decision).initEmpty();
+        /// Verdicts a source member may not take: under advisory policy every
+        /// finding post-generation advice does not offer (ADR 0023, D10.2),
+        /// `not_applicable` outside an applicability review (native
+        /// applicability owns it, and is never under review after generation),
+        /// and any positive verdict to which no claim set can be bound (ADR 0023
+        /// route 4). Negative verdicts always resolve.
+        fn withheldVerdicts(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, target: a.Id) Error!source_model.Offered {
+            var withheld = source_model.Offered.initEmpty();
+            if (a.assessmentPolicy(inputs.projection) == .advisory) {
+                for (std.meta.tags(source_model.Decision)) |verdict| if (!admission.advisoryPermits(verdict.finding())) withheld.insert(verdict);
+            }
             if (!permitsNotApplicable(try applicability(inputs, target))) withheld.insert(.not_applicable);
             const required = try admission.requirements(allocator, inputs, sources, target);
             for ([_]source_model.Decision{ .supported, .not_applicable }) |verdict| if (!source_model.resolves(required, verdict)) withheld.insert(verdict);
             return withheld;
+        }
+
+        /// The verdicts a single source request offers. Null under required
+        /// policy: a required request keeps its definition's complete set.
+        pub fn offeredVerdicts(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, target: a.Id) Error!?source_model.Offered {
+            if (purpose != .source or a.assessmentPolicy(inputs.projection) != .advisory) return null;
+            return (try withheldVerdicts(allocator, inputs, sources, target)).complement();
+        }
+
+        /// The offered set a single source packet presents: its own policy's,
+        /// or the one its assignment shares across members.
+        const Offer = union(enum) { policy, assignment: source_model.Offered };
+
+        /// One offered set restricts the response contract: each withheld
+        /// verdict is an excluded variant, so response admission rejects it
+        /// and the bounded protocol correction follows.
+        fn withOffered(allocator: std.mem.Allocator, base: *const packets.Packet, offered: ?source_model.Offered) Error!*const packets.Packet {
+            const set = offered orelse return packets.retain(base);
+            const withheld = set.complement();
+            if (withheld.count() == 0) return packets.retain(base);
+            const prior = base.excludedVariants();
+            const excluded = try allocator.alloc(@import("model_result_schema.zig").ExcludedVariant, prior.len + withheld.count());
+            defer allocator.free(excluded);
+            @memcpy(excluded[0..prior.len], prior);
+            var next = prior.len;
+            var verdicts = withheld.iterator();
+            while (verdicts.next()) |verdict| : (next += 1) excluded[next] = .{ .kind = @tagName(verdict) };
+            return packets.withExcludedVariants(allocator, base, excluded);
+        }
+
+        /// Source-ID choices for the finding at `prefix`: the gap's own
+        /// selection only while an offered verdict can carry a gap.
+        fn sourceChoices(allocator: std.mem.Allocator, offered: ?source_model.Offered, prefix: []const @import("model_result_schema.zig").ChoiceStep, definition: ?@import("model_result_schema.zig").DefinitionId, ids: []const i64) Error![]const @import("model_result_schema.zig").IntegerChoice {
+            const Step = @import("model_result_schema.zig").ChoiceStep;
+            var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
+            try choices.append(allocator, .{ .target = .{ .path = try std.mem.concat(allocator, Step, &.{ prefix, &.{.{ .property = "source_ids" }} }) }, .definition = definition, .allowed = ids });
+            if (source_model.carriesGap(offered)) try choices.append(allocator, .{ .target = .{ .path = try std.mem.concat(allocator, Step, &.{ prefix, &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }) }, .definition = definition, .allowed = ids });
+            return choices.toOwnedSlice(allocator);
         }
 
         fn assignmentPacket(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, id: a.Id) Error!*packets.Packet {
@@ -249,10 +293,10 @@ pub fn Contract(comptime purpose: Purpose) type {
             var assigned: std.ArrayList(std.json.Value) = .empty;
             const ordinals = try scratch.alloc(i64, selected.len);
             var sources: std.ArrayList(i64) = .empty;
-            // The shared batch envelope lists every source verdict. Native
-            // applicability and claim resolution narrow it, and one assignment
-            // has one restriction.
-            var withheld: ?std.EnumSet(source_model.Decision) = null;
+            // The shared batch envelope lists every source verdict. Policy,
+            // native applicability and claim resolution narrow it, and one
+            // assignment has one restriction.
+            var offered: ?source_model.Offered = null;
             for (selected, ordinals) |target, *ordinal| {
                 // Each member's single packet repeats the shared evidence. Build it in
                 // a member arena and keep only its own entry, so a large record family
@@ -261,11 +305,12 @@ pub fn Contract(comptime purpose: Purpose) type {
                 defer member_arena.deinit();
                 const local = member_arena.allocator();
                 if (purpose == .source) {
-                    const member = try withheldVerdicts(local, inputs, context.inputs, target);
-                    if (withheld) |prior| if (!prior.eql(member)) return error.InvalidRequiredAuthority;
-                    withheld = member;
+                    const member = (try withheldVerdicts(local, inputs, context.inputs, target)).complement();
+                    if (offered) |prior| if (!prior.eql(member)) return error.InvalidRequiredAuthority;
+                    offered = member;
                 }
-                const single = if (purpose == .source) try packetForContext(local, inputs, context, guidance, .{ .finding = target }) else try principles.packet(local, inputs, context, guidance, .{ .finding = target });
+                // The member packet presents guidance only for offered verdicts.
+                const single = if (purpose == .source) try packetForContext(local, inputs, context, guidance, .{ .finding = target }, .{ .assignment = offered.? }) else try principles.packet(local, inputs, context, guidance, .{ .finding = target });
                 defer packets.release(single);
                 var parsed = try @import("strict_json.zig").decode(std.json.Value, local, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
                 // Copy the shared body before the member entry below mutates aliased
@@ -292,13 +337,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 try requirement.object.put(local, "subject", subject);
                 if (purpose == .source) {
                     try requirement.object.put(local, "assessment_scope", parsed.object.get("assessment_scope").?);
-                    var rules = parsed.object.get("evidence_rules").?;
-                    // Guidance offers only the verdicts the assignment may take.
-                    if (withheld.?.contains(.supported)) _ = rules.object.orderedRemove("supported");
-                    if (withheld.?.contains(.not_applicable)) {
-                        _ = rules.object.orderedRemove("not_applicable");
-                        _ = requirement.object.orderedRemove("permitted_not_applicable");
-                    }
+                    const rules = parsed.object.get("evidence_rules").?;
                     try requirement.object.put(local, "evidence_rules", rules);
                     for (rules.object.get("eligible_source_ids").?.array.items) |source| {
                         if (std.mem.indexOfScalar(i64, sources.items, source.integer) == null) try sources.append(scratch, source.integer);
@@ -320,24 +359,15 @@ pub fn Contract(comptime purpose: Purpose) type {
             defer packets.release(reviewed);
             // A withheld verdict fails response admission, so it takes the bounded
             // protocol correction instead of reaching native canonicalization.
-            const base: *const packets.Packet = if (purpose == .source and withheld.?.count() != 0) excluded: {
-                const prior = reviewed.excludedVariants();
-                const excluded = try scratch.alloc(@import("model_result_schema.zig").ExcludedVariant, prior.len + withheld.?.count());
-                @memcpy(excluded[0..prior.len], prior);
-                var next = prior.len;
-                var verdicts = withheld.?.iterator();
-                while (verdicts.next()) |verdict| : (next += 1) excluded[next] = .{ .kind = @tagName(verdict) };
-                break :excluded try packets.withExcludedVariants(allocator, reviewed, excluded);
-            } else try packets.retain(reviewed);
+            const base = if (purpose == .source) try withOffered(allocator, reviewed, offered) else try packets.retain(reviewed);
             defer packets.release(base);
             // Response admission requires exactly one finding per member, so a
             // missing, repeated or foreign member gets the bounded protocol correction.
             const ordinal_choice: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals, .collection = .exact_members };
-            const selected_packet = if (purpose == .source) try packets.withIntegerChoices(allocator, base, &.{
-                ordinal_choice,
-                .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
-                .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
-            }) else cited: {
+            const selected_packet = if (purpose == .source) try packets.withIntegerChoices(allocator, base, try std.mem.concat(scratch, @import("model_result_schema.zig").IntegerChoice, &.{
+                &.{ordinal_choice},
+                try sourceChoices(scratch, offered, finding_path, definition, sources.items),
+            })) else cited: {
                 const ordinals_bound = try packets.withIntegerChoices(allocator, base, &.{ordinal_choice});
                 defer packets.release(ordinals_bound);
                 // A finding the domain rule requires citations for, returned
@@ -349,10 +379,13 @@ pub fn Contract(comptime purpose: Purpose) type {
                 }});
             };
             defer packets.release(selected_packet);
-            return if (purpose == .source) withQuestionText(allocator, selected_packet, context.inputs, true) else packets.withBody(allocator, selected_packet, selected_packet.body());
+            return if (purpose == .source) withQuestionText(allocator, selected_packet, context.inputs, offered, true) else packets.withBody(allocator, selected_packet, selected_packet.body());
         }
 
-        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: Scope) Error!*packets.Packet {
+        /// Each batch finding's value; the single finding is the response root.
+        const finding_path: []const @import("model_result_schema.zig").ChoiceStep = &.{ .{ .property = "findings" }, .items, .{ .property = "value" } };
+
+        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, guidance: *const @import("packet_guidance.zig").Guidance, scope: Scope, offer: Offer) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
@@ -369,7 +402,12 @@ pub fn Contract(comptime purpose: Purpose) type {
             } else return error.InvalidRequiredAuthority;
             const required = try applicability(inputs, target);
             const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, target);
-            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, guidance, target), .permitted_not_applicable = if (permitsNotApplicable(required)) required.review else null, .evidence = evidence_rule.guidance() }};
+            const offered: ?source_model.Offered = switch (offer) {
+                .policy => try offeredVerdicts(scratch, inputs, context.inputs, target),
+                .assignment => |set| set,
+            };
+            const offers_not_applicable = permitsNotApplicable(required) and source_model.offers(offered, &.{.not_applicable});
+            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, guidance, target), .permitted_not_applicable = if (offers_not_applicable) required.review else null, .evidence = evidence_rule.guidance() }};
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject = try subjects.project(scratch, inputs, context, target);
@@ -378,7 +416,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(guidance, subject), .evidence_rules = .{ .instruction = try admission.selection_instruction.present(scratch, guidance), .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = minimumFor(evidence_rule, offered, .supported), .not_applicable = if (offers_not_applicable) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = minimumFor(evidence_rule, offered, .candidate_omission), .candidate_invalid = minimumFor(evidence_rule, offered, .candidate_invalid), .negative = minimumFor(evidence_rule, offered, .negative) }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .exact_texts = projected.exact_texts, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
@@ -402,7 +440,9 @@ pub fn Contract(comptime purpose: Purpose) type {
             const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
             const slot = try reviewSlot(scratch, inputs, target);
             const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (permitsNotApplicable(required)) "applicability_finding" else "finding" };
-            const packet = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
+            const reviewed = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
+            defer packets.release(reviewed);
+            const packet = try withOffered(allocator, reviewed, offered);
             defer packets.release(packet);
             const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
             for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
@@ -410,24 +450,36 @@ pub fn Contract(comptime purpose: Purpose) type {
             const selected_packet = if (inputs.projection == .source_preservation)
                 try packets.withIntegerChoices(allocator, packet, &.{selected_sources})
             else
-                try packets.withIntegerChoices(allocator, packet, &.{ selected_sources, .{ .target = .{ .path = &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = ids } });
+                try packets.withIntegerChoices(allocator, packet, try sourceChoices(scratch, offered, &.{}, definition, ids));
             defer packets.release(selected_packet);
             if (inputs.projection == .source_preservation) return packets.withOriginalSources(allocator, selected_packet, context.inputs);
-            return withQuestionText(allocator, selected_packet, context.inputs, false);
+            return withQuestionText(allocator, selected_packet, context.inputs, offered, false);
         }
 
-        fn withQuestionText(allocator: std.mem.Allocator, base: *const packets.Packet, sources: r.evidence.Inputs, batch: bool) Error!*packets.Packet {
+        /// A guidance rule is presented only while a verdict it governs is
+        /// offered; every finding a rule governs shares its minimum.
+        fn minimumFor(required: admission.Requirements, offered: ?source_model.Offered, key: admission.RuleKey) ?admission.Minimum {
+            for (std.meta.tags(source_model.Decision)) |verdict| {
+                // `not_applicable` has its own applicability-owned rule.
+                if (verdict == .not_applicable or admission.ruleKey(verdict.finding()) != key or !source_model.offers(offered, &.{verdict})) continue;
+                return required.rule(verdict.finding(), .{ .unlocalized = .{} }).minimum;
+            }
+            return null;
+        }
+
+        /// Question prose paths exist only while an offered verdict carries them.
+        fn withQuestionText(allocator: std.mem.Allocator, base: *const packets.Packet, sources: r.evidence.Inputs, offered: ?source_model.Offered, batch: bool) Error!*packets.Packet {
             const witnessed = try packets.withOriginalSources(allocator, base, sources);
             defer packets.release(witnessed);
             const Field = @import("model_text_wire.zig").ProseField;
-            const fields: []const Field = if (batch) &.{
-                .{ .field = .clarification_question, .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "question" } } },
-                .{ .field = .clarification_question, .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "question" } } },
-            } else &.{
-                .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} },
-                .{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } },
-            };
-            const prose = try packets.withProseFields(allocator, witnessed, fields);
+            const prefix: []const @import("model_result_schema.zig").ChoiceStep = if (batch) finding_path else &.{};
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            const Step = @import("model_result_schema.zig").ChoiceStep;
+            var fields: std.ArrayList(Field) = .empty;
+            if (source_model.carriesQuestion(offered)) try fields.append(arena.allocator(), .{ .field = .clarification_question, .path = try std.mem.concat(arena.allocator(), Step, &.{ prefix, &.{.{ .property = "question" }} }) });
+            if (source_model.carriesGap(offered)) try fields.append(arena.allocator(), .{ .field = .clarification_question, .path = try std.mem.concat(arena.allocator(), Step, &.{ prefix, &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }) });
+            const prose = try packets.withProseFields(allocator, witnessed, fields.items);
             defer packets.release(prose);
             const bindings = (if (batch)
                 @import("model_candidate_json.zig").fieldBindings(source_model.Batch, allocator, .{})

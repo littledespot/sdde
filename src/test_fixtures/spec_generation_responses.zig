@@ -8,20 +8,21 @@ const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals };
-pub const SupportFault = enum { inconclusive, missing_detail, foreign_source_single, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating };
+/// The scripted obligation a native text repair restores.
+pub const repaired_obligation = "Renewal extends the loan by fourteen days from the request.";
+pub const SupportFault = enum { inconclusive, missing_detail, foreign_source_single, foreign_sources, obligation_recover, obligation_exhaust, obligation_native_exhaust, obligation_mixed_exhaust, obligation_evidence_recover, obligation_evidence_exhaust, obligation_evidence_alternating };
 // Semantic outcomes remain scripted candidates, not native semantic proof.
 pub const Applicability = enum {
     unjustified,
     no_entities,
     entities,
     missing_decision,
-    missing_text,
     inconclusive,
 
     pub fn source(self: Applicability, other: bool) []const u8 {
         return switch (self) {
             .entities => if (other) "Track customer invoices and display the outstanding balance." else "Track library loans and display their return deadlines.",
-            .missing_decision, .missing_text => if (other) "Display a sensor reading; whether it is calculated on request or read from managed records is undecided." else "Display a status value; whether it is calculated on request or read from managed records is undecided.",
+            .missing_decision => if (other) "Display a sensor reading; whether it is calculated on request or read from managed records is undecided." else "Display a status value; whether it is calculated on request or read from managed records is undecided.",
             else => if (other) "Calculate a checksum and display the digest and elapsed time." else "On startup display the greeting and the current UTC date and time.",
         };
     }
@@ -50,6 +51,9 @@ pub const Options = struct {
     principle_fault: ?PrincipleFault = null,
     principle_repair_calls: usize = 0,
     source_gaps: bool = false,
+    /// Feature intents scripted as omissions, so a review response carries a
+    /// required prose property that post-generation advice offers.
+    review_omissions: bool = false,
     evidence_fault: ?enum { recover, empty_correction } = null,
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
     story_omission: ?enum { missing, false_positive, multiple } = null,
@@ -600,6 +604,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     finding.value.source_ids = required.eligible_source_ids[0..1];
                     finding.value.detail = "The original source establishes the required readiness fact.";
                 }
+                // Post-generation advice offers only supported, candidate_omission
+                // and a gapless candidate_invalid (ADR 0023, D10.2). The default
+                // scripted doubt takes the offered contradiction; explicit
+                // controls below still script withheld verdicts.
+                if (@import("../domain/required_authority.zig").assessmentPolicy(inputs.projection) == .advisory and !@import("../domain/specification_support_evidence.zig").advisoryPermits(finding.value.kind.finding())) {
+                    finding.value.kind = .candidate_invalid;
+                    finding.value.question = null;
+                    finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
+                }
                 if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (options.record_review) |control| if (requirement.seed.id.unit == .record and requirement.seed.id.unit.record.kind == .acceptance_criterion and requirement.seed.id.unit.record.ordinal == 1) {
                     switch (control) {
@@ -655,6 +668,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .scenario_coverage => "What should happen when renewal is refused? Describe that scenario outcome.",
                     else => return error.UnexpectedSourceGap,
                 }, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
+                if (options.review_omissions and requirement.seed.id.kind == .feature_intent and requirement.seed.id.unit == .feature) finding.value = .{ .kind = .candidate_omission, .missing_obligation = context.inputs.corpus.sources[0].bytes, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "The candidate omits this source-required decision." };
                 if (options.extraction_omission) finding.value = .{ .kind = .candidate_omission, .missing_obligation = context.inputs.corpus.sources[0].bytes, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
             if (options.source_loss == .false_conflict_questions) for (ledger.requirements, findings) |required, *finding| {
@@ -688,31 +702,30 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const repair = @import("../domain/specification_support_repair.zig").Source;
                 const state = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_repair_workflow.zig").schema, .support_repair);
                 const authorized = state.authorization;
-                if (options.applicability == .missing_text) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .detail = .{ .detail = applicability_detail, .question = applicability_question } });
                 if (options.source_loss == .false_conflict_questions) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .detail = .{ .detail = findings[authorized.target.ordinal - 1].value.detail, .question = "Which behavior is intended? State the action and date to display." } });
                 if (options.support_fault) |fault| switch (fault) {
-                    .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
+                    .obligation_evidence_recover, .obligation_evidence_exhaust, .obligation_evidence_alternating => {
                         var replacement = authorized.operation.replace;
                         if (replacement != .detail) return error.InvalidFixture;
-                        replacement.detail.question = "What duration applies? State the duration and starting event.";
+                        replacement.detail.missing_obligation = repaired_obligation;
                         return sourceRepairWire(allocator, inputs, context, authorized, replacement);
                     },
-                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
+                    .obligation_recover, .obligation_exhaust, .obligation_native_exhaust, .obligation_mixed_exhaust => {
                         var replacement: repair.Replacement = .{ .detail = .{
-                            .detail = "The source establishes the action; its duration is unspecified.",
-                            .question = "What duration applies? State the duration and starting event.",
+                            .detail = "The candidate omits the source-required duration.",
+                            .missing_obligation = repaired_obligation,
                         } };
                         switch (fault) {
-                            .question_recover => if (options.attempt == 1) {
-                                replacement.detail.question = null;
+                            .obligation_recover => if (options.attempt == 1) {
+                                replacement.detail.missing_obligation = null;
                             },
-                            .question_exhaust => replacement.detail.question = null,
-                            .question_native_exhaust => if (options.support_merges == 0) {
+                            .obligation_exhaust => replacement.detail.missing_obligation = null,
+                            .obligation_native_exhaust => if (options.support_merges == 0) {
                                 replacement.detail.detail = " ";
                             } else {
-                                replacement.detail.question = "Invalid scalar\x01";
+                                replacement.detail.missing_obligation = "Invalid scalar\x01";
                             },
-                            .question_mixed_exhaust => replacement.detail.question = if (options.attempt == 1) null else "Invalid scalar\x01",
+                            .obligation_mixed_exhaust => replacement.detail.missing_obligation = if (options.attempt == 1) null else "Invalid scalar\x01",
                             else => unreachable,
                         }
                         return sourceRepairWire(allocator, inputs, context, authorized, replacement);
@@ -738,6 +751,12 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     finding.value.source_ids = if (options.attempt == 1) &.{.{ .ordinal = 999999 }} else &.{context.inputs.corpus.sources[0].id};
                 } else if (requirement.seed.id.unit == .token) {
                     finding.value.source_ids = if (options.attempt == 1) &.{.{ .ordinal = 999999 }} else &.{context.inputs.corpus.sources[0].id};
+                } else if (@import("../domain/required_authority.zig").assessmentPolicy(inputs.projection) == .advisory) {
+                    // Post-generation advice offers no source gap (ADR 0023, D10.2).
+                    finding.value.kind = .candidate_invalid;
+                    finding.value.question = null;
+                    finding.value.provenance.claim_ids = &.{};
+                    finding.value.detail = "The candidate states a requirement the source does not.";
                 } else {
                     finding.value.kind = .unsupported;
                     finding.value.question = "Which renewal rule should apply? Specify the duration and starting event.";
@@ -753,28 +772,33 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         findings[0].value.detail = "No missing user decision was established; interpretation remains inconclusive.";
                         findings[0].value.question = null;
                     },
-                    .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
+                    .obligation_evidence_recover, .obligation_evidence_exhaust, .obligation_evidence_alternating => {
                         for (findings[0..4]) |*finding| {
-                            finding.value.kind = .unsupported;
-                            finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = "Invalid scalar\x01";
+                            finding.value.kind = .candidate_omission;
+                            finding.value.detail = "The candidate omits the source-required duration.";
+                            finding.value.missing_obligation = "Invalid scalar\x01";
+                            finding.value.question = null;
+                            finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                         }
                         for (ledger.requirements, findings) |requirement, *finding| if (requirement.seed.id.kind == .entity_applicability) {
                             if (inputs.specification == null) finding.value.kind = .not_applicable;
-                            finding.value.source_ids = if (options.attempt == 1 or fault == .question_evidence_exhaust or fault == .question_evidence_alternating) &.{.{ .ordinal = if (fault == .question_evidence_alternating) 999999 + options.attempt else 999999 }} else &.{context.inputs.corpus.sources[0].id};
+                            finding.value.source_ids = if (options.attempt == 1 or fault == .obligation_evidence_exhaust or fault == .obligation_evidence_alternating) &.{.{ .ordinal = if (fault == .obligation_evidence_alternating) 999999 + options.attempt else 999999 }} else &.{context.inputs.corpus.sources[0].id};
                         };
                     },
-                    .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
+                    .obligation_recover, .obligation_exhaust, .obligation_native_exhaust, .obligation_mixed_exhaust => {
                         for (findings[0..2]) |*finding| {
-                            finding.value.kind = .unsupported;
-                            finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = "Invalid scalar\x01";
+                            finding.value.kind = .candidate_omission;
+                            finding.value.detail = "The candidate omits the source-required duration.";
+                            finding.value.missing_obligation = "Invalid scalar\x01";
+                            finding.value.question = null;
+                            finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                         }
                     },
                     .missing_detail => {
-                        findings[0].value.kind = .ambiguous;
-                        findings[0].value.question = "Which renewal deadline applies? Supply a duration and starting event.";
-                        findings[0].value.detail = if (options.attempt == 1) "" else "The source leaves the renewal deadline unspecified.";
+                        findings[0].value.kind = .candidate_invalid;
+                        findings[0].value.question = null;
+                        findings[0].value.source_ids = &.{context.inputs.corpus.sources[0].id};
+                        findings[0].value.detail = if (options.attempt == 1) "" else "The candidate states a renewal deadline the source does not.";
                     },
                     .foreign_source_single => if (options.attempt == 1) {
                         findings[0].value.source_ids = &.{.{ .ordinal = 999999 }};
@@ -803,16 +827,23 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         finding.value.detail = "The source requires calculated output, with no business records needed for that behavior.";
                     },
                     .entities => {},
-                    .missing_decision, .missing_text => {
+                    .missing_decision => {
                         finding.value.kind = .ambiguous;
                         finding.value.detail = applicability_detail;
-                        finding.value.question = if (mode == .missing_text) "Invalid scalar\x01" else applicability_question;
+                        finding.value.question = applicability_question;
                     },
                     .inconclusive => {
                         finding.value.kind = .inconclusive;
                         finding.value.detail = "The review could not establish applicability from the source; no missing user decision was identified.";
                         finding.value.question = null;
                     },
+                }
+                // Post-generation advice offers no source gap or inconclusive
+                // verdict (ADR 0023, D10.2); the scripted doubt about the
+                // candidate's applicability takes the offered contradiction.
+                if (@import("../domain/required_authority.zig").assessmentPolicy(inputs.projection) == .advisory and !@import("../domain/specification_support_evidence.zig").advisoryPermits(finding.value.kind.finding())) {
+                    finding.value.kind = .candidate_invalid;
+                    finding.value.question = null;
                 }
             };
             const model = @import("../domain/specification_support_model.zig");
@@ -826,14 +857,22 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 for (assigned, batch) |requirement, *finding| {
                     const ordinal = std.math.cast(u32, requirement.object.get("ordinal").?.integer) orelse return error.InvalidFixture;
                     const index = ordinal - 1;
-                    finding.* = .{ .requirement_ordinal = ordinal, .value = try @import("../domain/model_candidate_json.zig").decode(model.Value, allocator, try model.encode(allocator, findings[index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[index].seed.id))) };
+                    finding.* = .{ .requirement_ordinal = ordinal, .value = try @import("../domain/model_candidate_json.zig").decode(model.Value, allocator, try scriptedWire(allocator, findings[index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[index].seed.id))) };
                 }
                 return @import("../domain/model_candidate_json.zig").encode(model.Batch, allocator, .{ .findings = batch });
             }
-            return model.encode(allocator, findings[selected_index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[selected_index].seed.id));
+            return scriptedWire(allocator, findings[selected_index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[selected_index].seed.id));
         },
         else => return error.InvalidFixture,
     }
+}
+/// A scripted omission may carry a natively invalid obligation, which the
+/// shared fixture projection refuses; native admission must reject it instead.
+fn scriptedWire(allocator: std.mem.Allocator, value: @import("../domain/specification_support_model.zig").Canonical, required: @import("../domain/specification_support_evidence.zig").Requirements) ![]const u8 {
+    const model = @import("../domain/specification_support_model.zig");
+    if (value.kind == .candidate_omission and value.missing_obligation != null and !@import("../domain/specification_support_evidence.zig").validObligation(.candidate_omission, value.missing_obligation))
+        return @import("../domain/model_candidate_json.zig").encode(model.Value, allocator, .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail, .missing_obligation = value.missing_obligation.? } });
+    return model.encode(allocator, value, required);
 }
 fn encodePrincipleAssignment(allocator: std.mem.Allocator, packet: *const @import("../domain/model_input_packet.zig").Packet, findings: []const @import("../domain/specification_support.zig").Contract(.principles).Finding) ![]const u8 {
     const policy = @import("../domain/specification_support.zig").Contract(.principles);

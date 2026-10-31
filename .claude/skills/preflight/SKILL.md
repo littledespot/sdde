@@ -22,7 +22,7 @@ skill.
    type, validator or normalizer, action or runner, and YAML operation entry. List its
    producers, consumers, transitions, repair and recovery paths, and sibling
    implementations. State the general violated invariant, not only the symptom.
-4. **Check known work.** Read [known-work.md](../../known-work.md). Note any item
+4. **Check known work.** Read the open work in [fixes/FIX06.md](../../../fixes/FIX06.md). Note any item
    that already covers this failure class, with its status and approval. Apply
    AGENTS.md's evidence rules to any contract change.
 5. **Report** under the AGENTS.md "Before editing" headings:

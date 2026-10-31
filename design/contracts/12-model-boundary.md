@@ -109,7 +109,10 @@ Each generation request contains only what the current unit needs:
   compiled schema. The existing schema owner derives a narrower
   view; it never adds fields, values or semantic decisions. A source-review
   assignment excludes each positive verdict to which no claim set can be bound for
-  its subjects ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#unresolvable-positive-verdicts-at-response-admission-20-october-2026)). Initial reference/specification
+  its subjects ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#unresolvable-positive-verdicts-at-response-admission-20-october-2026)).
+  Every post-generation source-review packet, assignment, insert or correction, also
+  excludes each verdict advisory policy does not offer
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)). Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
   Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   all model-response wire contracts and schemas omit `exact_copy`. The model types required
@@ -776,7 +779,12 @@ So do missing, repeated or foreign assignment members: the packet's `exact_membe
 ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
 So does a positive verdict the assignment withholds because no claim set can be
-bound to it: it rejects as `unknown_variant`. So does a principle verdict that requires
+bound to it: it rejects as `unknown_variant`. So does a verdict post-generation advice
+does not offer: every advisory assignment, insert and correction packet withholds
+`ambiguous`, `conflicting`, `unsupported` and `inconclusive` (the `advisoryPermits`
+owner) and `not_applicable` (native applicability, which never permits it after
+generation), and the restriction leaves `authority_gap` null-only
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)). So does a principle verdict that requires
 citations but has none: the packet's required-items constraint, derived from the
 domain rule, rejects it as `missing_required_item` at the citations array
 ([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)). The
@@ -1188,7 +1196,8 @@ and actionable question. Native admission validates both evidence selections
 against the same current subject; neither part supplies authority for the other.
 The top-level finding carries no question, `missing_obligation`, localized loss
 or preservation comparison. A contradiction that removes original meaning still
-uses `candidate_omission`. Per-source preservation permits only a null gap;
+uses `candidate_omission`. Per-source preservation and post-generation advice
+permit only a null gap ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026));
 principle review retains its separate finding vocabulary.
 
 The shared authority owner retains an `invalid_content` candidate defect without

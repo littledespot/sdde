@@ -144,5 +144,6 @@ complete workflow runs after this bounded comparison.
 
 This single-model pilot also does not exercise downstream behavior with source
 preservation enabled versus disabled. That comparison and broader cross-model
-acceptance remain open in
-[FIX06](../../../fixes/FIX06.md#summary-hierarchy-and-cross-model-variation); diagnostic success cannot close them.
+acceptance were closed as record only on 31 October 2026 (`fixes/Z_FIX06.md` "Summary
+hierarchy and cross-model variation", git `194e29a`); cross-model work is FIX06 H5.
+Diagnostic success did not establish them.

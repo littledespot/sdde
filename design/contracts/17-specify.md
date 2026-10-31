@@ -193,6 +193,10 @@ Typed content covers these concerns; each concern does not require a separate ca
   authority currentness, citation/selection validity and publication gates remain
   independently mandatory. A genuinely unresolved required decision uses the
   existing native clarification owner; model uncertainty alone establishes none.
+- Post-generation source advice offers only `supported`, `candidate_omission` and
+  `candidate_invalid` without an authority gap; source-decision-gap and inconclusive
+  findings are required-review verdicts
+  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)).
 - Source findings keep their closed evidence contract, including a nonblank
   `missing_obligation` for `candidate_omission`, distinct from its explanation.
   Source selection and field purpose bind the observation without proving its

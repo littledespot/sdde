@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B7:
+  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B7:
   - "YES" to source-quoted claim wording;
   - "apply the best option" for one claim per source requirement, recorded as a native
     list-item split and later withdrawn (Decision 3);

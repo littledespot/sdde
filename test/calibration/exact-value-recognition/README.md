@@ -1,7 +1,7 @@
 # Exact-value recognition evidence and approved B3 cutover
 
 This directory retains the historical offline prototype and policy comparisons
-for [FIX05 B3](../../../fixes/Z_FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
+for FIX05 B3 (`fixes/Z_FIX05.md` B3, git `194e29a`)
 (former FIX04 §1.1 item 1). The tools make no model calls; their captured
 observations remain diagnostic evidence under their original policies.
 
@@ -230,7 +230,7 @@ The executable has no dispatch mode or credential lookup. Its report is a
 diagnostic projection, never production occurrence, lineage or coverage authority.
 Output creation is exclusive; choose a fresh filename for another scan. The
 completed scan and its SHA-256, denominators, unavailable evidence and open
-representation questions are recorded in [Z_FIX02 §5.4.6](../../../fixes/Z_FIX02.md#546-offline-native-exact-value-recognition-prototype).
+representation questions are recorded in `fixes/Z_FIX02.md` §5.4.6 (git `194e29a`).
 The report inventories 3,743 physical rows and measures 454 fields, with mirrors
 and unsupported archive placeholders explicitly retained. It does not qualify
 production completion or live effects.

@@ -32,6 +32,12 @@
   FIX05 route 4 as a typed response-admission defect rather than a terminal one. It
   amends §12.2, §12.7, §17.3 and §22.6. No contract version changes. See "Unresolvable
   positive verdicts at response admission".
+- **Advisory verdict-set amendment (D10.2, 31 October 2026):** by the user's decision
+  "implement Q10b with the recommendations" ([FIX06](../../fixes/FIX06.md) Q10b).
+  Post-generation source advice offers only `supported`, `candidate_omission` and
+  `candidate_invalid` with a null `authority_gap`. It amends §12.2, §12.7, §12.9
+  ("Source invalid-content finding"), §17.3, §22.6 and §24, and advances
+  `specification-state` to v20. See "Advisory verdict set".
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
   yet implemented). The advisory `more` and `blocked` request outcomes come from one
   `request-model` step; their closure is an engine-run stage instead of a separate
@@ -139,9 +145,9 @@ runaway re-send.
 The native `assessment_incomplete` outcome identifies the exact missing current
 assignment suffix, reason, revision, authorities and producing origin when a call
 was sent. Complete admitted assignment prefixes remain intact, including adverse
-or inconclusive findings. An incomplete assignment is discarded atomically;
+findings. An incomplete assignment is discarded atomically;
 no absent finding becomes positive evidence or `assessment_complete`.
-Stored state (`specification-state/v19`) reconstructs these bindings and permits
+Stored state (`specification-state/v20`) reconstructs these bindings and permits
 sparse findings only with this explicit native stop. Native requiredness, exact
 coverage, currentness and publication checks still run independently.
 
@@ -273,9 +279,9 @@ on one call per record.
   subject. Whether a verdict resolves is uniform within an assignment: a record
   always binds its own provenance, and every other unit has one collection, field
   or reference rule. The assignment packet withholds each unresolvable positive
-  verdict, alongside the `not_applicable` that applicability already excludes. It
-  does so through the existing excluded-variant restriction, and omits that
-  verdict's guidance rule. A packet whose members disagree is refused as an
+  verdict, alongside `not_applicable` and the verdicts advisory policy does not
+  offer (see "Advisory verdict set"). It does so through the existing
+  excluded-variant restriction, and omits that verdict's guidance rule. A packet whose members disagree is refused as an
   authority failure before invocation.
 - **Correction and exhaustion:** response admission rejects a withheld verdict as
   `unknown_variant`, which takes the same bounded protocol correction as a
@@ -290,6 +296,56 @@ on one call per record.
     pre-authoring feature subjects bind original sources, and its reference and
     preservation subjects bind exact claim sets, so each of their verdicts
     resolves.
+
+### Advisory verdict set (D10.2, 31 October 2026)
+
+- **Decision:** post-generation source advice offers `supported`,
+  `candidate_omission` and `candidate_invalid`, and `candidate_invalid` carries a null
+  `authority_gap`. The source-decision-gap verdicts (`unsupported`, `ambiguous`,
+  `conflicting`) and `inconclusive` belong to required pre-generation review. After
+  generation they never repaired content or created a clarification, and in the
+  measured runs they were rarely used and never right (FIX06 Q10b). No advisory request
+  carries a `question`. Findings keep their original type within the reduced set.
+- **Typed owner:** `advisoryPermits` in
+  `src/domain/specification_support_evidence.zig` states the offered findings with
+  an exhaustive switch. Request restriction and native admission both consume it.
+  It judges findings, so it doesn't own `not_applicable`, a decision that maps to
+  `supported`. The native applicability owner withholds `not_applicable` after
+  generation, as it already did (`permitsNotApplicable`; admission rejects it as
+  `invalid_decision`).
+- **Mechanism:** the existing withheld set adds every finding advisory policy does
+  not offer, beside the `not_applicable` that applicability withholds. The same excluded-variant restriction and guidance-rule removal now
+  apply to every advisory packet: each assignment, and each single insert and
+  correction packet. The restriction recurses, so it also collapses the nested
+  `nullable_authority_gap` to null. From the offered set each packet derives:
+  - its excluded variants;
+  - the `evidence_rules` entries it presents, dropping a rule (for example `negative`)
+    whose verdicts are all withheld;
+  - the integer choices and prose paths it binds. No `authority_gap.*` or
+    `question` path is bound unless an offered verdict carries it.
+- **Correction and exhaustion:** unchanged from "Unresolvable positive verdicts at
+  response admission". A withheld verdict, or a non-null gap, fails response
+  admission and takes the bounded protocol correction. Exhaustion ends that
+  assignment's advice as incomplete (`protocol_exhausted`) and publishes it under
+  ADR 0040.
+- **Native admission:** under advisory policy, native admission rejects a verdict
+  outside the offered set, or a non-null `authority_gap`, as an invalid finding. It
+  is the authority behind admission and governs stored readback.
+- **Repair:** detail and selection corrections of an advisory `candidate_invalid` use
+  the plain `detail` and `selection` definitions, because no offered verdict carries a
+  gap. The choice derives from the retained verdict and the offered set, not from a
+  definition name. For the same reason the correction presents no authority-gap
+  guidance entry, and its question entry is the one for findings without a question.
+  An advisory finding can no longer reach the question-composition
+  or gap-presence paths that block a run.
+- **State:** `specification-state/v20`. A stored advisory finding outside the offered
+  set is inadmissible; earlier versions reject without migration.
+- **Unchanged:**
+  - required review (readiness, preservation and loss) requests, schemas and routing
+    are byte-identical, and `support.schema.json` and `support.prompt.md` are
+    unchanged;
+  - whole-unit assignments, record families and the rule against batching (above);
+  - principle review (ADR 0042).
 
 ## Post-generation upstream findings and source repair
 
@@ -363,7 +419,7 @@ loader. Model selection and the live-test cost policy are unchanged.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v19`; earlier
+Completed and clarification-pending state use `specification-state/v20`; earlier
 contracts reject without migration or a compatibility reader. Stored validation
 recomputes native policy, authority currentness, complete assignment membership
 or the exact missing suffix authorized by native incomplete-advice evidence,
@@ -371,4 +427,4 @@ assessment bindings, provenance and coverage. It rejects forged deterministic
 method tags, forged advisory bindings, semantic-success outcomes and stale candidates.
 Execution-local receipts and their origins remain separate from persisted
 workflow authority; a fresh invocation starts at `start`. Implementation and live
-evidence are recorded in [Z_FIX05](../../fixes/Z_FIX05.md) and [FIX06](../../fixes/FIX06.md).
+evidence are recorded in `fixes/Z_FIX05.md` (git `194e29a`) and [FIX06](../../fixes/FIX06.md).

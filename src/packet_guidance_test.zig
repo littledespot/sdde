@@ -247,7 +247,9 @@ test "review scopes and evidence instructions place their workflow entries" {
         .candidate_invalid = .retained_gap,
         .inconclusive = .omitted,
     });
-    for (std.enums.values(authority.Finding)) |finding| try std.testing.expectEqual(rules.get(finding), evidence.questionRule(finding));
+    for (std.enums.values(authority.Finding)) |finding| try std.testing.expectEqual(rules.get(finding), evidence.questionRule(finding, true));
+    // An advisory contradiction is offered no gap, so its correction omits any question.
+    try std.testing.expectEqual(.omitted, evidence.questionRule(.candidate_invalid, false));
 }
 
 test "capture publishes its bound compiled guidance as owned run data and rejects other bindings" {

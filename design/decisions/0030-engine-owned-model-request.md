@@ -9,7 +9,7 @@
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
-  decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A1 after a review of the pros and cons of keeping
+  decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A1 after a review of the pros and cons of keeping
   the 16-step `model-request-body` subgraph. The user's stated goal is simpler workflow
   YAML.
 - **Amendment authority:** On 23 October 2026 the user asked for "the best possible

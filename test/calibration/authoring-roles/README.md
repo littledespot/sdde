@@ -77,7 +77,7 @@ errors and need independent semantic review.
 The completed guidance-only routing comparison used 48 calls and 65,228 tokens.
 Its candidate increased required-role omissions from 27/124 to 37/124 despite
 reducing unsupported selections. Production guidance was retained. The
-[selection record](../../../fixes/Z_FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
+selection record (`fixes/Z_FIX01.md` §9.7, git `194e29a`)
 retains all reports; that allowance is consumed. These known cases are regression
 evidence for the new contract, not a fresh blind confirmation. Broader/new-family,
 collective-support and post-repair calibration still need reviewed premises.
@@ -186,7 +186,7 @@ new bounded approval. The pinned current executable and its asset hashes are
 retained in `zig-out/role-contract-comparison/implementation.json`, with frozen
 request pairs in `manifest.json` and aggregate actual outcomes in `results.json`.
 
-The [results](../../../fixes/Z_FIX01.md#99-complete-role-decision-implementation--9-october-2026)
+The results (`fixes/Z_FIX01.md` §9.9, git `194e29a`)
 show wrong-basis pairs falling from 39 to 0 and captured-input improvement, but
 observed omissions rising from 35/124 to 38/117 admitted required roles, with seven
 unscored premises and two missing-final-text answers. Explicit false unsupported

@@ -1,7 +1,10 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
 - **Status:** Accepted, on hold (30 October 2026): E0 stopped by user decision ("stop E0")
-  during implementation; nothing is implemented.
+  during implementation; nothing is implemented. It named `specification-state/v20`
+  for its state; [ADR 0023](0023-advisory-post-generation-review.md)'s advisory
+  verdict-set amendment (D10.2) took v20 on 31 October 2026, so when this ADR resumes
+  it takes the next version.
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decision on 26 October 2026. Asked whether a
   required step that fails should also publish what it has, marked incomplete (for
@@ -35,7 +38,8 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v20`), §27 and F0002 (the `run.incomplete_published`
+    §24 (the next `specification-state` version; v20 was taken by ADR 0023's 31
+    October 2026 amendment), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, diagram 09, the [E2E harness](../harness/e2e.md) and
     the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1

@@ -374,14 +374,25 @@ fn advisoryMechanicalProbe(a: std.mem.Allocator, id: []const u8, prepared: share
     try std.testing.expect(finding.loss == .unlocalized and finding.preservation == null);
     const controls = [_]model.Value{
         .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK grounded control." } },
-        .{ .unsupported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK purported missing choice remains advice.", .question = "MOCK Which event permits release?" } },
-        .{ .inconclusive = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK unresolved semantic assessment." } },
+        .{ .candidate_invalid = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK purported contradiction remains advice.", .authority_gap = null } },
     };
     for (controls) |control| {
         const bytes = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = control });
         const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, bytes, null);
         try std.testing.expect(result != .rejected);
         try std.testing.expect(candidateOf(result).?.pending_localization == null);
+    }
+    // Post-generation advice offers no source gap or inconclusive verdict
+    // (ADR 0023, D10.2); native admission refuses each one.
+    const withheld = [_]model.Value{
+        .{ .unsupported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK purported missing choice.", .question = "MOCK Which event permits release?" } },
+        .{ .inconclusive = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK unresolved semantic assessment." } },
+    };
+    for (withheld) |control| {
+        const bytes = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = control });
+        const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, bytes, null);
+        try std.testing.expect(result == .rejected);
+        try std.testing.expectEqual(.invalid_decision, result.rejected.rejection.selected().?.issue);
     }
     const foreign = try shared.reviewResponse(a, prepared, packet, .{ .target = target, .value = .{ .candidate_omission = .{ .source_ids = &.{.{ .ordinal = 999 }}, .detail = "MOCK foreign source.", .missing_obligation = obligation } } });
     try std.testing.expect((try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, prior, packet, foreign, null)) == .rejected);

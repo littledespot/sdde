@@ -163,6 +163,13 @@ A small non-semantic documentation fix needs none of this.
 - Delete superseded code, flags, schemas, tests, fixtures and docs in the same
   change. No compatibility shims, aliases, migrations, dual readers or writers,
   deprecated entry points or fallbacks.
+- Write or update a document only if an LLM uses it: a model-facing workflow asset
+  the engine sends, or the one governing record (an ADR or contract clause) a coding
+  agent reads as authority. State each fact once, in its owner; add no summary,
+  index entry, changelog, status narrative or traceability that only documents.
+  Extend an existing file; create one only when no existing file can hold it.
+  Delete closed work and superseded evidence; git history keeps it. Fix records follow
+  [fixes/README.md](fixes/README.md).
 
 ## Anti-overfitting rule
 
@@ -194,6 +201,11 @@ A small non-semantic documentation fix needs none of this.
   ([ADR 0014](design/decisions/0014-universal-response-format-guidance.md)) and
   [ADR 0039](design/decisions/0039-configured-temperatures-and-runaway-resend.md)'s
   single runaway re-send; report runaways, re-sends and normalizations separately.
+- The goal is better published output. Every engine change names the published-output
+  defect class it should reduce, and its live runs are judged by scoring the
+  published specifications against the case rubrics and comparing them with the
+  previous build. Cost is reported, never the reason for a change: no cost-only
+  change without that output-quality assessment.
 - Decide a rule, prompt or contract change on both development cases, hello-world
   and loan-renewal, with repeated runs on one committed build; a single run never
   decides it. Never tune on the sixteen reserved qualification features
@@ -325,7 +337,7 @@ The outcome and acceptance criteria are met; invariants hold; regression and
 negative tests exist at the owning boundary; targeted and full checks pass; the
 whole diff is reviewed for scope creep, duplicated policy, fallbacks, bypasses and
 weakened validation; packaging and generated artifacts are checked when affected;
-docs, ADRs and traceability follow contract changes. The final report names changed
+the governing ADR or contract follows a contract change. The final report names changed
 contracts and files, tests, exact commands and results, open uncertainty and
 approved deviations.
 

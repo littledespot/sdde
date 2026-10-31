@@ -635,7 +635,11 @@ child-object descriptors only.
   Native finding-evidence validation and repair exhaustion remain terminal. A
   positive verdict that no claim set can bind is withheld at response admission
   and corrected as a malformed response, not a finding-evidence defect (ADR 0023,
-  20 October 2026).
+  20 October 2026). So is a verdict post-generation advice does not offer (ADR
+  0023, D10.2, 31 October 2026). Advisory corrections preserve the verdict; an
+  advisory `candidate_invalid` is corrected through the plain `detail` and
+  `selection` definitions, without a gap, while other verdicts keep their shapes
+  (for example `omission_detail`).
 - Request IDs cannot reset either authority.
 - A runaway is not a malformed response. A provider `output_limit` stop gets no
   correction: its partial text is discarded and the identical request is re-sent once at
