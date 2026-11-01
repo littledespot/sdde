@@ -37,7 +37,6 @@ pub const Projection = struct {
     exact_scope: Member("exact_scope"),
     members: Member("members"),
     coverages: Member("coverages"),
-    required_items: Member("required_items"),
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("../domain/strict_json.zig").Error!Projection {
         return @import("../domain/strict_json.zig").decode(Projection, a, bytes, .{ .maximum_depth = 64 });

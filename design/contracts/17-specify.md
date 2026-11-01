@@ -58,8 +58,7 @@ arguments of the generic workflow engine.
    Reference changes follow normal reconciliation and downstream invalidation;
    they never change the feature directory or mint a second feature.
 6. Build and validate reference authority, the reference-grounded feature brief,
-   specification units, the principle assessment in §17.3.1 and complete rendered/state
-   candidates. Keep candidates private to the execution. Missing business authority
+   specification units and complete rendered/state candidates. Keep candidates private to the execution. Missing business authority
    creates a clarification and a validated incomplete `spec.md` under
    [ADR 0017](../decisions/0017-incomplete-specification-publication.md). It never
    creates completed specification authority from unresolved content.
@@ -89,7 +88,6 @@ The LLM performs these semantic activities:
 2. one reference-grounded feature brief containing the human title, description, and primary goal;
 3. specification content generation from original sources, the validated brief and
    currently retained claim selections.
-4. focused requirement–principle consistency assessment under §17.3.1.
 
 Typed content covers these concerns; each concern does not require a separate call:
 
@@ -128,80 +126,39 @@ Typed content covers these concerns; each concern does not require a separate ca
   passive ID. Native recognition admits exact values in prose under ADR 0020. Ordinary
   prose punctuation is not a reference.
 - A valid display reference proves neither business meaning nor source preservation.
-  Existing source review must distinguish a path-valued requirement from a filename
-  substituted for the behavior described in that file. After generation the
-  judgment remains advice; independent native defects retain their typed routes.
-- **Post-generation assessment:**
-  [ADR 0023](../decisions/0023-advisory-post-generation-review.md) governs source
-  and principle review. Source review assesses one whole canonical unit, record
-  family or complete collection per call: the brief, story, entity applicability,
-  all fields/relationship members of every record of one kind (a record family,
-  each member carrying its own record), or an independently assigned
-  collection/reference subject. A family stops atomically under one
-  protocol-correction allowance; narrow finding correction keeps its per-target
-  allowance. Principle review assesses the complete generated
-  requirement set together, carrying the selected principle corpus once. Native
-  ownership defines each complete member set; a model cannot choose a subset.
-  Each closed assignment response contains exactly one finding per assigned
-  requirement. Missing, duplicate, foreign or partial membership rejects at
-  response admission, before any member is appended. The existing bounded protocol
-  correction resubmits the complete assignment. Assignments exist only under
-  advisory policy, so on exhaustion that assignment's advice closes as incomplete
-  (ADR 0023, 18 October 2026). An assignment also withholds any positive verdict
-  to which no claim set can be bound, such as `supported` for a coverage subject
-  whose collection has no records; one in a response rejects at admission in the
-  same way (ADR 0023, 20 October 2026). Canonical ledger order, per-member evidence, origins,
-  current candidate revision and full assignment context remain bound. Initial
-  admission cannot fall back to a singleton response for a required batch.
-  Narrow finding correction preserves the verdict and every sibling.
-  Retention must compare the complete current assignment and dependencies;
-  reuse creates neither a new call nor semantic proof.
-  All inference, including post-generation review and correction, counts once
-  against the single configured workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
+  Whether a path-valued requirement or a filename substituted for the behavior
+  described in that file belongs in the requirement is judged by the human who
+  reviews and edits the published `spec.md`; independent native defects retain their
+  typed routes.
+- **No post-generation review:**
+  [ADR 0023](../decisions/0023-advisory-post-generation-review.md) removes source and
+  principle review after generation. The meaning of generated content (support of
+  each field, business/technical placement, scenario-coverage meaning) rests on the
+  human who reviews and edits the published `spec.md`, which is the source of Plan
+  and Tasks, and on H1 adjudication for E2E acceptance. No native check replaces
+  that judgment. Native requiredness, provenance, exact coverage, authority
+  currentness, citation/selection validity and publication gates remain mandatory.
+  A genuinely unresolved required decision uses the existing native clarification
+  owner.
+  All inference, including correction, counts once against the single configured
+  workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
-  with `WorkflowTokenBudgetExceeded`, including during advice; it cannot become
-  incomplete advice or a completed specification. Today it publishes nothing.
-  Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
-  (accepted, on hold since 30 October 2026; not implemented), it would publish a
-  failed incomplete specification of the validated content. A provider `output_limit` stop is first re-sent once
-  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A
-  runaway on the re-send, other eligible provider stops, exhausted protocol correction
-  or genuinely missing usage may record `assessment_incomplete`, with the exact
-  unassessed member set and native stop evidence. Only a fully admitted assignment contributes
-  findings. This is no assessment success or semantic support, and it cannot fail an
-  otherwise valid workflow. Native defects, invalid trusted associations, cancellation, deadlines
-  and security/logging/operational failures retain their ordinary blocking routes.
-  Inspectable retained findings and the incomplete status are published together
-  with the same current candidate binding; stale or forged stop evidence rejects.
-  Under [ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md),
-  `spec.md` carries a review-status line, `reference-context.md` lists each incomplete
-  review's reason and unassessed subjects, for source and principle review, and each
-  incomplete review is logged as a warning `review.incomplete`.
+  with `WorkflowTokenBudgetExceeded`; it cannot become a completed specification.
+  Today it publishes nothing. Under
+  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+  since 30 October 2026; not implemented), it would publish a failed incomplete
+  specification of the validated content.
 - Registered source-readiness and preservation projections require native
   pre-generation phase facts. Generation sessions cannot be treated as readiness
   merely because no brief has been produced yet. Late required-review projection
-  attempts reject; complete generated content selects the advisory projection.
-  Generation initialization requires the canonical required-authority projection
-  set to be retired and no active native repair permit, preventing earlier
-  required review or dependent repair validation from surviving into generation.
-- Every admitted post-generation semantic finding retains its original type,
-  explanation, selected evidence, subject and origin as advice. Native
-  `assessment_complete` records complete current assessment without declaring
-  the content supported. A model's positive or negative finding cannot create,
-  discharge or repair a native defect, create a mandatory Plan obligation, or
-  manufacture a clarification. Native requiredness, provenance, exact coverage,
-  authority currentness, citation/selection validity and publication gates remain
-  independently mandatory. A genuinely unresolved required decision uses the
-  existing native clarification owner; model uncertainty alone establishes none.
-- Post-generation source advice offers only `supported`, `candidate_omission` and
-  `candidate_invalid` without an authority gap; source-decision-gap and inconclusive
-  findings are required-review verdicts
-  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)).
+  attempts reject. Generation initialization requires the canonical
+  required-authority projection set to be retired and no active native repair
+  permit, preventing earlier required review or dependent repair validation from
+  surviving into generation.
 - Source findings keep their closed evidence contract, including a nonblank
   `missing_obligation` for `candidate_omission`, distinct from its explanation.
   Source selection and field purpose bind the observation without proving its
-  meaning. Collection review assesses complete selected-member coverage; record
-  fields may jointly express conditions and results. Original sources establish
+  meaning. Original sources establish
   obligations, while claims/groups remain derived evidence. Exact/passive
   references resolve through the canonical projector, not from display equality.
 - Pre-generation source-readiness and optional preservation review retain their
@@ -213,11 +170,8 @@ Typed content covers these concerns; each concern does not require a separate ca
   nonempty original source IDs and empty canonical claims/citations/clarification
   selections, under the approved §12 rule. It retains model-assisted source
   authority without creating a candidate binding or authored association.
-  Post-generation advice triggers no paid localization/comparison or automatic
-  omission repair. An upstream finding retains its producer/evidence in a typed
-  outcome or an independently justified clarification; it never restarts
-  extraction, reconciliation and generation. Independently detected native
-  generation/coverage defects retain their authorized repair or blocked outcome.
+  Independently detected native generation/coverage defects retain their authorized
+  repair or blocked outcome.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
@@ -255,7 +209,7 @@ iteration contract in §6 fixes the population at three narrative assignments pl
 the native record-authoring group count and advances once per admitted assignment, even
 for an empty record array. It grants traversal only for committed progress and
 does not enlarge retry limits. Existing aggregate required families, entity
-membership, claim mapping, exact-token coverage and semantic review still apply.
+membership, claim mapping and exact-token coverage still apply.
 An empty collection contributes no positive coverage.
 All-preserved-token groups have no record batch, but remain in general source
 catalogues and exact evidence. Zero authorable groups returns a typed binding
@@ -336,8 +290,8 @@ For each feature-brief or specification unit, the declared model operation retur
   establishes semantic entailment nor requires an empty batch. It does not assign
   every other duty in the source to that group. Under ADR 0024, only groups whose
   complete membership is preserved tokens are omitted from record scheduling;
-  this adds no context prohibition. Semantic support remains subject to original-source
-  review. Original sources remain available; citation
+  this adds no context prohibition. Semantic support rests on the human review of the
+  published `spec.md`. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
   Exact-value guidance exposes authorized literal/source context through one
   reference-owned projection; immutable native metadata retains occurrence identity
@@ -354,7 +308,8 @@ For each feature-brief or specification unit, the declared model operation retur
   Record kinds remain closed schema variants; an optional family has no dedicated
   call or required filler. Positive requirements cannot satisfy the assumption,
   non-goal or prohibited-behavior purposes merely
-  by having valid citations. Semantic assessment remains with the existing review.
+  by having valid citations. Semantic assessment rests on the human review of the
+  published `spec.md`.
   Per-field validation, atomic repair, request identities and total-token accounting
   retain their existing owners. Request grouping grants no semantic repair authority.
   Original candidate indices/origins survive canonical section-order projection;
@@ -381,16 +336,14 @@ For each feature-brief or specification unit, the declared model operation retur
   extraction/reconciliation, including sources with no claims. Source-only loss
   goes through the shared localization, authorized repair, dependent rebuilding
   and re-review path. The extra check is skipped when disabled or omitted; it
-  never replaces the mandatory review below. Authorized candidate repairs use
+  never replaces the required source-readiness review. Authorized candidate repairs use
   the separate configured `repair` model slot; protocol retries retain their
   original binding.
-- Assemble and validate the generated sections, then build the complete
-  specification-owned requirement ledger and perform source-preservation and
-  principle assessment through the existing review owners. The shared authority
-  gate remains mandatory for rendering, state construction and publication.
-  Explicit regeneration after actual input changes retires prior assessment
-  projections. A review finding cannot initiate upstream rebuilding. Drafts
-  confer no completion or downstream authority.
+- Assemble the generated sections and validate their coverage; rendering, state
+  construction and publication then require only the native checks that already run
+  (generation complete, coverage validated, rendering round trip). No post-generation
+  authority gate or review runs (ADR 0023). Drafts confer no completion or downstream
+  authority.
 - A current required business choice genuinely missing or ambiguous in the source
   produces an `SNN` only after shared [§12.8.1 admission](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
   Uncertain interpretation, missing extraction or an unverified conflict label does
@@ -407,80 +360,11 @@ meaning even when current eligible signals contain only a preserved token. A
 validated conflict label alone cannot justify an `SNN`. Shared clarification
 preparation in §12.7 requires a concrete missing decision. Before generation,
 correcting an unsafe upstream candidate requires an authorized target and complete
-rebuilding. Post-generation semantic findings retain advisory status under
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md).
-Invalid additions use the source-only finding in
+rebuilding. Invalid additions use the source-only finding in
 [§12](12-model-boundary.md#source-invalid-content-finding), so a mixed source gap
 stays visible beside invalid candidate content. Native diagnostics bind the assessed
 subject, purpose, original evidence and permitted correction scope; models never
 select a repair producer or turn candidate assertions into source requirements.
-
-### 17.3.1 Requirement–principle consistency review
-
-Governed by [ADR 0015](../decisions/0015-specification-principle-review.md) as
-amended by [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
-
-After references and applicable validated answers establish business intent, compare
-that intent with the current principle selection from
-[§9.4](09-configuration.md#94-project-principle-resolution). Reassess affected business
-units after source/answer changes, generation or repair; require current complete
-evidence before publication. Reuse the existing semantic-assessment request, admission and authority
-owners with a distinct typed assessment purpose; do not create a second policy
-validator, source loader or summary model. YAML declares the calls and typed exits;
-actions retain one responsibility and the runner owns execution.
-
-Guidance must distinguish the business assignment being assessed from the principle
-chunk and source-line range cited as evidence. Assignment ordinals do not identify
-policy chunks. Source-preservation and principle-consistency instructions stay
-specific to their existing typed purposes; the same shared review orchestration
-and each purpose's guidance serve initial review, insertion and selected repair.
-A policy finding explains the relation between business behavior and a cited policy
-passage. A source-comparison concern alone does not establish a policy conflict,
-and a citation's existence does not prove semantic support.
-
-- Source-preservation review remains independent: it distinguishes missing source
-  authority from extraction/reconciliation loss. Principles are policy evidence,
-  never reference claims, source citations or sufficient positive business support.
-- The assessment receives assigned business units supported by references or current
-  validated answers, plus the exact selected principle spans once, with their existing
-  typed IDs and citations.
-  Native checks establish assignment coverage, citation membership, current source,
-  answer and principle bindings, and closed findings. Compatibility remains
-  model-assisted; a structurally valid no-conflict result is not deterministic proof.
-- A clear business requirement with a model-reported policy conflict remains
-  intact. Retain the cited finding and affected identities as advice under
-  ADR 0023. It alone creates no mandatory Plan obligation or Spec clarification.
-  Do not force a user to restate known intent or create a `PNN` during Specify,
-  before Plan's predecessor and `PlanInputAuthorityState` exist.
-- A genuine business-choice gap uses the existing `SNN` route. Changing or waiving
-  project policy belongs to Plan/project approval. Neither the model nor an ordinary
-  clarification answer may silently amend principles or business requirements.
-- No open Spec clarification may be relabelled a deferred policy obligation. Plan
-  remains prohibited until every Spec clarification is resolved under the existing
-  answer/authority contract; Tasks remains prohibited while any Spec or Plan
-  clarification is open.
-- Completed Spec publication requires current native assessment bindings and
-  all native business/authority checks. Advice may be completely assessed or
-  explicitly `assessment_incomplete` with the exact unassessed set and an
-  admissible native stop. Neither disposition certifies semantic compatibility. Plan validates current project policy and
-  its own required decisions independently; a semantic finding alone cannot
-  choose that requiredness or resolve policy.
-
-Persist the assessment's provenance, exact principle selection/revision and
-advisory findings through the existing canonical evidence/context owners; render
-the cited advice in `reference-context.md`. That view is not authority. Add no
-parallel summary store, copied principle registry or new fixed artifact. Fresh
-readback must recover the same associations. A principle change invalidates the
-dependent assessment; the consuming gate rebuilds it under §24.5 without rewriting
-unchanged business intent. An earlier no-conflict finding cannot certify Plan's
-current policy compliance.
-
-Capturing principle files is not performing the assessment. A source-authority gap
-may pause before policy assessment; the incomplete view is then unassessed, never
-policy-approved. Existing execution evidence/reporting must distinguish captured
-inputs from an executed assessment. Principles cannot repair a false negative in
-source review by becoming business authority. Assess supported intent through the
-existing policy path once its prerequisites hold; retain its cited advice.
 
 ### 17.4 Specification clarification behavior
 
@@ -490,13 +374,13 @@ existing policy path once its prerequisites hold; retain its cited advice.
 - Source review assesses meaning, not whether references already contain separate
   stories, acceptance criteria or requirement headings. Known behavior must not be
   requested again merely to fill those categories. Genuine missing actors, outcomes
-  or choices must be identified precisely. Post-generation omission findings
-  remain advice; independently detected native defects retain their owning path.
+  or choices must be identified precisely. Independently detected native defects
+  retain their owning path.
 - A valid specification need is deduplicated by its engine-built subject tuple.
 - If it is new, the engine allocates the next `S01` through `S99` identity and derives
   `<paths.specs>/<featureId>/clarify/SNN.md`; otherwise it reuses the existing ID and path.
 - It commits the registry/form/workflow pause together in `spec_clarification_pending`.
-- Source, generation, post-generation and residual open-registry pauses all use the
+- Source, generation and residual open-registry pauses all use the
   existing shared incomplete-specification publication path in ADR 0017. A validated
   current reference snapshot is required. The output includes `spec.md`, reference
   context and linked forms, but grants no completed or downstream authority.
@@ -553,17 +437,14 @@ The engine validates:
 - a record maps only the claims it names, not its whole group; an unnamed claim maps only through another target, such as a narrative field that selects its group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
 - no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
 - artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
-- unsupported technical content: existing semantic review assesses whether code, filenames, paths, framework identifiers and implementation details belong in business requirements. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
+- unsupported technical content: whether code, filenames, paths, framework identifiers and implementation details belong in business requirements is judged by the human who reviews and edits the published `spec.md`. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved specification-owned conflicts and blocking open questions;
-- current principle-assessment bindings under §17.3.1, either complete findings
-  or a validated incomplete-advice disposition; policy findings cannot erase
-  source requirements or create downstream mandatory obligations;
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
 
-There is no technical-leakage lint: it was never built and was removed on 28 October 2026 by user decision, because lexical shape alone is not a semantic rejection. The semantic-review action decides these cases and labels them model-assisted.
+There is no technical-leakage lint: it was never built and was removed on 28 October 2026 by user decision, because lexical shape alone is not a semantic rejection. The human who reviews and edits the published `spec.md` decides these cases; no native check replaces that judgment (ADR 0023).
 
 ### 17.6 Rendering and commit
 
@@ -591,14 +472,11 @@ the compact form owned by
   omitted.
 - Mandatory parents, primary story, acceptance criteria and functional requirements remain
   present; optional empty families and an empty scope parent are omitted.
-- The shared required-authority projection requires supported acceptance criteria, functional
-  requirements and complete scenario coverage.
-- Missing mandatory record families in an assembled candidate force a `missing` gap through that
-  gate; positive model evidence cannot override absence.
-- Scenario coverage remains model-assisted, requiring comparison with source claims/citations,
-  including triggers, outcomes and exact copy.
-- The persisted specification-state validator also enforces the canonical required-family
-  contract.
+- Generation and the persisted specification-state validator enforce the canonical
+  required-family contract; positive model evidence cannot override absence.
+- Native scenario coverage checks links (ADR 0038). Whether a scenario's triggers,
+  outcomes and exact copy match the source is judged by the human who reviews and
+  edits the published `spec.md`.
 - Display omission never proves non-applicability or removes a source obligation.
 
 - The initial acknowledgement state is present even when its `entries` array is empty.
@@ -618,7 +496,6 @@ the compact form owned by
 - the mandatory `reference-context.md` exists and passes;
 - no behavior-changing reference conflict remains unresolved;
 - no specification clarification record remains open;
-- the current §17.3.1 advisory assessment, its native bindings, and required
-  principle authority validate;
+- the captured principle registry and selection validate;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.

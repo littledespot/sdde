@@ -21,10 +21,9 @@ pub const Input = struct {
     original_sources: ?[]const wire.SourceText = null,
     metadata_contract: MetadataContract = .current,
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
-    /// Recorded assignment membership, coverage and required items; the schema bytes cannot express them.
+    /// Recorded assignment membership and coverage; the schema bytes cannot express them.
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
     coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
-    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
 };
 pub const State = enum { measured, no_exact_context, invalid_packet, invalid_model_json, missing_schema, invalid_field_metadata, unsupported_schema, schema_invalid, no_declared_text_fields };
 pub const Binding = enum { assigned_requirements, selected_groups, explicit_provenance, fixed_candidate, missing, invalid };
@@ -202,8 +201,8 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         return result;
     };
     var compiler: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    // Only current descriptions record membership, coverage and required items; older contracts cannot carry them.
-    if ((input.members.len != 0 or input.coverages.len != 0 or input.required_items.len != 0) and input.metadata_contract != .current) {
+    // Only current descriptions record membership and coverage; older contracts cannot carry them.
+    if ((input.members.len != 0 or input.coverages.len != 0) and input.metadata_contract != .current) {
         result.state = .invalid_field_metadata;
         return result;
     }
@@ -212,8 +211,8 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         result.state = .unsupported_schema;
         return result;
     };
-    // Production admission validates the restricted schema, membership, coverage and required items included.
-    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictRecorded(a, captured, input.members, input.coverages, input.required_items) catch |err| {
+    // Production admission validates the restricted schema, membership and coverage included.
+    const restricted = @import("../../../src/domain/model_result_schema.zig").restrictRecorded(a, captured, input.members, input.coverages) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.state = .invalid_field_metadata;
         return result;

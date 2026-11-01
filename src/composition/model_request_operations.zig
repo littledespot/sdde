@@ -13,9 +13,6 @@ const observation = @import("../application/provider_observation_workflow.zig");
 const envelope = @import("../application/model_envelope_workflow.zig");
 const payload = @import("../application/model_payload_schema_workflow.zig");
 const completion = @import("../application/provider_operation_completion_workflow.zig");
-const advisory_completion = @import("../application/advisory_model_request_completion_workflow.zig");
-const advisory_failure = @import("../application/advisory_request_failure_workflow.zig");
-const advisory_protocol_completion = @import("../application/advisory_protocol_request_completion_workflow.zig");
 const request_completion = @import("../application/model_request_completion_workflow.zig");
 const termination = @import("../application/provider_operation_termination_workflow.zig");
 const request_termination = @import("../application/model_request_termination_workflow.zig");
@@ -23,7 +20,7 @@ const request_termination = @import("../application/model_request_termination_wo
 const transport = @import("../application/model_transport_workflow.zig");
 const protocol = @import("../application/model_protocol_retry_workflow.zig");
 const composition = @import("../application/json_composition_workflow.zig");
-pub const count = 34;
+pub const count = 30;
 pub const schemas = requests.schemas ++ composition.schemas ++ [_]@import("../domain/pipeline_data.zig").Schema{ accounting.schema, accounting.operation_schema, accounting.invoked_schema, accounting.terminal_schema, authorization.schema, invocation.schema, observation.schema, envelope.schema, payload.schema };
 
 /// Native bindings only; sequencing belongs to the selected YAML graph.
@@ -45,13 +42,9 @@ pub const Assembly = struct {
     admit_response: payload.Admit,
     complete_operation: completion.Complete,
     complete_request: request_completion.Complete,
-    complete_advisory_request: advisory_completion.Complete,
-    propagate_advisory_failure: advisory_failure.Propagate,
-    complete_advisory_protocol: advisory_protocol_completion.Complete,
     terminate_operation: termination.Terminate,
     terminate_request: request_termination.Terminate,
     retire_request: transport.Retire(.request),
-    retire_advisory_protocol: transport.RetireAdvisoryProtocol,
     protocol_retry: protocol.Build,
     check_phase: protocol.Check,
     check_runaway: protocol.Runaway,
@@ -83,13 +76,9 @@ pub const Assembly = struct {
             .admit_response = .{ .allocator = allocator },
             .complete_operation = .{},
             .complete_request = .{ .allocator = allocator },
-            .complete_advisory_request = .{ .allocator = allocator },
-            .propagate_advisory_failure = .{},
-            .complete_advisory_protocol = .{ .allocator = allocator },
             .terminate_operation = .{},
             .terminate_request = .{ .allocator = allocator },
             .retire_request = .{},
-            .retire_advisory_protocol = .{},
             .protocol_retry = .{ .allocator = allocator },
             .check_phase = .{},
             .check_runaway = .{},
@@ -120,13 +109,9 @@ pub const Assembly = struct {
             entry(payload.Admit, &self.admit_response),
             entry(completion.Complete, &self.complete_operation),
             entry(request_completion.Complete, &self.complete_request),
-            entry(advisory_completion.Complete, &self.complete_advisory_request),
-            entry(advisory_failure.Propagate, &self.propagate_advisory_failure),
-            entry(advisory_protocol_completion.Complete, &self.complete_advisory_protocol),
             entry(termination.Terminate, &self.terminate_operation),
             entry(request_termination.Terminate, &self.terminate_request),
             entry(transport.Retire(.request), &self.retire_request),
-            entry(transport.RetireAdvisoryProtocol, &self.retire_advisory_protocol),
             entry(protocol.Build, &self.protocol_retry),
             entry(protocol.Check, &self.check_phase),
             entry(protocol.Runaway, &self.check_runaway),

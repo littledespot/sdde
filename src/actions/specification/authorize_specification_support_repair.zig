@@ -7,7 +7,7 @@ const authority = @import("../../domain/required_authority.zig");
 const p = @import("../../domain/specification_provenance.zig");
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "authorize-specification-support-repair", .kind = .action, .requires = &.{ .required_authority_inputs, .specification_support_review, .citable_reference_inputs, .accounted_reference_reconciliation, .reference_passive_literals, .valid_toolchain, .packet_guidance }, .produces = &.{.specification_support_repair}, .side_effect = .none };
-    pub fn execute(_: Action, comptime purpose: support.Purpose, allocator: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, guidance: *const @import("../../domain/packet_guidance.zig").Guidance, rejected: @FieldType(support.Contract(purpose).Collection, "rejected")) repair.Contract(purpose).Error!repair.Contract(purpose).Authorization {
-        return repair.Contract(purpose).authorize(allocator, inputs, context, guidance, rejected);
+    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, guidance: *const @import("../../domain/packet_guidance.zig").Guidance, rejected: @FieldType(support.Source.Collection, "rejected")) repair.Source.Error!repair.Source.Authorization {
+        return repair.Source.authorize(allocator, inputs, context, guidance, rejected);
     }
 };

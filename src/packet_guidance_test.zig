@@ -44,8 +44,8 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
     for ([_]Change{
         // Missing registered entries.
         .{ .object = &.{"feature_purposes"}, .key = "scenario_coverage", .value = null },
-        .{ .object = &.{"review_scope"}, .key = "collection", .value = null },
-        .{ .object = &.{ "review_scope", "candidate_field" }, .key = "in_record", .value = null },
+        .{ .object = &.{"review_scope"}, .key = "source_preservation", .value = null },
+        .{ .object = &.{ "review_scope", "reference" }, .key = "token", .value = null },
         .{ .object = &.{"support_evidence"}, .key = "selection", .value = null },
         .{ .object = &.{ "support_evidence", "question" }, .key = "required", .value = null },
         .{ .object = &.{ "reference_tasks", "token" }, .key = "after", .value = null },
@@ -55,12 +55,15 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{"feature_purposes"}, .key = "acceptance_criteria", .value = text },
         .{ .object = &.{"record_fields"}, .key = "text", .value = text },
         .{ .object = &.{"review_scope"}, .key = "instruction", .value = text },
+        // Review scopes of the removed post-generation review are not entries.
+        .{ .object = &.{"review_scope"}, .key = "collection", .value = text },
+        .{ .object = &.{"review_scope"}, .key = "entity_applicability", .value = text },
         .{ .object = &.{}, .key = "notes", .value = text },
         // Wrong wire kinds.
         .{ .object = &.{}, .key = "summary_purpose", .value = .{ .integer = 1 } },
         .{ .object = &.{"record_families"}, .key = "entity", .value = .{ .null = {} } },
         .{ .object = &.{"reference_tasks"}, .key = "signal", .value = text },
-        .{ .object = &.{"review_scope"}, .key = "candidate_field", .value = text },
+        .{ .object = &.{"review_scope"}, .key = "source_preservation", .value = .{ .integer = 3 } },
         .{ .object = &.{ "review_scope", "reference" }, .key = "signal", .value = .{ .integer = 2 } },
         .{ .object = &.{"support_evidence"}, .key = "question", .value = text },
         // Empty, blank and control-character texts.
@@ -70,7 +73,7 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{"support_evidence"}, .key = "detail", .value = .{ .string = "MOCK\ndetail" } },
         .{ .object = &.{ "support_evidence", "question" }, .key = "omitted", .value = .{ .string = "MOCK\u{85}omitted" } },
         // Unsupported version.
-        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v2" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v1" } },
     }) |change| {
         var document = try std.json.parseFromSliceLeaky(std.json.Value, a, valid, .{});
         var target = &document;
@@ -79,14 +82,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v1\",", "{\"schema\":\"packet-guidance/v1\",\"schema\":\"packet-guidance/v1\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v2\",", "{\"schema\":\"packet-guidance/v2\",\"schema\":\"packet-guidance/v2\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v1\"",
+        "\"packet-guidance/v2\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),
@@ -125,7 +128,6 @@ test "registered keys follow the native registries and consumers declare their g
         @import("actions/reference/build_reference_reconciliation_repair_input.zig").Action,
         @import("actions/specification/build_specification_model_input.zig").Action,
         @import("actions/specification/build_specification_repair_input.zig").Action,
-        @import("actions/specification/reuse_specification_review.zig").Action,
         @import("actions/specification/build_specification_support_input.zig").Action,
         @import("actions/specification/collect_specification_support.zig").Action,
         @import("actions/specification/build_specification_support_loss_input.zig").Action,
@@ -146,11 +148,6 @@ test "registered keys follow the native registries and consumers declare their g
         // Coverage repair places no repair tail.
         @import("actions/specification/authorize_specification_coverage_repair.zig").Action,
     }) |Action| try std.testing.expect(std.mem.indexOfScalar(pipeline.DataKey, Action.contract.requires, .packet_guidance) == null);
-    // Every advice stop revalidates its stopped packet against the run guidance.
-    inline for (comptime std.enums.values(@import("domain/specification_advice_stop.zig").Scope)) |transport| {
-        const stop = comptime @import("domain/specification_advice_stop.zig").contract(transport);
-        try std.testing.expect(std.mem.indexOfScalar(pipeline.DataKey, stop.requires, .packet_guidance) != null);
-    }
 }
 
 test "model input presents stored values with run guidance and keeps every other field" {
@@ -247,9 +244,7 @@ test "review scopes and evidence instructions place their workflow entries" {
         .candidate_invalid = .retained_gap,
         .inconclusive = .omitted,
     });
-    for (std.enums.values(authority.Finding)) |finding| try std.testing.expectEqual(rules.get(finding), evidence.questionRule(finding, true));
-    // An advisory contradiction is offered no gap, so its correction omits any question.
-    try std.testing.expectEqual(.omitted, evidence.questionRule(.candidate_invalid, false));
+    for (std.enums.values(authority.Finding)) |finding| try std.testing.expectEqual(rules.get(finding), evidence.questionRule(finding));
 }
 
 test "capture publishes its bound compiled guidance as owned run data and rejects other bindings" {

@@ -33,7 +33,7 @@ pub const Adapter = struct {
         const family = key.Family.of(description.provider_config) orelse return error.InvalidReplay;
         if (std.meta.activeTag(facts) != family.configSchema() or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
-        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, schema, description.members, description.coverages, description.required_items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, schema, description.members, description.coverages) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         recorded.release();
         const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
@@ -188,10 +188,10 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
-        // Admission validates the restricted schema, including native membership, coverage and required items.
-        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, compiled, description.members, description.coverages, description.required_items) catch |err| {
+        // Admission validates the restricted schema, including native membership and coverage.
+        const recorded = @import("../../domain/model_result_schema.zig").restrictRecorded(a, compiled, description.members, description.coverages) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
-            result.reason = "Captured schema and native membership, coverage or required items disagree";
+            result.reason = "Captured schema and native membership or coverage disagree";
             return result;
         };
         defer recorded.release();

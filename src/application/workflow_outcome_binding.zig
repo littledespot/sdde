@@ -108,15 +108,7 @@ pub fn prepare(
         .independent => unreachable,
         .observe => {},
         .preserve => {
-            if (subject == .request) {
-                if (candidate.outcome == .more and binding.evidence == .provider_invocation_validation_result) {
-                    // Optional-stop routing does not relabel the failed raw
-                    // request. Only this exact sealed observation can carry
-                    // its unchanged failure toward native advisory closure.
-                    const source = observation.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
-                    if (observation.status(source) != .more or !source.operationId().eql(subject.request)) return error.InvalidOutcomeAssociation;
-                } else try changes.add(.{ .preserve = subject });
-            }
+            if (subject == .request) try changes.add(.{ .preserve = subject });
         },
         .request_decode => {
             const result = decoded.readCurrent(&after) catch return error.InvalidOutcomeAssociation;
@@ -156,16 +148,6 @@ pub fn prepare(
                     return error.InvalidOutcomeAssociation;
             }
         },
-        .advisory_request_closure => {
-            const facts = @import("advisory_request_completion_workflow.zig").closing(&before) catch return error.InvalidOutcomeAssociation;
-            if (!facts.operation.eql(subject.request)) return error.InvalidOutcomeAssociation;
-            const protocol_stop = if (@import("workflow_model_accounting.zig").readAdvisoryStop(&before)) |_| true else |_| false;
-            if (candidate.outcome != (if (protocol_stop) @import("../domain/workflow.zig").OutcomeTag.blocked else .more)) return error.InvalidOutcomeAssociation;
-            const next = values.read(&after, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.InvalidOutcomeAssociation;
-            const record = next.record(facts.request.id()) orelse return error.InvalidOutcomeAssociation;
-            if (record.status != .terminal or record.terminal_reason != .failed) return error.InvalidOutcomeAssociation;
-            try changes.add(.{ .advisory_request_failed = facts.operation });
-        },
         .request_closure => {
             const next = values.read(&after, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.InvalidOutcomeAssociation;
             const record = next.record(subject.request.model_request_id) orelse return error.InvalidOutcomeAssociation;
@@ -188,28 +170,13 @@ pub fn prepare(
             if (candidate.delta.repair_transition) |transition| switch (transition) {
                 .validated => |progress| if (progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
                 .merged_validated => |progress| if (progress.changed and progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
-                .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
+                .authorized, .merged => return error.InvalidOutcomeAssociation,
             };
         },
         .diagnostic_admission => {
             if (candidate.outcome == .ok and envelope.outcomes.permitsDiagnosticAdmission(subject)) {
                 const decision = try diagnosticAdmission(&after, binding.evidence);
                 if (decision == .accepted) try changes.add(.{ .resolve = .{ .diagnostic_admitted = .{ .subject = subject, .evidence = decision } } });
-            }
-        },
-        .advisory_completion => {
-            if (candidate.outcome == .failed) {
-                if (candidate.delta.repair_transition != null) return error.InvalidOutcomeAssociation;
-                @import("specification_advice_stop_workflow.zig").validateUnchangedFailure(envelope.allocator, &before, &after) catch return error.InvalidOutcomeAssociation;
-            } else {
-                if (candidate.outcome != .ok) return error.InvalidOutcomeAssociation;
-                const facts = @import("specification_advice_stop_workflow.zig").validateCompletion(envelope.allocator, &before, &after) catch return error.InvalidOutcomeAssociation;
-                const permit = facts.request.packet().?.repairPermit();
-                if (permit) |expected| {
-                    const transition = candidate.delta.repair_transition orelse return error.InvalidOutcomeAssociation;
-                    if (transition != .abandoned_advice or !std.meta.eql(transition.abandoned_advice, expected)) return error.InvalidOutcomeAssociation;
-                } else if (candidate.delta.repair_transition != null) return error.InvalidOutcomeAssociation;
-                try changes.add(.{ .resolve = .{ .advice_stopped = .{ .subject = subject, .request = facts.operation, .permit = permit } } });
             }
         },
         .authority_reconcile => {
@@ -249,13 +216,13 @@ pub fn prepare(
             }
         },
     }
-    if (association.prohibiting(candidate.outcome) and descriptor != .request_closure and descriptor != .advisory_request_closure) {
+    if (association.prohibiting(candidate.outcome) and descriptor != .request_closure) {
         const recurring: ?retry.Transition = if (descriptor == .repair_validate) progress: {
             const transition = candidate.delta.repair_transition orelse break :progress null;
             break :progress switch (transition) {
                 .validated => |value| if (value.result == .recurring) transition else null,
                 .merged_validated => |value| if (value.changed and value.result == .recurring) transition else null,
-                .authorized, .merged, .abandoned_advice => return error.InvalidOutcomeAssociation,
+                .authorized, .merged => return error.InvalidOutcomeAssociation,
             };
         } else null;
         try changes.add(.{ .observe = .{ .subject = subject, .outcome = candidate.outcome, .repair_progress = recurring } });
@@ -425,10 +392,6 @@ fn requestOperation(view: *const data.View, evidence: pipeline.DataKey, request:
                 .prepared => null,
             };
         },
-        .accounted_model_attempt => stopped: {
-            const stop = @import("workflow_model_accounting.zig").readAdvisoryStop(view) catch return error.InvalidOutcomeAssociation;
-            break :stopped stop.request().protocolCorrection();
-        },
         .model_request_identity_ledger => null,
         else => return error.InvalidOutcomeAssociation,
     };
@@ -450,7 +413,7 @@ fn missingFinalText(changes: *Changes, source: *const observation.Result, outcom
             try changes.add(.{ .reclassify = .{ .missing_final_text = evidence } })
         else if (evidence.runaway() == .first)
             try changes.add(.{ .reclassify = .{ .runaway = evidence } }),
-        .rejected, .cancelled, .advisory_stopped => {},
+        .rejected, .cancelled => {},
     }
 }
 
@@ -459,7 +422,6 @@ fn diagnosticAdmission(view: *const data.View, evidence: pipeline.DataKey) Error
     const value = values.read(view, @import("specification_support_workflow.zig").schema, authority_values.Value) catch return error.InvalidOutcomeAssociation;
     return switch (authority_values.payload(value).*) {
         .support => |collection| if (collection == .accepted and collection.accepted.candidate.pending_localization == null) .accepted else .rejected,
-        .principle_support => |review| if (review.result == .accepted and review.result.accepted.candidate.pending_localization == null) .accepted else .rejected,
         else => .rejected,
     };
 }
@@ -757,7 +719,7 @@ test "diagnostic admission requires the sealed accepted source or principle coll
         .seeds = &.{},
         .evidence = &.{},
     };
-    for (0..5) |mode| {
+    for (0..3) |mode| {
         var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &.{support_schema});
         defer envelope.deinit();
         const initial_owner = try authority_values.create(std.testing.allocator, .{});
@@ -773,16 +735,12 @@ test "diagnostic admission requires the sealed accepted source or principle coll
             .review = .{ .entries = &.{} },
             .origin = null,
             .origins = &.{},
-            .pending_localization = if (mode == 3) 1 else null,
+            .pending_localization = if (mode == 2) 1 else null,
         } };
         const owner = try authority_values.create(std.testing.allocator, .{ .slots = envelope.slots });
         owner.payload = switch (mode) {
             0 => .support_initial,
-            1, 3 => .{ .support = .{ .accepted = source } },
-            2, 4 => .{ .principle_support = .{ .pending = .{ .source = source, .inputs = native_inputs }, .result = .{ .accepted = .{
-                .inputs = native_inputs,
-                .candidate = .{ .review = .{ .entries = &.{} }, .origin = null, .origins = &.{}, .pending_localization = if (mode == 4) 1 else null },
-            } } } },
+            1, 2 => .{ .support = .{ .accepted = source } },
             else => unreachable,
         };
         var reviewed = try authority_values.publish(std.testing.allocator, support_schema, owner, .ok);
@@ -793,7 +751,7 @@ test "diagnostic admission requires the sealed accepted source or principle coll
         const occurrence = try envelope.beginOccurrence("test.support-admission");
         var accepted = try prepare(&envelope, occurrence, .{ .diagnostic_admission = .{ .kind = .candidate, .subject = support_schema.key, .evidence = support_schema.key, .result = support_schema.key } }, &reviewed);
         defer accepted.deinit();
-        try std.testing.expectEqual(mode == 1 or mode == 2, accepted.compatible(.ok));
+        try std.testing.expectEqual(mode == 1, accepted.compatible(.ok));
         try std.testing.expect(envelope.outcomes.firstUnresolved() != null);
         try std.testing.expectEqual(@as(u64, 1), envelope.generation);
     }

@@ -13,7 +13,6 @@ pub const Diagnostic = union(enum) {
     coverage: @import("specification_coverage.zig").Rejection,
     support_findings: SupportFindings,
     support: @import("specification_support.zig").Source.Rejection,
-    principle_review: @import("specification_support.zig").Contract(.principles).Rejection,
     specification: @import("specification_candidate.zig").Rejection,
     source_catalogue: @import("specification_source_binding.zig").Rejection,
 
@@ -32,7 +31,6 @@ pub const Diagnostic = union(enum) {
             .coverage => |value| value.origin,
             .support_findings => |value| value.origin,
             .support => |value| if (value.selected()) |selected| selected.origin else null,
-            .principle_review => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
             .source_catalogue => |value| value.origin,
         };
@@ -53,7 +51,6 @@ pub const Diagnostic = union(enum) {
             .token_classifications,
             .support_findings,
             .support,
-            .principle_review,
             .specification,
             => .missing_response,
         };
@@ -68,14 +65,13 @@ pub const Diagnostic = union(enum) {
 
 const authority = @import("required_authority.zig");
 pub const SupportFindings = struct {
-    purpose: @import("specification_support.zig").Purpose,
     revision: u64,
     evidence: []const authority.Evidence,
     origins: []const ?@import("model_candidate_origin.zig").Origin,
     origin: ?@import("model_candidate_origin.zig").Origin,
     repair_rejection: ?@import("source_omission.zig").Rejection,
 
-    pub fn from(purpose: @import("specification_support.zig").Purpose, inputs: authority.Inputs, rejection: ?@import("source_omission.zig").Rejection) SupportFindings {
-        return .{ .purpose = purpose, .revision = inputs.revision, .evidence = inputs.evidence, .origins = inputs.review_origins, .origin = inputs.review_origin, .repair_rejection = rejection };
+    pub fn from(inputs: authority.Inputs, rejection: ?@import("source_omission.zig").Rejection) SupportFindings {
+        return .{ .revision = inputs.revision, .evidence = inputs.evidence, .origins = inputs.review_origins, .origin = inputs.review_origin, .repair_rejection = rejection };
     }
 };

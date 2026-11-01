@@ -13,7 +13,7 @@
   replacing model-authored exact-copy selection (17 October).
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1.
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
-  (post-generation findings are advice) and
+  (no post-generation review since 1 November 2026) and
   [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
   record task; native exact duties are independent of semantic kind),
   [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
@@ -237,7 +237,7 @@ unit, validate the affected dependencies, then validate the full candidate.
 The exact old value and revision still compare exactly; only effective evidence
 uses set equality. A value-only replacement cannot change unrelated siblings or
 borrow their reference choices. Retained exact obligations, membership,
-omission, semantic/principle review and publication gates still apply. A prose
+omission and publication gates still apply. A prose
 repair may pass field validation yet fail exact-token coverage; that is not
 workflow recovery. Retry bounds and execution-wide token accounting do not
 change.

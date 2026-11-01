@@ -3,10 +3,9 @@
 const std = @import("std");
 const spec = @import("specification.zig");
 const reference = @import("reference_snapshot.zig");
-const authority = @import("required_authority.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v20";
+pub const schema = "specification-state/v21";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -19,16 +18,9 @@ pub const State = struct {
     id_ledger: ids.Ledger,
     coverage: @import("specification_coverage.zig").Coverage,
     clarification: struct { state_ordinal: u64, revision: u64 },
-    principle_assessment: @import("principle_assessment.zig").Canonical,
-    review: struct {
-        candidate_revision: u64,
-        seeds: []const authority.Seed,
-        evidence: []const authority.Evidence,
-        candidates: []const authority.Candidate,
-        observations: authority.Observations,
-        result: authority.Result,
-        advice_stop: ?authority.AdviceStop,
-    },
+    /// The captured principle registry, which the next run's capture reads as its
+    /// prior registry. Spec doesn't assess principles.
+    principle_registry: @import("principle_registry.zig").Registry,
 };
 pub const Prior = struct {
     captured: ?[]const u8,
@@ -89,8 +81,6 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
     if (!std.mem.eql(u8, state.schema, schema) or state.revision == 0 or
         !std.mem.eql(u8, state.feature.bytes, feature.bytes) or
         !std.mem.eql(u8, state.reference.inputs.corpus.feature_id.bytes, feature.bytes) or
-        !std.mem.eql(u8, state.review.result.feature.bytes, feature.bytes) or
-        state.review.result.continuation != .all_resolved or
         state.clarification.state_ordinal == 0 or state.clarification.revision == 0 or
         !state.reference.inputs.corpus.state_id.eql(state.reference.extraction.state_id) or
         state.reference.conflicts.len != 0) return error.InvalidSpecificationState;
@@ -99,6 +89,7 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
         entity_count += 1;
     };
     if (!spec.entityMembershipSatisfied(state.content.entities.disposition, entity_count)) return error.InvalidSpecificationState;
+    @import("principle_registry.zig").validate(state.principle_registry) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     validateAssociations(allocator, state) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     var largest: [std.meta.tags(spec.Kind).len]u32 = @splat(0);
     for (spec.required_record_families) |kind| if (!spec.hasRecords(state.content, kind)) return error.InvalidSpecificationState;
@@ -139,14 +130,4 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     if (checked != .valid) return error.InvalidSpecificationState;
     const canonical = @import("canonical_json.zig");
     if (!std.mem.eql(u8, try canonical.encode(coverage.Coverage, allocator, checked.valid), try canonical.encode(coverage.Coverage, allocator, state.coverage))) return error.InvalidSpecificationState;
-    if (state.review.candidate_revision == 0) return error.InvalidSpecificationState;
-    var inputs = try @import("specification_authority.zig").projectRecords(allocator, state.feature, records, state.content, state.brief);
-    inputs.revision = state.review.candidate_revision;
-    inputs.seeds = state.review.seeds;
-    inputs.evidence = state.review.evidence;
-    inputs.candidates = state.review.candidates;
-    inputs.advice_stop = state.review.advice_stop;
-    try @import("specification_support.zig").Source.validateStored(allocator, inputs, state.reference.inputs);
-    try @import("principle_assessment.zig").validateStored(allocator, inputs, state.reference.inputs, state.principle_assessment);
-    if (!try authority.validate(allocator, inputs, state.review.observations, state.review.result)) return error.InvalidSpecificationState;
 }

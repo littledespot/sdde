@@ -15,7 +15,7 @@ The stage gate:
 **Hard prerequisite:** if any Spec clarification remains open/unresolved, stop at
 the entry gate before planning work or model calls. Validate the canonical registry
 and current answer authority; changing a form's requested status alone does not
-satisfy this gate. Advisory principle findings never bypass an open `SNN`.
+satisfy this gate. Nothing about principles bypasses an open `SNN`.
 
 1. requires current validated specification authority; each Plan invocation starts from its graph start and revalidates every input, without restoring an execution;
 2. requires and parses `spec.md`;
@@ -29,10 +29,9 @@ satisfy this gate. Advisory principle findings never bypass an open `SNN`.
 
 - The pre-generation boundary also rebuilds the shared authority-requirement projection for all
   planning-owned decision slots.
-- Retain early Spec principle advice from canonical evidence (§17.3.1),
-  recapture/select current principles and independently validate required policy
-  through the shared authority contract. Under ADR 0023, an earlier semantic
-  finding alone creates no mandatory Plan obligation. No earlier no-conflict result proves current compliance.
+- Recapture/select current principles and independently validate required policy
+  through the shared authority contract. Spec runs no principle assessment (ADR 0015),
+  so no Spec result proves current compliance.
   Assess the complete current business scope, including authenticated specification
   edits and validated clarification-derived requirements, not only previously flagged units.
   Unresolved policy decisions use the existing `PNN` path after Plan input authority

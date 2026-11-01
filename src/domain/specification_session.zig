@@ -160,8 +160,7 @@ const RecordRequirements = struct {
 fn recordRequirements(a: std.mem.Allocator, current: Session, context: p.Context) Error!RecordRequirements {
     if (current.completed != records_index or current.record_cursor >= current.record_group_count) return error.InvalidSpecificationUnit;
     try validateRecordPrefix(a, current, context);
-    var present: std.EnumSet(g.spec.Kind) = .initEmpty();
-    for (current.record_batches) |batch| for (batch.response.content.records) |record| present.insert(std.meta.activeTag(record.content));
+    const present = presentFamilies(current);
     const required = &g.spec.required_record_families;
     var families: std.ArrayList(g.spec.Kind) = .empty;
     errdefer families.deinit(a);
@@ -170,6 +169,21 @@ fn recordRequirements(a: std.mem.Allocator, current: Session, context: p.Context
     errdefer unmet.deinit(a);
     for (required) |kind| if (!present.contains(kind)) try unmet.append(a, kind);
     return .{ .required_families = required, .present_families = try families.toOwnedSlice(a), .unmet_required_families = try unmet.toOwnedSlice(a) };
+}
+
+/// The record families the admitted record batches contain.
+pub fn presentFamilies(current: Session) std.EnumSet(g.spec.Kind) {
+    var present: std.EnumSet(g.spec.Kind) = .initEmpty();
+    for (current.record_batches) |batch| for (batch.response.content.records) |record| present.insert(std.meta.activeTag(record.content));
+    return present;
+}
+
+/// Whether completed generation lacks a mandatory record family. A model can
+/// omit one; that candidate is invalid, never a complete specification.
+pub fn missingRequiredFamily(current: Session) bool {
+    const present = presentFamilies(current);
+    for (g.spec.required_record_families) |kind| if (!present.contains(kind)) return true;
+    return false;
 }
 
 /// Repair retains all source claims but offers exact-copy choices only from the

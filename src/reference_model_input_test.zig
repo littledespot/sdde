@@ -934,7 +934,7 @@ test "reconciliation phase recreation retains native source exceptions through r
             try std.testing.expectEqualDeep(original.id, retained.source_id);
             try std.testing.expectEqualStrings(original.bytes, retained.bytes);
         }
-        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies(), packet.requiredItems());
+        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies());
         defer selected.release();
         const response: stage.Response = if (prior == .signals)
             .{ .signals = .{ .signals = &.{.{ .claim_ids = &.{dispositions[2].claim_id}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Retain help describing " ++ encoded ++ "." } }} } } } }} } }

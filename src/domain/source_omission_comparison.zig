@@ -34,8 +34,6 @@ pub const Assignment = struct {
         revision: u64,
         sources: r.evidence.Inputs,
         records: @import("reference_support.zig").Records,
-        brief: ?@import("specification.zig").Brief,
-        candidate: ?@import("specification.zig").IdentifiedContent,
     },
     finding: struct { ordinal: u32, revision: u64, subject: authority.Id, detail: []const u8, missing_obligation: []const u8, source_ids: []const r.extraction.identity.SourceId },
     sources: []const loss.SourceLines,

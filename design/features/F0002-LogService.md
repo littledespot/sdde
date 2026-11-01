@@ -384,7 +384,6 @@ Logging-internal nodes are not recursively observed.
 | `repair.exhausted` | `error` | `repair_unit_kind`, `diagnostic_code`, `outcome` | — |
 | `retry.admitted` | `debug` | `count` | — |
 | `retry.exhausted` | `error` | `count`, `diagnostic_code`, `outcome` | — |
-| `review.incomplete` | `warning` | `diagnostic_code` | `count` |
 | `review.requested` | `info` | — | — |
 | `review.approved` | `info` | `outcome` | — |
 | `review.rejected` | `warning` | `outcome` | — |

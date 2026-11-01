@@ -13,17 +13,15 @@ pub const schemas = [_]data.Schema{ document_schema, rendered_schema, validated_
 
 pub const Project = struct {
     pub const Action = @import("../actions/specification/project_specification_document.zig").Action;
-    pub const gates = [_][]const u8{"required-authority@1"};
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const authority = @import("required_authority_values.zig");
         const content = authority.read(&input.step.data, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
-        const support = authority.read(&input.step.data, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), content, support) catch |operation_error| return operation_error };
+        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), content) catch |operation_error| return operation_error };
         return owned.publish(self.allocator, document_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };

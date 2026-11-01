@@ -38,10 +38,11 @@
 - **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
   October 2026): a provider `output_limit` stop is re-sent once with the identical
   request at the configured `temperatureRunawayRetry`. A runaway on the re-send stops
-  the workflow in required work; in advisory work it ends that advice as incomplete,
-  published, marked and logged ([ADR 0040](0040-incomplete-review-published-marked-logged.md)).
-  This supersedes the B9 amendment's "no `output_limit` correction" and the stop rules
-  below.
+  the workflow. This supersedes the B9 amendment's "no `output_limit` correction" and the
+  stop rules below.
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
+  amendment (FIX06 D13.1, 1 November 2026): post-generation advice and its
+  incomplete-advice outcomes are removed, so every model call is required work.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
   2026): a required failure of model work, including a budget failure, still fails the
   run but publishes its validated content as a failed incomplete specification, marked
@@ -122,33 +123,25 @@ than a model's maximum when a Converse request omits `inferenceConfig.maxTokens`
 
 There is one total limit: the project configuration's positive
 `workflowTokenBudget` ([ADR 0037](0037-configured-workflow-token-budget.md)), initialized
-freshly for every execution. It covers all model work, including post-generation source and principle
-advice, which has no pool or allowance of its own. Native advisory classification
-controls only the permitted non-budget incomplete-assessment outcome; it does not
-partition token usage.
+freshly for every execution. It covers all model work, with no pool or allowance per
+purpose.
 
 - Record actual API-reported input plus output tokens after every inference call,
   including retries and stopped output, exactly once against that total.
 - For Converse, normalize input usage as `inputTokens + cacheReadInputTokens +
   cacheWriteInputTokens` (absent optional cache counters are zero), then add
   `outputTokens`. Check arithmetic and reported `totalTokens`; invalid usage is
-  unavailable for accounting and remains a fatal native validation failure.
-  Genuinely missing usage on otherwise valid advisory evidence may instead end
-  advice as incomplete. This follows the
+  unavailable for accounting and remains a fatal native validation failure. This follows the
   [AWS cache accounting contract](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html).
 - Any inference call may overshoot: retain its full usage, return
-  `WorkflowTokenBudgetExceeded`, and prohibit further model calls globally.
-  The same fatal budget rule applies during required work and advice; global
-  exhaustion or overshoot cannot produce incomplete advice. At exact equality the
+  `WorkflowTokenBudgetExceeded`, and prohibit further model calls globally. At exact equality the
   admitted current result may proceed, but no further model call may start.
 - Missing usage is never estimated or fabricated. It prohibits further model
-  calls. Missing usage during advice records incomplete advice and may continue
-  through native validation and publication; missing usage during required work
-  retains its ordinary workflow failure.
+  calls and retains its ordinary workflow failure.
 - No pre-call token reservation, mandatory counting, capacity prediction,
   budget-derived output allowance or per-class usage subtotal exists. Trusted association,
   native validation, security, cancellation, deadline, logging and operational failures
-  remain blocking; incomplete advice is not a blanket failure-to-success route.
+  remain blocking.
 
 ### B9 runaway-output policy
 
@@ -167,9 +160,7 @@ A provider `output_limit` remains a typed non-candidate stop: partial text never
 becomes a candidate, is never salvaged, and receives no protocol correction. Under
 [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) the identical request is
 re-sent once at the configured `temperatureRunawayRetry`. A runaway on the re-send
-fails mandatory work; advisory work records incomplete advice under its native
-assessment policy, published and marked as incomplete and logged (ADR 0040). The model
-binding and existing
+fails the work. The model binding and existing
 explicit protocol retry rules otherwise remain unchanged.
 
 ### Retry and safety boundaries
@@ -203,8 +194,7 @@ explicit protocol retry rules otherwise remain unchanged.
 - Accounting tests must cover the single aggregate ledger across all inference,
   full overshoot retention, global subsequent-call prohibition, unavailable usage,
   execution isolation and explicit-only retries. Global-budget failures must stay
-  fatal during advice as well as required work. Native advisory continuation must
-  retain current incomplete-assessment evidence and all mandatory publication checks.
+  fatal.
 - Architecture tests require the retired capacity fields and local size-failure variants
   to remain absent.
 - Configuration/resource capture bounds retain separate negative tests.

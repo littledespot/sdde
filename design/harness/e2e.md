@@ -313,8 +313,8 @@ credentials. No model answer means no evidence yet about schema conformance.
   from its configuration, never a smaller allowance, and
   every provider stop is logged with its reason
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-- The engine accounts every inference, including post-generation advice and
-  correction, once against one execution budget.
+- The engine accounts every inference, including correction, once against one
+  execution budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, diagnostics and the standalone evaluator share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
@@ -364,7 +364,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v11`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v12`; it stays null until ADR 0041 is
   implemented (FIX06 E0).
 
 ### Rubric assessment
@@ -535,10 +535,8 @@ workflow to repair reporting.
 `token_accounting` (the single total budget and actual usage), `retry_settings` and `attempts` project the executed graph
 and native accounting. Each attempt records `resends`, the attempt number it re-sends,
 when it is a runaway re-send
-([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), and the
-report records each incomplete review's reason and unassessed count
-([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)), so runaways,
-re-sends and incomplete reviews are counted separately. Each attempt's request
+([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), so
+runaways and re-sends are counted separately. Each attempt's request
 `purpose` and `owner_kind` are read from its native request identity, so stage costs
 can be measured ([Format history](#format-history) records the versions these members
 advanced). A composed request's
@@ -607,8 +605,8 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v11`,
-`baseline-freeze/v3`, `baseline-acquisition/v8`, `baseline-score/v4` and
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v12`,
+`baseline-freeze/v3`, `baseline-acquisition/v9`, `baseline-score/v4` and
 `baseline-budget-feasibility/v2`. Step events remain
 `e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
 not yet implemented, model-request stages become events of one `request-model` step,
@@ -641,6 +639,10 @@ The runaway re-send and incomplete-review members
 `incomplete_publication` member advanced it to v11 (user decision of 29 October 2026);
 ADR 0041 adds no later version.
 `baseline-acquisition/v8` advanced with `spec-e2e-report/v11`, which it embeds.
+Removing post-generation review ([ADR 0023](../decisions/0023-advisory-post-generation-review.md),
+1 November 2026, FIX06 D13.1) dropped the `advisory_completion` and `incomplete_reviews`
+members, advancing `spec-e2e-report` to v12 and `baseline-acquisition` to v9. Runs
+retained before that change stay adjudicable only by the build that made them.
 `baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
 budget became the configured `workflowTokenBudget`
 ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Every configuration
@@ -830,9 +832,8 @@ request-projection freezes, not by a live run.
 
 The report records the one configured total budget for all model work, with
 aggregate actual usage including full overshoots. Global-budget rejection is a
-workflow failure during advice too. An explicitly incomplete review from an
-eligible non-budget stop does not establish acceptance: R8's rubric thresholds,
-expected publication and human adjudication remain independent.
+workflow failure. R8's rubric thresholds, expected publication and human adjudication
+remain independent of every native outcome.
 
 Human calibration and broader rerun/failure acceptance are tracked in
 [FIX06](../../fixes/FIX06.md).

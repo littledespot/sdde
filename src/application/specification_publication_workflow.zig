@@ -41,7 +41,7 @@ pub const Parse = struct {
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch |cause| return cause };
-        const prior_principles = if (owner.payload.prior_state.specified()) |state_value| state_value.principle_assessment.registry else null;
+        const prior_principles = if (owner.payload.prior_state.specified()) |state_value| state_value.principle_registry else null;
         const principle_schema = @import("principle_workflow.zig").prior_schema;
         const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch |operation_error| return operation_error;
         errdefer values.destroy(projected);
@@ -52,22 +52,19 @@ pub const Parse = struct {
 };
 pub const ResolvedNeeds = struct {
     pub const Action = @import("../actions/clarification/build_resolved_clarification_needs.zig").Action;
-    pub const gates = [_][]const u8{"required-authority@1"};
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const result = authority.read(&input.step.data, @import("required_authority_workflow.zig").result_schema, .result) catch |operation_error| return operation_error;
         const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const needs = self.action.execute(arena.allocator(), sources.*, result) catch |operation_error| return operation_error;
+        const needs = self.action.execute(arena.allocator(), sources.*) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, refresh.needs_schema, @import("../domain/clarification_refresh.zig").Needs, needs);
     }
 };
 pub const Build = struct {
     pub const Action = @import("../actions/specification/build_specification_state.zig").Action;
-    pub const gates = [_][]const u8{"required-authority@1"};
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -78,14 +75,13 @@ pub const Build = struct {
         const content = authority.read(view, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
         const ledger = values.read(view, @import("specification_workflow.zig").ids_schema, @import("../domain/specification_identity.zig").Ledger) catch |operation_error| return operation_error;
         const coverage = owned.read(view, @import("specification_workflow.zig").coverage_schema, .coverage) catch |operation_error| return operation_error;
-        const inputs = authority.read(view, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch |operation_error| return operation_error;
-        const observations = authority.read(view, @import("required_authority_workflow.zig").observations_schema, .observations) catch |operation_error| return operation_error;
-        const result = authority.read(view, @import("required_authority_workflow.zig").result_schema, .result) catch |operation_error| return operation_error;
+        const brief = (try @import("specification_generation_facts.zig").read(view)).brief() orelse return error.OperationExecutionFailed;
+        const principles = values.read(view, @import("principle_workflow.zig").registry_schema, @import("../domain/principle_registry.zig").Registry) catch |operation_error| return operation_error;
         const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
         const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), content, ledger.*, coverage, inputs, observations, result, clarifications.*, valid.*) catch |cause| return cause };
+        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), brief, content, ledger.*, coverage, principles.*, clarifications.*, valid.*) catch |cause| return cause };
         return owned.publish(self.allocator, state_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };

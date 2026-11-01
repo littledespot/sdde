@@ -119,7 +119,7 @@ governs; these add what the phases need.
     Such a change lands only after H1 adjudicates the published set runs it strands, or the
     user records that they stay unadjudicated. Candidates: E1's request-lifecycle data keys,
     E4's repair keys, E5's split of `OperationExecutionFailed`, E9's `rejected_exact`, rule
-    withdrawals in Q7 or Q8, `Relations.competing` (Q2b), Q13's would-have record, Q14 b2's
+    withdrawals in Q7 or Q8, `Relations.competing` (Q2b), Q14 b2's
     and Q16's diagnostic reasons. `Relations.competing` and `rejected_exact` appeared only in
     failed, unpublished Q4 runs (`8be8…`, `7c6a…`), which are no longer retained, so removing
     them strands no retained run. **Decided 1 November 2026:** no members-only decoder (it
@@ -165,9 +165,9 @@ between measurement sets.
 | 9 | **Q7 D7.2** withdraw ADR 0045, keep ADR 0036 Decision 6 | none directly (docs) | S | None | D7.2 |
 | 10 | **Q17** principles as context for Spec generation (decided) | none scored today; guards only unless the rubrics gain a principle criterion | M | Measurement set | D17.1 |
 
-**Robustness track** (run completion, the Incomplete banner, budget; no scored defect):
-Q10b step 1's keep decision and the exact-value review fault (Q10b); E5's §22.6 correction
-location; budget headroom (H4). Three loan-renewal runs on `ddbc6d9` stopped on the
+**Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
+location; budget headroom (H4). D13.1 removed the review calls where every runaway and
+SyntaxError in the 18 runs occurred. Three loan-renewal runs on `ddbc6d9` stopped on the
 workflow budget and published nothing; the lowest headroom in the 18 runs was 1,481 tokens
 (`07-27-53Z-1098…`, 21,299 without its runaway).
 
@@ -180,8 +180,8 @@ adopted; the provider defect recorded; §2 rules 3, 4 and 13 settled.
 **Build order** (each change set measured on its own committed build, §2.1 and §2.3):
 1. T5 counts: baseline taken 1 November 2026 ([Z_FIX06](Z_FIX06.md)); each later change set
    retakes them (§6 T5).
-2. D13.1: revert D10.2 in full, then remove both post-generation reviews in one change.
-   Generation requests stay byte-identical, so §2.11's proof plus one live run per case.
+2. D13.1: implemented 1 November 2026, uncommitted ([Z_FIX06](Z_FIX06.md)); the one live
+   run per case (approved) is outstanding.
 3. Q13 inline source lines; then Q7 D7.4 (both offline-proven once no request carries the
    projection).
 4. Q12 D12.1, a measurement set.
@@ -190,9 +190,8 @@ adopted; the provider defect recorded; §2 rules 3, 4 and 13 settled.
 7. Q14 b3, a measurement set.
 8. Q7 D7.5, a measurement set; D16.1 and D15.1 revisited on the results.
 
-**Recommended, not yet decided:** D5.1 no; D8.1 keep, record only; D10.3 record as a model
-limitation (moot after D13.1); close D2.2, D11.3, Q9 (keeping the capture replays E4 needs)
-and W5; Q10a closed (moot after D13.1).
+**Recommended, not yet decided:** D5.1 no; D8.1 keep, record only; close D2.2, D11.3, Q9
+(keeping the capture replays E4 needs) and W5.
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
 startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
@@ -414,58 +413,6 @@ conflicts saves at most two sends and 2–4% of tokens and reduces no defect cla
 assignment contexts and ADR 0033's per-phase owners. **Recommended (not decided):** close Q9;
 keep only the `model-request-debug/v13` capture replays E4 needs (ADR 0033:264).
 
-### Q10a. Publish source-review findings as advice (B2)
-
-**D10.1** Amend ADR 0023:79-80 (as amended by ADR 0040:11-14) and the `reference-context.md`
-rendering text (17-specify.md:469-471, 23-rendering.md:148-158, F0100:961-964) so negative
-source findings appear as an advisory section (`reference_context.zig:100-123`). In the 18
-runs this would have published 19 notes, 16 of them misleading (13 on clean subjects, 2 of the
-wrong type, 1 with a false rationale; the false AC-001 note in 7 of 9 hello-world runs), and
-left spec.md unchanged. **Recommended (not decided):** close in favour of Q13.
-
-### Q10b. Simplify the source-review taxonomy (B2)
-
-Step 1 (D10.2) is implemented, uncommitted ([Z_FIX06](Z_FIX06.md)). **Not kept** (decided 1
-November 2026): it cannot change the spec (ADR 0023), and D13.1 removes post-generation source
-review. It is reverted in full as the first step of D13.1's change set (§2.1), which returns
-`specification-state` to v19. Q10b's later steps are moot.
-
-**The exact-value review fault** (the only later step with an output link): every runaway
-and SyntaxError in the 18 runs is a `supported` finding whose `detail` string is never closed,
-on an exact-value reference subject: 8 of 62 such calls against 0 of 190 other source-review
-calls (14 of 92 against 0 of 260 in the 36 runs retained on 31 October), 88,364 tokens. A runaway on the
-re-send ends advice incomplete, and a budget stop publishes nothing. Levers (no caps):
-- remove the `supported` detail field (amends ADR 0023:74-77 and `support.schema.json`);
-  measured with approved `e2e-call --repeats` on a retained exact-value request against the
-  12.9% baseline (0 faults in 30 repeats gives p ≈ 0.016);
-- or drop exact-value reference subjects from post-generation advice: their duty is native
-  (ADR 0024:29-50); 62 calls, 0 true findings, 17% of review tokens; amends ADR 0023:218-221
-  and the §17.3 subject list, and removes a check (the user's call).
-
-The data can't separate "exact-value subject" from "a quoted value ending in punctuation" as
-the trigger: all three exact values end in `!` or `.`.
-
-**Other later steps** have no output effect and are superseded if Q13 replaces the review:
-the packet-guidance step (`review_scope`, `support_evidence`, including the `authority_gap`
-clause advisory packets still carry, `specification_support.zig:419`); rewriting
-`support.prompt.md` (`:22-33` still describe the withheld verdicts); unifying `finding` and
-`applicability_finding` selection (`support.schema.json:123-130`, `:148-157`; raw-string
-choice at `specification_support.zig:218`, `:442`, E8; projection-branch rule drop at
-`:436-439`); merging `preservation_finding`.
-
-### Q10c. Principle-review citations (B11)
-
-**Defect:** every principle citation is a whole file or absent: in the 18 runs 286 of 286
-findings were `compatible`, 277 cite a whole chunk, 9 none, 0 a part, and no adverse finding
-appeared. The packet gives each principle unnumbered as one 16 KiB chunk
-(`principle_registry.zig:11`, `:148`). The one published principle defect was an
-`array_length` exhaustion (`07-37-10Z-f5c2…`: 2 of 14 findings twice), which published
-"Review status: Incomplete". **D10.3:** record citation precision as a model limitation, or
-change the citation instruction (`principle.prompt.md:14-18`) or presentation (numbered
-lines, smaller chunks). **Recommended (not decided):** record it. No rule may inspect citation
-text; ADR 0042's admission constraint stays. Line-citeable principles are a precondition of
-D13.4's conflict check.
-
 ### Q11. Story-restatement deletion
 
 **D11.3** ADR 0035: never delete a covered restatement whose claims no other record names (the
@@ -523,73 +470,17 @@ only.
   forbids a duplicate modality field; making it matter needs a word check or engine-rendered
   modal text).
 
-### Q13. Review that checks each link (redesign of post-generation review)
+### Q13. Inline source lines (post-generation review removed)
 
-**Defect:** review can't improve the published output. Under ADR 0023 post-generation
-findings never repair, block or ask (0023:74-82, :159-167), and source findings aren't shown
-to readers. In the 18 runs review used 70.8–84.7% of tokens (median 77.3%; source 53.1–73.1%,
-principle 11.1–25.1%). It flagged 4 of the 47 non-rendering defects (3 with the right type)
-and passed 43: weakened obligation 0 of 10, unsupported addition 1 of 10, entity 2 of 17, lost
-requirement 1 of 3, restatement 0 of 7. Of its 19 negative findings, 4 were right, 2 had the
-wrong type and 13 were on clean subjects. Required review ran in none of the 18.
+**D13.1 is implemented** (1 November 2026, uncommitted; [Z_FIX06](Z_FIX06.md)); its one live run
+per case is outstanding. The link-check proposal of 31 October was not built; D13.2 and D13.3
+lapse. Reopen link checks, in shadow mode, only if adjudication shows semantic defects that the
+generation-side items (Q12, Q14, Q15) leave. **D13.4** (decided 1 November 2026): principles are
+context and constraints only, never origins, and never modified (Q17).
 
-**Causes** (verified on `10-23-59Z-caf58f4…` calls 18 and 21 and `07-35-27Z-0669…` calls
-10–12):
-1. It asks whether one field is supported by the source; content in the wrong place (an
-   entity restating FR-001, a duplicate record) is "supported" by that question.
-2. It sees one record and is told not to judge the whole (`support.prompt.md`: "do not
-   require sibling conditions to be repeated in it or replace its finding with a verdict on
-   the whole unit"), so duplication and missing scenarios are invisible.
-3. It is given the generator's claim links as fixed evidence ("Native code fixes claim
-   evidence for the assigned subject"), so a false link passes (loan-renewal AC-001).
-4. Its prompt describes seven verdicts, authority gaps and readiness rules; after D10.2 three
-   verdicts are offered and the prompt is unchanged.
-5. A right answer (call 21, the entity decision) changes nothing.
-
-Making today's findings drive repair would harm the output: at 4 right findings in 19, most
-repairs would hit clean subjects (net harm if more than about 27% of wrong repairs do harm).
-
-**Proposal (not decided):** replace post-generation source review with link checks.
-- **Deterministic first:** every record has a link, every claim is linked, no byte-identical
-  duplicates, exact values kept.
-- **One focused, blind question per link:** "Which of these source claims does this record
-  state? Quote the part." The engine compares the answer with the generator's `claim_ids`; a
-  mismatch, or a stated claim with weaker obligation or added content, is a finding typed as
-  a rubric defect class (lost source requirement, weakened obligation, unsupported addition).
-  A reverse check per claim (which records state it) finds omissions.
-- **Evidence-bound:** a finding names its claim and quotes the record and the source; the
-  engine checks that the claim exists and that both quotes exist byte for byte. A finding that
-  fails is rejected and the model is asked to repair it with guidance naming the error (D13.6),
-  within the retry limit; on exhaustion the advice ends incomplete (ADR 0040).
-- **Regeneration:** only the engine-selected record, with the engine fixing its claim IDs;
-  guidance is the finding's claim text and defect type. The replacement is accepted only if it
-  keeps its other links and exact values, passes native validation and passes the same link
-  check; otherwise the original stays and the finding is published marked (ADR 0040).
-  Additive actions (a missing scenario) are enabled before rewrites; deletions stay advisory.
-  Attempts stay within existing retry limits; no voting or re-asking until positive.
-- **Shadow mode:** the checks run in every live run under today's advisory policy (ADR 0023
-  unchanged) and record would-have actions; `/evaluate-e2e` scoring and H2-confirmed labels
-  give precision, recall and projected harm per finding type. Optional dry-run regeneration
-  into an unpublished copy grades each replacement helpful, neutral or harmful.
-- **Activation:** per finding type, by user decision as a typed policy, once precision meets
-  the user's threshold (for example 90% on at least 30 confirmed findings) with no harmful
-  dry-run regeneration. A type that never qualifies stays advisory, recorded as a model
-  limitation.
-- **Principles:** a record's origin is a source claim; principles are project-level
-  constraints checked for conflict, which needs line-citeable principles (Q10c).
-
-**Brittleness:** model-dependent control flow (contained by deterministic action rules
-testable with scripted answers), cascades (one regeneration per record per finding; the
-original stays on failure), more model-facing text (guidance is typed finding content with one
-owner; ADR 0033's generic operations; today's `support.prompt.md` goes), overfitting
-(AGENTS.md's rule; both cases plus an unrelated fixture) and budget (checks replace today's
-review, not add to it). T5's counts are taken first so the effect can be reported.
-
-**Alternative (user proposal, 31 October 2026): no post-generation review, with each item's
-claims shown inline.** Removing review is not decided. **Decided 1 November 2026** (user: "the
-claims associate with the AC, FR and EN should be placed after each AC, FR and EN"): spec.md
-shows, after each AC, FR and EN, the claims linked to it with their source file and lines.
-**Format decided 1 November 2026:** file and lines only, one line per item with the source
+**Inline sources (decided 1 November 2026**, user: "the claims associate with the AC, FR and EN
+should be placed after each AC, FR and EN"): spec.md shows, after each AC, FR and EN, the claims
+linked to it with their source file and lines. **Format decided 1 November 2026:** file and lines only, one line per item with the source
 file and merged line ranges, computed from the item's claims and their citations. Target
 output (hello-world `10-23-59Z-f331…`, rendered from its `reference-context.md` links):
 
@@ -622,34 +513,14 @@ can't break a user-edited spec.
   continuation rule (`specification_markdown.zig:354-366`). No state or report version
   changes, and no model request changes. Amends 23-rendering.md:128 ("Reference citations are
   not rendered into the business-only file"), :152-153 (spec grammar unchanged), :116-118 and
-  F0100 §5.1. Offline proof needs a new test: strict-decode the 6 retained v20 states,
-  compute the sources, insert them into the retained spec.md and check the round trip and the
-  ranges against "Generated Requirement Sources". Small open choices: "line 6" for a single
+  F0100 §5.1. Offline proof needs a new test: strict-decode the v21 states the D13.1 live runs
+  publish (retained v20 states no longer decode), compute the sources, insert them into their
+  spec.md and check the round trip and the ranges against "Generated Requirement Sources". Small open choices: "line 6" for a single
   line, records whose provenance is only clarification answers, incomplete (pending) views,
   and whether reference-context keeps its own section.
-- **Removing review:** source and principle review can't be split. Principle review starts
-  only after an accepted post-generation source review (`specification_review.zig:14-31`), and
-  the advisory machinery goes only when both go, so the clean option removes both in one
-  change. Effort L, about 45–60 files and a net deletion of several thousand lines, mostly
-  tests: the `review-candidate` subgraph and post-generation gate, `candidate-gaps`, every
-  advisory route (`spec.workflow.yaml:625-650`, `:702-749`, `:956-1094`), about 820 lines of
-  post-only modules, the advisory branches in shared runner files, the spec.md "Review
-  status" line and reference-context's review and principle sections. The post-generation
-  gate's only native check (a missing AC or FR family) is already enforced by generation and
-  state validation (`specification_session.zig:160-172`; `specification_state.zig:104`). Stays:
-  required review, loss review, `support.prompt.md` and `support.schema.json` (required parts),
-  and principle capture (Q17 needs it). Versions: `specification-state` v21, `spec-e2e-report`
-  v12 (§2.13), `baseline-acquisition` v9, `packet-guidance` v2 if review-scope keys go; the
-  ADR-required `review.incomplete` event retires. Effect: review can no longer stop a run on
-  budget, and it frees 71–85% of each run's tokens (53–73% is source review).
-- **Limits:** a citation is only as true as its link (loan-renewal AC-001 would cite the
+**Limits:** a citation is only as true as its link (loan-renewal AC-001 would cite the
   refusal line it doesn't state), so it pairs with Q14 b3; story and entities cite whole groups
   (R1); semantic checking rests on human adjudication (H1).
-- **Amends** (removal): ADR 0023 (retire), ADRs 0040 and 0042 (moot), ADR 0030's advisory
-  carriers, ADR 0039's advice-incomplete clause, ADR 0011's advice budget text, ADR 0041's
-  review-failure clause, design.md §3.3 invariants 20 and 22, §§12.6–12.8, 17.3–17.4, 22, 23,
-  24, F0100, design/harness/e2e.md, acceptance.md:141 and the evaluate-e2e skill. Q10a, Q10b
-  and Q10c become moot, and D10.2 is reverted in full (§2.1). Link checks stay possible later.
 
 **D13.6 — decided 1 November 2026** (user: "the review repair should check that the claim
 exists, if the claim supplied by the LLM does not exist then is should attempt to get the LLM
@@ -673,24 +544,6 @@ error.
   correction text only; first requests stay byte-identical (§2.11). Proven offline: a
   scripted non-existent claim gets the named correction and an accepted retry. A set can't
   measure it, since it didn't fire in the 18 runs.
-- In Q13's link checks, the claim a finding names and its quotes are checked the same way
-  (see "Evidence-bound").
-
-**D13.1 decided 1 November 2026:** remove both post-generation reviews (source and
-principle) in one change, after reverting D10.2, and show inline source lines. Link checks
-(the proposal) aren't built; D13.2 and D13.3 lapse unless review returns.
-
-**Decisions:** **D13.1** (decided above); **D13.2** the activation threshold, and the ADR 0023 amendment per activated type (also
-design.md invariants 20 and 22, 22-repair.md:220-231, ADR 0023:350-357 and :400-403);
-**D13.3** dry-run regeneration; **D13.4** decided 1 November 2026: principles are context and
-constraints only, never origins, and never modified (Q17).
-**Feasibility:** M–L: a new review contract (unit, closed outcomes, guidance shape), a packet
-builder, a would-have record in reports (a report version, §2.13) and its evaluation;
-activation reuses ADR 0033's repair operations. Approved `e2e-call` replays of retained
-records calls can estimate precision before a live set. **Keep if** (shadow): publication and
-guards unchanged and cost not above today's review; activation decided per type on precision.
-Add link checks later, in shadow mode, only if adjudication shows semantic defects that the
-deterministic checks and the generation-side items (Q12, Q14, Q15) leave.
 
 ### Q14. Scenarios bound to their claims
 
@@ -802,7 +655,7 @@ principles "should be used for context when executing the spec workflow".
   (11-path-validation.md:20). Every future step (Plan, Implement, init, repair) keeps it; it
   becomes a design.md §3.3 invariant when the design is next amended.
 - **Context:** today no generation call receives principles. In `10-23-59Z-f331…` calls 1–22
-  carry none; only the post-generation principle review (call 23) does. Adding them changes
+  carry none, and since D13.1 no call does. Adding them changes
   generation requests, so it is a model-input change measured by a set. Principles are
   context and constraints, never a requirement's origin: items still cite only source claims
   (Q13's D13.4 resolved).
@@ -850,8 +703,8 @@ before it lands. Slice 1 review points: trace the advisory production run; make
 `extract/content` and `extract/content-request` (`spec.workflow.yaml:326-338`) one step; port
 each runner-level lifecycle test in `src/model_request_workflow_test.zig` one for one with a
 mapping table and a reason for any dropped assertion (user decision, 23 October 2026, option b).
-**Decision** with E1: keep or remove `propagate-advisory-request-failure` (ADR 0030:625-628).
-If it removes a request-lifecycle `DataKey`, it lands under §2.13.
+`propagate-advisory-request-failure` and the advisory protocol were deleted with D13.1.
+If E1 removes a request-lifecycle `DataKey`, it lands under §2.13.
 
 ### E2. Stage actions (A2, ADR 0031) and identical sibling steps (W5)
 
@@ -917,12 +770,6 @@ conversion. Failure-evidence gaps:
 - **Redaction policy ID:** 26-security.md:196 and F0002:561 name `redaction/default-v1`, which
   no code carries. **Decision:** a record carries the ID (a `feature-log/v2` field, so a
   version change), or both documents drop it. **Recommended:** drop it.
-- **Support-findings diagnostic origin** is its collection's first review call
-  (`candidate_validation_diagnostic.zig:78-80`), not the finding or localization call
-  (`2026-10-31T02-53-14Z-da42…`); it feeds the log event and CLI output, and e2e.md:568-570
-  defines "review origin", so which call counts is a contract question. **Recommended:** define
-  it as the call that returned the outstanding finding, using the per-evidence `origins` the
-  diagnostic already carries (no new data). Moot if D13.1 removes post-generation review.
 - **Producerless rejection** (fixed, [Z_FIX06](Z_FIX06.md)), still open: contract 27
   (27-observability.md:59-62) names only coverage as an assembled-candidate example (design
   edit awaiting approval: add `producerless` as a second example); `observation.capture`'s
@@ -945,12 +792,10 @@ E1–E4.
 
 ### E8. Typed schema-definition identities
 
-Domain code names result-schema definitions by raw strings. Partly done: D10.2 replaced the
-`specification_support_repair.zig` branch with typed correction shapes; one site still
-branches on a second copy (`specification_review_retention.zig:80`), and the rest fail only at
-request preparation (`model_request_handoff.zig:351-352`; sites in `specification_support.zig`,
-`principle_assessment.zig`, `specification_session.zig`, `specification_repair.zig`,
-`reference_model_input.zig`, `reference_reconciliation_*.zig`,
+Domain code names result-schema definitions by raw strings: T5.2 counts 20 production sites
+after D13.1 (Z_FIX06 T5), which fail only at request preparation
+(`model_request_handoff.zig`; sites in `specification_support.zig`, `specification_session.zig`,
+`specification_repair.zig`, `reference_model_input.zig`, `reference_reconciliation_*.zig`,
 `reference_extraction_*repair.zig`). Bind them as closed IDs checked at schema load. Test
 fixtures branch on names too (`spec_generation_driver.zig`, `spec_generation_responses.zig`).
 

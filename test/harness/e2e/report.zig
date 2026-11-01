@@ -287,14 +287,6 @@ fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
         try writer.print("Workflow tokens: {d}/{d}. In-flight overshoots retain full usage.\n\n", .{ accounting.total_tokens, accounting.total_budget.value });
     }
     if (report.last_model_usage) |usage| try writer.print("Last exchange usage: {d} input + {d} output = {d} tokens.\n\n", .{ usage.input_tokens, usage.output_tokens, usage.total_tokens });
-    if (report.advisory_completion) |completion| {
-        try writer.writeAll("Native incomplete advice (does not certify semantic support): ");
-        try std.json.Stringify.value(completion, .{}, writer);
-        try writer.writeAll("\n\n");
-    }
-    for (report.incomplete_reviews) |review| {
-        try writer.print("Published incomplete {s} review ({s}): {d} of {d} subjects not assessed.\n\n", .{ @tagName(review.review), @tagName(review.reason), review.unassessed, review.subjects });
-    }
     if (report.exchange_evidence) |exchange| {
         try writer.writeAll("Exchange evidence: ");
         try std.json.Stringify.value(exchange, .{}, writer);

@@ -213,42 +213,24 @@ test "Specify projects registered native fields and complete reference obligatio
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
-    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted, null, null);
+    const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted);
     try std.testing.expectEqual(@as(usize, 11), before.seeds.len); // Eight mandatory slots, two signals, one exact value.
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
     try std.testing.expectEqualStrings("Hello, World!", before.references.?.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
-    const spec = @import("domain/specification.zig");
-    const value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} };
-    const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
-    const attributed: spec.AttributedValue = .{ .value = value, .source_group_ids = &.{accounted.records.signals[0].id}, .provenance = provenance };
-    const brief: spec.Brief = .{ .title = attributed, .description = attributed, .primary_goal = attributed };
-    var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };
+    // Specify projects only source readiness: no generated content binds review
+    // requirements after generation starts.
     try std.testing.expectEqual(.source_readiness, before.projection);
-    try std.testing.expectError(error.InvalidRequiredAuthority, project.execute(allocator, before.feature, accounted, content, null));
-    const empty = try project.execute(allocator, before.feature, accounted, content, brief);
-    try std.testing.expectEqual(.specification, empty.projection);
-    try std.testing.expectEqual(before.seeds.len, empty.seeds.len);
-    const records = try allocator.alloc(spec.IdentifiedRecord, @typeInfo(spec.Kind).@"enum".fields.len);
-    inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
-        var fields: @FieldType(spec.Content(spec.BusinessValue), @tagName(kind)) = undefined;
-        inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-            @field(fields, field.name) = if (field.type == spec.BusinessValue) value else &.{ value, value };
-        }
-        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .source_group_ids = attributed.source_group_ids, .provenance = provenance } };
-    }
-    content.records = records;
-    const after = try project.execute(allocator, before.feature, accounted, content, brief);
-    try std.testing.expectEqual(before.seeds.len + 15, after.seeds.len);
-    const ledger = try build.execute(allocator, after);
-    try std.testing.expectEqual(after.seeds.len, ledger.requirements.len);
+    for (before.seeds) |seed| try std.testing.expect(seed.id.unit != .record);
+    const ledger = try build.execute(allocator, before);
+    try std.testing.expectEqual(before.seeds.len, ledger.requirements.len);
     for (ledger.requirements) |requirement| try std.testing.expectEqual(.spec, requirement.registered_policy.?.owner);
-    var omitted = after;
-    omitted.seeds = after.seeds[1..];
+    var omitted = before;
+    omitted.seeds = before.seeds[1..];
     try std.testing.expectError(error.InvalidRequiredAuthority, build.execute(allocator, omitted));
-    var invented = after;
-    const more = try allocator.alloc(a.Seed, after.seeds.len + 1);
-    @memcpy(more[0..after.seeds.len], after.seeds);
-    more[after.seeds.len] = more[0];
+    var invented = before;
+    const more = try allocator.alloc(a.Seed, before.seeds.len + 1);
+    @memcpy(more[0..before.seeds.len], before.seeds);
+    more[before.seeds.len] = more[0];
     invented.seeds = more;
     try std.testing.expectError(error.InvalidRequiredAuthority, build.execute(allocator, invented));
 }
@@ -339,7 +321,7 @@ test "reference support must name current accounted signals with no foreign or d
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted, null, null);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "catalogue" }, accounted);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };
     inputs.evidence = evidence;
@@ -366,7 +348,7 @@ test "reference conflicts cannot be dropped or resolved by supplied evidence" {
     defer reference.deinit();
     const final = try f.summaries(allocator, try f.initialize(allocator, reference.inputs, reference.extracted, 2), reference.context());
     const accounted = (try f.finish(allocator, final, try @import("reference_reconciliation_test.zig").conflicting(allocator, final), reference.context())).valid;
-    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted, null, null);
+    var inputs = try (@import("actions/authority/build_specification_authority_requirements.zig").Action{}).execute(allocator, .{ .bytes = "library" }, accounted);
     try std.testing.expectEqual(@as(usize, 1), inputs.forced_gaps.len);
     const evidence = try allocator.alloc(a.Evidence, inputs.seeds.len);
     for (inputs.seeds, evidence, 0..) |seed, *entry, index| entry.* = .{ .id = .{ .ordinal = @intCast(index + 1) }, .requirement = seed.id, .authorities = inputs.authorities, .resolution = .{ .existing_authority = inputs.authorities[0] }, .finding = .supported, .method = .model_assisted };

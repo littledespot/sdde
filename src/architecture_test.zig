@@ -831,7 +831,7 @@ test "YAML request lifecycle uses its existing action and publishes only a valid
 }
 
 test "YAML request closure reuses lifecycle validation without new authority or effects" {
-    inline for (.{ @import("application/model_request_completion_workflow.zig").Complete, @import("application/model_request_termination_workflow.zig").Terminate, @import("application/advisory_protocol_request_completion_workflow.zig").Complete, @import("application/advisory_model_request_completion_workflow.zig").Complete }, .{ "application/model_request_completion_workflow.zig", "application/model_request_termination_workflow.zig", "application/advisory_protocol_request_completion_workflow.zig", "application/advisory_model_request_completion_workflow.zig" }) |Native, path| {
+    inline for (.{ @import("application/model_request_completion_workflow.zig").Complete, @import("application/model_request_termination_workflow.zig").Terminate }, .{ "application/model_request_completion_workflow.zig", "application/model_request_termination_workflow.zig" }) |Native, path| {
         const metadata = @import("application/workflow_operation_binding.zig").inspect(Native, &.{});
         try std.testing.expect(metadata.valid and !metadata.model_provider and !metadata.provider_authorization);
         try std.testing.expectEqual(.none, Native.contract.runner_accounting);
@@ -1918,9 +1918,10 @@ test "required authority has capability-free registered bindings and no model co
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }
     try std.testing.expectEqual(@import("domain/clarification_inputs.zig").Stage, authority.Stage);
-    try std.testing.expectEqual(@as(usize, 8), @typeInfo(authority.Outcome).@"union".fields.len);
-    try std.testing.expect(@FieldType(authority.Outcome, "assessment_incomplete") == authority.IncompleteAssessment);
-    try std.testing.expect(@FieldType(authority.Outcome, "assessment_complete") == authority.Assessment);
+    try std.testing.expectEqual(@as(usize, 6), @typeInfo(authority.Outcome).@"union".fields.len);
+    // Post-generation review is removed: no outcome records advisory assessment.
+    try std.testing.expect(!@hasField(authority.Outcome, "assessment_complete"));
+    try std.testing.expect(!@hasField(authority.Outcome, "assessment_incomplete"));
     try std.testing.expect(!@hasField(authority.Observation, "outcome"));
     try std.testing.expect(!@hasField(authority.Observation, "owner"));
     try std.testing.expect(!@hasField(authority.Observation, "score"));
@@ -2067,8 +2068,4 @@ test "principle root access stays in its narrow source adapter and shares physic
         try std.testing.expect(std.mem.indexOf(u8, source, "directory_inventory.zig") != null);
         try std.testing.expect(std.mem.indexOf(u8, source, "files.capture(") != null);
     }
-    const review = @embedFile("domain/principle_assessment.zig");
-    try expectAbsent(review, "/adapters/");
-    try expectAbsent(review, "std.Io.Dir");
-    try std.testing.expect(std.mem.indexOf(u8, review, "a.reconcile(") != null);
 }

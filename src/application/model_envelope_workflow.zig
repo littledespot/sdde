@@ -41,7 +41,7 @@ pub const Decode = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_decode = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_envelope_result } },
     };
@@ -68,7 +68,7 @@ pub fn complete(source: *const observation.Result) ?*const @import("../domain/pr
             .complete => |candidate| candidate,
             .stopped, .failed => null,
         },
-        .rejected, .cancelled, .advisory_stopped => null,
+        .rejected, .cancelled => null,
     };
 }
 
@@ -119,7 +119,7 @@ pub fn status(result: *const Result) @import("../domain/workflow.zig").OutcomeTa
             // A missing final answer takes correction, and a first runaway its
             // one re-send (ADR 0039); neither is a candidate.
             .validated => |evidence| if (evidence.missingFinalText() or evidence.runaway() == .first) .invalid else observation.status(source),
-            .rejected, .cancelled, .advisory_stopped => observation.status(source),
+            .rejected, .cancelled => observation.status(source),
         },
     };
 }

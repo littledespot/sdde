@@ -203,9 +203,7 @@ pub const Tracker = struct {
             const reviewed = try native_support.progress(view);
             switch (reviewed) {
                 .initial => {},
-                .source => |collection| try self.sourceReview(sequence, after_call, try native_support.inputs(view, reviewed), collection),
-                .pending => |pending| try self.sourceReview(sequence, after_call, pending.source.inputs, .{ .accepted = pending.source }),
-                .principles => |result| try self.sourceReview(sequence, after_call, result.pending.source.inputs, .{ .accepted = result.pending.source }),
+                .source => |collection| try self.sourceReview(sequence, after_call, try native_support.inputs(view), collection),
             }
         }
         if (view.contains(native_clarifications.state_schema.key)) {

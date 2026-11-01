@@ -74,7 +74,8 @@ only block.
   - Requirements written in one prose sentence stay one claim, so the scenario rule
     can't separate them.
   - The rule checks links, not meaning: an acceptance criterion that names a claim
-    but doesn't test it passes. Review stays advisory (ADR 0023).
+    but doesn't test it passes. Since 1 November 2026 no review runs after generation
+    (ADR 0023); the human who reviews and edits `spec.md` judges meaning.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
     unconditional; the condition survives only as its own claim.

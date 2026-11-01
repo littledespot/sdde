@@ -2,6 +2,12 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-26
+- **Moot (FIX06 D13.1, 1 November 2026):** Spec runs no principle review
+  ([ADR 0023](0023-advisory-post-generation-review.md) removal amendment). By the
+  user's decision the generic required-items admission constraint (Decision 1), whose
+  only user was principle review, is deleted in the same change, and request
+  descriptions advance to `model-request-debug/v14` without the `required_items`
+  member. This record is history only.
 - **Decision authority:** The user's decision on 26 October 2026, "1 yes" and "update
   with recommendations and implement", approving the recommendation to check "a
   `conflicting` or `uncertain` verdict must cite a principle" at response admission and

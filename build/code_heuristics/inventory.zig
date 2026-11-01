@@ -156,11 +156,12 @@ fn distinct(a: std.mem.Allocator, names: []const []const u8) ![]const []const u8
 fn listed(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir, patterns: []const []const u8) ![]const []const u8 {
     const prefix = try git(a, io, root, &.{ "rev-parse", "--show-prefix" });
     if (std.mem.trim(u8, prefix, "\r\n").len != 0) return error.GitInventoryUnavailable;
-    const arguments = try std.mem.concat(a, []const u8, &.{ &.{ "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--" }, patterns });
-    const names = try git(a, io, root, arguments);
+    const names = try git(a, io, root, try std.mem.concat(a, []const u8, &.{ &.{ "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--" }, patterns }));
+    // A tracked file deleted from the working tree is not an input.
+    const deleted = try git(a, io, root, try std.mem.concat(a, []const u8, &.{ &.{ "ls-files", "--deleted", "-z", "--" }, patterns }));
     var paths: std.ArrayList([]const u8) = .empty;
     var items = std.mem.tokenizeScalar(u8, names, 0);
-    while (items.next()) |path| try paths.append(a, path);
+    while (items.next()) |path| if (!contains(deleted, path)) try paths.append(a, path);
     const sorted = try distinct(a, paths.items);
     if (sorted.len == 0) return error.InventoryInputMissing;
     return sorted;
@@ -270,7 +271,7 @@ fn projected(comptime guidance: []const u8, comptime protocol: []const u8) []con
         "\"protocol_prompt\":\"" ++ protocol ++ "\",\"schema\":\"{\\\"type\\\":\\\"object\\\"}\",\"response_mode\":\"prompt_only\"," ++
         "\"controls\":{\"temperatures\":{\"configured\":0.1,\"runaway_retry\":1}},\"sampling\":\"configured\",\"reasoning_effort\":null," ++
         "\"operation_kind\":\"inference\",\"original_sources\":[],\"prose_fields\":[],\"field_policies\":[],\"exact_scope\":null," ++
-        "\"members\":[],\"coverages\":[],\"required_items\":[]}";
+        "\"members\":[],\"coverages\":[]}";
 }
 
 test "freeze keeps distinct guidance, protocol and schema text, the schema's decoded strings, and confirms its manifest" {
@@ -319,6 +320,9 @@ test "assets are the tracked workflow prompts and JSON resources only" {
     try repository.dir.writeFile(io, .{ .sub_path = "design/workflows/demo/result.schema.json", .data = "{}" });
     try repository.dir.writeFile(io, .{ .sub_path = "design/workflows/demo.workflow.yaml", .data = "schema: workflow/v1\n" });
     try repository.dir.writeFile(io, .{ .sub_path = "design/template.md", .data = "Not an asset.\n" });
+    try repository.dir.writeFile(io, .{ .sub_path = "design/workflows/demo/removed.prompt.md", .data = "Removed.\n" });
+    _ = try git(a, io, repository.dir, &.{ "add", "design/workflows/demo/removed.prompt.md" });
+    try repository.dir.deleteFile(io, "design/workflows/demo/removed.prompt.md");
     const found = try assets(a, io, repository.dir);
     try std.testing.expectEqual(@as(usize, 2), found.len);
     try std.testing.expectEqualStrings("design/workflows/demo/result.schema.json", found[0].path);

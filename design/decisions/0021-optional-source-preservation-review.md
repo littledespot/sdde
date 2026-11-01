@@ -5,16 +5,18 @@
 - **Decision authority:** The user's configuration and repair-slot request
 - **Amends:** The draft-first sequencing in [§17.3](../contracts/17-specify.md) and
   the closed configuration contract in [§9](../contracts/09-configuration.md)
-- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): review of the
-  generated specification is advisory; required pre-generation review is unchanged
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): no review of
+  the generated specification runs (removed 1 November 2026, FIX06 D13.1); required
+  pre-generation review is unchanged
 
 The optional `.sddtoolkit.json` setting
 `validation.sourcePreservationCheck` is a boolean, disabled when omitted.
 When enabled, complete, generation-ready references undergo a focused semantic
 review before specification generation. When disabled, the extra review and its
-repairs are skipped. Required review of blocked references and advisory review of
-the generated specification ([ADR 0023](0023-advisory-post-generation-review.md))
-are unchanged; this setting cannot relax publication authority.
+repairs are skipped. Required review of blocked references is unchanged, and no review
+of the generated specification runs
+([ADR 0023](0023-advisory-post-generation-review.md)); this setting cannot relax
+publication authority.
 
 The original captured corpus supplies one preservation obligation per source,
 including sources with no extracted claims. Review compares original meaning

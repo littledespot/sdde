@@ -53,7 +53,7 @@ not an alternative input authority; reruns regenerate it and preserve user-close
 
 ## Acceptance criteria
 
-- Source, generation and post-generation gaps publish the incomplete document and real
+- Source and generation gaps publish the incomplete document and real
   question links for arbitrary feature directories and unrelated business domains.
 - Supported business statements survive; technical, conflicting and superseded content
   cannot silently become supported specification content.

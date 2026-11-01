@@ -1002,7 +1002,7 @@ test "source snapshots retain static JSON guidance with its prompt resource kind
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {
-    for (0..10) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for (0..9) |shape| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -1056,7 +1056,6 @@ test "selected request schemas survive capture and graph release without whole-s
         if (shape == 2 or shape == 6) try std.testing.expect(selected.field_policies.len != 0);
         if (shape == 7) try expectReplayedMembers(a, &fixture, selected);
         if (shape == 8) try expectReplayedCoverage(a, &fixture, selected);
-        if (shape == 9) try expectReplayedRequiredItems(a, &fixture, selected);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -1126,11 +1125,6 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
         const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = coverage_path }, .allowed = &.{ 2, 4 }, .collection = .unique_subset, .coverage = coverage_rule }});
         return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}", .restriction = restriction };
     }
-    if (shape == 9) {
-        const canonical = try compiler.compile(a, required_schema);
-        const restriction = try @import("domain/model_result_schema.zig").restrictFieldPolicies(a, canonical, &.{}, &.{}, &.{}, &.{.{ .path = required_path, .when = required_when }});
-        return .{ .schema = restriction.selected(), .response = "{\"findings\":[{\"verdict\":\"flagged\",\"refs\":[2]},{\"verdict\":\"fine\",\"refs\":[]}]}", .restriction = restriction };
-    }
     if (shape == 7) {
         const canonical = try compiler.compile(a, member_schema);
         const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = member_path }, .allowed = &.{ 2, 4 }, .collection = .exact_members }});
@@ -1182,7 +1176,7 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
     var foreign = selected;
     foreign.members = &.{.{ .path = member_path, .allowed = &.{ 2, 4, 6 } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
-    try std.testing.expectEqualStrings("Captured schema and native membership, coverage or required items disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
+    try std.testing.expectEqualStrings("Captured schema and native membership or coverage disagree", (try fixture.provider.provider().inspect(a, foreign, repeated)).reason.?);
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
     try std.testing.expectEqualDeep(selected.members, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).members);
 }
@@ -1213,34 +1207,9 @@ fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: deb
     try std.testing.expectEqualDeep(selected.coverages, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).coverages);
 }
 
-const required_schema = "{\"type\":\"object\",\"properties\":{\"findings\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"verdict\":{\"enum\":[\"fine\",\"flagged\"]},\"refs\":{\"type\":\"array\",\"minItems\":0,\"maxItems\":4,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}},\"required\":[\"verdict\",\"refs\"],\"additionalProperties\":false}}},\"required\":[\"findings\"],\"additionalProperties\":false}";
-const required_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "findings" }, .{ .items = {} }, .{ .property = "refs" } };
-const required_when: @import("domain/model_result_schema.zig").RequiredWhen = .{ .property = "verdict", .values = &.{"flagged"} };
-
-/// A captured request replays admission's native required items (ADR 0042),
-/// which the recorded provider schema bytes cannot express.
-fn expectReplayedRequiredItems(a: std.mem.Allocator, fixture: *Fixture, selected: debug.Description) !void {
-    try std.testing.expectEqual(@as(usize, 1), selected.required_items.len);
-    const uncited = try debugResponse(a, "{\"findings\":[{\"verdict\":\"fine\",\"refs\":[]},{\"verdict\":\"flagged\",\"refs\":[]}]}");
-    const checked = try fixture.provider.provider().inspect(a, selected, uncited);
-    try std.testing.expectEqual(.invalid, checked.schema);
-    try std.testing.expectEqualStrings("missing_required_item", checked.reason.?);
-    try std.testing.expectEqualStrings("/findings/1/refs", checked.path.?);
-    // Without the record the same bytes pass, so the record is what replays admission.
-    var unrestricted = selected;
-    unrestricted.required_items = &.{};
-    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, uncited)).schema);
-    // A record that does not fit the captured schema cannot be read or replayed.
-    var foreign = selected;
-    foreign.required_items = &.{.{ .path = required_path, .when = .{ .property = "verdict", .values = &.{"ghost"} } }};
-    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
-    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
-    try std.testing.expectEqualDeep(selected.required_items, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).required_items);
-}
-
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {
     const fields = try @import("domain/model_candidate_json.zig").fieldBindings(@import("domain/reference_extraction_parser.zig").Response, a, .{ .reference_phase = .extraction });
-    const restriction = try @import("domain/model_result_schema.zig").restrictFieldPolicies(a, selected, &.{}, &.{}, fields, &.{});
+    const restriction = try @import("domain/model_result_schema.zig").restrictFieldPolicies(a, selected, &.{}, &.{}, fields);
     return .{ .schema = restriction.selected(), .response = response, .fields = fields, .restriction = restriction };
 }
 

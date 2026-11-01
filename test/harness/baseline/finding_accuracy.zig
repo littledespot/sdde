@@ -3,7 +3,7 @@
 const std = @import("std");
 const assessment = @import("assessment.zig");
 const reviews = @import("reviews.zig");
-const kind_count = std.meta.tags(@FieldType(reviews.Kind, "source")).len + std.meta.tags(@FieldType(reviews.Kind, "principles")).len + std.meta.tags(@FieldType(reviews.Kind, "preservation")).len;
+const kind_count = std.meta.tags(@FieldType(reviews.Kind, "source")).len + std.meta.tags(@FieldType(reviews.Kind, "preservation")).len;
 
 pub const Workload = struct { findings: []const assessment.FindingResult, coverage: []const assessment.ReviewCoverage };
 pub const Counts = struct { correct: u64 = 0, incorrect: u64 = 0, unknown: u64 = 0 };
@@ -49,7 +49,7 @@ pub const Report = struct {
 fn emptyWindow() Window {
     var result: Window = .{ .by_kind = undefined };
     var at: usize = 0;
-    inline for (.{ "source", "principles", "preservation" }) |domain| {
+    inline for (.{ "source", "preservation" }) |domain| {
         for (std.meta.tags(@FieldType(reviews.Kind, domain))) |kind| {
             result.by_kind[at] = .{ .kind = @unionInit(reviews.Kind, domain, kind) };
             at += 1;
@@ -165,7 +165,7 @@ pub fn summarize(a: std.mem.Allocator, workloads: []const Workload) !Report {
 
 fn testFinding(request: usize, predicted: reviews.Kind, expected: ?reviews.Kind) assessment.FindingResult {
     return .{
-        .native = .{ .ordinal = 1, .origin = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } }, .requirement = .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 1 } }, .slot = .disposition }, .kind = predicted, .detail = "Typed native finding.", .source_ids = &.{.{ .ordinal = 1 }}, .principle_citations = &.{}, .missing_obligation = null, .question = null, .authority_gap = null, .admission = .accepted },
+        .native = .{ .ordinal = 1, .origin = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } }, .requirement = .{ .kind = .reference_meaning, .unit = .{ .source = .{ .ordinal = 1 } }, .slot = .disposition }, .kind = predicted, .detail = "Typed native finding.", .source_ids = &.{.{ .ordinal = 1 }}, .missing_obligation = null, .question = null, .authority_gap = null, .admission = .accepted },
         .corrective = request != 1,
         .correct = if (expected) |value| std.meta.eql(predicted, value) else null,
         .expected_kind = expected,

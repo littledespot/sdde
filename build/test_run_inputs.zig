@@ -39,14 +39,10 @@ pub const ignored = [_][]const u8{
     ".zig-cache/r42-recovery",
     ".zig-cache/r43-recovery",
     ".zig-cache/representation-admission",
-    ".zig-cache/review-assignment-",
     ".zig-cache/review-decision-greeting",
     ".zig-cache/review-decision-loan",
     ".zig-cache/semantic-simplicity/phase0",
     ".zig-cache/source-loss-citation-completeness-current-contract",
-    ".zig-cache/source-review-handoff/current-advisory",
-    ".zig-cache/source-review-record",
-    ".zig-cache/source-review-scope",
     ".zig-cache/workflow-step-trace",
     "zig-out/baseline/claims",
     "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959",
@@ -137,7 +133,7 @@ test "every ignored path that test sources name is keyed or a live output root" 
 
 test "ignored-path coverage accepts listed locations and rejects new ones" {
     try std.testing.expect(covered(".zig-cache/authoring-associations/v14-text", false));
-    try std.testing.expect(covered(".zig-cache/review-assignment-", true));
+    try std.testing.expect(covered(".zig-cache/chunk13-admission-", true));
     try std.testing.expect(covered("zig-out/e2e-spec", false));
     try std.testing.expect(!covered("zig-out/e2e-spec", true));
     try std.testing.expect(!covered("zig-out/e2e-spec/2026-01-01T00-00-00Z-new-run", false));

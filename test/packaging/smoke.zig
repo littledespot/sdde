@@ -153,8 +153,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         \\policy: core.capability-free@1
         \\start: account
         \\steps:
-        \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, more: account-stop, failed: end.failed } }
-        \\  account-stop: {use: complete-advisory-protocol-request, on: {blocked: end.failed}}
+        \\  account: { use: advance-model-attempt-accounting, with: { retry-limit: 0 }, on: { ok: end.ok, failed: end.failed } }
     );
     const denied_accounting = std.Build.Step.Run.create(b, "reject packaged attempt accounting without a prepared request");
     denied_accounting.addFileArg(missing_request_executable);
@@ -598,7 +597,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         inline for (.{ "reconciliation", "generation", "support" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
         };
-        inline for (.{ "support-loss.prompt.md", "principle.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "packet-guidance.json" }) |name| {
+        inline for (.{ "support-loss.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "packet-guidance.json" }) |name| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name), ".sddtoolkit/workflows/spec/" ++ name);
         }
         _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");

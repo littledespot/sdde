@@ -79,7 +79,7 @@ pub const Initialize = struct {
 };
 pub const Check = struct {
     pub const Action = @import("../actions/specification/check_specification_generation_progress.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         return .{ .outcome = context.?.action.execute(try readSession(&input.step.data)), .delta = .{} };

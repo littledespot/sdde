@@ -725,7 +725,6 @@ fn reviewViews(a: std.mem.Allocator, facts: acquisition.Facts, outputs: []const 
             native_coverage = true;
             review = switch (entry.review) {
                 .source => .source,
-                .principles => .principles,
                 .preservation => .preservation,
             };
             projected = entry.complete;
@@ -841,7 +840,7 @@ fn render(a: std.mem.Allocator, report: Report) ![]const u8 {
     try w.print("Phase 2 decision: **{s}**; reason: **{s}**; follow-up: **{s}**. Reproduced failure classes: {d}/{d}. This recommendation grants no workflow authority. Missing evidence: ", .{ @tagName(report.phase2_decision.decision), @tagName(report.phase2_decision.reason), @tagName(report.phase2_decision.follow_up), report.phase2_decision.reproduced_failure_classes, report.failure_classes.len });
     try std.json.Stringify.value(report.phase2_decision.missing, .{}, w);
     try w.print(".\n\nThe frozen feasibility report retains declared phase coverage and the worst-observed workflow cost assumption. The exclusive experiment claim admits this baseline once; its actual consumption and remaining allowance are retained independently. Later phases remain reserved and cannot dispatch through this command. Reforecast of all declared future phases: **{s}**. A sized sample outside this envelope remains infeasible with its required count retained and no holdout IDs selected.\n\n", .{@tagName(report.qualification_budget.status)});
-    try w.print("Finding-type accuracy: **{s}**. Correct: {d}; incorrect: {d}; unknown: {d}. Native review-bearing sends: {d}; unmeasured review responses: {d}. Only typed native source, principle and preservation-comparison findings with source-backed expected-kind judgments contribute known correctness. Native admission does not prove a finding true. Unsupported or incomplete review contracts stay unmeasured; harmful-diagnosis issue counts are not substituted for finding-type accuracy. Original, latest per native subject, all corrective and complete-chain confusion counts and per-kind precision/recall remain separate in score.json. Evaluator-only source cases and exact native semantic targets are retained in assessment-inputs.json; none are generation inputs.\n\n", .{ @tagName(report.finding_type_accuracy.status), report.finding_type_accuracy.all.counts.correct, report.finding_type_accuracy.all.counts.incorrect, report.finding_type_accuracy.all.counts.unknown, report.finding_type_accuracy.native_review_bearing_sends, report.finding_type_accuracy.unmeasured_review_responses });
+    try w.print("Finding-type accuracy: **{s}**. Correct: {d}; incorrect: {d}; unknown: {d}. Native review-bearing sends: {d}; unmeasured review responses: {d}. Only typed native source and preservation-comparison findings with source-backed expected-kind judgments contribute known correctness. Native admission does not prove a finding true. Unsupported or incomplete review contracts stay unmeasured; harmful-diagnosis issue counts are not substituted for finding-type accuracy. Original, latest per native subject, all corrective and complete-chain confusion counts and per-kind precision/recall remain separate in score.json. Evaluator-only source cases and exact native semantic targets are retained in assessment-inputs.json; none are generation inputs.\n\n", .{ @tagName(report.finding_type_accuracy.status), report.finding_type_accuracy.all.counts.correct, report.finding_type_accuracy.all.counts.incorrect, report.finding_type_accuracy.all.counts.unknown, report.finding_type_accuracy.native_review_bearing_sends, report.finding_type_accuracy.unmeasured_review_responses });
     try w.print("Original upstream extraction/reconciliation evidence complete: **{}**. Every original native upstream assignment requires its own exact-response source-backed judgment, independently of specification-generation fidelity. Corrective and context-follow-up targets retain separate unknown counts; their later success cannot replace an original loss. Per-send native origins, output hashes, purpose/owner, usage and correction facts are exported for evaluators. Missing original labels block the Phase 2 decision and qualification selection without erasing independently known generation fidelity.\n\n", .{report.original_upstream_evidence_complete});
     try w.print("Current-content fidelity after the correction chain: known successes {d}, known failures {d}, unknown {d}; complete: {}. Independent-feature rate: ", .{ report.correction_assisted_fidelity.successes, report.correction_assisted_fidelity.failures, report.correction_assisted_fidelity.unknown, report.correction_assisted_fidelity.evidence_complete });
     try std.json.Stringify.value(report.correction_assisted_fidelity.rate, .{}, w);
@@ -901,7 +900,7 @@ test "native projection retains original generation independently of later block
     var facts: acquisition.Facts = .{
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
-        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
         .first_candidate = .{ .json = original, .sha256 = std.fmt.bytesToHex(first_hash, .lower), .first_pass = true },
         .final_candidate = .{ .json = final, .sha256 = std.fmt.bytesToHex(last_hash, .lower), .first_pass = false },
@@ -937,7 +936,7 @@ test "receipt hashes reject changed bytes and unknown usage never becomes zero c
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
+        .workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .specification_unit, .request_step = "generate", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .uncertain_delivery = true }},
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -956,7 +955,7 @@ test "native genuine clarification targets include registered question bytes wit
         .trial = .{ .ordinal = 1, .case_id = "approval-gap", .feature_id = "approval", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
+        .workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .request_step = "understand", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = .{ .input_tokens = 5, .output_tokens = 3, .total_tokens = 8 } }},
         .published_output = "Urgent requests require manager sign-off. Ordinary approval remains unresolved.",
         .clarification_outputs = &.{.{ .path = "specs/approval/clarify/spec-01.md", .bytes = question, .sha256 = try frozen_inputs.hash(a, question) }},
@@ -1068,7 +1067,7 @@ test "native purposes count failed first repair sends and preserve unknown per-s
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -1177,7 +1176,7 @@ test "partial setup without invocation stays unattempted while native exchanges 
     var facts: acquisition.Facts = .{ .trial = row.trial, .freeze_sha256 = "freeze", .directory = "trials/0001/partial", .inputs_sha256 = "reserved-input-identity", .diagnostic = "InputUnavailable" };
     try std.testing.expect(try invocationUnstarted(facts));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(facts));
-    facts.workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .input_invalid };
+    facts.workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(!try invocationUnstarted(facts));
     facts.workflow = null;
     facts.receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .experiment_send = .{ .ordinal = 1 }, .request_step = "extract", .context_sha256 = @splat(0), .request_sha256 = @splat(0) }};
@@ -1221,7 +1220,7 @@ test "representation attribution stays separate from native paid-resource stages
     const receipt: trace.Receipt = .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .specification_unit, .experiment_send = .{ .ordinal = 1 }, .request_step = "generation", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = operation.ProviderUsage.init(4, 3, 7) };
     const resources = try resourceStages(a, &.{receipt});
     try std.testing.expectEqual(@as(?u64, 7), resources[@intFromEnum(stages.Stage.generation)].actual_tokens);
-    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
+    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
     const metric = try admissionMetric(a, facts);
     try std.testing.expectEqual(.measured, metric.status);
     facts.workflow.?.admission_escape.?.escaped_values = 1;
@@ -1235,7 +1234,7 @@ test "native admission workload incidence includes zero-send invocations and exc
     try std.testing.expect(!acquisition.nativeInvocationObserved(never_invoked));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(never_invoked));
     var invoked = never_invoked;
-    invoked.workflow = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .input_invalid };
+    invoked.workflow = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(acquisition.nativeInvocationObserved(invoked));
     const missing = try admissionMetric(a, invoked);
     try std.testing.expectEqual(.unavailable, missing.status);

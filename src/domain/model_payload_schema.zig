@@ -74,17 +74,6 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                 };
                 if (validateValue(child, property.schema)) |diagnostic| return diagnostic.within(.{ .property = property.name });
             }
-            // ADR 0042: an array needs an item when its sibling takes a listed
-            // value. The location names the empty array.
-            for (properties) |property| {
-                if (property.schema.* != .array) continue;
-                const rule = property.schema.array.required_when orelse continue;
-                const list = object.get(property.name) orelse continue;
-                if (list.array.count() != 0) continue;
-                const sibling = object.get(rule.property) orelse continue;
-                if (sibling != .string) continue;
-                for (rule.values) |listed| if (std.mem.eql(u8, sibling.string, listed)) return (reject(.missing_required_item, property.schema)).within(.{ .property = property.name });
-            }
         },
         .string => |bounds| {
             if (value != .string) return reject(.type_mismatch, node);

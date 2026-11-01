@@ -881,7 +881,6 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                 .unknown_variant => "allowed kind",
                 .duplicate_member => "repeats an assigned member",
                 .uncovered_member => "covering.kinds",
-                .missing_required_item => "needs at least one item",
                 .missing_member => "no item names this assigned member",
             };
             try std.testing.expect(std.mem.indexOf(u8, explanation, expected_words) != null);

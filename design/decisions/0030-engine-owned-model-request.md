@@ -49,9 +49,6 @@
     available" and "Detailed operations and distinct request identities remain visible";
   - [ADR 0019](0019-single-request-debugger.md): what `node_id`, `route_id` and the
     action ID name, and its token-count observations;
-  - [ADR 0023](0023-advisory-post-generation-review.md): the advisory request outcomes
-    as "distinct step occurrences", and its deferred-carrier proof, which now applies
-    only to steps marked `advisory: allowed`;
   - [ADR 0028](0028-anthropic-messages-provider.md) and
     [ADR 0029](0029-bedrock-model-families.md): each catalogue entry's `config` gains a
     required `requestTimeoutMs`, which settles their open per-provider and per-family
@@ -73,22 +70,32 @@
 - **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
   October 2026): after a provider `output_limit` stop, the request re-sends the
   identical request once at the configured `temperatureRunawayRetry`, without using the
-  step's `retry-limit`. A runaway on the re-send fails a required step; an advisory one
-  ends its advice incomplete ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). Until
+  step's `retry-limit`. A runaway on the re-send fails the step. Until
   `request-model` lands, the explicit request-lifecycle steps carry the re-send.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (27 October
   2026, not yet implemented): exhausting a required request's correction stays a terminal
   runner rejection, not a YAML outcome, but after it (and after a `RepairNoProgress` or
   token-budget rejection) the engine may run the definition's declared, model-free
   failure output, then returns the original failure.
+- **Advisory variant withdrawn (FIX06 D13.1, 1 November 2026):** by the user's decision
+  to remove both post-generation reviews and to delete the advisory request protocol
+  they alone used ([ADR 0023](0023-advisory-post-generation-review.md) removal
+  amendment). `request-model` has one contract with the outcomes `ok`, `invalid`,
+  `failed` and `cancelled`; the `advisory` parameter, the `advisory: allowed` marking,
+  the advisory `more` and `blocked` outcomes, their deferred carriers, the
+  one-directional check, `propagate-advisory-request-failure`, the advisory stop and
+  completion steps and `retire-advisory-protocol-transport` are withdrawn. This settles
+  the question this ADR left open about `propagate-advisory-request-failure`. The
+  contract-variant mechanism stays for ADR 0033, which is now its only user. The
+  23 October amendment authority below records the history of the withdrawn marking.
 
 ## Context
 
 Every model call in the Specify definition runs through the 16-step `model-request-body`
 subgraph. Its steps count the attempt, assign and authorize a provider operation, check
 the request phase, advance two lifecycles, invoke the model, validate the observation,
-complete the operation, admit the response, build a protocol correction, close or
-terminate the request, and close the two advisory stops. Five wrapper subgraphs
+complete the operation, admit the response, build a protocol correction, and close or
+terminate the request. Five wrapper subgraphs
 (`model-request`, `model-request-with-context`, `support-request`, `composition-request`
 and `composition-request-body`) add request preparation and route the result. With the
 `release-request` subgraph, this request region is 159 of the definition's 1,159 lines.
@@ -120,30 +127,18 @@ A workflow makes one model request with one step that uses the registered operat
   `composition-part` (ADR 0016);
 - optional `context`, which may accompany either schema form;
 - `retry-limit`, bounded by the operation contract as today (`0` permits only the
-  initial attempt);
-- optional `advisory: allowed`, for a step that may carry a request whose advice can end
-  incomplete (see "Advisory requests").
+  initial attempt).
 
 The step declares no deadline: the provider-operation deadline is the bound catalogue
 entry's `requestTimeoutMs` (see "Request deadline"). A `timeout-ms` parameter is rejected.
 
-The outcome meanings of today's request body are unchanged. Every step maps `ok`,
-`invalid`, `failed` and `cancelled`. Only a step marked `advisory: allowed` also maps
-`more` and `blocked`.
+Every step maps `ok`, `invalid`, `failed` and `cancelled`. Exhausting a request's
+protocol correction remains a terminal runner rejection, not a YAML outcome. It names
+the step and the stage.
 
-- `more` and `blocked` are the advisory incomplete and advisory protocol-exhausted
-  outcomes of ADR 0023. Each step marked `advisory: allowed` still routes them to
-  `propagate-advisory-request-failure` or to a native completion step. The compiler's
-  deferred-carrier proof keeps its rules for those steps; because one step now carries
-  ordinary closure and both advisory carriers, its descriptor becomes per-outcome instead
-  of per-step.
-- Exhausting the protocol correction of an ordinary or required request remains a
-  terminal runner rejection, not a YAML outcome. It names the step and the stage.
-  Exhausting an advisory request's correction returns `blocked`, as today.
-
-A definition may still fix repeated parameters and routing, such as `protocol-prompt`
-and advisory propagation, once in a thin definition-local subgraph (ADR 0013). This ADR
-adds no workflow-level default; its only new YAML is the `advisory` parameter.
+A definition may still fix repeated parameters and routing, such as `protocol-prompt`,
+once in a thin definition-local subgraph (ADR 0013). This ADR adds no workflow-level
+default.
 
 ### How the step runs
 
@@ -159,8 +154,7 @@ binding.
 The orchestrator coordinates these stages, in this order, through runner-owned child
 bindings. This is the one stage list; other documents refer to it.
 
-1. Preparation: request assignment, binding validation (including the advisory-step
-   check, see "Advisory requests") and request building.
+1. Preparation: request assignment, binding validation and request building.
 2. Attempt accounting.
 3. Provider-operation assignment.
 4. Authorization preparation, using the bound catalogue entry's `requestTimeoutMs`.
@@ -173,8 +167,7 @@ bindings. This is the one stage list; other documents refer to it.
 10. Provider-operation completion.
 11. Response admission: decoding and payload-schema validation.
 12. Protocol correction, or ADR 0039's runaway re-send, which returns to stage 2.
-13. Request closure, pre-call termination of the operation and then the request, or
-    advisory completion: the protocol stop or incomplete advice.
+13. Request closure, or pre-call termination of the operation and then the request.
 
 - **Fixed order.** The order and branches are compiled into the engine and are the same
   for every workflow. YAML cannot reorder, skip, add or name a stage. A removed stage ID
@@ -212,52 +205,6 @@ bindings. This is the one stage list; other documents refer to it.
   rules: inputs, transitions, ownership, rejection, cleanup, token accounting and
   evidence retention.
 
-### Advisory requests
-
-`advisory` is an optional, closed step parameter whose one value is `allowed`. It marks a
-step that may carry a request ADR 0023 classifies as advisory, whose advice can end
-incomplete. It declares where advisory outcomes are routed; it never makes a request
-advisory.
-
-- **Classification stays native.** Whether a request is advisory is the prepared input
-  packet's advisory-assessment binding, which the native review context attaches under
-  advisory policy (ADR 0023). A workflow, slot, model response or this parameter cannot
-  select it, and the parameter selects no policy, scope or owner.
-- **Two contract variants.** `request-model` is the first user of the shared mechanism
-  in "Contract variants". `advisory: allowed` selects the advisory variant, whose outcome
-  set adds `more` and `blocked`, with their deferred-carrier descriptors. Without it, the
-  ordinary variant's outcomes are `ok`, `invalid`, `failed` and `cancelled`. The
-  compiler applies its general rule that `on` maps every outcome of the selected variant
-  exactly once, with no `request-model` special case. The deferred-carrier proof applies
-  to the advisory variant unchanged. The ordinary variant has no advisory carrier, so the
-  proof has nothing to check there.
-- **One-directional check.** Binding validation in the preparation stage (stage 1)
-  fails a request whose packet carries an advisory-assessment binding when its step is
-  not marked `advisory: allowed`. It reads the compiled step's typed marking, not a
-  re-parsed parameter, so the compiler and preparation share one owner of "is this step
-  marked". The result is a terminal runner rejection with a closed diagnostic, not a YAML
-  outcome that a workflow could route; it names the step and the preparation stage. It
-  comes before attempt accounting and authorization, so it accounts no attempt, creates
-  no lease, incurs no usage and still cleans up the prepared request. That is the unsafe
-  direction: an advisory stop with nowhere to go.
-- **Both kinds at a marked step.** A step marked `advisory: allowed` may also carry
-  ordinary requests. An ordinary request never ends `more` or `blocked`, because only a
-  request with an advisory-assessment binding is eligible for advisory completion, so the
-  step's advisory mappings simply don't fire for it.
-- **Why both directions are not checked.** The Specify definition's `assess-support`
-  subgraph serves the pre-generation review, which runs under required policy, and the
-  post-generation source and principle advice, which runs under advisory policy. Source
-  review reaches it through `review-source-support`; principle advice calls it directly
-  from `review-candidate`. A two-directional check would need a required and an
-  advisory copy of both subgraphs. The one-directional check keeps the safety rule with
-  no duplicated YAML.
-- **Effect.** Today's generic wrappers route `more` and `blocked` to
-  `propagate-advisory-request-failure` at every call site, including sites whose requests
-  are never advisory. Those unreachable mappings and propagation steps go. Sites that can
-  carry an advisory request, such as `assess-support`'s model and repair requests, are
-  marked; the equivalence acceptance below proves the marking against today's
-  behaviour.
-
 ### Contract variants
 
 Confirmed by the user on 23 October 2026 ("update the documentation around option 1").
@@ -269,45 +216,32 @@ so there is one mechanism with two users.
 - **A variant is a complete contract:** outcome set, data effects, side-effect class,
   outcome-association descriptors, repair role and retry authority, the same fields as
   any registered contract. Its type has no defaulted fields, so every variant states
-  each one. Nothing is partial or merged from another variant. Association descriptors
-  are per outcome; a variant with one descriptor for every outcome is the simple case
-  ADR 0033's variants use, and `request-model`'s advisory variant needs the per-outcome
-  form for its deferred carriers.
+  each one. Nothing is partial or merged from another variant. A variant has one
+  association descriptor for every outcome, as ADR 0033's variants use.
 - **Selection.** Exactly one closed enum step parameter selects the variant at compile
-  time: `advisory` for `request-model`, `owner` for ADR 0033's operations. A value with
+  time: `owner` for ADR 0033's operations. A value with
   no variant, or a step that leaves out a required selector, rejects at compilation. A
   selector is never a version, alias or compatibility form (ADR 0005). It picks a
   contract variant and grants no policy, scope or defect identity. Whether an operation
   also selects rules from its compiled variant, and how it checks its selector at run
-  time, belongs to that operation's ADR: `advisory`'s one-directional check is in
-  "Advisory requests", and `owner`'s rules and check are in ADR 0033.
-- **Optional selectors.** A selector may be optional, as `advisory` is. Its contract then
-  names exactly one variant that its absence selects; for `request-model` that is the
-  ordinary variant. A required selector, such as `owner`, has no such variant.
+  time, belongs to that operation's ADR: `owner`'s rules and check are in ADR 0033.
+  A selector is required; no variant is selected by its absence.
 - **Registry admission** validates every variant independently, with the same checks as
-  any registered contract, and also rejects an optional selector with zero or more than
-  one variant for its absence. Registry-wide checks that read every contract cover every
+  any registered contract. Registry-wide checks that read every contract cover every
   variant of every contract: gate-evidence exclusivity, the gate-issuer check and schema
   registration.
 - **The compiler** checks each step against its selected variant alone: outcome mapping,
   data flow, role and association compatibility, and retry authority. Compiled-graph
   validation and registry publication recheck each step against that same variant.
 - **The runner and the stage actions** check every delta, outcome, association and
-  retry authority against the compiled step's variant, never a union of variants. The
-  advisory-step check in preparation reads the compiled variant, not the parameter.
-- **Scope.** The mechanism carries what ADR 0033 specifies for its variants, plus two
-  things `request-model` needs: optional selectors and per-outcome association
-  descriptors. It adds no run-time selector check of its own; any check against native
-  facts belongs to the operation that uses it. Its two `request-model` variants, which
-  differ in their outcome sets and those outcomes' descriptors, are its first and
-  simplest test before ADR 0033's 29.
+  retry authority against the compiled step's variant, never a union of variants.
+- **Scope.** The mechanism carries what ADR 0033 specifies for its variants. It adds no
+  run-time selector check of its own; any check against native facts belongs to the
+  operation that uses it.
 - **Why this option.** ADR 0033 needs per-owner variants anyway: separate operations
   would bring back most of the 29 per-owner operations W3 removes, and a union contract
-  would lose the per-owner checks. Separate `request-model` operations would leave it the
-  one place that picks its contract by operation name. A compiler special case is the
-  per-caller branch AGENTS.md forbids. Building the mechanism here keeps one way to do
-  it, and finds defects on two simple variants instead of during the 13-owner
-  conversion.
+  would lose the per-owner checks. A compiler special case is the per-caller branch
+  AGENTS.md forbids. Building the mechanism here keeps one way to do it.
 
 ### Request deadline
 
@@ -343,15 +277,11 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
 This is the one list; other documents refer to it.
 
 - **Consumers** of an admitted response, which read the retained request as ADR 0012
-  describes. `reuse-specification-review` consumes the same selection contract as the
-  `request-model` step that may follow it; one parameter owner serves both.
+  describes.
 - **Release.** A site's release step chooses what the following steps keep:
   `retire-model-request` keeps the input packet for a following request,
-  `retire-model-transport` and `retire-model-input` drop it, and
-  `retire-advisory-protocol-transport` follows an advisory protocol stop. Release is a
-  workflow choice, so it stays an explicit step.
-- **Advisory routing:** `propagate-advisory-request-failure` and the native advisory
-  stop steps, at each step marked `advisory: allowed`, which routes `more` and `blocked`.
+  and `retire-model-transport` and `retire-model-input` drop it. Release is a workflow
+  choice, so it stays an explicit step.
 - **JSON-part retention** after a composition request (`retain-json-part`).
 - **Request-ledger initialization** (`build-initial-model-request-identity-ledger`).
 - **Repairs**, each its own request.
@@ -441,8 +371,8 @@ cases: forged deltas, stale or foreign evidence, cancellation and allocation cle
 - Model calls, prompts, schemas, token usage and the single workflow budget (ADR 0011),
   including actual-usage accounting of every inference call.
 - The Specify definition's deadline: each GPT-OSS-20B request keeps 180,000 ms.
-- Retry limits and counting scopes, advisory completion and incomplete advice
-  (ADR 0023), and response admission (ADRs 0006, 0014, 0016 and 0020).
+- Retry limits and counting scopes, and response admission (ADRs 0006, 0014, 0016 and
+  0020).
 - Request identity form, `model-request/v1` and retained-request consumers (ADR 0012).
 - Atomic execution (ADR 0009) and the 1,024-step ceiling (ADR 0016).
 
@@ -459,7 +389,7 @@ changed:
 | 2. Token counting | Rebuild as `count-model-tokens`, contract deferred | **Removed** | Nothing can use it |
 | 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as `requestTimeoutMs` | It depends on the model, not the workflow |
 | 4a. Release | Stays an explicit YAML step | **Kept** | It has to run after workflow-specific consumers |
-| 4b. Advisory routing | Every step maps all six outcomes | **Only steps marked `advisory: allowed` map `more` and `blocked`** | Removes unreachable mappings from most sites |
+| 4b. Advisory routing | Every step maps all six outcomes | **Only steps marked `advisory: allowed` map `more` and `blocked`** (withdrawn 1 November 2026 with the advisory protocol) | Removes unreachable mappings from most sites |
 
 1. **Form: a fixed kernel orchestrator with runner-owned child bindings.** The request
    stages change runner-owned state (accounting, leases and lifecycle ledgers) that the
@@ -479,12 +409,9 @@ changed:
    retirements and a release must follow the request's workflow-specific consumers.
    Engine-owned release needs the compiler to derive each request's lifetime, and stays a
    separate question.
-5. **4b. Advisory routing stays at each advisory call site**, because ADR 0023 requires
-   per-site propagation or native completion. It applies only to steps marked
-   `advisory: allowed`, and only an advisory request at an unmarked step is rejected;
-   see "Advisory requests". The 23 October table first named this `role: advisory` with
-   a two-directional check; the same day the user chose the one-directional form, because
-   one review site serves both kinds of request.
+5. **4b. Advisory routing** was settled as a per-site `advisory: allowed` marking. It was
+   withdrawn on 1 November 2026, when the advisory protocol it routed was removed with
+   post-generation review (FIX06 D13.1).
 
 ## Consequences
 
@@ -492,9 +419,8 @@ changed:
   leaves the Specify definition, and later workflow files don't copy it.
 - **The net YAML saving grows.** The 22 October estimate was about 35–90 lines (3–8%) of
   the Specify definition, because each call site still routed `more` and `blocked` and
-  declared `protocol-prompt` and `timeout-ms`. Ordinary sites now route neither advisory
-  outcome and need no propagation steps, and no site declares a deadline, so the saving
-  is larger. The implementation measures it.
+  declared `protocol-prompt` and `timeout-ms`. No site routes an advisory outcome or
+  declares a deadline, so the saving is larger. The implementation measures it.
 - **Deadlines follow the model.** Selecting a different model for a slot brings that
   model's deadline with it; no workflow edit is needed.
 - **Less engine code.** The token-count path, the count operation kind and Bedrock's
@@ -521,7 +447,6 @@ All offline. The change makes no model call.
   and the production-admission results of retained raw response bytes.
 - **Equivalence.** `request-model` must reproduce those frozen results. That includes:
   - protocol correction and retry exhaustion;
-  - both advisory stops;
   - budget exhaustion and provider failure;
   - pre-call termination and cancellation;
   - an inference-then-authorization rejection.
@@ -529,7 +454,7 @@ All offline. The change makes no model call.
   - stage order;
   - every branch: preparation rejection (no later stage is invoked), accounting
     exhaustion, authorization failure or cancellation, phase `ok`/`more`, admission
-    `ok`/`invalid`/`more`, and closure;
+    `ok`/`invalid`, and closure;
   - cancellation at each stage;
   - the `retry-limit` bound;
   - cleanup on every path.
@@ -540,34 +465,13 @@ All offline. The change makes no model call.
 - **Counting removed.** No count operation, operation kind, capability, CountTokens wire
   path, fixture or test remains. Workflow token accounting reproduces the frozen totals
   from inference usage alone.
-- **Advisory requests:**
-  - at a step marked `advisory: allowed`, an advisory request reproduces both advisory
-    stops, and an ordinary request at the same step completes as an ordinary request
-    and never produces `more` or `blocked`;
-  - `assess-support` serves both the pre-generation required review and post-generation
-    advice from one marked step, with today's outcomes;
-  - at that marked step, an ordinary request whose protocol correction is exhausted
-    still ends in the terminal runner rejection, not `blocked`, and one whose provider
-    reports an output limit, a provider failure or unavailable usage still ends
-    `failed`, not `more`, so marking a step never softens a required failure;
-  - an advisory request at an unmarked step ends in a terminal runner rejection with a
-    closed diagnostic naming the step and the preparation stage, with no attempt
-    accounted, no lease, no usage and full cleanup. This holds for each producer of the
-    binding: the source-review packet, the principle-assessment packet and an
-    atomic-repair packet that inherits the binding;
-  - each contract variant is admitted at registry admission on its own, and
-    `request-model`'s own contract validation rejects an advisory variant that lacks
-    `more` or `blocked`, and an ordinary variant that declares either;
-  - post-generation review never reaches `review-source-support`'s loss-localization
-    request with an advisory packet, so that unmarked step never carries one.
 - **Contract variants (shared mechanism):**
   - accepted: an operation with one contract of closed variants, each admitted on its
     own, and a step whose selector picks one;
   - accepted: a selector forwarded through a subgraph `{param}`, as ADR 0033's call
     sites will;
   - rejected at admission: a variant that fails any per-contract check while its
-    sibling variant is valid; two variants with the same selector value; an optional
-    selector with zero or two variants for its absence; and a non-first variant that
+    sibling variant is valid; two variants with the same selector value; and a non-first variant that
     produces another operation's gate evidence key;
   - rejected at compilation: a selector value with no variant, a missing required
     selector, and a step checked against the wrong variant's outcomes or data effects;
@@ -575,7 +479,7 @@ All offline. The change makes no model call.
     whose effects match a non-selected variant;
   - the runner rejects a delta, outcome, association or retry authority that fits
     another variant but not the step's compiled one;
-  - the mechanism has no `request-model`-specific branch: a test contract whose two
+  - the mechanism has no operation-specific branch: a test contract whose two
     variants differ in data effects, retry authority (required and forbidden, with
     different maximums) and repair role passes through the same admission, compiler and
     runner paths that ADR 0033 will use.
@@ -591,18 +495,10 @@ All offline. The change makes no model call.
   - a provider operation past its deadline keeps today's timeout outcome and usage
     rules.
 - **Compiler cases:**
-  - accepted: a valid request step with each schema form, with and without `context`,
-    with and without `advisory: allowed`;
+  - accepted: a valid request step with each schema form, with and without `context`;
   - rejected: both or neither of `result-schema` and `composition-part`;
   - rejected: a missing `retry-limit`, or any `timeout-ms` parameter;
-  - rejected: an unknown `advisory` value;
-  - rejected: an unmapped outcome, including `more` or `blocked` on a step marked
-    `advisory: allowed`;
-  - rejected: `more` or `blocked` mapped on an unmarked step;
-  - accepted: a marked step routing `more` and `blocked` to
-    `propagate-advisory-request-failure`, and one routing them to native completion;
-  - rejected: `more` or `blocked` routed to success, or to a model-call or publication
-    step, before propagation or native completion;
+  - rejected: an unmapped outcome, and any `more` or `blocked` mapping;
   - rejected: a removed stage ID, or any attempt to name a stage;
   - rejected: a policy that does not permit one of the stages' capabilities.
 - **Reports** name the stage where a request stopped.
@@ -622,9 +518,5 @@ All offline. The change makes no model call.
   compiler to derive each request's lifetime, and needs its own decision.
 - The measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`.
 - Token counting's return, if a workflow and a counting-capable model ever need it.
-- Whether `propagate-advisory-request-failure` stays once no shipped step uses it. After
-  this change, only `assess-support` is marked, and it routes to the native stop steps.
-  The implementation reports its remaining users, and keeping or removing it is a
-  separate decision.
 - Any workflow-level parameter default. FIX05 A2 and W3 are decided separately, in
   [ADR 0031](0031-stage-actions.md) and [ADR 0033](0033-generic-repair-operations.md).

@@ -151,12 +151,6 @@ Renderers own:
   links from validated canonical lineage. Each citation retains its captured
   reference-state identity, source ID, block and span. Pending views have no
   generated-record links. The editable `spec.md` grammar is unchanged.
-- When any post-generation review is incomplete, `spec.md` renders one engine-owned
-  status line under its title, `**Review status: Incomplete — N of M review subjects
-  were not assessed.**`, pointing to `reference-context.md`, whose `## Review Status`
-  section lists each incomplete source or principle review's reason and unassessed
-  subjects ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
-  A fully reviewed specification renders neither.
 - The engine loads their canonical IR, renders the expected bytes, and checks the view for exact
   equality.
 - A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the

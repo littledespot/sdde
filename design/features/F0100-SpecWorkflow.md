@@ -3,7 +3,8 @@
 **Status:** Proposed feature design
 
 **Amendments include:** [ADR 0015](../decisions/0015-specification-principle-review.md)
-adds early principle assessment and shared question preparation;
+adds principle capture and shared question preparation (Spec runs no principle
+assessment since 1 November 2026);
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) configures
 extraction and reconciliation response parts with prompt-free native assembly, and
 its packet-guidance amendment makes packet purpose text a workflow resource;
@@ -11,8 +12,9 @@ its packet-guidance amendment makes packet purpose text a workflow resource;
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) and
 [ADR 0024](../decisions/0024-native-exact-token-authority.md) own exact lineage,
 reconciliation phases and token authority; and
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md) keeps every
-post-generation source and principle finding as advice. One configured token budget
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) runs source review only
+before generation; its 1 November 2026 amendment (FIX06 D13.1) removed post-generation
+source and principle review. One configured token budget
 covers all model work ([ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 ADRs [0013](../decisions/0013-workflow-input-reuse.md),
@@ -24,10 +26,10 @@ ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0036](../decisions/0036-source-quoted-claims.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
-[0040](../decisions/0040-incomplete-review-published-marked-logged.md),
+[0040](../decisions/0040-incomplete-review-published-marked-logged.md) (moot),
 [0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
 since 30 October 2026; not implemented),
-[0042](../decisions/0042-principle-verdict-citations-at-admission.md) and
+[0042](../decisions/0042-principle-verdict-citations-at-admission.md) (moot) and
 [0043](../decisions/0043-model-facing-exact-text-names.md) also amend this feature; the
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
 decision.
@@ -496,23 +498,18 @@ The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
 detailed assignment, binding validation and request construction remain available.
 Both paths use the same native owners and produce identical model-visible content.
 The request body also uses pure `admit-model-response`, retaining detailed decoder
-and schema-validator operations. Pre-generation source, post-generation source and
-principle review each have distinct request/repair call sites; shared bodies do not
-share their retry counters.
+and schema-validator operations. Pre-generation source review has its own
+request/repair call sites; shared bodies do not share their retry counters.
 
 Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
 `model-request-body` subgraph and its wrappers (`model-request`,
 `model-request-with-context`, `support-request`, `composition-request` and
 `composition-request-body`) are removed. Each of the 16 call sites becomes one
 `request-model` step, followed by its consumers, any `retain-json-part` and its release
-step. Advisory `more` and `blocked` routing stays at each advisory call site, directly or
-through a thin wrapper, and each call site keeps its own retry counter. The 159-line request
-region goes; the ADR estimates the net saving and the implementation measures it. Under the
-ADR's 23 October 2026 amendment, only call sites that may carry a request ADR 0023
-classifies as advisory are marked `advisory: allowed` and map `more` and `blocked`;
-ordinary sites such as extraction, reconciliation and generation map neither.
-`assess-support`'s model and repair requests are marked and keep serving both the
-pre-generation required review and post-generation advice.
+step, and each call site keeps its own retry counter. The 159-line request region goes; the
+ADR estimates the net saving and the implementation measures it. No call site maps `more`
+or `blocked`: the advisory protocol was removed with post-generation review on
+1 November 2026.
 
 No call site declares a deadline. Since 24 October 2026 the body's authorization step takes
 no parameter, and each model's catalogue entry carries `requestTimeoutMs`
@@ -787,23 +784,17 @@ bypasses.
   its source selection and distinct from diagnostic detail, under
   [§22.1](../contracts/22-repair.md). Comparison, correction, persisted evidence,
   revision checks and repair consume the same bound statement without native
-  semantic rewriting. Principle and non-omission findings forbid this field.
+  semantic rewriting. Non-omission findings forbid this field.
   Native missing-family obligations remain invalid even after a positive
   review. Genuine source gaps route under §12.8.1 only after candidate/interpretation
   defects are resolved. `inconclusive` findings grant no question or repair authority.
-- Post-generation source review offers only `supported`, `candidate_omission` and
-  `candidate_invalid` with a null `authority_gap`; source-gap and `inconclusive`
-  verdicts are required-review verdicts. Any other verdict fails response admission
-  and takes protocol correction; exhaustion publishes incomplete advice (ADR 0023,
-  31 October 2026 amendment).
 - Malformed review repair changes one authorized detail or evidence selection,
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
-  A whole-unit or record-family assignment's missing, repeated or foreign member
-  is instead a response-admission defect, corrected by protocol correction of the
-  complete assignment (ADR 0023, 18 October 2026). A record family covers every
-  record of one kind in one call.
+  A preservation comparison's missing, repeated or foreign member is instead a
+  response-admission defect, corrected by protocol correction of the complete
+  response (ADR 0023, 18 October 2026).
 - Mechanical coverage defects have no independently supported repair target and
   block (§5.7); a review finding cannot authorize an edit to generated content.
 - Before generation, upstream repair attributes loss to an extraction chunk, token classification,
@@ -958,12 +949,11 @@ validators:
   registered outputs before the writer runs.
 - `workflow.json` is written last.
 
-- The principle consistency assessment uses the current configured registry and complete
-  Spec selection after source support is accepted. Canonical state retains registry identity,
-  exact spans, selected chunks, business-subject associations and cited findings. Findings
-  remain advice (ADR 0023), rendered in `reference-context.md`; Specify creates no Plan
-  form or obligation and cannot use policy findings as business provenance. Plan
-  reassesses current principles under its own input authority.
+- Specify captures the current configured principle registry and Spec selection and
+  runs no principle assessment (ADR 0015). Canonical state keeps the captured registry
+  identity as `principle_registry`, which the next run's capture reads as its prior
+  registry. Specify creates no Plan form or obligation. Plan reassesses current
+  principles under its own input authority.
 - The native closed, versioned `specification-state` contract distinguishes `specified` and
   `spec_clarification_pending`. The pending variant holds the current reference snapshot,
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
@@ -971,8 +961,8 @@ validators:
   revision, `specified` stage, captured reference sources/chunks/claims/citations,
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
-  coverage, record-ID counters, clarification state/revision and required-authority
-  review evidence.
+  coverage, record-ID counters, clarification state/revision and the captured principle
+  registry identity (`specification-state/v21`; no post-generation review evidence).
 - Model-assisted support retains that label.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
@@ -995,14 +985,12 @@ validators:
 - A clarification publication ending in `needs_user` still does not claim a completed
   Specify workflow.
 
-### 3.13 Early principle assessment and actionable questions
+### 3.13 Actionable questions
 
-[§17.3.1](../contracts/17-specify.md#1731-requirementprinciple-consistency-review)
-owns the early consistency assessment and its advisory findings (ADR 0023).
+Spec runs no principle assessment (ADR 0015).
 [§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
-owns shared question preparation. Reuse canonical principle selection, model/evidence
-contracts and existing clarification builders; no workflow-local loader or summary call.
-Clear business intent survives policy conflicts; unresolved SNN still blocks Plan and
+owns shared question preparation. Reuse model/evidence contracts and existing
+clarification builders; no workflow-local loader or summary call. Unresolved SNN still blocks Plan and
 unresolved SNN/PNN still blocks Tasks. Answer authentication is separate:
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) (FIX06 E7; not yet
 implemented).
@@ -1317,9 +1305,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Complete validated references with selectable retained claims admit private
   section generation directly. `check-specification-source-readiness` reuses the
   provenance owner's eligibility rule. Blocked references or absent selectable
-  claims retain their source review/repair route. After assembly, model review
-  supplies scoped evidence for the publication gate, including the brief
-  description/goal and every record field. Initial and repair generation packets
+  claims retain their source review/repair route. After assembly no model review runs
+  (ADR 0023): publication requires the native checks (generation complete, coverage
+  validated, rendering round trip), and the human who reviews and edits the published
+  `spec.md` judges its meaning. Initial and repair generation packets
   carry original source text through the same projection as source review;
   retained claims still own positive provenance (§17.3).
 
@@ -1335,7 +1324,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   is no whole-record kind replacement. Entity membership repair follows
   [§22.3](../contracts/22-repair.md#223-repair-authorization).
   One whole-record target remains bounded across field-level failures of that
-  replacement; successful siblings, full coverage and semantic review remain.
+  replacement; successful siblings and full coverage remain.
 - The engine retains owner, revision, old value, source choices and policy facts;
   the model returns only the authorized value or record shape. Value repairs
   receive the unchanged provenance.
@@ -1365,8 +1354,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   old value before incrementing the revision.
 - Native domain actions select and apply their typed units.
 - Generation, reference and source-omission repairs use the shared repair prompt through
-  `model-request` or `model-request-with-context`; review repairs reuse their assessment
-  prompt (§17.3.1) through `support-request`.
+  `model-request` or `model-request-with-context`; source-review repairs reuse the
+  support prompt through `support-request`.
 - Request release occurs before shared model/automatic reconciliation and specification
   merge routes.
 - Deterministic repair loops have explicit runner-owned execution bounds.
@@ -1408,8 +1397,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or
   change another owning association, so no destination family, invented statement or
-  coverage-ledger edit is substituted, and semantic review cannot authorize edits to
-  completed generated content.
+  coverage-ledger edit is substituted.
 - Shared authority classification separates supported candidate omissions from source
   gaps.
 - Review eligibility includes each nonconflicting signal/token's canonical members,
@@ -1425,7 +1413,6 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   - Each takes the route's closed `owner`, and the owner rules stay in their domain
     modules.
   - Each route keeps its own steps, retry counter and ceiling.
-  - The advisory repair stops stay native stop steps.
   - This converts after ADR 0030 and ADR 0031's first conversion.
 - Only the workflow's cumulative actual token budget limits model tokens.
 - No missing knowledge is replaced with a default or treated as deterministic proof.
@@ -1475,17 +1462,9 @@ YAML definition.
    relabelled as `ok`.
 10. Success requires a committed valid specification, complete reference
     accounting, valid `reference-context.md`, no open `SNN`, and workflow state
-    `specified`. ADR 0015 additionally requires current policy-assessment bindings,
-    complete or explicitly incomplete under ADR 0023; findings are advice and do not
-    assert that policy decisions are resolved. A provider `output_limit` stop is first
-    re-sent once ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
-    Incomplete review is published with a review-status line in `spec.md`, its
-    reasons and unassessed subjects in `reference-context.md`, and a
-    `review.incomplete` log event
-    ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). A
-    `conflicting` or `uncertain` principle verdict without citations is rejected at
-    response admission and corrected with the whole response
-    ([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)).
+    `specified`, with a valid captured principle registry and selection (ADR 0015; no
+    principle assessment runs). A provider `output_limit` stop is first re-sent once
+    ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden
     operation, or engine rebuild.

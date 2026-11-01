@@ -45,7 +45,7 @@ pub const SourcePreservationPolicy = struct {
 };
 
 pub const ProjectSpecification = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .identified_specification_content, .result = .required_authority_inputs } };
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .accounted_reference_reconciliation, .result = .required_authority_inputs } };
     pub const Action = @import("../actions/authority/build_specification_authority_requirements.zig").Action;
     pub const outcomes = structural_outcomes;
     allocator: std.mem.Allocator,
@@ -55,12 +55,10 @@ pub const ProjectSpecification = struct {
         const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
         const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
         const generated = try generation_facts.read(&input.step.data);
-        const brief = generated.brief();
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        if (generated.phase() == .generation_started and (generated.content == null or brief == null)) return reject(self.allocator, inputs_schema, owner, error.InvalidRequiredAuthority);
-        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, generated.content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
-        if (generated.session) |value| owner.payload.inputs.revision = value.revision;
+        if (generated.phase() != .pre_generation) return reject(self.allocator, inputs_schema, owner, error.InvalidRequiredAuthority);
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };

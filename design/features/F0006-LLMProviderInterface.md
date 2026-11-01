@@ -194,11 +194,8 @@ facts remain local to the abandoned or completed execution.
     catalogue deadline below).
 
     - One `request-model` step makes one inference request.
-    - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes.
-      Only a step marked `advisory: allowed` maps `more` and `blocked`, and it may carry
-      both advisory and ordinary requests. An advisory request at an unmarked step fails
-      preparation's binding validation: a terminal runner rejection with a closed
-      diagnostic, not a YAML outcome, before any attempt.
+    - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes
+      (`ok`, `invalid`, `failed`, `cancelled`).
     - The provider-operation deadline moved to the bound catalogue entry's required
       `requestTimeoutMs`, beside `maxOutputTokens`, on 24 October 2026 (implemented).
       Authorization preparation takes no parameter, and compilation rejects a YAML

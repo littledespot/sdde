@@ -27,9 +27,12 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v20, since [ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)'s
-31 October 2026 advisory verdict-set amendment; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
-(accepted, on hold since 30 October 2026; not implemented) takes the next version, v21,
+`specification-state` contract (currently v21, since [ADR 0023](../decisions/0023-advisory-post-generation-review.md)'s
+1 November 2026 removal amendment: no post-generation review, principle assessment or
+incomplete-advice evidence, and the captured principle registry identity kept as its
+own `principle_registry` field, which the next run's capture reads as its prior
+registry; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
+(accepted, on hold since 30 October 2026; not implemented) takes the next version, v22,
 for its `spec_incomplete` variant when it resumes) over canonical `specification/v3`
 content; stage discriminators distinguish the variants. Earlier versions reject
 without migration, aliases or a compatibility reader. The pending variant retains
@@ -45,54 +48,31 @@ Changed authority invalidates affected descendants through the stage rules below
   lists or displayed bytes cannot replace an occurrence, and stored projection errors
   are never repaired by substituting a fresh union.
 - **Exact values.** Readback validates exact handles against the current captured
-  ledger and checks field roles, explicit `S`, derived `E` and `L`, citations,
-  coverage and review projections (ADR 0020). It recomputes native token
+  ledger and checks field roles, explicit `S`, derived `E` and `L`, citations and
+  coverage (ADR 0020). It recomputes native token
   classification, dispositions and complete original-occurrence coverage (ADR 0024).
   Inconsistent stored authority rejects instead of being inferred from matching
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
-  bytes; `model-request-debug/v13` retains it for diagnostics, not state recovery.
+  bytes; `model-request-debug/v14` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
   port.
-- **Review evidence.** Canonical review evidence retains nullable `authority_gap`,
-  with the same closed gap kind, separate sources, detail and question admitted at
-  review; readback revalidates the defect and any gap against the exact current
-  subject and authorities. Generated source and principle evidence retain their
-  original findings through a distinct native `assessment` binding;
-  `assessment_complete` proves only complete current assessment (ADR 0023). Advisory
-  omission evidence retains its explicit obligation, diagnostic explanation, source
-  selection, subject and review revision without post-generation loss-comparison or
-  repair authority. Principle notes alone create no mandatory Plan obligation or
-  clarification. Before any authored candidate exists, a positive readiness
+- **Review evidence.** State holds no post-generation review evidence (ADR 0023).
+  Pre-generation required review evidence retains nullable `authority_gap`, with the
+  same closed gap kind, separate sources, detail and question admitted at review;
+  readback revalidates the defect and any gap against the exact current subject and
+  authorities. Before any authored candidate exists, a positive readiness
   source-purpose finding requires nonempty current original source IDs and empty
   canonical claim, citation and clarification-response selections. Forged
-  deterministic methods, forged or stale assessment bindings, semantic-success
-  substitutions and invalid candidate evidence reject; loading cannot infer
-  authority from diagnostic prose or eligible claims.
-- **Incomplete advice.** An optional native `advice_stop` binds the source or
-  principle projection, candidate revision, complete ordered requirements and current
-  authorities, exact unassessed suffix, reason and producing inference origin. Every
-  incomplete-advice reason, including unknown usage, requires a valid origin from an
-  actual attempt. Pre-send global-budget or unavailable-usage checks reject without
-  creating an advice result or accounting row. Stored validation reconstructs the
-  whole-assignment prefix and all current bindings, rejecting forged or stale stops,
-  partial retained assignments and native requiredness/coverage gaps. Missing advice
-  is explicitly `assessment_incomplete`; it cannot certify support, become a positive
-  finding or substitute for a missing native requirement. Provider failures keep
-  their failed request identity and actual usage even when the exact advisory outcome
-  references are discharged natively. Persisted advice metadata creates no separate
-  allowance or token subtotal; global-budget rejection is fatal and has no persisted
-  incomplete-advice reason. All native publication checks remain mandatory.
+  deterministic methods, semantic-success substitutions and invalid candidate
+  evidence reject; loading cannot infer authority from diagnostic prose or eligible
+  claims.
 - **Text wire.** Model-facing prose/composition conversion is never applied to
   persisted authority to guess a missing fragment, separator or source occurrence.
 
 It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
 
-The [within-execution review receipts](22-repair.md#224-repair-request-and-response) exist
-only in one execution's native owners. They are not part of persisted
-specification state and are not restored by state readback. Loading ordinary
-published review evidence cannot manufacture an accepted call origin or a reusable
-receipt. Candidate-local re-admission does not resume an earlier execution;
-every fresh invocation starts at `start` with empty review history.
+Execution-local review data is not part of persisted specification state and is not
+restored by state readback. Every fresh invocation starts at `start`.
 
 ### 24.2 Stage transition state machine
 
@@ -188,7 +168,7 @@ invalidation obligation; the detecting component cannot choose a shallower owner
 | Reference or reference-ingestion/specification contract | Specify; reingest when the reference contract changed | Affected reference/request/provenance, Plan input, plan, tasks, runtime/evidence and approvals |
 | Authenticated editable specification | Retain the validated edit, then Plan | Plan input, plan, task definitions, views, runtime/evidence and approvals |
 | Toolchain, environment, path, parser, command, dependency or capability policy | Plan under the new validated mechanical authority | Plan/task definitions, views, runtime/evidence and approvals |
-| Semantic principles | Refresh dependent policy assessments at their consuming gate; Plan retains policy-resolution ownership | Dependent assessment evidence, Plan input and affected downstream authority; preserve unchanged source-derived business content |
+| Semantic principles | Recapture at the consuming gate; Plan retains policy-resolution ownership | Plan input and affected downstream authority; preserve unchanged source-derived business content |
 | Plan decision/review feedback | Plan, then renewed Plan and Tasks review | Current plan approval and affected tasks/runtime/evidence/approval |
 | Task-definition feedback or gap | Tasks, then renewed task review | Affected task definitions/runtime/evidence and task approval |
 | Compatible logging/model binding or unrelated workflow definition | Same semantic stage; validated runtime refresh | None when all feature-bound semantic authority remains equal |

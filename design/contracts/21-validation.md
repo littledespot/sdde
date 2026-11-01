@@ -50,7 +50,9 @@ to covered cross-kind restatements
 claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 
 Removed 28 October 2026 by user decision: the business-only keyword lint, which was never
-built. Semantic review owns business/technical classification ([§17.5](17-specify.md)).
+built. Business/technical classification is judged by the human who reviews and edits
+the published `spec.md` ([§17.5](17-specify.md)); no native check or post-generation
+review owns it.
 
 ### 21.3 Plan validators
 

@@ -40,7 +40,7 @@ test "ADR-required events are emitted at every threshold; other warnings follow 
     const testing = @import("std").testing;
     for (@import("std").enums.values(telemetry.CanonicalLogLevel)) |configured| {
         const policy: log_policy.CompiledLoggingPolicy = .{ .level = .{ .threshold = configured, .alias_evidence = .none }, .console = false };
-        for ([_]telemetry.EventType{ .model_response_normalized, .model_provider_stopped, .model_runaway_resent, .review_incomplete }) |required|
+        for ([_]telemetry.EventType{ .model_response_normalized, .model_provider_stopped, .model_runaway_resent }) |required|
             try testing.expectEqual(Decision.emit, (Action{}).execute(policy, log_event_registry.eventDefinition(required)));
         const ordinary = log_event_registry.eventDefinition(.validation_failed);
         try testing.expectEqual(log_event_registry.Emission.threshold, ordinary.emission);

@@ -107,12 +107,7 @@ Each generation request contains only what the current unit needs:
   make filenames available as passive content choices; semantic relevance still requires review.
 - Native availability facts may exclude unavailable tagged alternatives from the selected
   compiled schema. The existing schema owner derives a narrower
-  view; it never adds fields, values or semantic decisions. A source-review
-  assignment excludes each positive verdict to which no claim set can be bound for
-  its subjects ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#unresolvable-positive-verdicts-at-response-admission-20-october-2026)).
-  Every post-generation source-review packet, assignment, insert or correction, also
-  excludes each verdict advisory policy does not offer
-  ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)). Initial reference/specification
+  view; it never adds fields, values or semantic decisions. Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
   Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition),
   all model-response wire contracts and schemas omit `exact_copy`. The model types required
@@ -125,11 +120,10 @@ Each generation request contains only what the current unit needs:
   tag/field; other selectors use an exact property/items path bound to a compiled
   response definition. Request preparation validates locations, definition/part
   association and canonical integer bounds, then derives one schema for provider
-  and local validation. Three admission constraints are exceptions, because
+  and local validation. Two admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, and with a
-  native count its completeness (`missing_member`; below, ADR 0046),
-  ADR 0038's records coverage (`uncovered_member`) and ADR 0042's required items
-  (`missing_required_item`, §12.7). Local admission, request descriptions and replay
+  native count its completeness (`missing_member`; below, ADR 0046), and
+  ADR 0038's records coverage (`uncovered_member`). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -369,27 +363,11 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   unit and declares its semantic-review resources and transitions in YAML.
 - Its findings are labeled `model_assisted`, retain source citations, and never masquerade as
   deterministic evidence.
-- Under [ADR 0023](../decisions/0023-advisory-post-generation-review.md),
-  every post-generation source/principle finding remains advice unless an
-  independent owning deterministic validator establishes the corresponding
-  defect. Complete current assessment is a native fact; semantic support is not.
-  Whole-unit, record-family and collection assignments retain one finding per native member, with
-  exact association, per-member origins and narrow correction. Pre-generation
-  source-readiness/preservation policy remains separate and mandatory.
-
-**Review retention:** an explicit pure native transition may re-admit an execution-local source-review assignment when its
-complete assessment dependencies are unchanged. The original terminal accepted
-request, epoch and actual inference origin remain the witness; reuse creates no
-request, attempt, provider receipt or token charge. Compare the native unit and
-purpose, full packet and restrictions, selected schema, compiled guidance/context
-and provider/model/slot/settings. The pure admission step may have a different
-workflow-step ID; workflow identity/version and the original producing request
-association remain fixed. No other binding difference is equivalent by implication.
-Current native subject, requiredness, applicability and evidence admission still
-apply. Eligibility and conservative exclusions are defined once in
-[§22.4](22-repair.md#224-repair-request-and-response); resource-only requests and
-JSON-composition parts have no review-retention contract. This is assessment
-reuse, not provider caching or deterministic semantic proof.
+- Under [ADR 0023](../decisions/0023-advisory-post-generation-review.md), Spec runs
+  semantic review only before generation: required source readiness and the optional
+  source-preservation comparison. No semantic review runs after generation; the human
+  who reviews and edits the published `spec.md` judges its meaning, and H1
+  adjudication does for E2E acceptance.
 
 ### 12.7 Workflow-defined model operations
 
@@ -403,8 +381,8 @@ reuse, not provider caching or deterministic semantic proof.
 > the one step. Each stage's rules are otherwise unchanged. `retry-limit` moves to the
 > `request-model` step. Retry counting keeps its scopes, with the compiled operation now
 > being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
-> Its 23 October amendment (token counting removed, the catalogue deadline and the
-> `advisory: allowed` marking) is stated once in ADR 0030.
+> Its 23 October amendment (token counting removed and the catalogue deadline) is
+> stated once in ADR 0030.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
@@ -421,7 +399,7 @@ reuse, not provider caching or deterministic semantic proof.
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned (FIX06
   D3.1; ADR 0016 packet-guidance amendment). A workflow declares one closed
-  `packet-guidance/v1` resource with exactly one text for each registered key; the
+  `packet-guidance/v2` resource with exactly one text for each registered key; the
   compiler rejects a missing, extra, duplicate, mistyped or empty entry and an
   unsupported version. One `capture-packet-guidance` step publishes it as run data,
   and each consuming operation declares `.packet_guidance` and receives it
@@ -448,14 +426,11 @@ reuse, not provider caching or deterministic semantic proof.
   prompt content and its closed result-schema resource.
 
 **Focused semantic reviews.** For a review whose required subjects are known
-natively, the review owner selects one complete native assignment from its ordered
-ledger (a whole unit, record family or collection, or one selected principle set;
-ADR 0023) and
-binds its ordered members, purpose, parent and current dependencies to the request.
-The response returns exactly one finding per assigned member, keyed by its
-assignment ordinal, under the selected canonical finding schema; it returns no
-expected count or completion flag. Source-preservation, candidate-support and
-principle reviews use this shared contract. The review packet owner derives a
+natively, the review owner selects one native subject from its ordered ledger and
+binds its purpose, parent and current dependencies to the request. A
+source-preservation comparison returns exactly one comparison per bound comparison
+ID, under the selected canonical schema; it returns no expected count or completion
+flag. Source-readiness and source-preservation reviews use this shared contract. The review packet owner derives a
 bounded slot from the purpose prefix and SHA-256 of the existing canonical
 typed-subject snapshot, and binds that same slot as unit owner and semantic-review
 purpose. Request identity excludes attempt, mutable text and revision; the exact
@@ -490,11 +465,9 @@ findings. Only complete native collection validation permits authority advanceme
   `build-model-runaway-resend`, a route the compiler requires wherever admission's
   `invalid` continues. The re-send must equal its attempt in every field except
   sampling. Requests and provider operations record their sampling
-  (`configured` or `runaway_resend`), and `model-request-debug/v13` records both
+  (`configured` or `runaway_resend`), and `model-request-debug/v14` records both
   configured temperatures and the sampling. A runaway on the
-  re-send ends the request with `RunawayRepeated`: required work fails, and advisory
-  work ends that advice incomplete
-  ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
+  re-send ends the request with `RunawayRepeated` and the work fails.
 - Every retry response, a re-send or a protocol correction, passes exactly the checks a
   first response does, in the same order: observation and usage validation, decoding,
   payload-schema validation, native admission constraints, domain validation, the
@@ -513,12 +486,8 @@ findings. Only complete native collection validation permits authority advanceme
   reports its own size errors or stops.
 - The runner accounts API-reported input plus output usage exactly once against
   the execution's single configured `workflowTokenBudget` ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)), across
-  all inference calls. Advice has no separate allowance or usage subtotal
-  (ADR 0011). Global exhaustion, overshoot or unavailable usage prohibits later
-  model calls. Native advisory classification controls eligible non-budget
-  incomplete-failure semantics only, survives correction and cannot be chosen by a
-  workflow, slot or model response. A global budget rejection remains fatal during
-  advice and required work; it cannot become incomplete advice.
+  all inference calls (ADR 0011). Global exhaustion, overshoot or unavailable usage
+  prohibits later model calls, and a global budget rejection is fatal.
 
 - Native `advance-model-attempt-accounting` consumes the retained prepared request through an
   explicit YAML step and requires `retry-limit` (`0` permits only the initial attempt and
@@ -528,11 +497,7 @@ findings. Only complete native collection validation permits authority advanceme
   identity, applies the proposed accounting transition, and publishes sealed
   `accounted_model_attempt` evidence from that canonical record together with the envelope
   delta.
-- Rejection publishes neither. An advisory protocol-correction exhaustion instead
-  publishes a sealed stop receipt naming the existing request and exact exhaustion,
-  without allocating an attempt or provider operation. An explicit lifecycle step
-  closes that request failed; the native advice owner may record incomplete advice
-  only for that same current projection (ADR 0023).
+- Rejection publishes neither.
 - Later visits use the accounting step's compiled authority and runner-owned counts.
   Atomic repairs use native defect keys; ordinary requests use immutable assignment
   keys, and required dependent requests additionally bind their native repair parent
@@ -770,31 +735,17 @@ closed `kind`-discriminated source findings:
 `ambiguous`, `conflicting` and `unsupported` require `detail` and `question`;
 `supported`, `not_applicable`, `candidate_omission` and `inconclusive` forbid
 `question`. Shared fields remain schema references; `kind` is the sole source
-decision field. Principle findings retain their separate `decision` contract.
+decision field.
 The existing codec decodes source candidates with `kind`; native candidates retain
 optional question data for diagnostics and the same decision-dependent checks.
 Persisted evidence retains its existing finding/resolution representation.
 Missing/forbidden questions reject at schema admission, before native collection.
-So do missing, repeated or foreign assignment members: the packet's `exact_members`
-ordinal choice fixes the item count and rejects a repeat as `duplicate_member`
+So do missing, repeated or foreign preservation comparisons: the packet's
+`exact_members` ordinal choice fixes the item count and rejects a repeat as
+`duplicate_member`
 ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
-So does a positive verdict the assignment withholds because no claim set can be
-bound to it: it rejects as `unknown_variant`. So does a verdict post-generation advice
-does not offer: every advisory assignment, insert and correction packet withholds
-`ambiguous`, `conflicting`, `unsupported` and `inconclusive` (the `advisoryPermits`
-owner) and `not_applicable` (native applicability, which never permits it after
-generation), and the restriction leaves `authority_gap` null-only
-([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026)). So does a principle verdict that requires
-citations but has none: the packet's required-items constraint, derived from the
-domain rule, rejects it as `missing_required_item` at the citations array
-([ADR 0042](../decisions/0042-principle-verdict-citations-at-admission.md)). The
-required-items constraint is generic: when a named property of an object has one of
-the listed values, a named array property of the same object needs at least one item.
-Like `exact_members` and coverage, it is native, recorded in request descriptions and
-reapplied by replay.
-Existing protocol correction resubmits the whole assigned review under its original
-assignment allowance, including otherwise correct siblings; insertion still corrects
-only its selected finding. No partial-response merge, new counter or verdict
+Existing protocol correction resubmits the whole review response under its original
+allowance; insertion still corrects only its selected finding. No partial-response merge, new counter or verdict
 reassessment is introduced. Selected native text repairs retain their narrow scope.
 There is no source `decision` wire format or compatibility reader. Generation uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
@@ -835,8 +786,7 @@ validation and persisted readback retain eligibility, exact-set and current-prov
 schema cardinality never establishes semantic support or selects citations.
 Review insertion and replacement reuse the initial guidance for the **same
 assessment purpose**, returning only the authorized replacement and retaining
-any existing verdict. Shared orchestration does not require source and principle
-assessment to share semantic instructions; §17.3.1 owns the policy boundary. A
+any existing verdict. A
 `missing_finding` diagnostic identifies an absent assessment, not missing source
 information or candidate content. Insertion must assess the supplied content;
 it must not infer a candidate omission from the mechanical diagnostic.
@@ -906,16 +856,6 @@ authenticated answer acceptance and protected history (§23.2).
 - `resolved_exactly_one`, naming either one current existing authority or one candidate resolution supported by current authority, together with its evidence IDs;
 - `resolved_explicit_not_applicable`, naming either the deterministic rule or one authority-supported candidate disposition that proves why the required slot does not apply;
 - `resolved_explicit_exception`, naming a current authenticated exception whose scope exactly covers the requirement;
-- `assessment_complete`, naming the exact current subject/revision binding of
-  complete admitted advisory review; it neither asserts semantic support nor
-  discharges native authority/coverage defects;
-- `assessment_incomplete`, naming the exact current advisory projection, revision,
-  authority/member set, missing assignment suffix, native stop reason and origin
-  when sent. Only ADR 0023's bound non-budget provider/protocol stop or eligible
-  missing usage can produce it; an `output_limit` stop does so only when its re-send
-  also runs away (ADR 0039). Publication marks it in `spec.md` and
-  `reference-context.md` and logs it as `review.incomplete` (ADR 0040);
-  native requirements remain mandatory and absent findings are not evidence;
 - `clarification_required`, with a closed reason and the earliest owning `spec | plan | tasks` stage;
 - `upstream_rework_required`, when a downstream stage encounters a gap owned by an earlier stage; or
 - `administrative_block`, when the kind/slot has no registered ownership/reconciliation policy or requires authority that the workflow is not authorized to create.
@@ -940,17 +880,10 @@ authenticated answer acceptance and protected history (§23.2).
 - Unknown ownership blocks administratively rather than falling back to the stage that noticed
   it.
 
-- Detection time does not change resolution ownership. Spec's early principle
-  assessment (§17.3.1) must completely account for its assigned evidence and findings,
-  or retain the exact missing assignment suffix under ADR 0023's native
-  incomplete-advice contract.
-  Under ADR 0023, semantic policy findings remain cited advice and alone create
-  no mandatory Plan obligation. They are not inserted as policy-resolution
-  requirements into the Spec ledger or relabelled supported. Plan validates its
-  current native required policy decisions independently.
-  Genuine business-intent gaps remain Spec-owned; invalid assessment evidence or
-  missing evidence without that native stop follows the ordinary rejection path
-  and cannot be deferred as a policy obligation.
+- Detection time does not change resolution ownership. Spec runs no principle
+  assessment (ADR 0015); project policy is not inserted as policy-resolution
+  requirements into the Spec ledger. Plan validates its current native required
+  policy decisions independently. Genuine business-intent gaps remain Spec-owned.
 
 - The ledger is a deterministic projection over current canonical authorities, not a competing
   persisted truth or fingerprint.
@@ -1041,21 +974,18 @@ a current candidate and nonempty subject-bound claim evidence. `unlocalized`
 means no reliable attribution was established. Both retain ordinary eligibility.
 Native source-review evidence retains the bound preservation assignment and complete
 assessment response under [§22.1](22-repair.md). The derived location must agree
-with re-admission against current canonical facts. Non-omission and principle
-findings carry no comparison. The response supplies judgments, original-source
+with re-admission against current canonical facts. Non-omission findings carry no
+comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
 The current specification-state contract in [§24.1](24-workflow-state.md#241-workflow-state)
-retains authorized pre-generation comparisons and authored associations. Generated
-source and principle findings instead retain advisory assessment bindings under
-ADR 0023 and reject attached loss-comparison authority. Earlier snapshot contracts
+retains authorized pre-generation comparisons and authored associations. Earlier snapshot contracts
 reject without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract:** the model chooses a semantic finding, detail,
 and any genuinely selectable source. [§22.1](22-repair.md) also requires
 `missing_obligation` for a source candidate omission, distinct from its diagnostic
-detail and bound to its selected sources. No other finding or principle review
-may supply it. Before generation, the separate loss call assesses native-bound preservation
+detail and bound to its selected sources. No other finding may supply it. Before generation, the separate loss call assesses native-bound preservation
 views against that unchanged obligation without revising the finding or inferring
 its requirement from diagnostic prose. It returns complete evidenced comparisons,
 not a location; the same schema and immutable assignment govern protocol correction.
@@ -1196,9 +1126,7 @@ and actionable question. Native admission validates both evidence selections
 against the same current subject; neither part supplies authority for the other.
 The top-level finding carries no question, `missing_obligation`, localized loss
 or preservation comparison. A contradiction that removes original meaning still
-uses `candidate_omission`. Per-source preservation and post-generation advice
-permit only a null gap ([ADR 0023](../decisions/0023-advisory-post-generation-review.md#advisory-verdict-set-d102-31-october-2026));
-principle review retains its separate finding vocabulary.
+uses `candidate_omission`. Per-source preservation permits only a null gap.
 
 The shared authority owner retains an `invalid_content` candidate defect without
 omission-repair support, and evaluates a nested gap through its existing gap
@@ -1225,6 +1153,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v13` retains native scope for diagnostic replay; request logs
+`model-request-debug/v14` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

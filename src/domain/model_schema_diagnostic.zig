@@ -2,7 +2,7 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, uncovered_member, missing_required_item, missing_member };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, uncovered_member, missing_member };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
@@ -35,7 +35,6 @@ pub const Diagnostic = struct {
             .duplicate_member => "Schema validation failed: this item repeats an assigned member; return exactly one item for every assigned member.",
             .missing_member => "Schema validation failed: no item names this assigned member; return exactly one item for every assigned member.",
             .uncovered_member => "Schema validation failed: no item of a kind in covering.kinds names this value; add one that does, as the instructions require.",
-            .missing_required_item => "Schema validation failed: with the value given for that property, this list needs at least one item; add the items the instructions require, or correct that value.",
         };
     }
 

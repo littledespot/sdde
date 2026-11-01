@@ -4,7 +4,7 @@ const data = @import("../domain/pipeline_data.zig");
 const values = @import("pipeline_values.zig");
 const Diagnostic = @import("../domain/candidate_validation_diagnostic.zig").Diagnostic;
 pub fn read(view: *const data.View) values.Error!?Diagnostic {
-    if (try @import("source_omission_repair_workflow.zig").rejection(view)) |rejected| return .{ .support_findings = .from(.source, rejected.support.inputs, rejected.reason) };
+    if (try @import("source_omission_repair_workflow.zig").rejection(view)) |rejected| return .{ .support_findings = .from(rejected.support.inputs, rejected.reason) };
     const extraction = @import("reference_extraction_workflow.zig");
     if (view.contains(extraction.text_schema.key)) {
         const value = try values.read(view, extraction.text_schema, @import("../domain/reference_candidate_value.zig").Value);
@@ -48,15 +48,12 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (view.contains(support.schema.key)) {
         const storage_authority = @import("required_authority_values.zig");
         const value = storage_authority.payload(try values.read(view, support.schema, storage_authority.Value));
-        inline for (.{ .support, .principle_support }) |tag| if (value.* == tag) {
-            const selected = if (tag == .support) value.support else value.principle_support.result;
-            switch (selected) {
-                .rejected => |rejected| return if (tag == .support) .{ .support = rejected.rejection } else .{ .principle_review = rejected.rejection },
-                .pending => {},
-                .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
-                    if (evidence.finding != .supported) return .{ .support_findings = .from(if (tag == .support) .source else .principles, accepted.inputs, null) };
-                },
-            }
+        if (value.* == .support) switch (value.support) {
+            .rejected => |rejected| return .{ .support = rejected.rejection },
+            .pending => {},
+            .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
+                if (evidence.finding != .supported) return .{ .support_findings = .from(accepted.inputs, null) };
+            },
         };
     }
     return null;

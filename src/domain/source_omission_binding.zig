@@ -11,7 +11,6 @@ pub const ComparisonError = comparison.Error;
 /// generation cursor. All slices belong to/borrow the caller's request arena.
 /// Production packet retention copies these facts before that arena is released.
 pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.evidence.Inputs, target: authority.Id, ordinal: u32, review_revision: u64, finding: authority.ReviewEvidence) ComparisonError!comparison.Assignment {
-    if (authority.assessmentPolicy(inputs.projection) == .advisory) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     if (!@import("specification_support_evidence.zig").validObligation(.candidate_omission, finding.missing_obligation)) return error.InvalidRequiredAuthority;
     if (finding.source_ids.len == 0 or finding.detail.len == 0 or ordinal == 0 or review_revision == 0 or !records.items.state_id.eql(source_inputs.corpus.state_id)) return error.InvalidRequiredAuthority;
@@ -113,7 +112,7 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
     }
     try builder.boundaries.append(a, .{ .input = builder.last, .output = .deficient_subject, .owner = target_owner });
     return .{
-        .facts = .{ .feature = inputs.feature, .revision = inputs.revision, .sources = source_inputs, .records = records, .brief = inputs.brief, .candidate = inputs.specification },
+        .facts = .{ .feature = inputs.feature, .revision = inputs.revision, .sources = source_inputs, .records = records },
         .finding = .{ .ordinal = ordinal, .revision = review_revision, .subject = target, .detail = finding.detail, .missing_obligation = finding.missing_obligation.?, .source_ids = finding.source_ids },
         .sources = sources.items,
         .comparisons = builder.views.items,

@@ -34,7 +34,7 @@ pub const Validate = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_envelope_result, .result = .model_payload_schema_result } },
     };
@@ -64,7 +64,7 @@ pub const Admit = struct {
         .kind = .step,
         .requires = Action.contract.requires,
         .produces = Action.contract.produces,
-        .outcomes = &.{ .ok, .invalid, .more, .failed, .cancelled },
+        .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_payload_schema_result } },
     };
@@ -123,7 +123,7 @@ pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
 }
 
 /// A request whose re-send also ran away fails with its typed diagnostic
-/// (ADR 0039); an advisory one instead ends its advice incomplete.
+/// (ADR 0039).
 pub fn runawayDiagnostic(result: *const Result) ?operations.Error {
     if (status(result) != .failed) return null;
     const original = switch (result.outcome()) {
@@ -132,7 +132,7 @@ pub fn runawayDiagnostic(result: *const Result) ?operations.Error {
     };
     return switch (original.source().outcome()) {
         .validated => |evidence| if (evidence.runaway() == .repeated) error.RunawayRepeated else null,
-        .rejected, .cancelled, .advisory_stopped => null,
+        .rejected, .cancelled => null,
     };
 }
 

@@ -31,6 +31,12 @@
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
   2026): when required work stops on a repeated runaway, the run publishes its validated
   content as a failed incomplete specification, marked and logged.
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
+  amendment (FIX06 D13.1, 1 November 2026): advisory work no longer exists, so a
+  runaway on the re-send always fails the work with `RunawayRepeated`. Decision 3 and
+  the ADR 0040 amendment above are withdrawn. Request descriptions are now
+  `model-request-debug/v14` (ADR 0042's constraint deleted); this ADR's controls are
+  unchanged.
 - **Amends:**
   - [ADR 0011](0011-provider-owned-request-limits.md): a provider `output_limit` stop is
     re-sent once instead of ending the request ("SDDE does not retry … because of a
@@ -109,10 +115,9 @@ temperature was a compiled engine constant, so projects couldn't choose it.
      once in the same way.
    - A runaway on the re-send ends the request with the diagnostic `RunawayRepeated`,
      naming the step, the runaway attempt and its re-send.
-     - In required work the workflow stops with that error. It publishes only its
-       validated content, as a failed incomplete specification
-       ([ADR 0041](0041-failed-run-incomplete-publication.md)).
-     - In advisory work that advice ends incomplete (Decision 3).
+     - The workflow stops with that error. Under
+       [ADR 0041](0041-failed-run-incomplete-publication.md) (on hold) it would publish
+       only its validated content, as a failed incomplete specification.
    - Other stop reasons and provider failures are unchanged.
    - Two new single-responsibility actions carry it. Response admission admits a first
      runaway (an `output_limit` stop with valid usage, on an attempt that isn't itself a
@@ -131,11 +136,8 @@ temperature was a compiled engine constant, so projects couldn't choose it.
      exempt, because it continues nothing.
    - A re-send must equal the attempt it repeats in every request field except its
      sampling, and attempt accounting rejects a second re-send of one attempt.
-3. **An advisory runaway is re-sent before it can end advice.** Only a runaway on the
-   re-send ends that advice as incomplete, with ADR 0023's `provider_output_limit`
-   reason. Like every incomplete review, it is published, marked in the output and
-   logged ([ADR 0040](0040-incomplete-review-published-marked-logged.md)). ADR 0023's
-   other incomplete-advice reasons are unchanged.
+3. **An advisory runaway is re-sent before it can end advice.** Withdrawn on 1 November
+   2026 with post-generation review (FIX06 D13.1); no advisory work remains.
 4. **Accounting and evidence.**
    - Both attempts' actual usage counts once each against the one workflow budget
      (ADR 0011, ADR 0037). Overshoot stays fatal.
@@ -210,9 +212,8 @@ temperature was a compiled engine constant, so projects couldn't choose it.
     model; omission on both attempts for a family without one.
   - The re-send: identical bytes except the temperature; sent at a `retry-limit: 0`
     step; its admitted response publishes; its invalid response takes a correction at
-    `temperature`; a correction that runs away is re-sent; a second runaway fails a
-    required request with `RunawayRepeated` and ends an advisory request's advice
-    incomplete with `provider_output_limit`; both attempts' usage is accounted.
+    `temperature`; a correction that runs away is re-sent; a second runaway fails the
+    request with `RunawayRepeated`; both attempts' usage is accounted.
   - Logging: one `model.runaway_resent` warning before each re-send, after the
     runaway's `model.provider_stopped`; none for any other stop; a logging rejection
     prevents the re-send; the failure events carry `RunawayRepeated`.

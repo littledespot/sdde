@@ -2,6 +2,11 @@
 
 - **Status:** Accepted
 - **Date:** 2026-10-26
+- **Moot (FIX06 D13.1, 1 November 2026):** both post-generation reviews are removed
+  ([ADR 0023](0023-advisory-post-generation-review.md) removal amendment). No review
+  can end incomplete, so there is no Review status line in `spec.md`, no
+  `## Review Status` in `reference-context.md`, no `review.incomplete` event and no
+  `incomplete_reviews` report member. This record is history only.
 - **Decision authority:** The user's decision on 26 October 2026: "incomplete results
   must be published, but it must be indicated that the results are incompelete, and it
   must also be logged", then "update docs". It refines the same day's "the system should
