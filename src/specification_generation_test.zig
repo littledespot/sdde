@@ -979,8 +979,52 @@ test "specification display resolves exact values without normalization and pass
         const scalar = try projection.scalar(a, fixture.context, value);
         try std.testing.expectEqualStrings("stories.md", scalar.bytes);
         try std.testing.expectEqual(@as(usize, 1), scalar.code_spans.len);
+        // A passive value keeps its code span inside quotes. An exact copy touching it
+        // shares its span; quoted apart from it, the exact copy alone loses its span.
+        const exact = for (items.entries) |item| {
+            if (item.claim.content == .preserved_token) break item.claim.id;
+        } else return error.MissingTestToken;
+        value.provenance = try provenance.select(a, fixture.context, .{ .claim_ids = &.{ value.provenance.claim_ids[0], exact }, .clarification_response_ids = &.{} });
+        const Expected = struct { segments: []const @import("domain/typed_text.zig").BusinessSegment, bytes: []const u8, spans: []const spec.CodeSpan };
+        for ([_]Expected{
+            .{ .segments = &.{ .{ .literal = .{ .value = "Consult \"" } }, .{ .passive = .{ .passive_literal_id = record.id } }, .{ .literal = .{ .value = "\" now." } } }, .bytes = "Consult \"stories.md\" now.", .spans = &.{.{ .start = 9, .end = 19 }} },
+            .{ .segments = &.{ .{ .literal = .{ .value = "Show \"" } }, .{ .exact_copy = .{ .claim_id = exact } }, .{ .passive = .{ .passive_literal_id = record.id } }, .{ .literal = .{ .value = "\" now." } } }, .bytes = "Show \"Cafe\u{301}stories.md\" now.", .spans = &.{.{ .start = 6, .end = 22 }} },
+            .{ .segments = &.{ .{ .literal = .{ .value = "Show \"" } }, .{ .exact_copy = .{ .claim_id = exact } }, .{ .literal = .{ .value = "\" and " } }, .{ .passive = .{ .passive_literal_id = record.id } }, .{ .literal = .{ .value = "." } } }, .bytes = "Show \"Cafe\u{301}\" and stories.md.", .spans = &.{.{ .start = 18, .end = 28 }} },
+        }) |expected| {
+            value.value = .{ .segments = expected.segments };
+            const mixed = try projection.scalar(a, fixture.context, value);
+            try std.testing.expectEqualStrings(expected.bytes, mixed.bytes);
+            try std.testing.expectEqualSlices(spec.CodeSpan, expected.spans, mixed.code_spans);
+        }
     }
     try std.testing.expectEqual(@as(usize, 1), passive_count);
+}
+
+test "an exact copy takes no delimiting pair from a neighbouring exact copy's bytes" {
+    const projection = @import("domain/specification_projection.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.init(a, "Say `Hello ` then `\" x` now.");
+    defer fixture.deinit();
+    const items = try provenance.items(fixture.context);
+    var hello: ?@import("domain/reference_reconciliation.zig").ClaimId = null;
+    var quoted: ?@import("domain/reference_reconciliation.zig").ClaimId = null;
+    for (items.entries) |item| {
+        if (item.claim.content != .preserved_token) continue;
+        const raw = item.claim.content.preserved_token.value.raw_value.bytes;
+        if (std.mem.eql(u8, raw, "Hello ")) hello = item.claim.id;
+        if (std.mem.eql(u8, raw, "\" x")) quoted = item.claim.id;
+    }
+    // The quote after `Hello ` is the second copy's first byte, not literal text, so
+    // the first copy keeps its span and both share it.
+    const value: spec.AttributedValue = .{
+        .value = .{ .segments = &.{ .{ .literal = .{ .value = "say \"" } }, .{ .exact_copy = .{ .claim_id = hello.? } }, .{ .exact_copy = .{ .claim_id = quoted.? } }, .{ .literal = .{ .value = " now" } } } },
+        .provenance = try provenance.select(a, fixture.context, .{ .claim_ids = &.{ hello.?, quoted.? }, .clarification_response_ids = &.{} }),
+    };
+    const projected = try projection.scalar(a, fixture.context, value);
+    try std.testing.expectEqualStrings("say \"Hello \" x now", projected.bytes);
+    try std.testing.expectEqualSlices(spec.CodeSpan, &.{.{ .start = 5, .end = 14 }}, projected.code_spans);
 }
 
 test "complete specification sessions preserve unit order provenance and conditional entities" {
@@ -1990,6 +2034,17 @@ test "native exact recognition shares equal bytes but rejects distinct overlappi
     try std.testing.expectEqualDeep(active, repaired.segments[1].exact_copy.claim_id);
     try std.testing.expectEqualStrings("` VALUE.", repaired.segments[2].literal.value);
     try std.testing.expectEqualDeep(repaired, try provenance.recognizeValue(a, @import("domain/reference_support.zig").records(ambiguous.context.references), repaired, .functional_requirement, null));
+    // The kept backticks are a table pair, so the engine adds no second delimiter and
+    // the model's backticks render as written text.
+    const projection = @import("domain/specification_projection.zig");
+    const markdown = @import("domain/specification_markdown.zig");
+    const kept = try projection.scalar(a, ambiguous.context, .{ .value = repaired, .provenance = try provenance.select(a, ambiguous.context, .{ .claim_ids = &.{active}, .clarification_response_ids = &.{} }) });
+    try std.testing.expectEqualStrings("Display `ACTIVE` VALUE.", kept.bytes);
+    try std.testing.expectEqual(@as(usize, 0), kept.code_spans.len);
+    const document: spec.CapturedDocument = .{ .display_name = .{ .bytes = "Kept delimiters" }, .primary_user_story = kept, .records = &.{}, .entity_section = .omitted };
+    const rendered = try markdown.render(a, document);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "Display \\`ACTIVE\\` VALUE\\.") != null);
+    try std.testing.expectEqualDeep(document, try markdown.parse(a, rendered));
 
     var unique = try Fixture.init(a, "Display `ACTIVE` to the visitor.");
     defer unique.deinit();
@@ -2109,6 +2164,55 @@ test "stored native exact spans reject missing authority with consistent citatio
         forged_records[0].proposal.provenance = (try provenance.lineageForRepair(a, fixture.context, base.provenance, &.{forged_value})).provenance;
         forged.records = forged_records;
         try std.testing.expectError(error.InvalidTypedText, provenance.validateStored(a, fixture.context.inputs, passive, references_stored, brief, forged));
+    }
+}
+
+test "an exact copy its own prose wraps in a balanced pair is projected without the engine's code span" {
+    const projection = @import("domain/specification_projection.zig");
+    const markdown = @import("domain/specification_markdown.zig");
+    const Segment = @import("domain/typed_text.zig").BusinessSegment;
+    const Case = struct { source: []const u8, prefix: []const u8, suffix: []const u8, spans: usize };
+    for ([_]Case{
+        // The prose delimits a value that ends without punctuation, in any table pair.
+        .{ .source = "Export `report.csv` nightly.", .prefix = "Export \"", .suffix = "\" nightly.", .spans = 0 },
+        .{ .source = "Export `report.csv` nightly.", .prefix = "Export (", .suffix = "), nightly.", .spans = 0 },
+        .{ .source = "Export `report.csv` nightly.", .prefix = "Export \u{201c}", .suffix = "\u{201d} nightly.", .spans = 0 },
+        .{ .source = "Display `Hello, World` when started.", .prefix = "Display the exact text \"", .suffix = "\" when started.", .spans = 0 },
+        // Both development-case shapes end in their own punctuation, which inside the
+        // pair reads as the prose's, so the engine still delimits them.
+        .{ .source = "Display `Hello, World!` when started.", .prefix = "Display the exact text \"", .suffix = "\" when started.", .spans = 1 },
+        .{ .source = "Refuse and display `Renewal refused.`.", .prefix = "The system refuses and displays \"", .suffix = "\"", .spans = 1 },
+        // No pair, or punctuation inside the pair: the engine delimits the value.
+        .{ .source = "Export `report.csv` nightly.", .prefix = "Export ", .suffix = " nightly.", .spans = 1 },
+        .{ .source = "Export `report.csv` nightly.", .prefix = "Export \"", .suffix = ".\" nightly.", .spans = 1 },
+    }) |case| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.init(a, case.source);
+        defer fixture.deinit();
+        const all = try provenance.items(fixture.context);
+        const token_claim = for (all.entries) |item| {
+            if (item.claim.content == .preserved_token) break item.claim;
+        } else return error.MissingTestToken;
+        const raw = token_claim.content.preserved_token.value.raw_value.bytes;
+        const fixed = try provenance.select(a, fixture.context, .{ .claim_ids = &.{ all.entries[0].claim.id, token_claim.id }, .clarification_response_ids = &.{} });
+        const segments: []const Segment = &.{ .{ .literal = .{ .value = case.prefix } }, .{ .exact_copy = .{ .claim_id = token_claim.id } }, .{ .literal = .{ .value = case.suffix } } };
+        const model: spec.Model.AttributedValue = .{ .value = .{ .segments = segments }, .source_group_ids = &.{ fixture.context.references.records.signals[0].id, fixture.context.references.records.signals[1].id }, .provenance = selection(fixed) };
+        const value = try provenance.checkAttributed(.model, a, text.validator, fixture.context, model, .spec_story);
+        const displayed = try projection.scalar(a, fixture.context, value);
+        try std.testing.expectEqualStrings(try std.mem.concat(a, u8, &.{ case.prefix, raw, case.suffix }), displayed.bytes);
+        try std.testing.expectEqual(case.spans, displayed.code_spans.len);
+        if (case.spans == 1) try std.testing.expectEqual(spec.CodeSpan{ .start = case.prefix.len, .end = case.prefix.len + raw.len }, displayed.code_spans[0]);
+        const record = try provenance.checkRecord(.model, a, text.validator, fixture.context, .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = &.{fixture.context.references.records.signals[0].id}, .provenance = .{ .claim_ids = &.{all.entries[0].claim.id}, .clarification_response_ids = &.{} } });
+        const descriptive = try provenance.checkAttributed(.model, a, text.validator, fixture.context, try fixture.proposal("The user receives the requested output."), .spec_title);
+        const content = (try identifiers.assign(a, .{ .display_name = descriptive, .primary_user_story = value, .records = &.{record}, .entities = .{ .disposition = .not_applicable, .basis = descriptive } }, .{})).content;
+        const document = try projection.project(a, fixture.context, content);
+        try std.testing.expectEqual(case.spans, document.primary_user_story.code_spans.len);
+        try std.testing.expectEqual(case.spans, document.records[0].content.functional_requirement.text.code_spans.len);
+        const rendered = try markdown.render(a, document);
+        try std.testing.expectEqual(case.spans != 0, std.mem.indexOfScalar(u8, rendered, '`') != null);
+        try std.testing.expectEqualDeep(document, try markdown.parse(a, rendered));
     }
 }
 

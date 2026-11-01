@@ -62,6 +62,7 @@ The user starts a live Spec case with `/live-e2e <case>`.
   runs the validation ladder and writes the definition-of-done report.
 - Before reporting a change complete, have the `contract-reviewer` agent review the
   diff against the AGENTS.md review rules.
-- These files are policy, so every edit to them prompts: AGENTS.md, CLAUDE.md,
-  accepted ADRs, and the Claude Code settings and hooks. Change them only when the
-  request includes that policy change.
+- These files are policy: AGENTS.md, CLAUDE.md, accepted ADRs, and the Claude Code
+  settings and hooks. Change them only when the request includes that policy change.
+  Markdown edits and `zig` commands don't prompt. Edits to the settings and hooks do,
+  and so does every live or billed step.

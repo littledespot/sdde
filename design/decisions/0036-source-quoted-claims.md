@@ -17,7 +17,11 @@
     split, after the second live pair;
   - "APPROVED. Implement B5": reinstate the split
     ([ADR 0038](0038-record-claims-and-scenario-coverage.md)), after the withdrawal's
-    evidence turned out to be misread.
+    evidence turned out to be misread;
+  - 1 November 2026, FIX06 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
+    no code span to an exact copy its text already wraps in a balanced pair (Decision 6);
+  - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
+    its span, although every development-case value then stays doubled (Decision 6).
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -25,6 +29,7 @@
   - [F0100](../features/F0100-SpecWorkflow.md) §§3.7–3.8 and its validation summary;
   - [text-field composition](../contracts/text-field-composition.md), extraction claim text
     and exact-value code delimiters in generated text;
+  - §23.1, the code span of an exact copy its text already delimits (Decision 6);
   - the §13 reference action catalogue, extraction text validation;
   - [ADR 0016](0016-configured-json-response-composition.md) §5, whose extraction repairs
     lose citation repair;
@@ -148,6 +153,26 @@ could disagree with the source.
    - Nothing else in the text changes. A code-wrapped value with no other prose is now
      the value alone, so a field that requires prose rejects it as `reference_only`,
      exactly as it rejects the bare value.
+   - **The engine adds no delimiter the text already supplies.** Generation also wraps
+     values in quotes, so `"Hello, World!"` rendered as quotes around the engine's code
+     span. When the literal text directly around an exact copy is one balanced pair from
+     the shared closed wrapper table ([ADR 0020](0020-derived-exact-reference-lineage.md)),
+     with no punctuation inside the pair, the projection gives the copy no code span and it
+     renders as escaped text.
+     - The model's bytes, the stored segment and its lineage don't change, and no meaning
+       is judged.
+     - These keep the span: an unwrapped copy, a pair with punctuation inside it
+       (`"report.csv."`), and a copy beside another display value. Passive values always
+       keep theirs (§23).
+     - A copy that ends in terminal punctuation from the shared closed table also keeps
+       its span. Inside quotes a reader can't tell
+       whether `"Renewal refused."` requires the final period, and the span shows that it
+       does. All three exact values in the development cases end this way, so their
+       rendering is unchanged.
+     - The backtick is in the table, so a backtick run this decision keeps stays as
+       written, with no second delimiter.
+     - No renderer revision exists to change, and no Plan or Tasks review exists to renew
+       ([ADR 0034](0034-spec-quality-gate.md)).
 
 ## Consequences
 
@@ -193,6 +218,15 @@ could disagree with the source.
     - admission into an obligation field and a field that can't hold exact copies, with
       idempotence, including a code-wrapped value alone;
     - the composition check with a code-wrapped value alone and with prose.
+  - Delimiting text:
+    - at the boundary owner: straight, curly and CJK quotes, groups and nested pairs are
+      direct pairs; no wrapper, punctuation inside the pair, a pair around a longer
+      phrase, mismatched or one-sided wrappers, a continuation and a reference edge are
+      not;
+    - at the projection: an unrelated value in straight, curly and group pairs, with and
+      without a direct pair, and both development-case values, which end in punctuation
+      and keep the span, through rendering and the parse round trip; a copy touching a
+      passive value or another exact copy whose bytes begin with the closer keeps it.
   - Quoting and splitting: top-level, ordered and nested items, continuation lines,
     headings and prose in and out of a split, wrapped numbers, look-alike markers and a
     thematic break, HTML blocks and comments, spacing and trimmed indentation, fenced

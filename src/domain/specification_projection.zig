@@ -87,16 +87,20 @@ pub fn modelRecord(allocator: std.mem.Allocator, context: provenance.Context, re
     };
 }
 
+const DisplayAtom = struct { start: usize, end: usize, kind: enum { passive, exact_copy } };
+
 fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, value: spec.BusinessValue, scopes: []const @import("reference_evidence.zig").Scope) Error!spec.Scalar {
     var bytes: std.ArrayList(u8) = .empty;
-    var spans: std.ArrayList(spec.CodeSpan) = .empty;
+    errdefer bytes.deinit(allocator);
+    var atoms: std.ArrayList(DisplayAtom) = .empty;
+    defer atoms.deinit(allocator);
     for (value.segments) |segment| switch (segment) {
         .literal => |literal| try bytes.appendSlice(allocator, literal.value),
         .passive => |passive| {
             const record = try @import("passive_literals.zig").resolveIn(context.registry, context.inputs, scopes, passive.passive_literal_id);
             const start = bytes.items.len;
             try bytes.appendSlice(allocator, record.value);
-            try appendSpan(allocator, &spans, start, bytes.items.len);
+            try atoms.append(allocator, .{ .start = start, .end = bytes.items.len, .kind = .passive });
         },
         .exact_copy => |selected| {
             const items = try provenance.items(context);
@@ -105,10 +109,32 @@ fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, val
             const raw = token.value.raw_value.bytes;
             const start = bytes.items.len;
             try bytes.appendSlice(allocator, raw);
-            try appendSpan(allocator, &spans, start, bytes.items.len);
+            try atoms.append(allocator, .{ .start = start, .end = bytes.items.len, .kind = .exact_copy });
         },
     };
-    return .{ .bytes = try bytes.toOwnedSlice(allocator), .code_spans = try spans.toOwnedSlice(allocator) };
+    const prose = @import("exact_value_boundary.zig").Utf8Prose.parse(bytes.items) orelse return error.InvalidSpecification;
+    var spans: std.ArrayList(spec.CodeSpan) = .empty;
+    errdefer spans.deinit(allocator);
+    for (atoms.items, 0..) |atom, index| {
+        if (atom.kind == .exact_copy and delimitedByText(prose, atoms.items, index)) continue;
+        try appendSpan(allocator, &spans, atom.start, atom.end);
+    }
+    const owned = try bytes.toOwnedSlice(allocator);
+    errdefer allocator.free(owned);
+    return .{ .bytes = owned, .code_spans = try spans.toOwnedSlice(allocator) };
+}
+
+/// §23: the engine's code span is a delimiter, so an exact copy that the field's literal
+/// text already wraps in one balanced pair from the shared closed table gets none. A
+/// display atom touching the copy never supplies the pair, even when its bytes begin
+/// with the closer. A copy ending in terminal punctuation keeps its span: inside the
+/// pair, that punctuation reads as the prose's own. Passive values keep their span.
+fn delimitedByText(prose: @import("exact_value_boundary.zig").Utf8Prose, atoms: []const DisplayAtom, index: usize) bool {
+    const atom = atoms[index];
+    if (index != 0 and atoms[index - 1].end == atom.start) return false;
+    if (index + 1 != atoms.len and atoms[index + 1].start == atom.end) return false;
+    if (@import("exact_value_boundary.zig").endsWithTerminal(prose.bytes[atom.start..atom.end])) return false;
+    return prose.directlyWrapped(atom.start, atom.end, .{ .left = .field_edge, .right = .field_edge });
 }
 
 // Adjacent display atoms share a code span; canonical identity stays in the IR.

@@ -80,6 +80,31 @@ stays open in FIX06.
   changes no output): hello-world 89.3 in 3 of 3, loan-renewal 85.7 / 78.6 / 82.1 (one below
   the 80% threshold, inside the earlier builds' range).
 
+## Q7 D7.4. No engine code span where the text already delimits an exact value
+
+**Implemented 1 November 2026 on `2b3dc8b`; uncommitted.** Targets the doubled delimiter
+(rendering artefact A) on values that end without punctuation. Every artefact-A occurrence
+so far is on a development-case value that ends in punctuation, so none of them changes.
+- **Change:** `delimitedByText` (`specification_projection.zig`) gives an exact copy no code
+  span when only literal text touches it and that text is directly one balanced pair from the
+  closed wrapper table (`Utf8Prose.directlyWrapped`, `exact_value_boundary.zig`, on
+  `evaluate`'s accepted evidence), unless the copy ends in terminal punctuation
+  (`endsWithTerminal`). Passive values keep their span. No model bytes, canonical state,
+  lineage, report or state version change. Rule: ADR 0036 Decision 6; 23-rendering.md §23.1.
+- **Offline proof:** no request carries the projection's spans. By the code: `brief` and
+  `entities` drop them, the clarification question uses only its bytes, and the projection's
+  `modelValue` and `modelRecord` have no production caller. Freeze `2b3dc8b-d74` against
+  `2b3dc8b` shows `diff -r` empty (129 scenarios, 1,702 calls), but no scripted scenario
+  quotes an exact copy, so the freeze doesn't reach the new path. Tests: the boundary pairs
+  (`exact_value_boundary.zig`); the projection with both development-case values (span
+  kept) and an unrelated value, with and without a direct pair, through rendering and the
+  parse round trip; touching a passive value, or an exact copy whose bytes begin with the
+  closer (fails without the guard); and a backtick run Decision 6 keeps
+  (`specification_generation_test.zig`). FIX06's re-render of retained `spec.md` files
+  couldn't run: every run directory was removed from `zig-out/e2e-spec/` on 1 November 2026.
+- **Not changed:** the design.md §32 index row for ADR 0036 doesn't name this rule (a
+  design edit).
+
 ## T5. Brittleness counts
 
 **Implemented and taken 1 November 2026, on HEAD `30e0d2f` (the D10.2 tree), before D13.1;

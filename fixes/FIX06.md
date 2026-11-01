@@ -106,7 +106,7 @@ governs; these add what the phases need.
     discard output.
 11. **Engine-track proof** (§5): offline on the scripted integration matrix against a request
     projection retaken on the commit before the item lands (current freezes
-    `evaluations/request-projection/d23-2026-10-31` and `q10b-2026-10-31`). (a) Behaviour
+    `evaluations/request-projection/2b3dc8b` and `2b3dc8b-d74`). (a) Behaviour
     reproduces the freeze its ADR defines, or the ADR 0030 step traces and summaries, with
     expected differences stated before landing; (b) every accounted request's projection is
     byte-identical. One live run of each case; lands only between sets.
@@ -154,7 +154,7 @@ between measurement sets.
 
 | Rank | Item | Defect class reduced (publications of 18) | Effort | Validation | Decisions |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q7 D7.4** render a model-quoted exact value without the engine's code span | rendering artefact (18; 70 doubled delimiters) | S–M | A set while review requests carry the projection's code spans; offline only after D13.1 | D7.4 |
+| 1 | **Q7 D7.4** render a model-quoted exact value without the engine's code span | rendering artefact, values ending without punctuation only (none in the development cases) | S–M | Implemented, proven offline ([Z_FIX06](Z_FIX06.md)) | D7.4 |
 | 2 | **Q12 D12.1** records stop receiving the brief and entity basis | weakened obligation in FRs (all 4 copied loan-renewal FRs), FR equal to an unpublished draft (9), copied additions (2) | S | Measurement set | D12.1 |
 | 3 | **Q13** remove both post-generation reviews, then show source lines inline (decided) | removes review's false findings, runaways and budget stops; inline lines make every link visible to the reader | L (remove), M (inline) | §2.11 proof and one run per case; inline lines offline | D13.1 decided |
 | 4 | **Q12 D12.2** story and description purposes name obligation strength | weakened obligation in the story (loan-renewal 15 of 16 since Q1b) | S | Measurement set (enough events) | D12.2 |
@@ -180,10 +180,13 @@ adopted; the provider defect recorded; §2 rules 3, 4 and 13 settled.
 **Build order** (each change set measured on its own committed build, §2.1 and §2.3):
 1. T5 counts: baseline taken 1 November 2026 ([Z_FIX06](Z_FIX06.md)); each later change set
    retakes them (§6 T5).
-2. D13.1: implemented 1 November 2026, uncommitted ([Z_FIX06](Z_FIX06.md)); the one live
-   run per case (approved) is outstanding.
-3. Q13 inline source lines; then Q7 D7.4 (both offline-proven once no request carries the
-   projection).
+2. D13.1: implemented 1 November 2026, committed by `2b3dc8b`. Its one live run per case
+   ran on 1 November (`04-13-54Z-c834…`, `04-14-32Z-9eda…`, tree marked `modified`): both
+   published, 10 and 12 sends, 14,633 and 26,263 tokens; advisory scores 85.7 and 89.3, and
+   loan-renewal published a refusal scenario after an `uncovered_member` correction. Both run
+   directories were removed the same day, so neither can be adjudicated.
+3. Q7 D7.4: implemented 1 November 2026, proven offline ([Z_FIX06](Z_FIX06.md)). Q13
+   inline source lines, offline, after approval to implement.
 4. Q12 D12.1, a measurement set.
 5. Q12 D12.2, a measurement set.
 6. Q17 principles as records-call context, a measurement set.
@@ -323,29 +326,9 @@ worsen.
   (`model_result_schema.zig:252`, `:358-381`; `model_text_field.zig:174-189`, `:228-251`),
   and fragments join with no separator (`model_candidate_json.zig:251-253`, `:269-282`).
 
-- **D7.4** Render a model-quoted exact value without the engine's code span: when the plain
-  text immediately around an exact copy forms a balanced pair from the existing closed wrapper
-  table (`exact_value_boundary.zig:82-100`, `:163-189`), the projection gives that copy no
-  span. No model bytes or canonical state change and no meaning is judged. The public
-  `evaluate()` already reports `enclosing_wrappers` (`exact_value_boundary.zig:70-73`, `:82-100`),
-  so the private table isn't copied. Effort S–M: `specification_projection.zig:90-119` plus
-  owner tests; it must change the projected document, not `render()`, because two tests require
-  parse(render(doc)) == doc (`specification_generation_test.zig:9216-9217`, `:9351-9352`) and
-  publication checks render(project(state)) == render(parse(bytes))
-  (`prepare_specification_output.zig:23-28`; `validate_specification_rendering.zig:13-19`). No
-  editable-view reparse exists yet (Plan is gated). Amends 23-rendering.md:99-100,
-  text-field-composition.md:75-81 and ADR 0036 Decision 6 (or a new ADR). Brackets and
-  parentheses are in the table too (none in the retained runs). **Model input changes:**
-  source, principle and loss review requests carry the projection's `code_spans` (35 of 178
-  retained requests, all with quoted spans), so it needs a measurement set while
-  post-generation review exists; if D13.1 removes it, no request carries the projection and it
-  is proven offline. No tool re-renders a stored state (the projection needs live
-  reconciliation data, `specification_provenance.zig:10-15`, `:31-34`); the offline proof is a
-  test that parses each retained spec.md, applies the rule and re-renders: A from 26 to 0 on
-  the 7 retained runs (70 in the 18 scored).
-  **Decided 1 November 2026:** not a punctuation rule. The engine decides only whether to add
-  its own delimiter, from the closed wrapper table recognition already applies (ADR 0036); no
-  model bytes change and no meaning is judged. Built after D13.1, so it is proven offline.
+- **D7.4** is implemented ([Z_FIX06](Z_FIX06.md); ADR 0036 Decision 6). Open: none of the
+  development-case values changes, so §1's rendering-artefact counts shouldn't fall on
+  either case.
 - **D7.5** Where a field offers no inserted reference, its schema offers only the plain string
   (`model_text_field.zig:179-189`; `textContract`, `model_text_wire.zig:277-292`). Contracts:
   07-domain-representations.md:74-80, ADR 0006:303-316, 12-model-boundary.md:1212-1213,
@@ -360,9 +343,9 @@ worsen.
   fixtures; `generation.context.json:2` still describes fragments. **Keep if** no fragments object appears where no reference is offered
   and publication, admission rejections, protocol corrections, runaways, unsupported addition
   and restating entity don't worsen.
-- **D7.2** Decide ADR 0036 Decision 6 and ADR 0045 (on hold) together. Built without D7.4,
-  ADR 0045 would double the delimiter on every quoted entity value (5 of 7 in the retained
-  runs); after D7.4 it adds none and fixes the bare values. It would also add entity spans to
+- **D7.2** Decide ADR 0036 Decision 6 and ADR 0045 (on hold) together. Even with D7.4, ADR
+  0045 would double a quoted entity value that ends in terminal punctuation, which is every
+  retained case (5 of 7); it would fix the bare values. It would also add entity spans to
   review requests, contrary to its "model-facing … unchanged" claim (0045:43-47). **Recommended
   (not decided; edits accepted ADRs):** keep Decision 6, which turns the model's backticks into
   one code span, and withdraw ADR 0045, docs only, removing its hold sites (0045:3-5,
@@ -472,8 +455,8 @@ only.
 
 ### Q13. Inline source lines (post-generation review removed)
 
-**D13.1 is implemented** (1 November 2026, uncommitted; [Z_FIX06](Z_FIX06.md)); its one live run
-per case is outstanding. The link-check proposal of 31 October was not built; D13.2 and D13.3
+**D13.1 is implemented** (1 November 2026, committed by `2b3dc8b`); its live runs are in §3's
+build order. The link-check proposal of 31 October was not built; D13.2 and D13.3
 lapse. Reopen link checks, in shadow mode, only if adjudication shows semantic defects that the
 generation-side items (Q12, Q14, Q15) leave. **D13.4** (decided 1 November 2026): principles are
 context and constraints only, never origins, and never modified (Q17).

@@ -73,7 +73,8 @@ same field policies validate it. The no-feature-claim reason is the only
 model-written extraction text.
 
 Generated specification fields lose the Markdown code delimiters (equal backtick runs)
-directly around a recognised exact value, because the engine formats exact values itself.
+directly around a recognised exact value, because the engine delimits exact values itself
+(§23).
 Where an exact copy is allowed (obligation-bearing or incidental) the value becomes one;
 where it is prohibited the value stays text. Removal is checked against every eligible
 value; if it would change the recognised values, every delimiter in that text stays. Extraction and reconciliation text keep theirs. Nothing

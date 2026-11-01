@@ -98,8 +98,13 @@ Renderers own:
   a new exact binding merely by borrowing model-request eligibility.
 - Ordinary segments are NFC-normalized prose; explicit passive and exact segments are inert
   inline code. Adjacent display spans may share a fence while their canonical identities remain
-  separate. Code samples render as deterministic fenced blocks in reference context and are
-  excluded from business-specification exact-copy choices.
+  separate. An exact segment that the field's literal text wraps directly in one balanced pair
+  from the exact-value boundary owner's closed wrapper table, with no punctuation inside the
+  pair, gets no fence: the pair already delimits it, and it renders as escaped text
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 6). A segment that ends in
+  the owner's terminal punctuation keeps its fence. Its segment and lineage are unchanged.
+  Code samples render as deterministic fenced blocks in reference context and are excluded
+  from business-specification exact-copy choices.
 - A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the
   specification.
 - A new user-written filename/path/URI cannot become a model repair or operational path: it
