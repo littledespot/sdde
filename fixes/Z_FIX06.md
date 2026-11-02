@@ -164,8 +164,8 @@ scored defect class; they make each record's links visible to the human reviewer
 
 ## Q12 D12.1. Records requests receive no unpublished drafts
 
-**Implemented 1 November 2026 on `340261e`; uncommitted. Measured 1 November 2026: rule 6
-recommends not kept (guards rise); the keep or revert decision is the user's (FIX06 D12.1).**
+**Implemented 1 November 2026 on `340261e`; committed in `6e543e6`. Measured 1 November 2026:
+rule 6 recommends not kept (guards rise); kept with D16.2 on 2 November 2026 (FIX06 Q16).**
 Approved 1 November 2026 as the first model-input change.
 - **Change:**
   - `specification_session.zig`: only the entities unit receives an earlier draft (the brief).
@@ -189,12 +189,47 @@ Approved 1 November 2026 as the first model-input change.
     an entity repair carries the brief and none carries the entity decision. A records packet
     without an accepted entities unit still rejects.
 
+## Q12 D12.2. Generated fields take obligation strength from one owner
+
+**Implemented 2 November 2026 on the `b38628c` tree; approved 1 November 2026. Its set and
+keep decision stay in FIX06 Q12.**
+- **Change:**
+  - `generation.context.json` `business_value`, bound to every generation and
+    specification-unit repair request, ends "preserve source-backed conditions, obligations
+    and obligation strength."
+  - `packet-guidance.json`: the story purpose drops "Preserve conditions and obligations;" and
+    the functional-requirement purpose drops "and obligation strength".
+  - `records.prompt.md:6-7` keeps "Preserve each statement's role." and drops "and obligation
+    strength".
+  - Kept: `generation.prompt.md:2` (optional in D12.2; kept so the set changes only the story
+    and FR owners), `packet-guidance.json:27` (`expected_outcome`, outside D12.2), `:61`,
+    `:65`, and the records prompt's "at most one" sentence (ADR 0038:116-117).
+  - No code, state, report or schema change; no contract quotes the moved texts.
+  - The purposes also reach, through `required_authority_description.task`, the
+    source-omission repairs (`source_omission_comparison.zig:55-67`;
+    `spec.workflow.yaml:821-851`, which bind no generation context) and a missing or stale FR
+    gap's clarification question (`required_authority_clarifications.zig:60-64`; form identity
+    ignores wording, `:21`). No scripted scenario reaches either with a story or FR subject,
+    so the freeze doesn't show them.
+- **Offline proof:**
+  - Freeze `b38628c-d122` against `b38628c`: the same 1,714 calls in 130 scenarios. 569
+    requests differ, each explained by the four texts, none unexplained:
+    - 525 generation (499) and specification-unit repair (26) requests carry the changed
+      context sentence; 105 story requests also carry the story purpose, and 171 records
+      requests the FR purpose and records prompt;
+    - 32 pre-generation source-review and 12 source-loss comparison requests carry the
+      changed story or FR purpose as a subject description (`required_authority_description.task`),
+      without the context.
+  - T5 on the change equals HEAD's (FIX06 §6 T5): no new repeated instruction.
+  - The driver already asserts the context in every generation and specification-unit repair
+    request (`spec_generation_driver.zig:734-741`, `:774`); no phrase test is added (T2).
+
 ## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
 
-**D16.1 implemented and measured 2 November 2026 on `340261e`; uncommitted. Its set failed
-the publication guard (FIX06 Q16 set result). D16.2 amends it the same day (user:
-"approved", then "Yes, exempt FRs"); D16.2's measurement set ran the same day (FIX06 Q16
-D16.2 set result) and the keep decision is outstanding.** D16.1 decisions: "the above recommendations are approved"; coverage kinds per
+**D16.1 implemented and measured 2 November 2026 on `340261e`; committed with D16.2 in
+`6e543e6`. Its set failed the publication guard (FIX06 Q16 set result). D16.2 amends it the
+same day (user: "approved", then "Yes, exempt FRs"); D16.2's measurement set ran the same day
+(FIX06 Q16 D16.2 set result) and the change set is kept (FIX06 Q16).** D16.1 decisions: "the above recommendations are approved"; coverage kinds per
 "No, behaviour kinds only"; "Yes, Q16 replaces it" (ADR 0035's in-batch deletion); "Yes,
 list every location".
 - **Change (as amended by D16.2):**

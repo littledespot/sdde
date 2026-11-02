@@ -20,10 +20,13 @@ HEAD (`ebc97d6`, the tree of `6e543e6`) byte for byte, all 1,824 files tracked, 
 set's equalled `194e29a`; whether either counts as "one committed build" (ADR 0034:64) is the
 user's reading. The user decides when Plan is actioned.
 
-Reference for quality phases (§2 rule 7): D2.3, the last kept measured state (kept 1 November
-2026). It is 12 runs on `dac4c4c` plus its working tree, 31 October 2026; measures in
-`evaluations/d23-12/measures-set.json` and evaluations in `evaluations/e2e/2026-10-31T07-*/`.
-A change proved under §2.10 never moves it.
+Reference for quality phases (§2 rule 7): the D16.2 set, the last kept measured state (D12.1 +
+D16.2 kept 2 November 2026, §4 Q16). It is 6 runs (`2026-11-02T02-27-46Z` to `02-29-15Z`,
+5 published) on source `1ae6b0583e57…`, the tree of `6e543e6`; measures in
+`evaluations/d162-measures-set.json` and evaluations in `evaluations/e2e/<run>/`. A change
+proved under §2.10 never moves it. The previous reference was D2.3 (12 runs on `dac4c4c` plus
+its working tree, 31 October 2026; `evaluations/d23-12/measures-set.json`); "reference" in the
+defect-class table below and in §4 means the 18 publications of 31 October (D2.3 and Q10b).
 
 **Output quality** (advisory scoring against the case rubrics,
 `evaluations/e2e/<run>/evaluation.json`; scorer judgment moves a score about ±3.6):
@@ -31,11 +34,12 @@ A change proved under §2.10 never moves it.
 | Build                                        | Hello-world mean (range) | Loan-renewal mean (range)        | Below 80% |
 | -------------------------------------------- | ------------------------ | -------------------------------- | --------- |
 | Q1b and 8444312 (14 earlier evaluations)     | 90.8 (82.1–100)          | 83.6 (78.6–89.3; 2 undetermined) | 1         |
-| D2.3 tree (12 runs; reference)               | 89.9 (85.7–100)          | 86.3 (82.1–92.9)                 | 0         |
+| D2.3 tree (12 runs; previous reference)      | 89.9 (85.7–100)          | 86.3 (82.1–92.9)                 | 0         |
 | Q10b tree (6 runs)                           | 89.3 (89.3–89.3)         | 82.1 (78.6–85.7)                 | 1         |
 | D12.1 alone (6 runs)                         | 89.3 (89.3–89.3)         | 72.6 (67.9–78.6)                 | 3         |
 | D12.1 with D16.1 (6 runs, 4 published)       | 86.9 (85.7–89.3)         | 85.7 (1 published)               | 0         |
-| D12.1 with D16.2, HEAD (6 runs, 5 published) | 89.3 (2 published)       | 85.7 (78.6–89.3)                 | 1         |
+| D12.1 with D16.2, HEAD (6 runs, 5 published; reference) | 89.3 (2 published) | 85.7 (78.6–89.3)        | 1         |
+| D12.2 (10 runs, 9 published)                 | 93.8 (89.3–100)          | 82.9 (78.6–89.3)                 | 3         |
 
 No change since Q1b has improved the published output. Publications showing each defect
 class, in the 18 reference publications of 31 October (D2.3 and Q10b, 9 per case) and the 15
@@ -143,16 +147,13 @@ between measurement sets.
 
 **Next** (each needs its decision or approval first):
 
-1. **Q16:** the keep decision on the D12.1 + D16.2 change set (§4 Q16). Rule 6 leaves its
-   target undecided: restatement has 7 events across both states, under the evidence floor,
-   and the unsupported-addition guard stands at p = 0.109. **Recommended (not decided):**
-   extend the set by three runs per case on HEAD (rule 6 sampling, each run approved); runs
-   on the clean tree should carry the set's source hash with `modified` false (rule 3).
-2. **Q12 D12.2**, approved for after that decision: the story is now the only producer of
-   weakened obligation (hello-world 2 of 8, loan-renewal 6 of 7 since D12.1).
-3. **Q15 D15.1 revisit**, due now: D12.1 removed lever 1's signal (0 of 15) and the class is
+1. **Q12 D12.2** measurement set (implemented, [Z_FIX06](Z_FIX06.md)): the story is the only
+   producer of weakened obligation (hello-world 2 of 8, loan-renewal 6 of 7 since D12.1). Its
+   proposed definition and one baseline decision are in §4 Q12; each run needs approval.
+2. **Q15 D15.1 revisit**, due now: D12.1 removed lever 1's signal (0 of 15) and the class is
    unchanged (14 of 15).
-4. **Q14 D14.1 re-decision:** its target class hasn't appeared since D12.1 (0 of 15).
+3. **Q14 D14.1 re-decision:** its target class hasn't appeared since D12.1 (0 of 15), so the
+   reference has none.
 
 **Output track** (recommended order; each needs its decision first):
 
@@ -178,16 +179,18 @@ punctuation rule; D12.1 and D12.2 approved; D14.1 b3; D15.1 recorded as a model 
 for now; D16.1 deferred (decided 2 November, §4 Q16); D17.1 records call only; T5 definitions
 approved; H2 convention adopted; the provider defect recorded; §2 rules 3, 4 and 12 settled.
 
+**Decided 2 November 2026** (user: "keep D12.1 + D16.2"): the D12.1 + D16.2 change set is kept
+without the recommended extension (§4 Q16), and its set becomes the reference (§1).
+
 **Build order** (each change set measured on its own committed build, §2.1 and §2.3):
 
 1. Done: T5 baseline (`93476e7`), D13.1 (`2b3dc8b`), D7.4 (`340261e`), and Q13 inline source
-   lines with the D12.1 + D16.2 change set (`6e543e6`; Q13 changes no request, §2.10).
-2. The D12.1 + D16.2 keep decision (§4 Q16), after the recommended extension; T5 retaken on
-   that build (§6 T5).
-3. Q12 D12.2, a measurement set.
-4. Q17 principles as records-call context, a measurement set.
-5. Q14 b3, a measurement set, unless D14.1 is re-decided (§4 Q14).
-6. Q7 D7.5, a measurement set.
+   lines with the D12.1 + D16.2 change set (`6e543e6`; Q13 changes no request, §2.10), kept
+   2 November 2026 (§4 Q16); T5 retaken on that build (§6 T5).
+2. Q12 D12.2 (implemented on the `b38628c` tree), a measurement set.
+3. Q17 principles as records-call context, a measurement set.
+4. Q14 b3, a measurement set, unless D14.1 is re-decided (§4 Q14).
+5. Q7 D7.5, a measurement set.
 
 **Recommended, not yet decided:** D5.1 no; D8.1 keep, record only; close D2.2, D11.3, Q9 and
 W5; keep D15.1 as a model limitation; hold Q14 b3 until lost source requirement recurs.
@@ -440,25 +443,52 @@ D16.2 freezes.
   loan-renewal records call wrote assumption, non-goal, prohibition and edge-case records that
   invented content or restated FRs (3 of 3 runs). **Decided 2 November 2026** (user: "the
   above recommendations are approved"): not kept alone; its code is part of the D12.1 + Q16
-  change set (§4 Q16).
+  change set, kept with D16.2 on 2 November 2026 (§4 Q16).
 - **Story route.** The story request (call 8) receives the claims verbatim ("must be able to
-  renew") and no drafts. The FR field purpose names obligation strength
-  (`packet-guidance.json:15`) and FRs keep "must"; the story and description purposes (`:7`,
-  `:5`) don't.
-- **D12.2** Give obligation strength one owner that every generated field receives:
-  `generation.context.json:2` (sent with every generation and repair request,
-  `spec.workflow.yaml:721`, `:751`) becomes "…preserve source-backed conditions, obligations
-  and obligation strength"; delete the duplicates at `packet-guidance.json:15` ("and
-  obligation strength"), `records.prompt.md:6-7` and the story purpose's "Preserve conditions
-  and obligations;" (`packet-guidance.json:7`); `generation.prompt.md:2` optionally. The
-  obligation-strength sentences outside generated fields (`packet-guidance.json:61`, `:65`)
-  stay. The story already receives "obligations" twice; only "strength" is missing. The
-  description purpose needs no change: the brief is never published. A model-input change
-  with enough events for a set to decide (8 of 15 since D12.1), effort S. It reopens B7's
-  recorded model limitation: the user's call. A separate change set from D12.1 (§2.1).
-  **Keep if** the story's weakening falls, FR weakening doesn't rise (FR's wording owner
-  moves) and unsupported addition and restatement don't rise. **Approved 1 November 2026:**
-  after D12.1's set, which is now the change set's keep decision (§4 Q16).
+  renew") and no drafts. Before D12.2 the FR field purpose named obligation strength
+  (`packet-guidance.json:15`) and FRs kept "must"; the story and description purposes (`:7`,
+  `:5`) didn't.
+- **D12.2** (approved 1 November 2026) gives obligation strength one owner that every
+  generated field receives, `generation.context.json`'s `business_value`. Implemented 2
+  November 2026 on the `b38628c` tree ([Z_FIX06](Z_FIX06.md)); the story and FR purpose
+  edits also reach pre-generation source-review and source-loss requests as subject
+  descriptions. Left for a later hygiene change (the user's call): `generation.prompt.md:2`
+  and `packet-guidance.json:27` still restate the context's "conditions and obligations". A
+  separate change set from D12.1 (§2.1). **Keep if** the story's weakening
+  falls, FR weakening doesn't rise (FR's wording owner moves) and unsupported addition and
+  restatement don't rise.
+  - **Set, approved 2 November 2026** (user: "approved"; recorded before it runs, rule 6):
+    target, story weakening of an obligation, events per publication, direction down, pooled
+    over both cases; guards, FR weakening, unsupported addition, restatement, lost source
+    requirement, a critical criterion below its minimum, harmful repair, publication rate per
+    case; run maximum three per case, extended by two or three with approval to eight.
+  - **Baseline, decided 2 November 2026** (same approval): the story-weakening target compares
+    with the 15 publications since D12.1 (hello-world 2 of 8, loan-renewal 6 of 7), whose
+    story requests are byte-identical across the D12.1, D16.1 and D16.2 freezes; the guards
+    compare with the reference, the D16.2 set (§1).
+  - **Set result** (2 November 2026; ten runs `2026-11-02T09-15-27Z` to `09-33-46Z`, five per
+    case after one approved extension, on source `bacfcd9ae368…`, `modified` true; measures
+    in `evaluations/e2e/<run>/measures.json`, the first six summarised in
+    `evaluations/d122-measures-set.json`):
+    - publication: hello-world 4 of 5, loan-renewal 5 of 5. `09-15-31Z` ended
+      `workflow_invalid`: extraction returned `no_feature_claim` (an unchanged request), then
+      the pre-generation story review returned a false `candidate_omission` from a request
+      differing from `02-28-14Z`'s only by D12.2's story purpose, and `repair-source` found no
+      upstream producer. Plausibly D12.2, not established (one pair, temperature 0.1);
+    - target, story weakening: 8 of 15 → 1 of 9 (hello-world 2/8 → 0/4, loan-renewal 6/7 →
+      1/5), p = 0.093; 9 events, at the evidence floor. Three hello-world stories are
+      byte-identical to pre-D12.2 stories;
+    - guards against the D16.2 set (5 publications → 9): unsupported addition 6 → 19 (1.2 →
+      2.1 per publication, p = 0.16; loan-renewal 4 → 16, p = 0.08 alone, with new story
+      additions in `09-33-44Z` and `09-33-46Z`); restatement 3 → 5; FR weakening 0 → 0; lost
+      source requirement 0 → 0; critical criterion below minimum 1 → 3 runs (loan-renewal
+      source-grounding, p = 0.55); harmful repair 0 → 0;
+    - advisory scores: hello-world 89.3, 92.9, 100, 92.9; loan-renewal 89.3, 78.6, 89.3,
+      78.6, 78.6.
+  - **Decision (open): keep or revert D12.2.** Under rule 6 the target improves (p ≤ 0.10,
+    neither case worse) and no guard rises under the pooled test. **Recommended (not
+    decided):** keep, recording the loan-renewal unsupported-addition rise and the
+    story-review failure as watch items.
 - **Not recommended:** a typed obligation-strength field (07-domain-representations.md:160
   forbids a duplicate modality field; making it matter needs a word check or engine-rendered
   modal text).
@@ -564,8 +594,8 @@ AC-001. It hasn't fired in the 18 retained runs.
 
 **D14.1 decided 1 November 2026:** b3 (Q13's link checks won't exist after D13.1). **Keep if**
 lost source requirement falls and publication and exhausted runs don't worsen. **Decision
-(re-decide D14.1):** the class is absent since D12.1, so if the change set is kept the
-reference has none, and a set could show only "benefit not demonstrated" (§2 rule 6).
+(re-decide D14.1):** the class is absent since D12.1, and the change set is kept, so the
+reference has none and a set could show only "benefit not demonstrated" (§2 rule 6).
 **Recommended (not decided):** hold b3 and reopen it when lost source requirement recurs.
 
 ### Q15. Entity applicability and restating meanings (B6)
@@ -683,12 +713,10 @@ paraphrasing the FR or the source, AC and edge-case repeats, the story repeating
     it neither shows nor rules out a benefit from it. Under rule 6 the restatement target has
     7 events across both states, under the evidence floor ("not enough evidence"), and the
     unsupported-addition guard is undecided after three runs.
-- **Decision (open): keep or revert the D12.1 + D16.2 change set.** **Recommended (not
-  decided):** extend the set by three runs per case on HEAD (rule 6 sampling; each run
-  approved). HEAD's build inputs equal the set's capture, all files tracked, so runs on the
-  clean tree should carry its source hash `1ae6b0583e57…` with `modified` false (rule 3). If
-  the extended set still doesn't show restatement falling, the **Keep if** isn't met and the
-  default is to revert the change set in full (rule 1); the user decides.
+- **Kept, decided 2 November 2026** (user: "keep D12.1 + D16.2"), without the recommended
+  three-run extension. Rule 6 left the restatement target at "not enough evidence" and the
+  unsupported-addition guard undecided (p = 0.109); the **Keep if** wasn't met. The set is the
+  reference (§1, §2 rule 7).
 
 ### Q17. Principles as Spec context
 
@@ -907,9 +935,14 @@ extending `spec_generation_responses.zig`.
 Baseline, definitions and decisions: [Z_FIX06](Z_FIX06.md). Each change set that a phase
 reports on retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>`
 with the freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a
-`slot: repair` step whose prompt no non-repair step binds). The last report
-(`zig-out/code-heuristics/report.json`, 1 November, the D13.1 tree: T5.1 19, T5.2 20, T5.5 0,
-T5.6 13) predates the D12.1 + D16.2 change set; retake it on HEAD with a freeze taken there.
+`slot: repair` step whose prompt no non-repair step binds). Retaken 2 November 2026 on the
+`b38628c` tree (the kept D12.1 + D16.2 change set) with
+freeze `evaluations/request-projection/b38628c` (130 scenarios, 1,714 calls): T5.1 19, T5.2 20
+(tests 88), T5.3 5 instructions at 11 sites, T5.4 6 (`spec.workflow.yaml:362`, `:399`,
+`:596`, `:752`, `:829`, `:844`, each binding `repair-prompt`), T5.5 0, T5.6 13 in 4 files.
+T5.1, T5.2, T5.5 and T5.6 equal the D13.1 tree's. The D12.2 tree with freeze
+`b38628c-d122` gives the same counts. The `340261e-d162` freeze predates the final D16.2
+tree (129 scenarios, 1,702 calls).
 
 ## 7. Human and decision track (H)
 

@@ -6,10 +6,11 @@ python or python3. A command shaped
     [cd DIR &&] python[3] [options] (SCRIPT | -c CODE | -m MODULE | - <<'EOF' ... EOF) [ARGS]
         [| head|tail|sort|uniq|wc|cut|grep|jq ...]
 
-is approved when Python can parse everything it runs and none of it, nor any local module it
-imports, reaches the network, starts another program, loads code dynamically or imports a
-module outside the standard library. Every other Python command is put to the user, with
-the reason.
+is approved when Python can parse everything it runs, every module it imports is in the
+standard library or a readable local module, and none of it reaches the network, starts
+another program, loads code dynamically or names .env.e2e. Python found doing any of those
+is put to the user, with the reason. Every other command, and code this check can't read,
+gets no decision here, so the session's permission mode decides it.
 """
 import ast
 import json
@@ -30,6 +31,8 @@ DYNAMIC = frozenset({"__import__", "eval", "exec"})
 # Modules that, run with -m, execute code named in their arguments.
 RUNNERS = frozenset({"cProfile", "code", "doctest", "pdb", "profile", "timeit", "trace",
                      "unittest"})
+# Module files Python can load that this check can't read.
+COMPILED = (".so", ".pyd", ".pyc")
 FILTERS = frozenset({"head", "tail", "sort", "uniq", "wc", "cut", "grep", "jq"})
 FLAGS = frozenset("bBdEIOPqRsSuvx")
 HEREDOC = re.compile(r"<<(-?)[ \t]*(?:'(\w+)'|\"(\w+)\"|(\w+))")
@@ -138,35 +141,36 @@ def invocation(found):
 
 
 def program(words, body, base):
-    """Return (source, import directory) for what the invocation runs, or a reason it can't
-    be read."""
+    """Return (source, import directory) for what the invocation runs, or None when this
+    check doesn't support the invocation or can't read what it runs."""
     i = 1
     while i < len(words) and words[i].startswith("-") and words[i] != "-":
         option = words[i]
-        if option in ("-c", "-m"):
-            if i + 1 == len(words):
-                return f"`{option}` has no argument"
-            if option == "-c":
-                return words[i + 1], base
+        if option in ("-c", "-m", "-W", "-X") and i + 1 == len(words):
+            return None
+        if option == "-c":
+            return words[i + 1], base
+        if option == "-m":
             if words[i + 1].split(".")[0] in RUNNERS:
-                return f"`-m {words[i + 1]}` runs code named in its arguments"
+                return None  # It runs code named in its arguments.
             return f"import {words[i + 1]}\n", base
         if option in ("-W", "-X"):
             i += 2
             continue
         if not FLAGS.issuperset(option[1:]):
-            return f"option `{option}` isn't recognised"
+            return None
         i += 1
     if i == len(words) or words[i] == "-":
-        if body is None:
-            return "it reads its program from standard input"
-        return body, base
+        return None if body is None else (body, base)
     path = os.path.join(base, words[i])
+    # A pipe or device, such as /dev/stdin, reads differently here than in the command.
+    if not os.path.isfile(path):
+        return None
     try:
         with open(path, encoding="utf-8") as script:
             return script.read(), os.path.dirname(path)
     except (OSError, UnicodeDecodeError):
-        return f"`{words[i]}` can't be read"
+        return None
 
 
 def starts_program(name):
@@ -177,8 +181,9 @@ def starts_program(name):
         or function.startswith(("exec", "fork", "posix_spawn", "spawn")))
 
 
-def external(source, directory, seen):
-    """Return why the Python source may reach outside the machine, or None."""
+def external(source, directory, seen, unread):
+    """Return why the Python source may reach outside the machine, or None. What this check
+    can't read is added to `unread`."""
     if CREDENTIALS.search(source):
         return "it names .env.e2e, which holds live provider credentials"
     try:
@@ -186,7 +191,9 @@ def external(source, directory, seen):
             warnings.simplefilter("ignore", SyntaxWarning)
             tree = ast.parse(source)
     except (SyntaxError, ValueError):
-        return None  # Python refuses to run it.
+        # The command's interpreter may parse what this one can't.
+        unread.append("code this Python can't parse")
+        return None
     nodes = list(ast.walk(tree))
     aliases = {"os"} | {
         alias.asname for node in nodes if isinstance(node, ast.Import)
@@ -207,38 +214,61 @@ def external(source, directory, seen):
         else:
             continue
         for module in modules:
-            reason = imported(module, directory, seen)
+            reason = imported(module, directory, seen, unread)
             if reason:
                 return reason
     return None
 
 
-def imported(module, directory, seen):
-    """Return why importing a module may reach outside the machine, or None."""
+def local_files(local):
+    """Return the source files Python can load for the local module or package `local`, or
+    None when it can also load code this check can't read: a compiled module, or a
+    symlinked directory inside the package."""
+    directory, name = os.path.split(local)
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        entries = []
+    if any(entry.startswith(name + ".") and entry.endswith(COMPILED) for entry in entries):
+        return None
+    files = [local + ".py"] if os.path.isfile(local + ".py") else []
+    for root, dirs, names in os.walk(local):
+        # __pycache__ caches the bytecode of the sources read here.
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        if (any(os.path.islink(os.path.join(root, d)) for d in dirs)
+                or any(n.endswith(COMPILED) for n in names)):
+            return None
+        files += [os.path.join(root, n) for n in names if n.endswith(".py")]
+    return files
+
+
+def imported(module, directory, seen, unread):
+    """Return why importing a module may reach outside the machine, or None. What this
+    check can't read is added to `unread`."""
     parts = module.split(".")
     if starts_program(module) or any(
             ".".join(parts[:k]) in EXTERNAL for k in range(1, len(parts) + 1)):
         return f"it imports {module}"
     # A local module shadows the standard library, so it is read first.
     local = os.path.join(directory, parts[0])
-    if os.path.isfile(local + ".py"):
-        files = [local + ".py"]
-    elif os.path.isdir(local):
-        files = [os.path.join(root, name) for root, _, names in os.walk(local)
-                 for name in names if name.endswith(".py")]
-    elif parts[0] in sys.stdlib_module_names:
+    files = local_files(local)
+    if files is None:
+        unread.append(f"{local} can load compiled or linked code")
         return None
-    else:
-        return f"it imports {parts[0]}, which isn't in the standard library"
+    if not files and not os.path.isdir(local):
+        if parts[0] not in sys.stdlib_module_names:
+            unread.append(f"{parts[0]} is outside the standard library")
+        return None
     for path in files:
         if path in seen:
             continue
         seen.add(path)
         try:
             with open(path, encoding="utf-8") as local_module:
-                reason = external(local_module.read(), directory, seen)
+                reason = external(local_module.read(), directory, seen, unread)
         except (OSError, UnicodeDecodeError):
-            return f"local module `{path}` can't be read"
+            unread.append(f"{path} can't be read")
+            continue
         if reason:
             return f"{reason} (in {os.path.relpath(path, directory)})"
     return None
@@ -258,20 +288,20 @@ def main():
     found = segments(command)
     shape = invocation(found) if found else None
     if shape is None:
-        decide("ask", "Python runs without approval only as its own command: "
-               "[cd DIR &&] python3 ... [| head ...], with no variables, substitutions, "
-               "redirections or globs.")
         return
     directory, python = shape
     base = os.path.join(hook.get("cwd") or os.getcwd(), directory)
     source = program(python["words"], python["body"], base)
-    reason = source if isinstance(source, str) else external(*source, set())
+    if source is None:
+        return
+    unread = []
+    reason = external(*source, set(), unread)
     if reason:
         decide("ask", f"This Python may make external calls: {reason}. "
                "Approve it only if it stays on this machine.")
-    else:
-        decide("allow", "Offline Python: standard library only, no network, "
-               "process or dynamic-import use.")
+    elif not unread:
+        decide("allow", "Offline Python: standard library or readable local modules only, "
+               "no network, process or dynamic-import use.")
 
 
 if __name__ == "__main__":
