@@ -3,12 +3,14 @@
 Implemented FIX06 items, moved here on 31 October 2026 by the user's instruction. Each
 item's open parts and keep decision stay in [FIX06](FIX06.md) under the same ID. Earlier
 completed FIX06 work (Q1, Q2, Q3, Q4's first attempt in full, Q6, D7.1, D11.1/.2/.4/.5,
-DE6, T1, T5's measures) is `fixes/Z_FIX06.md` at git `194e29a`. This record grants no
-approval and establishes no live acceptance.
+DE6, T1, T5's measures) is `fixes/Z_FIX06.md` at git `194e29a`; Q10b D10.2, reverted in full
+with D13.1 (ADR 0023:25-28), is here at git `388438e`. This record grants no approval and
+establishes no live acceptance.
 
 ## Q2b D2.3. Dispositions complete at response admission (ADR 0046)
 
-**Implemented 31 October 2026; committed in `194e29a`. Keep not confirmed by the user.**
+**Implemented 31 October 2026; committed in `194e29a`. Kept 1 November 2026 (user: "apply best
+recommendations") on the measurement below.**
 
 - **Defect targeted:** lost source requirement. Hello-world's UTC claim was lost when the
   dispositions insert repair answered `duplicate` of claim 1 (27 October 09:40, 29 October
@@ -54,37 +56,18 @@ measured and reverted on 31 October 2026: hello-world's first extraction returne
 (`extraction.context.json:14`) was removed (`evaluations/q4/measures-set.json`). The retry
 stays open in FIX06.
 
-## Q10b D10.2. Advisory verdict set (first step)
+## Q13 D13.1. Post-generation reviews removed
 
-**Implemented 31 October 2026; uncommitted. Not kept: the keep decision is the user's.**
-
-- **Change:** post-generation source review offers only `supported`, `candidate_omission`
-  and `candidate_invalid`, with a null `authority_gap` (ADR 0023 "Advisory verdict set").
-  Typed owner `advisoryPermits` (`specification_support_evidence.zig`) feeds the withheld
-  verdicts, native admission and stored readback; every advisory packet derives its excluded
-  variants, `evidence_rules` keys, source-ID choices and question paths from one offered
-  set. Advisory `candidate_invalid` corrections use the plain `detail`/`selection` shapes.
-  `specification-state/v20`, no migration. `support.prompt.md`, `support.schema.json` and
-  the workflow YAML unchanged. Required review unchanged.
-- **Offline proof:** `zig build verify` 169/169 steps, 2,002 tests. Projection
-  `q10b-2026-10-31` against `d23-2026-10-31`: all 167 pre-generation source-review requests
-  and every generation, loss, principle and other request byte-identical; only
-  post-generation source-review requests differ (schema text about 64% smaller, request text
-  about 15% smaller). Contract review: no blocker; the required gap-correction coverage it
-  found missing was moved to readiness inputs.
-- **Measurement (6 runs, `evaluations/q10b/measures-set.json`):** 6 of 6 published; no
-  withheld verdict emitted, no `unknown_variant`, no exhausted correction. Mean tokens
-  against the D2.3 set (not Q1b): hello-world 68,786 → 53,374, loan-renewal 97,319 → 88,701;
-  post-generation source-review input −28% and −13%.
-- **Output scoring:** the specs are unchanged in quality, as designed (advisory review
-  changes no output): hello-world 89.3 in 3 of 3, loan-renewal 85.7 / 78.6 / 82.1 (one below
-  the 80% threshold, inside the earlier builds' range).
+**Implemented 1 November 2026; committed in `2b3dc8b`.** Decided 1 November 2026 (user: "apply
+best recommendations"); the decision and what it removed are ADR 0023's removal amendment
+(0023:25-41). Effects: FIX06 §1 (runaways, re-sends) and H4 (sends and tokens).
 
 ## Q7 D7.4. No engine code span where the text already delimits an exact value
 
-**Implemented 1 November 2026 on `2b3dc8b`; uncommitted.** Targets the doubled delimiter
-(rendering artefact A) on values that end without punctuation. Every artefact-A occurrence
-so far is on a development-case value that ends in punctuation, so none of them changes.
+**Implemented 1 November 2026 on `2b3dc8b`; committed in `340261e`.** The user's ruling that
+D7.4 is not a punctuation rule stays in FIX06 Q7. Targets the doubled delimiter (rendering
+artefact A) on values that end without punctuation. Every artefact-A occurrence so far is on a
+development-case value that ends in punctuation, so none of them changes (FIX06 Q7).
 - **Change:** `delimitedByText` (`specification_projection.zig`) gives an exact copy no code
   span when only literal text touches it and that text is directly one balanced pair from the
   closed wrapper table (`Utf8Prose.directlyWrapped`, `exact_value_boundary.zig`, on
@@ -107,7 +90,8 @@ so far is on a development-case value that ends in punctuation, so none of them 
 
 ## Q13. Inline source lines
 
-**Implemented 1 November 2026 on `340261e`; uncommitted.**
+**Implemented 1 November 2026 on `340261e`; committed in `6e543e6` with the D12.1 + D16.2 change
+set (Q13 changes no request). Every publication since D12.1 shows the lines.**
 - **User decisions, 1 November 2026:**
   - "the claims associate with the AC, FR and EN should be placed after each AC, FR and EN";
   - format: file and lines only, one line per item with the source file and merged line
@@ -165,7 +149,7 @@ scored defect class; they make each record's links visible to the human reviewer
 ## Q12 D12.1. Records requests receive no unpublished drafts
 
 **Implemented 1 November 2026 on `340261e`; committed in `6e543e6`. Measured 1 November 2026:
-rule 6 recommends not kept (guards rise); kept with D16.2 on 2 November 2026 (FIX06 Q16).**
+rule 6 recommends not kept (guards rise); kept with D16.2 on 2 November 2026 (Q16).**
 Approved 1 November 2026 as the first model-input change.
 - **Change:**
   - `specification_session.zig`: only the entities unit receives an earlier draft (the brief).
@@ -188,11 +172,20 @@ Approved 1 November 2026 as the first model-input change.
     across both entity decisions. In assembled repair packets for every record family, only
     an entity repair carries the brief and none carries the entity decision. A records packet
     without an accepted entities unit still rejects.
+- **Measurement, D12.1 alone** (set 1 November 2026, `evaluations/d121-measures-set.json`; six
+  runs on source `732665ccc30f…`): unsupported addition 10 → 11 and restatement 7 → 12 rose,
+  as the loan-renewal records call wrote assumption, non-goal, prohibition and edge-case
+  records that invented content or restated FRs (3 of 3 runs). Decided 2 November 2026 (user:
+  "the above recommendations are approved"): not kept alone; its code is part of the D12.1 +
+  Q16 change set, kept with D16.2 (Q16).
+- **Copy route removed:** the records request had received the brief and the entity decision
+  with its basis. FR equal to an unpublished draft fell from 9 of 18 reference publications to
+  0 of 15 across the D12.1, D16.1 and D16.2 sets (p = 0.004).
 
 ## Q12 D12.2. Generated fields take obligation strength from one owner
 
-**Implemented 2 November 2026 on the `b38628c` tree; approved 1 November 2026. Its set and
-keep decision stay in FIX06 Q12.**
+**Implemented 2 November 2026 on the `b38628c` tree; committed in `388438e`; approved 1
+November 2026. Its set and keep decision stay in FIX06 Q12.**
 - **Change:**
   - `generation.context.json` `business_value`, bound to every generation and
     specification-unit repair request, ends "preserve source-backed conditions, obligations
@@ -227,11 +220,28 @@ keep decision stay in FIX06 Q12.**
 ## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
 
 **D16.1 implemented and measured 2 November 2026 on `340261e`; committed with D16.2 in
-`6e543e6`. Its set failed the publication guard (FIX06 Q16 set result). D16.2 amends it the
-same day (user: "approved", then "Yes, exempt FRs"); D16.2's measurement set ran the same day
-(FIX06 Q16 D16.2 set result) and the change set is kept (FIX06 Q16).** D16.1 decisions: "the above recommendations are approved"; coverage kinds per
-"No, behaviour kinds only"; "Yes, Q16 replaces it" (ADR 0035's in-batch deletion); "Yes,
-list every location".
+`6e543e6`. Its set failed the publication guard. D16.2 amends it the same day (user:
+"approved", then "Yes, exempt FRs"); D16.2's set ran the same day, and the change set is kept
+(decided 2 November 2026, user: "keep D12.1 + D16.2") without the recommended three-run
+extension. Its set is FIX06's reference (FIX06 §1, §2 rule 7).** D16.1 decisions: "the above
+recommendations are approved"; coverage kinds per "No, behaviour kinds only"; "Yes, Q16
+replaces it" (ADR 0035's in-batch deletion); "Yes, list every location".
+- **Defect targeted:** restatement, 5 of 18 reference publications (7 defects): business rules
+  paraphrasing the FR or the source, AC and edge-case repeats, the story repeating the FR.
+  ADR 0035's exact equality catches none of them.
+- **D16.1 set** (`evaluations/q16-measures-set.json`; six runs on source `6b37001bfce8…`):
+  loan-renewal published 1 of 3 against D2.3's 6 of 6 (p = 0.083); both failures exhausted the
+  records retry limit on `shared_member`, because the FRs named every claim and no claim ID
+  could satisfy the located position. Not kept as built.
+- **D16.2 decision** (an exception to FIX06 §2 rule 1): amend the change set instead of
+  reverting it. Requirements are never deleted or rejected by the rule, since one prose claim
+  can hold two obligations. After the contract review (user: "Yes, keep it", twice) a repeated
+  statement holding the batch's only copy of an exact value is kept, and the records prompt's
+  "at most one" sentence stays unchanged for the set. Evidence: in the D12.1 and D16.1 runs' first
+  records attempts, 24 statements were wholly taken (9 business rules, 6 outcomes, 3
+  assumptions, 3 non-goals, 3 prohibitions), all scored as restatements or inventions; none
+  was partly taken and no two requirements shared a claim. Both failed D16.1 runs' rejected
+  records are wholly taken outcomes, so the amended rule deletes them and the batch admits.
 - **Change (as amended by D16.2):**
   - `ItemCoverage` (`model_result_schema.zig`) has `exclusive` and `owning` kinds, both
     required, distinct, offered by the items, never covering kinds and disjoint from each
@@ -315,11 +325,49 @@ list every location".
     - **Integration:** a scripted BR restating an FR publishes with the rule deleted and no
       correction. Every scripted records batch has one claim, so a partly taken record is
       proven only at admission.
+- **D16.2 set**, recorded before it ran against the D2.3 reference: targets restatement, FR
+  equal to an unpublished draft and FR weakening (event counts, direction down, pooled over
+  both cases); guards lost source requirement, unsupported addition, a critical criterion
+  below its minimum, harmful repair, publication rate per case, exhausted records retries and
+  false links; three runs per case, extendable by two or three with approval to eight; also
+  counted, `repeated_statement` deletions and `shared_member` corrections per records batch.
+  **Keep if** restatement and FR-draft copies fall and FR weakening doesn't rise, with no
+  guard rising under rule 6.
+- **D16.2 set result** (2 November 2026, six runs `2026-11-02T02-27-46Z` to `02-29-15Z`;
+  `evaluations/d162-measures-set.json`, evaluations in `evaluations/e2e/<run>/`):
+  - **Rule activity:** none. No first records attempt had a business rule, outcome,
+    assumption, non-goal or prohibition, so nothing was deleted or corrected. The D12.2 set
+    had none either (no publication carries one and no report names `repeated_statement` or
+    `shared_member`), so the native rule hasn't fired live; the records prompt's "at most
+    one" sentence (`records.prompt.md:9-11`), added with D16.1, coincides with the drop.
+  - **Publication:** loan-renewal 3 of 3; hello-world 2 of 3. `02-29-06Z` exhausted
+    reconciliation dispositions on `missing_member` (claim 2 omitted three times), from a
+    request byte-identical across D2.3, D16.1 and D16.2: a model limitation in an unchanged
+    step (hypergeometric p = 0.33).
+  - **Cost:** 10 sends, 14.6k (hello-world) and 18.3–18.5k (loan-renewal) tokens. One outlier,
+    `02-28-14Z`, used 34 sends and 67k tokens: extraction returned `no_feature_claim` and the
+    pre-generation source review's repair loop recovered it (a helpful repair).
+  - **Advisory scores:** hello-world 89.3, 89.3; loan-renewal 89.3, 78.6, 89.3 (D2.3 means 89.9
+    and 86.3). One critical criterion below its minimum: `02-28-51Z` source-grounding, from
+    two invented edge cases.
+  - **Targets** (D2.3, 12 publications → set, 5): restatement 4 → 3, no fall (p = 0.88), all
+    three outside the rule's reach (a title sentence, a story equal to its single FR, an edge
+    case repeating an acceptance criterion); FR equal to an unpublished draft 0 of 5 (p = 0.11
+    alone; across three sets, D12.1 above); FR weakening 0.
+  - **Guards:** unsupported addition 6 → 6, 0.5 → 1.2 per publication (p = 0.109), 4 from the
+    records call (two AC "records the renewal" additions, two invented edge cases) and 2 from
+    story calls with unchanged requests; lost source requirement 2 → 0; critical criterion
+    below minimum 0 → 1 run; harmful repair 0; exhausted records retries 0 (D16.1: 2); false
+    links AC 2 of 11, EC 2 of 2, FR 0 of 15, EN 0 of 4. The reference was scored under
+    evaluation v2 and the set under v3 (FIX06 §1).
+  - **Keep if:** not met; restatement didn't fall. Under rule 6 the restatement target had 7
+    events across both states ("not enough evidence"), and the unsupported-addition guard was
+    undecided after three runs.
 
 ## T5. Brittleness counts
 
-**Implemented and taken 1 November 2026, on HEAD `30e0d2f` (the D10.2 tree), before D13.1;
-uncommitted.** `zig build code-heuristics -- --freeze <dir>` writes them to the
+**Implemented and taken 1 November 2026, on `30e0d2f` (the D10.2 tree), before D13.1;
+committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
 `brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`).
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.

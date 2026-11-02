@@ -6,23 +6,26 @@ every live run needs its own approval; nothing here authorizes a code change, li
 E2E run. **Decision** marks a question only the user settles; a recommendation is not a
 decision. The governing design remains **Proposed design**. Implemented items are in
 [Z_FIX06](Z_FIX06.md); earlier completed, closed and reverted work is in git history (last at
-`194e29a`).
+`388438e`).
 
 ## 1. Gate status and output quality
 
-**Gate (ADR 0034): not met.** No run is adjudicated (H1). `zig-out/e2e-spec/` holds only the
-D12.1, D16.1 and D16.2 sets (six runs each, 1–2 November 2026); every earlier run, the D2.3
-and Q10b sets included, has been removed, and their evaluations and measures remain under
-`evaluations/`. The current build decodes only `spec-e2e-report/v14`
-(`test/harness/e2e/contracts.zig:140`), so only the six D16.2 runs can be adjudicated. Every
-retained run records `build.source.modified` true. The D16.2 set's captured build inputs equal
-HEAD (`ebc97d6`, the tree of `6e543e6`) byte for byte, all 1,824 files tracked, as the D2.3
+**Gate (ADR 0034): not met.** No run is adjudicated (H1). `zig-out/e2e-spec/` holds the D12.1,
+D16.1 and D16.2 sets (six runs each) and the D12.2 set (ten runs), 1–2 November 2026; every
+earlier run, the D2.3 and Q10b sets included, has been removed, and their evaluations and
+measures remain under `evaluations/`. The current build decodes only `spec-e2e-report/v14`
+(`test/harness/e2e/contracts.zig:140`), so only the D16.2 and D12.2 runs can be adjudicated.
+Every retained run records `build.source.modified` true. The D16.2 set's captured build inputs
+equal `ebc97d6` (the tree of `6e543e6`) byte for byte, all 1,824 files tracked, as the D2.3
 set's equalled `194e29a`; whether either counts as "one committed build" (ADR 0034:64) is the
-user's reading. The user decides when Plan is actioned.
+user's reading. Advisory, not gate evidence: over every scored publication since 29 October
+(the table's sets plus the D13.1 pair `2026-11-01T04-13-54Z` and `04-14-32Z`; two published 29
+October loan-renewal runs are unscored), hello-world met the rubric bar in 29 of 29 and
+loan-renewal in 18 of 27. The user decides when Plan is actioned.
 
 Reference for quality phases (§2 rule 7): the D16.2 set, the last kept measured state (D12.1 +
-D16.2 kept 2 November 2026, §4 Q16). It is 6 runs (`2026-11-02T02-27-46Z` to `02-29-15Z`,
-5 published) on source `1ae6b0583e57…`, the tree of `6e543e6`; measures in
+D16.2 kept 2 November 2026, [Z_FIX06](Z_FIX06.md) Q16). It is 6 runs (`2026-11-02T02-27-46Z`
+to `02-29-15Z`, 5 published) on source `1ae6b0583e57…`, the tree of `6e543e6`; measures in
 `evaluations/d162-measures-set.json` and evaluations in `evaluations/e2e/<run>/`. A change
 proved under §2.10 never moves it. The previous reference was D2.3 (12 runs on `dac4c4c` plus
 its working tree, 31 October 2026; `evaluations/d23-12/measures-set.json`); "reference" in the
@@ -38,7 +41,7 @@ defect-class table below and in §4 means the 18 publications of 31 October (D2.
 | Q10b tree (6 runs)                           | 89.3 (89.3–89.3)         | 82.1 (78.6–85.7)                 | 1         |
 | D12.1 alone (6 runs)                         | 89.3 (89.3–89.3)         | 72.6 (67.9–78.6)                 | 3         |
 | D12.1 with D16.1 (6 runs, 4 published)       | 86.9 (85.7–89.3)         | 85.7 (1 published)               | 0         |
-| D12.1 with D16.2, HEAD (6 runs, 5 published; reference) | 89.3 (2 published) | 85.7 (78.6–89.3)        | 1         |
+| D12.1 with D16.2 (6 runs, 5 published; reference) | 89.3 (2 published) | 85.7 (78.6–89.3)  | 1         |
 | D12.2 (10 runs, 9 published)                 | 93.8 (89.3–100)          | 82.9 (78.6–89.3)                 | 3         |
 
 No change since Q1b has improved the published output. Publications showing each defect
@@ -49,12 +52,36 @@ now:
 | Defect class                 | Reference HW / LR | Since D12.1 HW / LR | Producer since D12.1                                                                                          | Item         |
 | ---------------------------- | ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ |
 | rendering artefact           | 9 / 9             | 8 / 7               | engine (`assembly_or_render`)                                                                                 | Q7           |
-| invented or restating entity | 8 / 9             | 7 / 7               | entities step                                                                                                 | Q15          |
-| weakened obligation          | 0 / 8             | 2 / 6               | story step only; FR weakening 0 of 15                                                                         | Q12 D12.2    |
-| unsupported addition         | 4 / 4             | 4 / 6               | story step (hello-world timing, display surface, ordering); records step (loan-renewal AC-001 "records the renewal", 5 of 7) | §3 open problem |
-| restatement                  | 1 / 4             | 3 / 5               | brief title (2), story (2), records (D12.1's statement records; an edge case repeating an AC)                 | Q16, Q11     |
+| invented or restating entity | 8 / 9             | 7 / 7               | entities step                                                                                                 | Q15, Q18     |
+| weakened obligation          | 0 / 8             | 2 / 6               | story step only; FR weakening 0 of 15                                                                         | Q12 D12.2, Q19 |
+| unsupported addition         | 4 / 4             | 4 / 6               | story step (hello-world timing, display surface, ordering); records step (loan-renewal AC-001 "records the renewal", 5 of 7) | Q18, Q19, §3 open problem |
+| restatement                  | 1 / 4             | 3 / 5               | brief title (2), story (2), records (D12.1's statement records; an edge case repeating an AC)                 | Q18, Q19, Q11 |
 | lost source requirement      | 0 / 3             | 0 / 0               | none                                                                                                          | Q14          |
 | ambiguity                    | 0 / 0             | 1 / 0               | records step (an AC precondition contradicting its trigger)                                                   | none         |
+
+**Swing factors** (the scored publications of the gate paragraph, advisory). Two presence
+outcomes explain most of the spread between sets:
+
+- Loan-renewal publications with edge cases average 78.9 and 3 of 11 meet the bar; without,
+  86.2 and 15 of 16. Eight of the nine below 80% have edge cases (Fisher p ≈ 0.0006); the
+  source states none. The pooled count crosses the evaluator change below; within the
+  v3-scored sets alone, 1 of 8 with edge cases meets the bar against 4 of 4 without
+  (p ≈ 0.01). Edge cases appear in 3 of 9 reference publications, 3 of 3 under D12.1 alone,
+  1 of 3 under D16.2 and 4 of 5 under D12.2 (against the reference, p ≈ 0.13).
+- Hello-world publications with an entity average 88.3 (22) and those without 95.4 (7).
+  D12.2's hello-world mean of 93.8 comes from 2 of its 4 publications having none.
+
+No change so far has controlled either rate, and a set of three to five runs can't tell a
+build's rate from chance (H6, Q18). The story's modes behave the same way (Q19). Items
+elsewhere cite these figures rather than repeat them.
+
+**Evaluator versions.** The 31 October reference was scored under `e2e-assistant-evaluation/v2`,
+with no link check; the D12.1, D16.1, D16.2 and D12.2 sets under v3, whose link check also
+counts each false link as an `unsupported_addition` (`.claude/skills/evaluate-e2e/SKILL.md:167`).
+The skill was created on 19 October and edited seven times by 2 November, so comparisons with
+the reference cross an instrument change. Within one set the scorer still moves on identical
+content: in the D12.2 set the doubled delimiter around `Hello, World!` was scored against
+organization in 3 of 4 hello-world publications and against nothing in `09-33-43Z` (100).
 
 Since D13.1 the retained runs show 0 runaways, 0 re-sends and 0 SyntaxError corrections; the
 highest run used 67,448 of the 125,000-token workflow budget (`2026-11-02T02-28-14Z`).
@@ -124,6 +151,10 @@ governs; these add what the phases need.
     unadjudicated unless the user adjudicates them (decided 1 November 2026; no members-only
     decoder).
 
+**Proposed amendments (H6.1–H6.4, not decided):** a screening step before rule 4's set, one
+evaluator version per comparison under rule 5, guard handling under rule 6 and a per-call
+pooled reference under rule 7.
+
 **Boundary gates** for contract changes (from FIX01 §5, git `b2f10a3`). Offline tests prove
 native mechanics only; negatives that turn on meaning are judged in live sets against
 human-reviewed labels, never by native code or a new judge.
@@ -147,53 +178,48 @@ between measurement sets.
 
 **Next** (each needs its decision or approval first):
 
-1. **Q12 D12.2** measurement set (implemented, [Z_FIX06](Z_FIX06.md)): the story is the only
-   producer of weakened obligation (hello-world 2 of 8, loan-renewal 6 of 7 since D12.1). Its
-   proposed definition and one baseline decision are in §4 Q12; each run needs approval.
-2. **Q15 D15.1 revisit**, due now: D12.1 removed lever 1's signal (0 of 15) and the class is
-   unchanged (14 of 15).
-3. **Q14 D14.1 re-decision:** its target class hasn't appeared since D12.1 (0 of 15), so the
-   reference has none.
+1. **H6** measurement-method decisions (§7), with **T6** (§6).
+2. **H1** adjudication (§7), before any §2.12 item strands the retained v14 runs.
+3. **Q12 D12.2** keep or revert (§4 Q12).
+4. **Q18 D18.1** and **Q19 D19.1** (§4).
+5. **Q15 D15.1** revisit (§4 Q15) and **Q14 D14.1** re-decision (§4 Q14).
 
 **Output track** (recommended order; each needs its decision first):
 
-| Rank | Item                                                                  | Defect class reduced (since D12.1: hello-world of 8 / loan-renewal of 7) | Effort             | Validation                  | Decisions          |
-| ---- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------ | --------------------------- | ------------------ |
-| 1    | **Q12 D12.2** generated fields receive obligation strength            | weakened obligation in the story (2 / 6)                                 | S                  | Measurement set             | D12.2 approved     |
-| 2    | **Q15** entity applicability and restating meanings (B6)              | invented or restating entity (7 / 7)                                     | M–H (lever 4 only) | Offline rebuild, then a set | D15.1 revisit      |
-| 3    | **Q7 D7.5** a plain string only where a field offers no insertion     | rendering artefact (1 joined-fragment story in 18 reference)             | S                  | Measurement set             | D7.5               |
-| 4    | **Q17** principles as records-call context (decided)                  | none scored; guards only unless the rubrics gain a principle criterion   | M                  | Measurement set             | D17.1              |
-| 5    | **Q14 b3** scenarios bound to their claim by the engine               | lost source requirement (0 / 0; reference loan-renewal 3 of 9)           | L                  | Measurement set             | D14.1 re-decision  |
-| 6    | **Q7 D7.2** withdraw ADR 0045, keep ADR 0036 Decision 6               | none directly (docs)                                                     | S                  | None                        | D7.2               |
+| Rank | Item | Defect class reduced (since D12.1: hello-world of 8 / loan-renewal of 7) | Effort | Validation | Decisions |
+| --- | --- | --- | --- | --- | --- |
+| 1 | **Q18** optional families and entities only from typed source claims (would absorb Q15) | invented or restating entity (7 / 7); edge-case and statement additions and restatements (loan-renewal edge cases in 4 of 7) | L | Then a set (H6 screening first, if adopted) | D18.1 |
+| 2 | **Q19** the primary story | weakened obligation in the story (2 / 6); story additions (hello-world 4 of 8) | S–M | Measurement set (structural screening can't measure prose, H6.1) | D19.1 |
+| 3 | **Q12 D12.2** generated fields receive obligation strength (built) | weakened obligation in the story (2 / 6; its set 0 of 4 / 1 of 5) | S | Set ran 2 November | D12.2 keep |
+| 4 | **Q17** principles as records-call context (decided) | none scored; guards only unless the rubrics gain a principle criterion | M | Measurement set | D17.1 |
+| 5 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact (1 joined-fragment story in 18 reference) | S | Measurement set | D7.5 |
+| 6 | **Q14 b3** scenarios bound to their claim by the engine | lost source requirement (0 / 0; reference loan-renewal 3 of 9) | L | Measurement set | D14.1 re-decision |
+| 7 | **Q7 D7.2** withdraw ADR 0045, keep ADR 0036 Decision 6 | none directly (docs) | S | None | D7.2 |
 
 **Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
 location. D13.1 removed the review calls where every runaway and SyntaxError of 31 October
-occurred and where the budget ran short (lowest headroom 1,481 tokens): the 18 retained runs
+occurred and where the budget ran short (lowest headroom 1,481 tokens): the D12.1, D16.1 and D16.2 runs
 used 7,213–67,448 of 125,000 tokens. Run failures since D12.1 are exhausted retries: the
 records call on `shared_member` twice (D16.1; D16.2 amends it) and reconciliation
 dispositions on `missing_member` once (`2026-11-02T02-29-06Z`, an unchanged step).
 
-**Decided 1 November 2026** (user: "apply best recommendations"): D2.3 kept; Q10b step 1 not
-kept (superseded by D13.1); D13.1 removes both post-generation reviews; D7.4 is not a
-punctuation rule; D12.1 and D12.2 approved; D14.1 b3; D15.1 recorded as a model limitation
-for now; D16.1 deferred (decided 2 November, §4 Q16); D17.1 records call only; T5 definitions
-approved; H2 convention adopted; the provider defect recorded; §2 rules 3, 4 and 12 settled.
+**Build order, as decided** (each change set measured on its own committed build, §2.1 and
+§2.3; completed change sets are in [Z_FIX06](Z_FIX06.md)):
 
-**Decided 2 November 2026** (user: "keep D12.1 + D16.2"): the D12.1 + D16.2 change set is kept
-without the recommended extension (§4 Q16), and its set becomes the reference (§1).
+1. Q12 D12.2's keep decision (committed in `388438e`; its set ran 2 November).
+2. Q17 principles as records-call context, a measurement set (D17.1: after D12.2).
+3. Q14 b3, a measurement set, unless D14.1 is re-decided (§4 Q14).
+4. Q7 D7.5, a measurement set.
 
-**Build order** (each change set measured on its own committed build, §2.1 and §2.3):
+**Recommended changes to the order (not decided):** H6's adopted parts and T6 before the next
+set; Q18, if D18.1 is approved, before Q17 (§4 Q17); Q19 as D19.1 decides; Q4's retry after
+D7.5.
 
-1. Done: T5 baseline (`93476e7`), D13.1 (`2b3dc8b`), D7.4 (`340261e`), and Q13 inline source
-   lines with the D12.1 + D16.2 change set (`6e543e6`; Q13 changes no request, §2.10), kept
-   2 November 2026 (§4 Q16); T5 retaken on that build (§6 T5).
-2. Q12 D12.2 (implemented on the `b38628c` tree), a measurement set.
-3. Q17 principles as records-call context, a measurement set.
-4. Q14 b3, a measurement set, unless D14.1 is re-decided (§4 Q14).
-5. Q7 D7.5, a measurement set.
-
-**Recommended, not yet decided:** D5.1 no; D8.1 keep, record only; close D2.2, D11.3, Q9 and
-W5; keep D15.1 as a model limitation; hold Q14 b3 until lost source requirement recurs.
+**Recommended, not yet decided:** H6 as each of its decisions recommends (§7); D12.2 kept,
+with its watch items (§4 Q12); D18.1 yes, which would replace Q15's revisit (keep D15.1 as a
+model limitation if D18.1 is declined); D5.1 no; D8.1 keep, record only; close D2.2, D11.3, Q9
+and W5; hold Q14 b3 until lost source requirement recurs; H1 before any §2.12 item (E1, E4, E5,
+E9) lands (§7 H1). D19.1 has no recommendation (§4 Q19).
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
 startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
@@ -201,11 +227,11 @@ any gap; E4 after E1, E2's measure and Q9's capture replays (ADR 0033:264); E5's
 reasons with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with
 E1, E4 or E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5 and E9 land only under §2.12.
 E1–E4 before the closing set is the user's call (ADR 0034:100-104). **Tests:** T2 and T3 in
-any gap; T4 with E1–E4. **Human:** H1 for every set; H2 when required source review is
-labelled or review returns; H3 when the user reviews the panels; H4 before any formal baseline
-freeze; H5 at the user's choice. **Closing set:** repeated runs of both cases on one committed,
-unmodified build (ADR 0034:64-65) unless the user amends ADR 0034; every counted published run
-adjudicated (H1).
+any gap; T4 with E1–E4; T6 with H6. **Human:** H1 for every set; H2 when required source review
+is labelled or review returns; H3 when the user reviews the panels; H4 before any formal
+baseline freeze; H5 at the user's choice; H6 before the next set. **Closing set:** repeated
+runs of both cases on one committed, unmodified build (ADR 0034:64-65) unless the user amends
+ADR 0034; every counted published run adjudicated (H1).
 
 **Open problems without an item.** Each stays until a structural lever with an owner is found
 or the user records it as a model limitation.
@@ -217,10 +243,12 @@ or the user records it as a model limitation.
   application executable." (5 of 17 hello-world publications from Q1b to 31 October) hasn't
   recurred; one unscored variant did (`2026-11-02T00-05-04Z`). The `given` purpose forbids
   invented prerequisites (`packet-guidance.json:23`), the `when` purpose (`:24`) doesn't.
-  Recommended: give the no-invention instruction one owner across the scenario clauses
+  Edge cases, entities and statement families now have a proposed structural lever (Q18), and
+  the story's content is D19.1's; AC wording ("records the renewal") has none. Recommended:
+  give the no-invention instruction one owner across the scenario clauses
   (`packet-guidance.json:23`, `records.prompt.md:8`, `generation.context.json:4`) inside a
-  hygiene change; at these rates a set can't decide it alone, and no structural lever is
-  known for the story's additions.
+  hygiene change (screened first if H6 is adopted); after Q18 and Q19, report the remaining AC and story
+  elaboration as a model limitation (AGENTS.md) and let H1 judge it.
 - **Repair requests without step guidance:** six repair sites take their task only from the
   three-line `repair.prompt.md` (`spec.workflow.yaml:362`, `:399`, `:596`, `:752`, `:829`,
   `:844`), and the two reconciliation repairs among them (`:596`, `:844`) bind no context.
@@ -230,7 +258,7 @@ or the user records it as a model limitation.
   `src/adapters/provider/bedrock_request.zig:74-77`; schemas within the documented limits),
   and the gpt-oss-20b model card lists structured outputs as supported. Yet Bedrock's raw text
   block (not engine extraction, `bedrock_response.zig:135-149`) opens with a fragment and
-  restarts the JSON in 198 of 205 responses in the 18 retained runs (433 of 451 in the 31
+  restarts the JSON in 198 of 205 responses in the D12.1, D16.1 and D16.2 runs (433 of 451 in the 31
   October runs), and two 31 October answers ended `end_turn` inside an open string (`5cbe…`
   call 25, `eea3…` call 23), which a grammar enforced from the first token to the stop can't
   produce. So ADR 0039:75's "schema-constrained decoding" premise doesn't hold for this route.
@@ -247,9 +275,7 @@ or the user records it as a model limitation.
 
 ### Q2b. Generic content-loss guard for repairs
 
-**D2.3** is implemented and committed (`194e29a`; [Z_FIX06](Z_FIX06.md)). **Kept** (decided 1
-November 2026): 12 of 12 published, no repair ran, no hello-world spec lost UTC in 9 runs, the
-lossy insert path is deleted. Open follow-ups:
+**D2.3** is implemented and kept ([Z_FIX06](Z_FIX06.md)). Open follow-ups:
 
 - remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:159-161`);
 - fold `member_count` into the `collection` variant (`model_result_schema.zig:103`, `:197`);
@@ -272,8 +298,7 @@ ADR 0016:151-152 say "FIX06 Q4 removes them", so the retry keeps the ID. No publ
 from 29 to 31 October contains engine vocabulary (0 in the 18), so this is AGENTS.md
 compliance, not an output target.
 
-**D4.1** is kept for `uncovered_member` ([Z_FIX06](Z_FIX06.md)); its first live firings were
-satisfied by false links (Q14). **Proposed extension (not decided):** the rule covers native
+**Proposed extension of D4.1** ([Z_FIX06](Z_FIX06.md); not decided): the rule covers native
 rule and correction texts too, and a sentence that says what a field, claim or response
 contains stays even when the engine enforces or transforms it.
 
@@ -294,7 +319,9 @@ written on purpose (:116-117). It stays as their only carrier on a first attempt
 provider schema can't express them.
 
 **Validation:** projection shows only the listed texts change; scripted missing and repeated
-members get the `array_length` and `duplicate_member` corrections; then a set. **Keep if**
+members get the `array_length` and `duplicate_member` corrections; then a set, with the
+extraction requests screened first if H6 is adopted (the first attempt broke hello-world
+extraction). **Keep if**
 engine vocabulary stays absent and corrections, rejections, defect classes and cost stay
 within the comparison point's range. Never rename a field to chase a leak. **Recommended:**
 settle D4.1's extension first.
@@ -341,16 +368,16 @@ worsen.
   (`model_result_schema.zig:230`, `:328-351`; `model_text_field.zig:174-189`, `:228-251`),
   and fragments join with no separator (`model_candidate_json.zig:251-253`, `:269-282`).
 
-- **D7.4** is implemented (`340261e`; [Z_FIX06](Z_FIX06.md); ADR 0036 Decision 6). No
-  development-case value changes, so §1's rendering-artefact counts don't fall on either case
-  (15 of 15 since).
+- **D7.4** (implemented, [Z_FIX06](Z_FIX06.md)): decided 1 November 2026, D7.4 is not a
+  punctuation rule (AGENTS.md "Prose heuristic").
 - **D7.5** Where a field offers no inserted reference, its schema offers only the plain string
   (`model_text_field.zig:174-190`; `textContract`, `model_text_wire.zig:277-292`). Contracts:
   07-domain-representations.md:74-80, ADR 0006:302-316, 12-model-boundary.md:1140-1141,
   text-field-composition.md:20-21; whether this is an amendment or a conformance fix (07
   already ties fragments to "composition around typed insertions") is the user's call. Schema
-  bytes change in every generation request (0 passive literals in the retained runs), so a
-  set. Verified: admission validates the response against the same selected schema the model
+  bytes change in every generation request (0 passive literals in the retained runs), so a set
+  (screened first if H6 is adopted). Verified: admission validates the response against the
+  same selected schema the model
   receives (`admit_model_response.zig:19-21`; `model_request_preparation.zig:27`, `:92-99`)
   before the codec runs (`model_candidate_handoff.zig:24-32`), so a fragments object against a
   plain-string field fails as `type_mismatch` with a protocol correction. Effort S: `walk` in
@@ -429,28 +456,18 @@ that FR would lose its claims. **Recommended (not decided):** close as record on
 ### Q12. Copied and weakened obligations
 
 **Defect:** weakened obligation. Reference: loan-renewal 8 of 9 publications (15 of 16 since
-Q1b), by a copy route and a story route. Since D12.1 no FR weakens an obligation (0 of 15);
-the story weakens "must" in 6 of 7 loan-renewal ("may renew") and 2 of 8 hello-world ("should
-also output") publications, from story requests byte-identical across the D12.1, D16.1 and
-D16.2 freezes.
+Q1b), by a copy route (removed by D12.1, [Z_FIX06](Z_FIX06.md)) and a story route. Since D12.1
+no FR weakens an obligation (0 of 15); the story weakens "must" in 6 of 7 loan-renewal ("may
+renew") and 2 of 8 hello-world ("should also output") publications, from story requests
+byte-identical across the D12.1, D16.1 and D16.2 freezes.
 
-- **Copy route, removed by D12.1** ([Z_FIX06](Z_FIX06.md)): the records request had received
-  the brief and the entity decision with its basis. FR equal to an unpublished draft fell from
-  9 of 18 reference publications to 0 of 15 across the D12.1, D16.1 and D16.2 sets
-  (p = 0.004).
-- **D12.1 alone** (set 1 November 2026, `evaluations/d121-measures-set.json`; six runs on
-  source `732665ccc30f…`): unsupported addition 10 → 11 and restatement 7 → 12 rose, as the
-  loan-renewal records call wrote assumption, non-goal, prohibition and edge-case records that
-  invented content or restated FRs (3 of 3 runs). **Decided 2 November 2026** (user: "the
-  above recommendations are approved"): not kept alone; its code is part of the D12.1 + Q16
-  change set, kept with D16.2 on 2 November 2026 (§4 Q16).
 - **Story route.** The story request (call 8) receives the claims verbatim ("must be able to
   renew") and no drafts. Before D12.2 the FR field purpose named obligation strength
   (`packet-guidance.json:15`) and FRs kept "must"; the story and description purposes (`:7`,
   `:5`) didn't.
 - **D12.2** (approved 1 November 2026) gives obligation strength one owner that every
   generated field receives, `generation.context.json`'s `business_value`. Implemented 2
-  November 2026 on the `b38628c` tree ([Z_FIX06](Z_FIX06.md)); the story and FR purpose
+  November 2026 and committed in `388438e` ([Z_FIX06](Z_FIX06.md)); the story and FR purpose
   edits also reach pre-generation source-review and source-loss requests as subject
   descriptions. Left for a later hygiene change (the user's call): `generation.prompt.md:2`
   and `packet-guidance.json:27` still restate the context's "conditions and obligations". A
@@ -485,25 +502,35 @@ D16.2 freezes.
       source-grounding, p = 0.55); harmful repair 0 → 0;
     - advisory scores: hello-world 89.3, 92.9, 100, 92.9; loan-renewal 89.3, 78.6, 89.3,
       78.6, 78.6.
-  - **Decision (open): keep or revert D12.2.** Under rule 6 the target improves (p ≤ 0.10,
-    neither case worse) and no guard rises under the pooled test. **Recommended (not
-    decided):** keep, recording the loan-renewal unsupported-addition rise and the
-    story-review failure as watch items.
+  - **Story modes in the set:** loan-renewal "may renew" (`09-15-30Z`), the five source lines
+    joined with no separator (`09-15-27Z-d2ee…`, `09-15-32Z`) and invented steps
+    (`09-33-44Z`, `09-33-46Z`; "logs into the library system and selects an active loan",
+    "updates the loan record"), each a scored defect (Q19). The invented-steps mode appears in
+    no earlier evaluation: it is new in the field whose purpose D12.2 changed.
+  - **Loan-renewal unsupported additions by field, D16.2 → D12.2:** story 0 → 4, edge case
+    2 → 6, AC 2 → 4, entity 0 → 2. Edge cases (4 of 5 publications against 1 of 3; §1 swing
+    factors) explain at most 4 of the 12 added events; the story's new mode explains 4.
+  - **Keep if, read:** story weakening fell (9 events, "not enough evidence" under rule 6's
+    floor); unsupported addition rose 6 → 19 and restatement 3 → 5, neither significant
+    (pooled p = 0.16); FR weakening didn't rise. So the **Keep if** is not met as written.
+  - **Decision (open): keep or revert D12.2.** **Recommended (not decided):** keep under
+    AGENTS.md's one owner per instruction, with two watch items for the next set: the story's
+    invented-steps mode and the story-review failure. If the next set shows the story's
+    additions again, revisit the story purpose (Q19).
 - **Not recommended:** a typed obligation-strength field (07-domain-representations.md:160
   forbids a duplicate modality field; making it matter needs a word check or engine-rendered
   modal text).
 
-### Q13. Inline source lines (post-generation review removed)
+### Q13. Inline source lines
 
-**D13.1 is implemented** (1 November 2026, committed by `2b3dc8b`). The link-check proposal
-of 31 October was not built; D13.2 and D13.3 lapse. Reopen link checks, in shadow mode, only
-if adjudication shows semantic defects that the generation-side items (Q12, Q14, Q15) leave.
-**D13.4** (decided 1 November 2026): principles are context and constraints only, never
-origins, and never modified (Q17).
+D13.1 (post-generation reviews removed) and the inline source lines are in
+[Z_FIX06](Z_FIX06.md). Reopen link checks, in shadow mode, only if adjudication shows semantic
+defects that the generation-side items (Q12, Q14, Q15, Q18, Q19) leave. **D13.4** (decided 1
+November 2026): principles are context and constraints only, never origins, and never modified
+(Q17).
 
-**Inline sources** are implemented (committed in `6e543e6`; [Z_FIX06](Z_FIX06.md);
-23-rendering.md §23, F0100 §5.6) and appear in the 15 publications since D12.1; nothing checks
-what a shown line means beyond the advisory evaluate-e2e link check. Open:
+Nothing checks what a shown source line means beyond the advisory evaluate-e2e link check.
+Open:
 
 - **Clarification question lines disagree.** `clarification_preparation.zig:32` prints
   `lines {start}–{end.line}`, so a citation of line 5 reads "lines 5–6" there and "line 5" in
@@ -531,7 +558,7 @@ error.
   conflicts (`reference_reconciliation_stage.zig:81`). A non-existent ID fails response
   admission as `enum_mismatch` (`model_payload_schema.zig:167`) and gets a protocol correction
   within the step's retry limit. No such correction fired in the 18 runs of 31 October or the
-  18 retained runs.
+  D12.1, D16.1 and D16.2 runs.
 - **Gap, the guidance:** the correction says only "this value is not among the allowed
   values" (`model_schema_diagnostic.zig:34`), and its expected shape for an ID choice is
   `{"type":"integer"}` (`model_schema_projection.zig:75-79`). It names neither the rejected
@@ -555,7 +582,7 @@ claim, and coverage gives each FR-named claim a scenario. Coverage (ADR 0038 Dec
 meaning (ADR 0038:126-128). Before D12.1 every retained `uncovered_member` firing failed: two
 Q1b runs exhausted the records retry limit (2, `spec.workflow.yaml:724`), and two 31 October
 runs (`07-35-27Z-0669…`, `07-37-18Z-61b3…`) passed by adding the claim IDs to the success-only
-AC-001. It hasn't fired in the 18 retained runs.
+AC-001. It hasn't fired in the D12.1, D16.1 and D16.2 runs.
 
 - **b3 (D14.1):** a claim-bound scenario insert: the engine fixes the new record's
   `claim_ids` to the uncovered claim and the model writes only its content, closing the
@@ -632,91 +659,9 @@ concept. `checkConsistency` and ADR 0035's `statement()` skip entities
 
 **D15.1 decided 1 November 2026:** entity applicability is recorded as a model limitation for
 now; revisit on D12.1's results. **Revisit due:** D12.1 removed lever 1's signal and the class
-is unchanged; only lever 4 remains, and it depends on intent.md's unaccepted shift.
-**Recommended (not decided):** keep D15.1. Inline source lines show the reader what a
-restating entity cites.
-
-### Q16. Requirements own their claims
-
-**Defect:** restatement, 5 of 18 reference publications (7 defects): business rules
-paraphrasing the FR or the source, AC and edge-case repeats, the story repeating the FR. ADR
-0035's exact equality catches none of them.
-
-- **D16.1 decided 2 November 2026** (user: "the above recommendations are approved"; "No,
-  behaviour kinds only"; "Yes, Q16 replaces it"; "Yes, list every location"): build Q16 with
-  D12.1 as one change set. In one records batch each claim is named by at most one FR, BR, UO,
-  AS, NG or PB record (scenarios exempt), enforced by protocol correction; claims named by an
-  FR, BR, UO or PB need a scenario; Q16 replaces ADR 0035's in-batch record-versus-record
-  deletion. **Set** (2 November 2026, `evaluations/q16-measures-set.json`; six runs on source
-  `6b37001bfce8…`): loan-renewal published 1 of 3 against D2.3's 6 of 6 (p = 0.083); both
-  failures exhausted the records retry limit on `shared_member`, because the FRs named every
-  claim and no claim ID could satisfy the located position. Not kept as built.
-- **D16.2 decided 2 November 2026** (user: "approved", then "Yes, exempt FRs"; an exception to
-  §2 rule 1): amend the change set instead of reverting it.
-  - **Rule:** a business rule, outcome, assumption, non-goal or prohibition whose every claim
-    a requirement (before or after it) or an earlier such record names is deleted natively,
-    with no model call (`repeated_statement`). One naming such claims and others gets the
-    item-level `shared_member` correction. Requirements are never deleted or rejected by this
-    rule, since one prose claim can hold two obligations and deleting the second requirement
-    would lose one. After the contract review (user: "Yes, keep it", twice): a repeated
-    statement holding the batch's only copy of an exact value is kept, and the records
-    prompt's "at most one" sentence stays unchanged for the set.
-  - **Evidence:** in the 12 retained runs' first records attempts, 24 statements were wholly
-    taken (9 business rules, 6 outcomes, 3 assumptions, 3 non-goals, 3 prohibitions), all
-    scored as restatements or inventions; none was partly taken and no two requirements
-    shared a claim. Both failed D16.1 runs' rejected records are wholly taken outcomes, so the
-    amended rule deletes them and the batch admits.
-  - **Implementation:** [Z_FIX06](Z_FIX06.md); ADR 0038 Decisions 2, 3 and 5; committed with
-    D12.1 and Q13 in `6e543e6`.
-- **Measurement set**, against the D2.3 reference (§1), three runs per case, recorded before
-  it ran:
-  - **Targets** (event counts, direction down, pooled over both cases): restatement; FR equal
-    to an unpublished draft; FR weakening.
-  - **Guards:** lost source requirement, unsupported addition, a critical criterion below its
-    minimum, harmful repair, publication rate per case, exhausted records retries, and false
-    links (link check).
-  - **Run maximum:** three runs per case, extended by two or three with approval to eight.
-  - **Also counted:** `repeated_statement` deletions and `shared_member` corrections per
-    records batch.
-  - **Keep if:** restatement and FR-draft copies fall and FR weakening doesn't rise, with no
-    guard rising under rule 6.
-- **Set result** (2 November 2026, six runs `2026-11-02T02-27-46Z` to `02-29-15Z`; measures
-  `evaluations/d162-measures-set.json`, evaluations `evaluations/e2e/<run>/`):
-  - **Rule activity:** none. No first records attempt had a business rule, outcome,
-    assumption, non-goal or prohibition, so nothing was deleted or corrected.
-  - **Publication:** loan-renewal 3 of 3; hello-world 2 of 3. `02-29-06Z` exhausted
-    reconciliation dispositions on `missing_member` (claim 2 omitted three times). The
-    request is byte-identical across D2.3, D16.1 and D16.2, so it is a model limitation in
-    an unchanged step (hypergeometric p = 0.33).
-  - **Cost:** 10 sends, 14.6k (hello-world) and 18.3–18.5k (loan-renewal) tokens. One outlier:
-    `02-28-14Z`, 34 sends and 67k tokens. There, extraction returned `no_feature_claim` and
-    the pre-generation source review's repair loop recovered it; the repair was helpful.
-  - **Advisory scores:** hello-world 89.3, 89.3; loan-renewal 89.3, 78.6, 89.3 (D2.3 means 89.9
-    and 86.3). One critical criterion below its minimum: `02-28-51Z` source-grounding, from
-    two invented edge cases.
-  - **Targets** (D2.3, 12 publications → set, 5):
-    - restatement: 4 → 3, no fall (p = 0.88). All three are outside the rule's reach: a title
-      sentence, a story equal to its single FR, and an edge case repeating an acceptance
-      criterion;
-    - FR equal to an unpublished draft: 0 of 5 (p = 0.11 alone). Across the D12.1, D16.1 and
-      D16.2 sets it is 0 of 15 against 9 of 18 (p = 0.004);
-    - FR weakening: 0.
-  - **Guards:**
-    - unsupported addition 6 → 6, 0.5 → 1.2 per publication (p = 0.109, just above rule 6's
-      0.10); 4 come from the records call (two AC 'records the renewal' additions, two
-      invented edge cases), 2 from story calls with unchanged requests;
-    - lost source requirement 2 → 0;
-    - critical criterion below minimum 0 → 1 run;
-    - harmful repair 0; exhausted records retries 0 (D16.1: 2);
-    - link check: false links AC 2/11, EC 2/2, FR 0/15, EN 0/4.
-  - **Keep if:** not met; restatement didn't fall. The set never exercised the rule itself, so
-    it neither shows nor rules out a benefit from it. Under rule 6 the restatement target has
-    7 events across both states, under the evidence floor ("not enough evidence"), and the
-    unsupported-addition guard is undecided after three runs.
-- **Kept, decided 2 November 2026** (user: "keep D12.1 + D16.2"), without the recommended
-  three-run extension. Rule 6 left the restatement target at "not enough evidence" and the
-  unsupported-addition guard undecided (p = 0.109); the **Keep if** wasn't met. The set is the
-  reference (§1, §2 rule 7).
+is unchanged; only lever 4 remains, and it depends on intent.md's unaccepted shift. The entity
+is one of §1's two swing factors. **Recommended (not decided):** fold Q15 into Q18, whose
+D18.1 generalises lever 4 to every optional family; if D18.1 is declined, keep D15.1.
 
 ### Q17. Principles as Spec context
 
@@ -744,6 +689,94 @@ principles "should be used for context when executing the spec workflow".
   publication) unless the case rubrics gain a criterion. Amends ADR 0015 (0015:10-15 already
   names D17.1), ADR 0023 "Principles" (0023:149-159), 17-specify.md's generation inputs
   (:264-284) and F0100.
+- **Sequence (recommended, not decided; D17.1 places it after D12.2):** after Q18 if D18.1 is
+  approved, screened first if H6 is adopted. It adds about 7k
+  tokens of generic principle text to the call that writes most edge-case and statement
+  additions, and the loan-renewal rubric's proportionate-scope criterion penalises
+  principle-derived prescriptions, so before Q18 its guards can't be read.
+
+### Q18. Optional sections only from typed source claims
+
+**Defect:** unsupported addition, restatement and invented or restating entity in record
+families and entities the source supplies nothing for. They decide most of the spread between
+sets (§1 swing factors).
+
+- **Evidence** (advisory evaluations since 29 October; the field read from each defect's
+  description, so approximate): of 59 unsupported additions, AC 20, story 15, edge case 13,
+  entity 4, other statements and the brief 7, FR about none; of 51 invented or restating
+  entities, 50 in the entity. Edge cases ("renew a loan exactly on its due date", "has already
+  been renewed and is now overdue") and hello-world's `required` entity are §1's swing factors.
+  Without D16.1's "at most one" sentence (D12.1 alone) the records call wrote business rules,
+  outcomes, assumptions, non-goals and prohibitions, all scored as restatement or invention
+  ([Z_FIX06](Z_FIX06.md) Q16).
+- **Cause:** every records batch's schema offers every family but `entity`
+  (`record.content.oneOf`, `generation.schema.json:429-459`; the per-batch exclusion,
+  `specification_session.zig:205-217`, is the owner the lever extends), and the entities unit
+  always decides applicability. The only controls are words, "optional
+  families need no filler" (`records.prompt.md:6`) and "Do not invent decisions"
+  (`generation.context.json:4`), and nothing native can check "supported content"
+  (F0100:1069; 17-specify.md:133-142). GPT-OSS-20B at low reasoning effort fills an offered
+  slot at a rate that moves with the request bytes.
+- **Lever (proposed):** extraction already gives each claim a closed `category`
+  (`extraction.schema.json:109-118`; meanings at `extraction.context.json:5-13`, among them
+  `implementation_assumption` and `scope_guard`; 16-reference-ingestion.md:188-191). Extend it
+  with the kinds the optional families need, for example boundary or exception, data concept,
+  rule and prohibition. A records batch's schema then offers FR and AC always and an optional
+  family only when an assigned claim carries its kind; the entities unit runs only when a claim
+  is a data concept, and otherwise `not_applicable` is native with that basis. Generalises Q15
+  lever 4 to every optional family; typing one source line is intent.md's smaller decision
+  (design/intent.md:82-105).
+- **Amends:** 17-specify.md §17.3 (:92-104, :201-233), F0100 §5.1 and §5.4 (:1069-1072,
+  :1131-1133), 16-reference-ingestion.md's claim categories, ADR 0038 (families and scenario
+  coverage), 07-domain-representations.md:161, `extraction.context.json` and
+  `packet-guidance.json` `record_families`; it adopts intent.md's shift for this purpose.
+- **Validation:** `/preflight`; accepted and rejected tests at the schema owner (no boundary
+  claim, no `edge_case` variant; a data-concept claim runs the entities unit; an unknown kind
+  rejects); an unrelated-domain fixture whose source states a boundary and a non-goal; the
+  §2.10 projection (every extraction, records and entities request changes); then a set, with
+  the extraction call screened on both cases first if H6 is adopted.
+- **Keep if:** unsupported addition and invented or restating entity fall; lost source
+  requirement doesn't appear (a stated boundary, rule or data concept typed as plain behaviour
+  loses its section); publication and extraction `no_feature_claim` don't worsen.
+- **Risk:** extraction moves with request bytes (Q4's first attempt: `no_feature_claim` in 5 of
+  6 hello-world runs), and typing is itself a model judgment. The whole-feature entity decision
+  says `required` for hello-world in 22 of 29 publications, so per-line typing must be shown
+  better, not assumed.
+- **Decision D18.1:** should an optional section appear only when a source line has first been
+  typed as its kind? Today loan-renewal's records call adds edge cases such as "renew a loan
+  exactly on its due date" in 11 of 27 publications, and hello-world gets an entity such as
+  "HelloWorldApplication" in 22 of 29. Yes: one ADR; every extraction request changes; a set;
+  intent.md's smaller-decision shift is accepted for this purpose; and a native
+  `not_applicable` from the absence of a data-concept claim replaces F0100's rules that an
+  empty `entities` collection can't prove the feature has no business data and that a missing
+  section is never a supported non-applicability fact (F0100:1131-1138). No: those sections
+  stay per-run outcomes, recorded as model limitations. **Recommended (not decided):** yes.
+
+### Q19. The primary story
+
+**Defect:** weakened obligation (26 of 30 weakenings since 29 October are in the story, by the
+field each defect names), unsupported addition (15 of 59) and restatement in the primary story.
+
+- **Evidence:** the story is mandatory (F0100:1068), and its purpose asks for "One narrative
+  describing the actor or system identified by the source, its action and intended result"
+  (`packet-guidance.json:7`). For a list of requirements, every loan-renewal story so far falls
+  in one of three modes, each a scored defect: "A borrower may renew…" (weakened obligation);
+  the five source lines joined with no separator (restatement and rendering artefact C, Q7
+  D7.5); and "A borrower logs into the library system and selects… updates the loan record"
+  (unsupported addition). The D12.2 set shows all three on one build (Q12). Hello-world's story
+  adds timing, a display surface or an order in 4 of 8 publications since D12.1 (§3).
+- **Decision D19.1:** may the primary story restate its source's requirements in one paragraph,
+  adding nothing? Example: "The application must start successfully. When started, it must
+  display "Hello, World!" and also output the date and time in UTC." The question covers every
+  source, not only requirement lists: no typed fact tells a list from a narrative today. Yes:
+  the story can be composed from its assigned claims' text, so it can't weaken or add; it
+  amends F0100 §5.2's "Main user journey", the story purpose and evaluate-e2e's `restatement`
+  definition (`.claude/skills/evaluate-e2e/SKILL.md:67`), the comparison point is re-scored
+  under the new definition so restatement doesn't fall by definition alone, and a later
+  `/preflight` settles how the story is composed. No: the story keeps needing content the
+  source lacks, and after Q18 its remaining
+  elaboration is reported as a model limitation (AGENTS.md). **No recommendation:** it decides
+  what the story is for; the evidence shows only that every mode so far is a scored defect.
 
 ## 5. Engine track (E)
 
@@ -944,16 +977,39 @@ T5.1, T5.2, T5.5 and T5.6 equal the D13.1 tree's. The D12.2 tree with freeze
 `b38628c-d122` gives the same counts. The `340261e-d162` freeze predates the final D16.2
 tree (129 scenarios, 1,702 calls).
 
+### T6. Structural counts in the measures (H6)
+
+Count each records response's records by `content.kind`, and each entities response's
+`disposition`, from the response's discriminator and arrays as `recordsCount` already counts
+the records array (`test/harness/e2e/measures.zig:24-25`, `:170-184`): structure, never prose.
+They are §1's two swing factors and need no evaluator. Two owners, one counting function:
+
+- **Runs:** `e2e-measures`, whose new members need a new `e2e-measures` version
+  (design/harness/e2e.md:682).
+- **Replays (H6 screening):** `e2e-call`'s report (`call-diagnostic-report/v2`,
+  `test/harness/call/report.zig:5`) records the counts per trial, which needs `v3` and an
+  amendment of e2e.md:146-152 ("semantic validation and rubric quality assessment are not
+  assessed" stays true: the counts are structure).
+
+No engine or request change (§2.10). Tests at the owner, as for `recordsCount` (`:539-546`).
+
 ## 7. Human and decision track (H)
 
 ### H1. Adjudication (R8)
 
 Only a human `human-spec-adjudication/v2` record applied with `zig build adjudicate-spec`
-decides acceptance; none exists. Retained: the D12.1 (v12), D16.1 (v13) and D16.2 (v14) sets.
-The current build decodes only v14 (`test/harness/e2e/contracts.zig:140`), so only the six
-D16.2 runs can be adjudicated from this checkout, and any later member change strands them
-(§2.12). Every earlier run was removed and can't be adjudicated; v9 runs stay unadjudicated
-(user decision, 27 October 2026). Needed for the ADR 0034 gate and adjudicated measures.
+decides acceptance; none exists. Retained: the D12.1 (v12), D16.1 (v13), D16.2 (v14) and D12.2
+(v14) sets. The current build decodes only v14 (`test/harness/e2e/contracts.zig:140`), so only
+the D16.2 and D12.2 runs can be adjudicated from this checkout, and any later member change
+strands them (§2.12). Every earlier run was removed and can't be adjudicated; v9 runs stay
+unadjudicated (user decision, 27 October 2026). Needed for the ADR 0034 gate and adjudicated
+measures. No adjudication has yet checked the evaluator's defect classes against the user's
+judgment, although every keep decision so far rests on them (H6).
+
+**Recommended (not decided):** adjudicate five contrasting publications before any §2.12 item
+lands: hello-world with an entity (`2026-11-02T02-27-46Z`) and without (`09-33-43Z`);
+loan-renewal with a "may renew" story and no edge cases (`02-29-15Z`), a joined-copy story and
+one edge case (`09-15-32Z`), and an invented-steps story and two edge cases (`09-33-46Z`).
 
 ### H2. Review-label confirmation (B2)
 
@@ -987,8 +1043,8 @@ protocol stops at 1,000 sends or 2,000,000 tokens
 ([README](../test/calibration/semantic-simplicity/README.md):189-190), about 13.9 sends and
 27.8k tokens for each of the Phase 2 baseline's 72 workloads. Since D13.1 the development
 cases use 10–12 sends and about 14.5k (hello-world) and 18.3–19.7k (loan-renewal, published)
-tokens; failed loan-renewal runs used about 27k, and one hello-world run 34 sends and 67,448
-tokens (a source-review repair). The 72 workloads come from the protocol's 24-feature panel
+tokens; failed loan-renewal runs used about 27k, and two hello-world runs 34 sends each, 67,448
+(`02-28-14Z`) and 65,621 (`09-15-31Z`) tokens (source-review repairs). The 72 workloads come from the protocol's 24-feature panel
 (§2 rule 11), whose cost on the current build is unmeasured, and the latest feasibility report
 (`zig-out/baseline/2026-10-15T22-38-08Z-4ae4…/budget-feasibility.json`, `insufficient`)
 predates D13.1; retaking it is a `baseline` run (live, approval needed). Options if it still
@@ -1000,6 +1056,66 @@ prompt, schema and evidence share before trimming; no local size ceilings (ADR 0
 The user decides when to change or compare models; all live evidence is GPT-OSS-20B. Only if
 the user selects Claude Haiku 5.5: measure its maximum-output time to replace the interim
 180,000 ms `requestTimeoutMs`, and settle Claude's response mode.
+
+### H6. Measurement method (proposed amendment to §2 rules 4–7)
+
+**Why:** a set can't separate a change's effect from a re-roll of the generation modes.
+
+- The swing factors vary within sets of identical requests (§1). Sets are three to five runs
+  per case, a rubric point is 3.57%, and the scorer moves on identical content (§1).
+- Rule 6's test on about ten events reaches p ≤ 0.10 only for changes of about four times
+  (D12.2's story weakening, 8 of 15 → 1 of 9, p = 0.093). With five to seven guards each at a
+  nominal one-sided 0.10, the chance that some guard "rises" by chance in a set is up to about
+  41–52% (lower under the discrete test).
+- The evaluator changed between the 31 October reference and every later set (§1), and the
+  current reference is five publications, two of them hello-world.
+- FIX04 recorded the pattern on 16 October ("near-identical requests give opposite results",
+  git `18a5ec8:fixes/FIX04.md:111-112`); FIX01 to FIX05 tried about 80 levers, reverted about
+  15 and closed without a demonstrated output gain. FIX06's clearest output gain removed an
+  input (D12.1, [Z_FIX06](Z_FIX06.md)), and removing calls (D13.1) ended runaways; moved
+  sentences re-rolled outcomes (Q4's first attempt; git `371b55a:fixes/Z_FIX05.md:4129-4134`,
+  `:4332-4340`).
+
+Four separate decisions, each the user's:
+
+1. **Decision H6.1, screening (rule 4):** should a change be screened with repeated single-call
+   replays before a set decides it? Example: replay loan-renewal's records call ten times as
+   captured and ten times with the change (`e2e-call --repeats 10`, then `--edit` with the
+   change's bytes; design/harness/e2e.md:67-92), and compare edge-case counts. Each changed
+   call kind the §2.10 projection names is screened on a retained v14 request from both cases,
+   with the captured run's model and reasoning effort (§9: no model comparison). In
+   `2026-11-02T09-33-46Z` a story call took 1,434 tokens, entities 2,298 and records 3,637,
+   against 14.6k–18.5k per run. The screen measures only T6's structural counts: the
+   evaluator can't score a replay (SKILL.md:4 takes runs only), so a change whose effect is
+   prose (Q19's story, Q4) gains nothing from it unless the user labels replay outputs by
+   hand. A screen decides nothing; the set on the committed build still decides (AGENTS.md).
+   Yes: rule 4 gains the step, T6 is built first, and each replay batch needs approval. It
+   reopens rule 4's 1 November decision, "no interleaved control run on the comparison
+   point's build" (git `340261e:fixes/FIX06.md:72-74`), since an as-captured arm is a
+   call-level control; the user says whether the screen supersedes it. No: decisions stay on
+   three to five whole runs. **Recommended (not decided):** yes.
+2. **Decision H6.2, guards (rule 6):** should one pre-stated target and the publication rate
+   per case decide keep or revert, with the other guards (lost source requirement,
+   unsupported addition, a critical criterion below its minimum, harmful repair) demoted to
+   watch items unless they cross an effect size stated before the set, such as a doubling
+   with at least five events? Yes: fewer chance reverts, but a real rise smaller than the
+   stated size no longer blocks a keep; lost source requirement is the guard most at risk.
+   No: every guard keeps blocking, and a set with several guards often shows a chance rise.
+   **Recommended (not decided):** no for lost source requirement, which keeps blocking at
+   any rise; yes for the others.
+3. **Decision H6.3, one evaluator version per comparison (rule 5):** should a set and its
+   reference always be scored on one evaluate-e2e version, re-scoring the reference when the
+   skill has changed, with link-derived `unsupported_addition` counted apart? Example: the 31
+   October reference (v2) re-scored under v3 before comparing it with D16.2. Re-scoring the
+   31 October runs recovers rubric scores and defect classes from their numbered copies under
+   `evaluations/e2e/`, but not the link check or defect origins, because their run
+   directories and `reference-context.md` are gone. Yes: rule 5 changes. No: comparisons keep
+   crossing skill edits. **Recommended (not decided):** yes.
+4. **Decision H6.4, pooled reference (rule 7):** should each call kind's reference pool every
+   publication whose request for that call is byte-identical to the current one, kept or not,
+   as Q12's D12.2 baseline pooled the D12.1-alone, D16.1 and D16.2 sets for the story? Yes:
+   larger references (15 publications instead of 5 for the story). No: the reference stays
+   the last kept set. **Recommended (not decided):** yes.
 
 ## 8. Research and backlog (R)
 
@@ -1020,9 +1136,9 @@ D13.1 removed post-generation review, and loss localization now runs uncondition
 a closed contract: source-authorized exact-reference repair eligibility (ADR 0033:353-354);
 narrow correction of invalid loss evidence (today `invalid`,
 `specification_support_workflow.zig:50`; `specification_support_repair.zig:93`); verdict
-reassessment under §22.1 with no voting or retry-until-positive. One retained run reached
-required source review (`2026-11-02T02-28-14Z`, after `no_feature_claim`); its repair was
-helpful.
+reassessment under §22.1 with no voting or retry-until-positive. Two retained runs reached
+required source review after `no_feature_claim`: `2026-11-02T02-28-14Z`, whose repair was
+helpful, and `09-15-31Z`, whose false `candidate_omission` ended the run (Q12).
 
 ### B7 contract-review leftovers
 
@@ -1045,8 +1161,8 @@ each citing file needs its reference rewritten, a docs edit needing approval for
 "T5(c)" (`test/harness/e2e/measures.zig:1-2`); "T5(e)"
 (`src/test_fixtures/request_projection.zig:1`, `test/integration/workflow_tests.zig:1311`);
 "T5" meaning the measures, which FIX06's T5 no longer is (`e2e_measures.zig:1`,
-`test/harness/e2e/measures_cli.zig:1`). Other retired IDs cited outside FIX06 haven't been
-swept since 1 November.
+`test/harness/e2e/measures_cli.zig:1`); "D10.2" (ADR 0023:27, ADR 0041:6; its record is in
+git at `388438e`). Other retired IDs cited outside FIX06 haven't been swept since 1 November.
 
 ### Wider scope retained
 
