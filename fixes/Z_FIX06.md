@@ -88,6 +88,14 @@ development-case value that ends in punctuation, so none of them changes (FIX06 
 - **Not changed:** the design.md §32 index row for ADR 0036 doesn't name this rule (a
   design edit).
 
+## Q7 D7.2. ADR 0045 withdrawn
+
+**Implemented 3 November 2026; docs only.** Decided 3 November 2026 (user: "apply
+recommendations"): ADR 0036 Decision 6 stays, and ADR 0045, accepted but on hold and never
+implemented, is withdrawn. Its file is deleted (git `388438e` keeps it), with its "Amended by"
+entries in ADRs 0020 and 0036 and its design.md §32 row; ADR 0036's decision authority records
+the decision. Plain values in entity meanings (rendering artefact B, FIX06 Q7) stay plain.
+
 ## Q13. Inline source lines
 
 **Implemented 1 November 2026 on `340261e`; committed in `6e543e6` with the D12.1 + D16.2 change
@@ -185,7 +193,9 @@ Approved 1 November 2026 as the first model-input change.
 ## Q12 D12.2. Generated fields take obligation strength from one owner
 
 **Implemented 2 November 2026 on the `b38628c` tree; committed in `388438e`; approved 1
-November 2026. Its set and keep decision stay in FIX06 Q12.**
+November 2026. Kept 3 November 2026 (user: "apply recommendations") under AGENTS.md's one owner
+per instruction, although its Keep if wasn't met as written; its watch items are in FIX06
+Q12.**
 - **Change:**
   - `generation.context.json` `business_value`, bound to every generation and
     specification-unit repair request, ends "preserve source-backed conditions, obligations
@@ -216,6 +226,45 @@ November 2026. Its set and keep decision stay in FIX06 Q12.**
   - T5 on the change equals HEAD's (FIX06 §6 T5): no new repeated instruction.
   - The driver already asserts the context in every generation and specification-unit repair
     request (`spec_generation_driver.zig:734-741`, `:774`); no phrase test is added (T2).
+- **Why:** the story request (call 8) receives the claims verbatim ("must be able to renew") and
+  no drafts. Before D12.2 the FR purpose named obligation strength (`packet-guidance.json:15`)
+  and FRs kept "must"; the story and description purposes (`:7`, `:5`) didn't. **Keep if** the
+  story's weakening falls, FR weakening doesn't rise (FR's wording owner moves) and unsupported
+  addition and restatement don't rise.
+- **Set** (approved 2 November 2026, user: "approved"; recorded before it ran): target, story
+  weakening of an obligation, events per publication, direction down, pooled over both cases;
+  guards, FR weakening, unsupported addition, restatement, lost source requirement, a critical
+  criterion below its minimum, harmful repair, publication rate per case; three runs per case,
+  extendable by two or three with approval to eight. Baseline (same approval): the target
+  compares with the 15 publications since D12.1 (hello-world 2 of 8, loan-renewal 6 of 7), whose
+  story requests are byte-identical across the D12.1, D16.1 and D16.2 freezes; the guards
+  compare with the D16.2 set.
+- **Set result** (2 November 2026; ten runs `2026-11-02T09-15-27Z` to `09-33-46Z`, five per case
+  after one approved extension, on source `bacfcd9ae368…`, `modified` true; measures in
+  `evaluations/e2e/<run>/measures.json`, the first six summarised in
+  `evaluations/d122-measures-set.json`):
+  - publication: hello-world 4 of 5, loan-renewal 5 of 5. `09-15-31Z` ended `workflow_invalid`:
+    extraction returned `no_feature_claim` (an unchanged request), then the pre-generation story
+    review returned a false `candidate_omission` from a request differing from `02-28-14Z`'s
+    only by D12.2's story purpose, and `repair-source` found no upstream producer. Plausibly
+    D12.2, not established (one pair, temperature 0.1);
+  - target, story weakening: 8 of 15 → 1 of 9 (hello-world 2/8 → 0/4, loan-renewal 6/7 → 1/5),
+    p = 0.093; 9 events, at the evidence floor. Three hello-world stories are byte-identical to
+    pre-D12.2 stories;
+  - guards against the D16.2 set (5 publications → 9): unsupported addition 6 → 19 (1.2 → 2.1
+    per publication, p = 0.16; loan-renewal 4 → 16, p = 0.08 alone); restatement 3 → 5; FR
+    weakening 0 → 0; lost source requirement 0 → 0; critical criterion below minimum 1 → 3 runs
+    (loan-renewal source-grounding, p = 0.55); harmful repair 0 → 0;
+  - loan-renewal unsupported additions by field, D16.2 → D12.2: story 0 → 4, edge case 2 → 6, AC
+    2 → 4, entity 0 → 2. Edge cases (4 of 5 publications against 1 of 3) explain at most 4 of
+    the 12 added events, and the story's new invented-steps mode 4;
+  - loan-renewal story modes: "may renew" (`09-15-30Z`), the five source lines joined with no
+    separator (`09-15-27Z-d2ee…`, `09-15-32Z`) and invented steps (`09-33-44Z`, `09-33-46Z`);
+  - advisory scores: hello-world 89.3, 92.9, 100, 92.9; loan-renewal 89.3, 78.6, 89.3, 78.6,
+    78.6.
+- **Keep if, read:** story weakening fell (9 events, "not enough evidence" under rule 6's floor);
+  unsupported addition rose 6 → 19 and restatement 3 → 5, neither significant (pooled
+  p = 0.16); FR weakening didn't rise.
 
 ## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
 
@@ -223,7 +272,8 @@ November 2026. Its set and keep decision stay in FIX06 Q12.**
 `6e543e6`. Its set failed the publication guard. D16.2 amends it the same day (user:
 "approved", then "Yes, exempt FRs"); D16.2's set ran the same day, and the change set is kept
 (decided 2 November 2026, user: "keep D12.1 + D16.2") without the recommended three-run
-extension. Its set is FIX06's reference (FIX06 §1, §2 rule 7).** D16.1 decisions: "the above
+extension. Its set was FIX06's reference until D12.2 was kept on 3 November 2026.** D16.1
+decisions: "the above
 recommendations are approved"; coverage kinds per "No, behaviour kinds only"; "Yes, Q16
 replaces it" (ADR 0035's in-batch deletion); "Yes, list every location".
 - **Defect targeted:** restatement, 5 of 18 reference publications (7 defects): business rules

@@ -25,7 +25,9 @@ Judge an engine change by its effect on:
 
 Passing structural tests, or getting more model calls to succeed, is not enough. The
 intent statement guides judgment but isn't contract authority. Its proposed shift
-toward smaller semantic decisions hasn't been accepted.
+toward smaller semantic decisions hasn't been accepted, except for typing source claims
+so that optional specification sections appear only from claims of their kind
+([FIX06](fixes/FIX06.md) Q18 D18.1, 3 November 2026).
 
 ## Authority and open work
 

@@ -13,13 +13,11 @@
   replacing model-authored exact-copy selection (17 October).
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1.
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)
-  (no post-generation review since 1 November 2026) and
+  (no post-generation review since 1 November 2026),
   [ADR 0024](0024-native-exact-token-authority.md) (token-only groups get no
-  record task; native exact duties are independent of semantic kind),
+  record task; native exact duties are independent of semantic kind) and
   [ADR 0038](0038-record-claims-and-scenario-coverage.md) (a non-entity record's response names its supporting
-  claims, a subset of its one group; the group stays its association), and
-  [ADR 0045](0045-entity-description-exact-values-as-code-spans.md) (on hold; entity meaning and
-  each relationship take the incidental exact-copy role).
+  claims, a subset of its one group; the group stays its association).
 
 ## Native exact-value recognition
 
