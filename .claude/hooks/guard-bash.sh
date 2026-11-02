@@ -1,13 +1,14 @@
 #!/bin/sh
 # PreToolUse (Bash): keep live provider credentials out of the conversation and
 # route billed or engine-execution commands to an explicit user decision
-# (AGENTS.md "Commands"). The permission
-# rules in .claude/settings.json are the declarative baseline; this hook also
-# matches forms those rules cannot express, such as a live step named after an
-# offline one in a single `zig build` invocation.
+# (AGENTS.md "Commands"), and approve Python only when it makes no external
+# calls. The permission rules in .claude/settings.json are the declarative
+# baseline; this hook also matches forms those rules cannot express, such as a
+# live step named after an offline one in a single `zig build` invocation.
 set -u
 
-command=$(jq -r '.tool_input.command // empty') || exit 0
+input=$(cat)
+command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty') || exit 0
 [ -n "$command" ] || exit 0
 
 decide() {
@@ -34,6 +35,13 @@ if matches "zig[[:space:]]+build([[:space:]]+[^[:space:];&|]+)*[[:space:]]+${liv
     matches 'zig-out/bin/[^[:space:]/]+' ||
     matches '(^|[;&|(])[[:space:]]*sdde([[:space:]]|$)'; then
     decide ask "This command can make billed live model calls or execute the engine against a project. AGENTS.md requires explicit user approval for each such run, naming the case or target project and workflow."
+fi
+
+# Python runs without a prompt only when offline-python.py reads all of it and
+# finds no external call; it puts every other Python command to the user.
+if matches '(^|[;&|(])[[:space:]]*([[:alpha:]_][[:alnum:]_]*=[^[:space:]]*[[:space:]]+)*([^[:space:]]*/)?python3?([[:space:]]|$)'; then
+    printf '%s' "$input" | python3 -I "$(dirname "$0")/offline-python.py" ||
+        decide ask "The offline Python check failed, so this Python command needs approval."
 fi
 
 exit 0
