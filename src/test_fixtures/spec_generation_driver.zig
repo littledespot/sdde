@@ -8,7 +8,7 @@ pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
     stage: enum { extraction, reconciliation, generation, repair, support, loss_review, records },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, runaway, runaway_uncovered, runaway_partial_assignment },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, shared_statement, runaway, runaway_uncovered, runaway_partial_assignment },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -419,6 +419,8 @@ pub const Driver = struct {
                     std.testing.expectEqual(rule.covering.len, covering.get("kinds").?.array.items.len) catch unreachable;
                     for (rule.covering, covering.get("kinds").?.array.items) |kind, listed| std.testing.expectEqualStrings(kind, listed.string) catch unreachable;
                 }
+                // ADR 0038 Decision 5: a wholly taken statement never reaches a correction.
+                if (matches_stage and fault.shape == .shared_statement) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at
                     // the runaway-retry temperature, with no correction guidance.
@@ -901,6 +903,19 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
         }
         if (requirements == 0 or kept == items.items.len) return error.InvalidFixture;
         items.shrinkRetainingCapacity(kept);
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .shared_statement) {
+        // Restate the first functional requirement as a business rule naming the same claims.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        const requirement = for (items.items) |item| {
+            if (std.mem.eql(u8, item.object.get("content").?.object.get("kind").?.string, "functional_requirement")) break item;
+        } else return error.InvalidFixture;
+        var content = try requirement.object.get("content").?.object.clone(allocator);
+        try content.put(allocator, "kind", .{ .string = "business_rule" });
+        var restated = try requirement.object.clone(allocator);
+        try restated.put(allocator, "content", .{ .object = content });
+        try items.append(.{ .object = restated });
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if (shape == .review_partial_assignment or shape == .review_repeated_member) {

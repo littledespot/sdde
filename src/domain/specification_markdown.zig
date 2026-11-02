@@ -40,11 +40,13 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try write(w, "**Then** ");
                     try scalar(w, content.then);
                     try write(w, "\n\n");
+                    try sourceLine(w, nested_source, record.sources);
                 } else if (comptime @hasField(@TypeOf(content), "text")) {
                     try write(w, "- **");
                     try identity(w, record.id.?);
                     try write(w, "**: ");
                     try field(w, "", content.text);
+                    try sourceLine(w, nested_source, record.sources);
                 } else {
                     try write(w, "**");
                     try identity(w, record.id.?);
@@ -56,6 +58,11 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                         } else {
                             for (value) |relationship| try inlineField(w, label(f.name), relationship);
                         }
+                    }
+                    if (record.sources.len != 0) {
+                        try write(w, field_source);
+                        try sourceList(w, record.sources);
+                        try write(w, "\n");
                     }
                     try write(w, "\n");
                 }
@@ -121,7 +128,11 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                     }
                     break :blk key;
                 };
-                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body) });
+                const sources: []const spec.SourceLines = if (comptime kind.showsSources())
+                    try readSources(allocator, &cursor, if (comptime kind == .entity) field_source else nested_source)
+                else
+                    &.{};
+                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources });
             }
             if (!mandatory(kind) and kind != .entity and records.items.len == start) return error.InvalidSpecification;
             if (isScope(kind)) scope_records += records.items.len - start;
@@ -202,6 +213,84 @@ fn escaped(input: []const u8, index: usize) bool {
 /// The boundary owner holds the one terminal-punctuation policy (§23).
 fn clauseSeparator(clause: spec.Scalar) []const u8 {
     return if (@import("exact_value_boundary.zig").endsWithTerminal(clause.bytes)) " " else ", ";
+}
+
+/// §23 source lines. A criterion or requirement shows its line as a nested item after
+/// a blank line, because a two-space line directly under a field continues that
+/// field; an entity shows it as its last field line.
+const nested_source = "  - Source: ";
+const field_source = "- Source: ";
+
+fn sourceLine(w: *std.Io.Writer, prefix: []const u8, files: []const spec.SourceLines) Error!void {
+    if (files.len == 0) return;
+    try write(w, prefix);
+    try sourceList(w, files);
+    try write(w, "\n\n");
+}
+
+/// `path` line N, or `path` lines A–B, C; several files join with "; ".
+fn sourceList(w: *std.Io.Writer, files: []const spec.SourceLines) Error!void {
+    for (files, 0..) |file, index| {
+        if (index != 0) try write(w, "; ");
+        try code(w, file.path);
+        try write(w, if (singleLine(file)) " line " else " lines ");
+        for (file.ranges, 0..) |range, at| {
+            if (at != 0) try write(w, ", ");
+            w.print("{d}", .{range.first}) catch return error.OutOfMemory;
+            if (range.last != range.first) w.print("–{d}", .{range.last}) catch return error.OutOfMemory;
+        }
+    }
+}
+fn singleLine(file: spec.SourceLines) bool {
+    return file.ranges.len == 1 and file.ranges[0].first == file.ranges[0].last;
+}
+
+/// An absent line means no shown sources. A present line must have the renderer's
+/// structure; like every field, an escaped or longer-fenced spelling of it parses but
+/// re-renders differently, so publication's byte checks reject it. It is a display
+/// that never becomes provenance.
+fn readSources(allocator: std.mem.Allocator, cursor: *Cursor, prefix: []const u8) Error![]const spec.SourceLines {
+    const next = cursor.peek() orelse return &.{};
+    if (!std.mem.startsWith(u8, next, prefix)) return &.{};
+    const input = (try cursor.take())[prefix.len..];
+    const listed = try unescape(allocator, input);
+    var files: std.ArrayList(spec.SourceLines) = .empty;
+    var offset: usize = 0;
+    for (listed.code_spans, 0..) |span, index| {
+        if (span.start != offset) return error.InvalidSpecification;
+        const tail_end = if (index + 1 == listed.code_spans.len) listed.bytes.len else listed.code_spans[index + 1].start;
+        var tail = listed.bytes[span.end..tail_end];
+        if (index + 1 != listed.code_spans.len) {
+            if (!std.mem.endsWith(u8, tail, "; ")) return error.InvalidSpecification;
+            tail = tail[0 .. tail.len - 2];
+        }
+        const file: spec.SourceLines = .{ .path = listed.bytes[span.start..span.end], .ranges = try readRanges(allocator, tail) };
+        try files.append(allocator, file);
+        offset = tail_end;
+    }
+    if (files.items.len == 0) return error.InvalidSpecification;
+    return files.toOwnedSlice(allocator);
+}
+fn readRanges(allocator: std.mem.Allocator, input: []const u8) Error![]const spec.LineRange {
+    const single = std.mem.startsWith(u8, input, " line ");
+    if (!single and !std.mem.startsWith(u8, input, " lines ")) return error.InvalidSpecification;
+    var ranges: std.ArrayList(spec.LineRange) = .empty;
+    var parts = std.mem.splitSequence(u8, input[if (single) " line ".len else " lines ".len..], ", ");
+    while (parts.next()) |part| {
+        const dash = std.mem.indexOf(u8, part, "–");
+        const first = try lineNumber(if (dash) |at| part[0..at] else part);
+        const last = if (dash) |at| try lineNumber(part[at + "–".len ..]) else first;
+        if (dash != null and last <= first) return error.InvalidSpecification;
+        try ranges.append(allocator, .{ .first = first, .last = last });
+    }
+    const file: spec.SourceLines = .{ .path = "", .ranges = ranges.items };
+    if (single != singleLine(file)) return error.InvalidSpecification;
+    return ranges.toOwnedSlice(allocator);
+}
+fn lineNumber(digits: []const u8) Error!u32 {
+    if (digits.len == 0 or digits[0] == '0') return error.InvalidSpecification;
+    for (digits) |digit| if (!std.ascii.isDigit(digit)) return error.InvalidSpecification;
+    return std.fmt.parseInt(u32, digits, 10) catch error.InvalidSpecification;
 }
 
 fn label(comptime name: []const u8) []const u8 {

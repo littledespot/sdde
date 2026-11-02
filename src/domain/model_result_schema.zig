@@ -45,19 +45,24 @@ pub const Property = struct {
 /// integer `property` of one array item. Response admission enforces it; the
 /// provider schema can express only the item count, so uniqueness stays native.
 pub const Members = struct { property: []const u8, values: []const i64 };
-/// Native cross-item coverage on an array of objects (ADR 0038): every value an
-/// item of a `covered` kind names in its integer list `property` must also be
-/// named by an item of a `covering` kind. An item's kind is the `kind` of its
-/// `kind_property` object. Response admission enforces it; the provider schema
-/// can't express it.
+/// Native cross-item rules on an array of objects (ADR 0038): every value an item
+/// of a `covered` kind names in its integer list `property` must also be named by
+/// an item of a `covering` kind. A value is taken for an item of an `exclusive` kind
+/// when an item of an `owning` kind names it anywhere, or an earlier exclusive item
+/// does; no exclusive item names both taken and untaken values, and one naming only
+/// taken values is left to the array's owner to delete. An item's kind is the `kind`
+/// of its `kind_property` object. Response admission enforces these; the provider
+/// schema can't express them.
 pub const Coverage = struct { property: []const u8, rule: ItemCoverage };
 pub const ItemCoverage = struct {
     kind_property: []const u8,
     covered: []const []const u8,
     covering: []const []const u8,
+    exclusive: []const []const u8,
+    owning: []const []const u8,
 
     pub fn clone(self: ItemCoverage, a: std.mem.Allocator) std.mem.Allocator.Error!ItemCoverage {
-        return .{ .kind_property = try a.dupe(u8, self.kind_property), .covered = try cloneStrings(a, self.covered), .covering = try cloneStrings(a, self.covering) };
+        return .{ .kind_property = try a.dupe(u8, self.kind_property), .covered = try cloneStrings(a, self.covered), .covering = try cloneStrings(a, self.covering), .exclusive = try cloneStrings(a, self.exclusive), .owning = try cloneStrings(a, self.owning) };
     }
 };
 pub const Node = union(enum) {
@@ -199,13 +204,20 @@ pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Sch
         if (entry.coverage) |rule| {
             const path = if (entry.target == .path) entry.target.path else return invalid();
             if (entry.collection != .unique_subset or path.len < 2 or path[path.len - 2] != .items or path[path.len - 1] != .property) return invalid();
+            // One governed array: an outer array would split the rule across several arrays,
+            // and a correction could no longer list every naming.
+            for (path[0 .. path.len - 2]) |step| if (step == .items) return invalid();
             if (rule.kind_property.len == 0 or rule.covered.len == 0 or rule.covering.len == 0) return invalid();
-            // Kinds are distinct and disjoint; an item that covers itself makes the rule vacuous.
-            const kinds = [_][]const []const u8{ rule.covered, rule.covering };
+            // Kinds are distinct and disjoint; an item that covers itself makes the rule vacuous,
+            // a covering kind can be neither exclusive nor owning, since covering repeats a
+            // covered value, and no kind both owns values and yields them.
+            const kinds = [_][]const []const u8{ rule.covered, rule.covering, rule.exclusive, rule.owning };
             for (kinds, 0..) |names, group| for (names, 0..) |kind, position| {
                 if (kind.len == 0) return invalid();
                 for (names[0..position]) |prior| if (std.mem.eql(u8, prior, kind)) return invalid();
                 if (group == 1) for (rule.covered) |covered| if (std.mem.eql(u8, covered, kind)) return invalid();
+                if (group >= 2) for (rule.covering) |covering| if (std.mem.eql(u8, covering, kind)) return invalid();
+                if (group == 3) for (rule.exclusive) |exclusive| if (std.mem.eql(u8, exclusive, kind)) return invalid();
             };
         }
         // A choice naming the selected definition targets the same schema as one
@@ -462,7 +474,7 @@ fn coverageApplies(node: *const Node, coverage: Coverage) bool {
     if (!listed.required or listed.schema.* != .array or (listed.schema.array.items.* != .integer and listed.schema.array.items.* != .integer_enumeration)) return false;
     const kinds = findProperty(node.object, coverage.rule.kind_property) orelse return false;
     if (!kinds.required) return false;
-    for ([_][]const []const u8{ coverage.rule.covered, coverage.rule.covering }) |names| for (names) |name| {
+    for ([_][]const []const u8{ coverage.rule.covered, coverage.rule.covering, coverage.rule.exclusive, coverage.rule.owning }) |names| for (names) |name| {
         if (!offersKind(kinds.schema, name)) return false;
     };
     return true;

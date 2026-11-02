@@ -1342,6 +1342,10 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .{ .stage = .generation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
         .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .first_request = 1 } },
         .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .persistent },
+        // ADR 0038 Decision 5: a wholly taken statement is deleted natively and publishes
+        // with no correction. Every scripted records batch has one claim, so a partly
+        // taken one is proven at response admission instead.
+        .{ .stage = .records, .shape = .shared_statement, .repetition = .{ .first_request = 1 } },
         // ADR 0039: a records runaway is re-sent once; a re-send that runs away
         // fails typed, and a re-sent response takes the same admission.
         .{ .stage = .records, .shape = .runaway, .repetition = .{ .first_request = 1 } },
@@ -2227,6 +2231,12 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 }
             }
         }
+        if (fault != null and fault.?.shape == .shared_statement) {
+            // The business rule restating a requirement was deleted natively.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            for (session.record_batches) |batch| for (batch.response.content.records) |record| try std.testing.expect(record.content != .business_rule);
+        }
         if (fault) |selected_fault| switch (selected_fault.repetition) {
             .once => try std.testing.expectEqual(@as(usize, 1), driver.fault_calls),
             .first_request => |count| {
@@ -2530,6 +2540,18 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     try std.testing.expect(std.mem.indexOf(u8, specification, "Review status") == null);
     try std.testing.expect(std.mem.indexOf(u8, context_view, "## Review Status") == null);
     try std.testing.expect(std.mem.indexOf(u8, context_view, "## Principle Consistency") == null);
+    check = "published criteria and requirements show their source lines";
+    const parsed = try @import("../../src/domain/specification_markdown.zig").parse(a, specification);
+    var shown: usize = 0;
+    for (parsed.records) |record| {
+        const family: @import("../../src/domain/specification.zig").Kind = record.content;
+        if (family != .acceptance_criterion and family != .functional_requirement) continue;
+        try std.testing.expect(record.sources.len != 0);
+        const prefix = try std.mem.concat(a, u8, &.{ persisted.reference.directory.bytes, "/" });
+        for (record.sources) |file| try std.testing.expect(std.mem.startsWith(u8, file.path, prefix) and file.path.len > prefix.len);
+        shown += 1;
+    }
+    try std.testing.expect(shown != 0);
     check = "no manufactured persisted clarification";
     const clarifications = @import("../../src/domain/clarification_inputs.zig");
     const clarification_bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", a, .limited(8_388_608));

@@ -105,6 +105,182 @@ so far is on a development-case value that ends in punctuation, so none of them 
 - **Not changed:** the design.md §32 index row for ADR 0036 doesn't name this rule (a
   design edit).
 
+## Q13. Inline source lines
+
+**Implemented 1 November 2026 on `340261e`; uncommitted.**
+- **User decisions, 1 November 2026:**
+  - "the claims associate with the AC, FR and EN should be placed after each AC, FR and EN";
+  - format: file and lines only, one line per item with the source file and merged line
+    ranges, computed from the item's claims and their citations; several files join with "; ";
+  - then "implement Q13,".
+
+Each AC, FR and EN record in `spec.md` now shows those lines, for example
+`` - Source: `references/hello-world/stories.md` lines 5–7 ``. The inline lines reduce no
+scored defect class; they make each record's links visible to the human reviewer (H1).
+- **Change:** `traceRequirements` (`specification_projection.zig`) now takes the inputs and
+  reference records, so the live projection and the snapshot (`traceSnapshot`, used by
+  reference-context) share one trace. `project` attaches typed `SourceLines`
+  (`specification.zig`, validated as ascending, merged, one entry per file, AC/FR/EN only) and
+  takes the reference directory; `project-specification-document` now requires
+  `reference_directory`. `source_coordinates.lines` turns a citation span into its lines and
+  `mergeLines` joins them. `specification_markdown.zig` renders and parses the line.
+  `reference_ingestion.displayPath` is the one path join both views use. The baseline
+  candidate JSON is `baseline-native-specification-candidate/v2` (records gain `sources`; it
+  has no reader). No state or report version changes.
+- **Choices forced by the code:**
+  - An AC or FR line follows a blank line, because a two-space line directly under a field
+    continues that field (F0100 §5.6).
+  - The snapshot can't be built before `project-document`: the pending branch builds it too,
+    and the data-flow check rejects producing a key twice. The live records give the same
+    trace.
+  - A single line reads `line N`; ranges join with ", ".
+  - Pending views and reference-context's own section are unchanged.
+  - A record citing no source line shows none.
+- **Contracts:** 23-rendering.md §23 (replaces "Reference citations are not rendered into the
+  business-only file" and "grammar is unchanged"), F0100 §5.6 and its parsing sentence,
+  17-specify.md's artifact boundary, design.md §31.21.
+- **Offline proof:**
+  - **Codec** (`specification_contract_test.zig`): AC, FR (beside a multiline exact
+    continuation) and EN lines, several files and a path containing a backtick, all round
+    trip. Thirteen rejected spellings, a source line on a business rule, and two continuation
+    placements that don't round-trip.
+  - **Span owner** (`source_coordinates.zig`): whole lines, line runs, a token ending
+    mid-line, a last line without its ending, and two rejected spans.
+  - **Projection** (`specification_generation_test.zig`):
+    - `line 4`, `lines 1–2`, and a sorted, merged `lines 1–2, 4`;
+    - overlapping, nested, touching, duplicate and separated ranges;
+    - the live lines equal the persisted snapshot's lines exactly, the exact token's mid-line
+      citation included;
+    - an occurrence whose source isn't in the corpus rejects.
+
+    Two source files are covered at the codec, not the projection; the fixture reads one file.
+  - **Integration** (`workflow_tests.zig`): the published `spec.md` shows source lines for
+    every AC and FR, under the reference directory.
+  - **Baseline harness:** the candidate document carries them.
+  - **Requests:** freeze `340261e-q13` against `2b3dc8b` shows `diff -r` empty (129
+    scenarios, 1,702 calls); no commit since `2b3dc8b` changes a request.
+  - FIX06's proof against the D13.1 live states couldn't run: those run directories were
+    removed.
+
+## Q12 D12.1. Records requests receive no unpublished drafts
+
+**Implemented 1 November 2026 on `340261e`; uncommitted. Measured 1 November 2026: rule 6
+recommends not kept (guards rise); the keep or revert decision is the user's (FIX06 D12.1).**
+Approved 1 November 2026 as the first model-input change.
+- **Change:**
+  - `specification_session.zig`: only the entities unit receives an earlier draft (the brief).
+    Records authoring and repair packets (repair goes through `packetForOptions`) receive
+    neither the brief nor the entity decision.
+  - The session-order check stays: a records packet still needs an accepted entities unit.
+  - `EntityDecision` and `entities()` are deleted from `specification_projection.zig`.
+  - `records.prompt.md:1` no longer names the brief, and `generation.context.json`'s `sources`
+    guidance drops "and prior drafts".
+  - 17-specify.md's draft rule is amended.
+  - No state, report or schema change.
+- **Offline proof:**
+  - Freeze `340261e-d121` against `340261e-q13`: the same 1,702 calls in the same order. 520
+    requests differ, and every difference is expected:
+    - all 520 generation requests carry the changed `sources` sentence;
+    - the 169 records requests also lose `brief` and `entities` and carry the new prompt line;
+    - none is unexplained.
+  - Tests: only the entities packet carries the brief, resolved through exact and passive
+    values. Records authoring and task packets carry neither draft and are byte-identical
+    across both entity decisions. In assembled repair packets for every record family, only
+    an entity repair carries the brief and none carries the entity decision. A records packet
+    without an accepted entities unit still rejects.
+
+## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
+
+**D16.1 implemented and measured 2 November 2026 on `340261e`; uncommitted. Its set failed
+the publication guard (FIX06 Q16 set result). D16.2 amends it the same day (user:
+"approved", then "Yes, exempt FRs"); D16.2's measurement set ran the same day (FIX06 Q16
+D16.2 set result) and the keep decision is outstanding.** D16.1 decisions: "the above recommendations are approved"; coverage kinds per
+"No, behaviour kinds only"; "Yes, Q16 replaces it" (ADR 0035's in-batch deletion); "Yes,
+list every location".
+- **Change (as amended by D16.2):**
+  - `ItemCoverage` (`model_result_schema.zig`) has `exclusive` and `owning` kinds, both
+    required, distinct, offered by the items, never covering kinds and disjoint from each
+    other. A rule on arrays nested in an outer array rejects.
+  - A value is taken for an exclusive item when an owning item names it anywhere or an
+    earlier exclusive item does. Admission (`model_payload_schema.zig`) rejects an exclusive
+    item naming taken and untaken values as `shared_member` at the item, before coverage;
+    one naming only taken values is admitted. Owning items are unconstrained.
+  - The diagnostic carries the compiled rule and its property (`coverage`) for both
+    cross-item reasons. The `shared_member` correction offers the record's shape, names the
+    exclusive and owning kinds (`exclusive`) and lists every taken value's naming in partly
+    taken items (`shared`). The correction owner (`model_protocol_retry.zig`) finds them
+    with admission's allocation-free `nextSharedNaming`, and refuses a response whose first
+    partly taken item isn't the rejected one.
+  - The session (`specification_session.zig` `repeatedStatementIssue`) deletes a wholly
+    taken business rule, outcome, assumption, non-goal or prohibition natively, with no
+    model call (`repeated_statement`, `specification_candidate.zig`;
+    `specification_repair.zig` gives its requirement and native delete). It runs after the
+    cross-batch duplicate check and ADR 0035's story comparison, and keeps a record holding
+    an exact copy no other record of the batch holds (`exactCopiesHeldElsewhere`, over
+    `specification_provenance.recordValues`).
+  - `scenario_coverage`: FR owns; BR, UO, AS, NG and PB are exclusive; FR, BR, UO and PB
+    need a scenario. The roles come from an exhaustive switch (`recordRole`).
+  - ADR 0035's in-batch record-versus-record deletion is deleted (`restatement`, the
+    in-batch loop and their tests); the story comparison and the same-kind delete stay,
+    and the story restatement's repair text names the story as the kept occurrence.
+  - `records.prompt.md:9-13` states the at-most-one-record and coverage rules for assigned
+    requirements. It is unchanged by D16.2, so the model sees what the D16.1 set saw.
+  - Versions: `model-request-debug/v16` (the recorded rule's owning kinds),
+    `spec-e2e-report/v14` (the new repair rule in reports' diagnostics) and
+    `baseline-acquisition/v11`, which embeds the report.
+  - The scripted records fixture puts the exact value in the FR instead of a second outcome
+    record.
+  - Amended: ADR 0038 (title, Decisions 2, 3 and 5), ADR 0035, ADR 0019, 12-model-boundary,
+    17-specify, 21-validation, 22-repair, 24-workflow-state, 27-observability, F0100,
+    e2e.md and acceptance.md, the evaluate-e2e skill's report version, the design.md §32
+    rows for 0035, 0038 and 0039, and FIX06 §2 rule 1's recorded exception.
+- **Offline proof:**
+  - **Freezes** (each taken with the scripted Q16 scenarios left out, so numbering
+    matches):
+    - `340261e-q16` against `340261e-q13`: the same 1,702 calls in order, 520 differing,
+      every difference explained (D12.1's sentence in all 520 generation requests; in the
+      169 records requests, the drafts removed, the new prompt lines and the recorded rule;
+      in 22 later records batches, one fewer present family, the fixture change).
+    - `340261e-d162` against `340261e-q16`: 1,533 identical; the 169 records requests
+      differ only in the recorded rule (FR moved from exclusive to owning).
+  - **Replay** (offline re-implementation over the 12 retained runs' first records
+    responses): both failed D16.1 batches admit with their two outcome records deleted; the
+    D12.1 loan-renewal batches delete 4, 8 and 8 restating records; none is partly taken or
+    uncovered.
+  - **Tests:**
+    - **Result-schema rule:** accepted and rejected exclusivity, owning items unconstrained
+      and taking values before or after, wholly taken items admitted, replay restoring the
+      rule, and invalid exclusive and owning configurations.
+    - **Admission and correction:** the correction names the exclusive and owning kinds and
+      lists every taken value's naming (several items, two in one item, behind a §22.6
+      opening artefact, none in a wholly taken item), only for `shared_member`; a response
+      whose first partly taken item differs, whose only shared item is wholly taken, or
+      with none is refused (both guards mutation-checked).
+    - **Replay:** the request debugger rejects a partly taken response and admits a wholly
+      taken one from the record; a record without `exclusive` or `owning` doesn't decode.
+    - **Records packet:** every behaviour kind needs a scenario; assumptions and non-goals
+      need none; each non-requirement statement kind rejects when partly taken, by a
+      requirement before or after it or an earlier statement; wholly taken ones and two
+      requirements sharing a claim are admitted.
+    - **Session:** a loan-renewal-shaped batch (outcomes restating requirements before and
+      after them, a second requirement on one claim) has both outcomes deleted natively,
+      one at a time, refuses a model value for the delete, and keeps the requirements and
+      scenarios. Fixtures whose sibling statements shared a claim now name distinct claims
+      (`proposalNaming`, `proposalGroup`), and two outcome records on one claim became
+      requirements.
+    - **Exact copies:** a repeated statement holding the batch's only copy of an exact value
+      is kept (the scripted fixture's old shape: an FR without the value, an outcome with
+      it); one whose value a requirement also holds is deleted; of two holders the first
+      goes and the last stays (mutation-checked).
+    - **Real schema:** against the restricted records generation schema, a partly taken
+      record's rejection locates and outlines the record node, carries the compiled rule
+      and lists the taken naming.
+    - **Same-kind duplicates:** acceptance criteria, edge cases and business rules are still
+      deleted as `duplicate_record`.
+    - **Integration:** a scripted BR restating an FR publishes with the rule deleted and no
+      correction. Every scripted records batch has one claim, so a partly taken record is
+      proven only at admission.
+
 ## T5. Brittleness counts
 
 **Implemented and taken 1 November 2026, on HEAD `30e0d2f` (the D10.2 tree), before D13.1;

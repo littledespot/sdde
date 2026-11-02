@@ -201,10 +201,15 @@ Do not invent an actor, benefit or entity to fill a field.
 Record authoring binds one complete retained group containing at least one
 non-token claim and may return multiple records
 or none. Each record names the claims it supports, a nonempty subset of that group's
-claims kept in the group's order, and keeps exactly one group occurrence. In one
-response, every claim a functional requirement names must also be named by an
-acceptance criterion or edge case; admission rejects a gap for the request's existing
-protocol correction ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). The shared finite native
+claims kept in the group's order, and keeps exactly one group occurrence. Requirements
+own their claims: in one response, a business rule, outcome, assumption, non-goal or
+prohibition whose every claim a requirement or an earlier such record names is deleted
+natively after validation unless it holds an exact copy no other record holds, and one
+naming such claims and others is a defect;
+requirements are never deleted or rejected by this rule. Every claim a behaviour
+statement names must also be named by an acceptance criterion or edge case. Admission
+rejects either defect for the request's existing protocol correction
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5). The shared finite native
 iteration contract in §6 fixes the population at three narrative assignments plus
 the native record-authoring group count and advances once per admitted assignment, even
 for an empty record array. It grants traversal only for committed progress and
@@ -269,10 +274,10 @@ For each feature-brief or specification unit, the declared model operation retur
   value, prose expresses its meaning and types required exact values verbatim.
   Native recognition owns exact occurrence bookkeeping; supplied passive/source
   references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
-  repair packets include earlier drafts only for dependent units: entities receive
-  the brief, records receive the brief and entity decision. Brief and story requests
-  receive neither sibling draft. Dependent drafts are resolved business text and
-  applicability; their canonical provenance, fragment wrappers and display-span
+  repair packets include an earlier draft only for the entities unit, which receives
+  the brief. Brief, story and records requests receive no sibling draft, so a batch
+  record can't copy unpublished draft wording (FIX06 D12.1). The brief draft is
+  resolved business text; its canonical provenance, fragment wrappers and display-span
   bookkeeping remain native. Record-family purposes come from the workflow's
   packet guidance; they and the response alternatives use the same native unit
   ownership; entity applicability and records are decided
@@ -283,7 +288,7 @@ For each feature-brief or specification unit, the declared model operation retur
   purposes; initial values select their support while drafting. Record packets
   retain their fixed group and separate remaining context without repeating assigned claims.
   Shared guidance names `source_assignment.requirements` as the batch's duties;
-  `context_requirements` and prior drafts help interpret them without substituting
+  `context_requirements` help interpret them without substituting
   another group's independent obligation or changing fixed repair evidence.
   A preserved-token occurrence retains its cited source context, including the
   source-required use and conditions of that value. Token membership alone neither
@@ -433,10 +438,11 @@ The engine validates:
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
 - exact preserved-token propagation in `reference-context.md`, with visual/style kinds additionally requiring visual checks;
-- presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a functional requirement names is also named by an acceptance criterion or edge case ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
+- presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes; natively, each claim a behaviour statement names is also named by an acceptance criterion or edge case ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 2);
 - a record maps only the claims it names, not its whole group; an unnamed claim maps only through another target, such as a narrative field that selects its group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md));
 - no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
-- artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
+- artifact boundary: `spec.md` has no `Reference Context` heading; its only reference metadata
+  is the source line §23 gives each criterion, requirement and entity;
 - unsupported technical content: whether code, filenames, paths, framework identifiers and implementation details belong in business requirements is judged by the human who reviews and edits the published `spec.md`. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;

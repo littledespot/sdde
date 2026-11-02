@@ -123,7 +123,7 @@ Each generation request contains only what the current unit needs:
   and local validation. Two admission constraints are exceptions, because
   provider schema syntax cannot express them: `exact_members` uniqueness, and with a
   native count its completeness (`missing_member`; below, ADR 0046), and
-  ADR 0038's records coverage (`uncovered_member`). Local admission, request descriptions and replay
+  ADR 0038's records coverage and exclusivity (`uncovered_member`, `shared_member`). Local admission, request descriptions and replay
   apply them natively from the same restriction. Unknown locations or definitions reject; a carried sibling
   restriction may be unused only after validation against its compiled definition
   or the composition part's complete parent. Unused typed text atoms retain their
@@ -465,7 +465,7 @@ findings. Only complete native collection validation permits authority advanceme
   `build-model-runaway-resend`, a route the compiler requires wherever admission's
   `invalid` continues. The re-send must equal its attempt in every field except
   sampling. Requests and provider operations record their sampling
-  (`configured` or `runaway_resend`), and `model-request-debug/v14` records both
+  (`configured` or `runaway_resend`), and `model-request-debug/v16` records both
   configured temperatures and the sampling. A runaway on the
   re-send ends the request with `RunawayRepeated` and the work fails.
 - Every retry response, a re-send or a protocol correction, passes exactly the checks a
@@ -1018,8 +1018,8 @@ and source-preservation/reference exact claim sets retain their existing rules.
 Reconciliation supplies validated source-obligation groups. The engine binds each record authoring task to one active group before
 dispatch and resolves its claims through the existing ledger. A task may author
 several records, each naming the claims it supports from that group, and admission
-requires every claim a functional requirement names to have an acceptance criterion
-or edge case naming it too ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)); overlapping or multi-claim groups preserve
+applies ADR 0038's one-statement-record and scenario rules
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2 and 5); overlapping or multi-claim groups preserve
 many-to-many links.
 Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
 generation evidence bounds remain independently enforced.
@@ -1153,6 +1153,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v14` retains native scope for diagnostic replay; request logs
+`model-request-debug/v16` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

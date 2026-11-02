@@ -69,6 +69,10 @@ the engine, its prompts or its deterministic code.
      | `placeholder` | Template filler or unresolved placeholder text |
      | `rendering_artefact` | Escaping, joining, punctuation or formatting the engine introduced |
      | `engine_vocabulary_leak` | Engine or schema vocabulary in published text |
+
+     The `Source:` line under each AC, FR and EN is the engine's decided display of the
+     record's cited lines (23-rendering.md §23). Don't count it as a defect or against a
+     business-facing criterion. Section 3 step 7 checks the links themselves.
    - **Scores:** score from the anchors. Give `maximum_score` only when no defect the
      criterion names remains. Don't reward length, demand particular wording or
      invent requirements.
@@ -146,6 +150,25 @@ the engine, its prompts or its deterministic code.
    | `neutral` | The value changed, the targeted defect's status didn't, and nothing was lost |
    | `harmful` | A new defect appears, or content the old value had is lost, whether or not the target was fixed |
    | `no_progress` | The repair returned the old value, or its result recurs (`RepairNoProgress`, recurring) |
+7. **Check every record's links.**
+   - **Where the links are:** the run's `reference-context.md`. Its "Generated Requirement
+     Sources" section lists each record's claims and citations, for every family, and its
+     "Source Citations" section quotes the cited lines.
+   - **Label each record exactly once.** Judge whether the cited lines state what the record
+     says:
+
+     | Label | Meaning |
+     | --- | --- |
+     | `supported` | The cited lines state everything the record says |
+     | `partial` | They state part of it; the record adds content they don't state |
+     | `unsupported` | They don't state what the record says |
+
+   - **A scenario** is `supported` when its cited lines state the behaviour it tests.
+   - **A false link counts twice.** A `partial` or `unsupported` link that makes invented
+     content look sourced is also an `unsupported_addition` defect (section 2), and the
+     defect's evidence names the link.
+   - **The measure:** false links (`partial` plus `unsupported`) per record family, over
+     the records of that family.
 
 ## 4. Recommend changes that generalize
 
@@ -179,7 +202,7 @@ separate from engine and prompt changes. Don't edit code, prompts, rubrics or ca
   corrections, re-sends, runaways, admission rejections, repairs and latency, and its
   per-stage sends, tokens and shares. Take stages only from `measures.json`; never
   group attempts by step name. A run whose report is `unavailable` (missing, or older
-  than `spec-e2e-report/v12`) has no report-derived measures at all: no sends, tokens,
+  than `spec-e2e-report/v14`) has no report-derived measures at all: no sends, tokens,
   corrections, re-sends, repairs or stages, only its call-evidence and feature-log
   counts. An `unmeasurable` run gives only which retained record couldn't be read or
   trusted; report it, and take nothing else from its records. Flag spending that bought
@@ -201,32 +224,36 @@ Write these to `evaluations/e2e/<run>/`, next to the numbered copies:
   3. A rubric table with each criterion's score, cited evidence and defects.
   4. Each defect, with its spec and source lines, origin class, producing call and
      step, prompt or code `path:line`, confidence and quoted evidence.
-  5. The ranked recommendations.
-  6. The cost profile.
-  7. Changes since the newest earlier `evaluations/e2e/*/evaluation.json` for the
+  5. The link check: false links per record family, and each `partial` or
+     `unsupported` record with its cited lines.
+  6. The ranked recommendations.
+  7. The cost profile.
+  8. Changes since the newest earlier `evaluations/e2e/*/evaluation.json` for the
      same case, if there is one: which defects were fixed, persisted or are new, and
      how the scores changed.
-  8. Limits: what was not checked, and the remaining uncertainty.
+  9. Limits: what was not checked, and the remaining uncertainty.
 - **`evaluation.json`**, the same content as data, in this shape:
 
   ```text
-  {"schema":"e2e-assistant-evaluation/v2","advisory":true,"run","report_schema","case_id",
+  {"schema":"e2e-assistant-evaluation/v3","advisory":true,"run","report_schema","case_id",
    "build":{"revision","modified","source_sha256"},"rubric":{"id","revision"},"results":[rubric-judgment/v2 results],
    "aggregate_percent","threshold_met","critical_failures":[],
    "defects":[{"id","class","criteria","spec_lines","source_lines","description","evidence",
      "origin":{"class","call","step","repository_path","lines"},"confidence"}],
    "repairs":[{"origin":{"request","attempt"},"operation","target","grade","evidence"}],
+   "links":[{"record","claim_ids":[],"label","evidence"}],
    "recommendations":[{"id","defects","failure_class","owning_path","change","expected_effect","risk","verification"}],
    "measures":"measures.json"}
   ```
 
-  `defects[].class` and `repairs[].grade` use the closed vocabularies in sections 2 and
-  3. Costs and counts come from `measures.json` (section 5); never restate them here.
+  `defects[].class`, `repairs[].grade` and `links[].label` use the closed vocabularies in
+  sections 2 and 3. Costs and counts come from `measures.json` (section 5); never restate them here.
   `build.source_sha256` distinguishes uncommitted trees that share a revision.
 
 In chat, give:
 - the advisory aggregate and any critical failures;
 - the top findings, with their origins;
+- false links per record family;
 - the path to `evaluation.md`.
 
 One run is one sample, so claim no reliability. Remind the user that acceptance needs

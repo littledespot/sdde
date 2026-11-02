@@ -45,7 +45,7 @@ built. Typed rendering emits no placeholder, and readback accepts only its close
 
 [§17.5](17-specify.md#175-deterministic-specification-validation) also lists the
 duplicate check, which [ADR 0035](../decisions/0035-cross-kind-restatement.md) extends
-to covered cross-kind restatements
+to covered restatements of the story
 ([F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair)), and
 claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 

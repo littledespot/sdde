@@ -4,6 +4,6 @@ const view = @import("../../domain/reference_context.zig");
 pub const Action = struct {
     pub const contract: pipeline.NodeContract = .{ .id = "render-reference-context", .kind = .action, .requires = &.{.specification_publication_state}, .produces = &.{.rendered_reference_context}, .side_effect = .none };
     pub fn execute(_: Action, allocator: std.mem.Allocator, state: @import("../../domain/specification_state.zig").State) (view.Error || @import("../../domain/specification_projection.zig").Error)![]const u8 {
-        return view.render(allocator, state.reference, try @import("../../domain/specification_projection.zig").traceRequirements(allocator, state.reference, state.content));
+        return view.render(allocator, state.reference, try @import("../../domain/specification_projection.zig").traceSnapshot(allocator, state.reference, state.content));
     }
 };

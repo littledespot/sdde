@@ -9,6 +9,11 @@
     - delete a restatement only "if the kept one covers it";
     - when the kept one doesn't cover the evidence, "leave it as today";
     - "keep FR; else the earlier".
+- **Amended 2 November 2026** (FIX06 D16.1 and D16.2; user: "Yes, Q16 replaces it", then
+  "approved" and "Yes, exempt FRs"): ADR 0038 Decision 5 replaces the comparison between
+  records in one batch. A business rule, outcome, assumption, non-goal or prohibition whose
+  every claim a requirement or an earlier such record names is deleted natively after this
+  rule runs. Only the comparison with the story remains here.
 - **Amends:**
   - [F0100](../features/F0100-SpecWorkflow.md) §5.7: which duplicates can be deleted;
   - F0100's native validation summary;
@@ -37,8 +42,9 @@ every group, while a record cites its batch's group.
    - The kinds are functional requirement, business rule, assumption, non-goal,
      prohibited behavior and user-visible outcome.
    - Each is compared by its typed statement value, using the same typed equality as
-     whole-content duplicates. The comparison runs across kinds within one records
-     batch, and against the primary user story.
+     whole-content duplicates, against the primary user story. (The comparison across
+     kinds within one records batch was replaced on 2 November 2026 by ADR 0038
+     Decision 5.)
    - Acceptance criteria, edge cases and entities still compare only as whole same-kind
      content.
    - Records in different batches bind different source groups, so neither covers the
@@ -57,12 +63,15 @@ every group, while a record cites its batch's group.
    - The primary user story is never deleted.
    - A functional requirement is never deleted as a restatement, because it is a
      required family.
-   - Between other kinds, the earlier record is kept and the later one deleted.
+   - (Between other kinds in one batch, the earlier record was kept; replaced by ADR 0038
+     Decision 5.)
 5. **Same-kind duplicates are decided first.**
    - Every same-kind duplicate check runs before any restatement can remove a record:
      within the batch (unit validation) and against earlier batches (the session).
    - A competing pair therefore still blocks, even when one of its members also
-     restates another record.
+     restates the story.
+   - ADR 0038 Decision 5's repeated statements are decided after both, so a record
+     restating the story keeps this rule.
 6. **Ownership and diagnostics.**
    - Restatements belong to the session's consistency check, after its same-kind checks.
    - The session receives the model candidate the checked records came from. It binds
@@ -72,8 +81,8 @@ every group, while a record cites its batch's group.
 
 ## Consequences
 
-- **Removed.** Filler records that repeat the story or another record word for word.
-  Removing them reduces review subjects.
+- **Removed.** Filler records that repeat the story word for word. A statement repeating
+  a requirement's or an earlier statement's claims is removed by ADR 0038 Decision 5.
 - **Not removed:**
   - paraphrases;
   - entity descriptions, since deleting an entity would change the entity decision (FIX05
@@ -89,11 +98,9 @@ every group, while a record cites its batch's group.
   - The family-purpose test keeps one shared wording for functional requirements,
     acceptance criteria, edge cases and entities, and gives each deletable kind its own.
   - The coverage test's user-visible outcome no longer copies the story.
-  - The R46 test keeps its original candidate, which still blocks as competing records,
-    and adds the covered case.
+  - The R46 test keeps its original candidate, which still blocks as competing records.
   - The scripted complete story in the integration fixture now has its own leading
     words, so review-advice scenarios don't trip a restatement delete.
   - New tests cover:
     - a story that cites every group, against a batch-bound record;
-    - a later functional requirement removing an earlier record;
     - an uncovered second-batch restatement that stays admitted.

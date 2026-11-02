@@ -19,9 +19,10 @@ pub const Project = struct {
         const self = context.?;
         const authority = @import("required_authority_values.zig");
         const content = authority.read(&input.step.data, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
+        const directory = values.read(&input.step.data, @import("reference_workflow_values.zig").directory, @import("../domain/reference_selector.zig").Directory) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), content) catch |operation_error| return operation_error };
+        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), .{ .bytes = directory.project_relative_path }, content) catch |operation_error| return operation_error };
         return owned.publish(self.allocator, document_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };

@@ -33,7 +33,10 @@
   constraint and carries [ADR 0043](0043-model-facing-exact-text-names.md)'s
   model-facing names. FIX06 D13.1 (1 November 2026) deleted that constraint with
   principle review and advanced descriptions to `model-request-debug/v14`, without
-  the `required_items` member.
+  the `required_items` member. ADR 0038 Decision 5 (2 November 2026) advanced them to
+  `model-request-debug/v15`, whose recorded coverage carries the exclusive kinds, and its
+  amendment the same day to `model-request-debug/v16`, which also carries the owning
+  kinds.
 
 ## Diagnostic execution boundary
 

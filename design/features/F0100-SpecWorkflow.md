@@ -1209,6 +1209,12 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Entities use `**EN-001**`, then `- **NAME** <text>`,
   `- **BUSINESS MEANING** <text>` and zero or more
   `- **RELATIONSHIP** <text>` lines.
+- Source lines (§23): after an acceptance criterion or functional requirement, a blank line
+  and `  - Source: <files>`; as an entity's last line, `- Source: <files>`. `<files>` lists
+  each cited file in corpus order as inline code followed by ` line N` or ` lines A–B, C`
+  (ascending, merged where ranges overlap or touch), joined with `; `. The line is present
+  only when the record cites a source line. The blank line keeps it apart from the
+  two-space code continuation lines of the field above it.
 - IDs have a positive ordinal, padded to at least three digits, without
   surplus leading zeroes. New editable records may use the kind label without
   an ordinal, such as `**AC**` or `- **FR**: <text>`; they require engine
@@ -1225,9 +1231,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
     gaps through the shared authority gate even if model evidence says `supported`.
   - The scenario-coverage obligation requires model-assisted comparison of the complete
     candidate with source claims/citations, including distinct observable flows and
-    their triggers/results. Natively, each claim a functional requirement names must
-    also be named by an acceptance criterion or edge case in the same records response
-    ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
+    their triggers/results. Natively, ADR 0038's one-statement-record and scenario rules
+    apply in each records response
+    ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2 and 5).
   - Missing behavior cannot be satisfied by citation presence or a title.
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
@@ -1245,8 +1251,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Code continuation lines have two structural indentation spaces, removed on parse.
 - Record order is section order, preserving order within each family.
 - The shared Markdown scanner owns code-span recognition.
-- Parsing captures text/spans, not NFC normalization, provenance, applicability,
-  semantic adequacy or stage success.
+- Parsing captures text, spans and shown source lines, not NFC normalization, provenance,
+  applicability, semantic adequacy or stage success.
 
 ### 5.7 Generation, coverage and repair
 
@@ -1317,10 +1323,14 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Record-field and relationship locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
-  single-statement record that restates the primary user story or another
-  single-statement kind is deleted only when the kept occurrence covers its evidence. A
-  functional requirement and the story are always kept, and an uncovered restatement is
-  not flagged. Closed variant/schema correction handles malformed record shapes; there
+  single-statement record that restates the primary user story is deleted only when the
+  story covers its evidence. A functional requirement and the story are always kept, and
+  an uncovered restatement is not flagged. Within one batch, a business rule, outcome,
+  assumption, non-goal or prohibition whose every claim a requirement or an earlier such
+  record names is deleted natively too, unless it holds an exact copy no other record
+  holds; one naming such claims and others is an admission
+  defect; requirements are never deleted or rejected by this rule
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5). Closed variant/schema correction handles malformed record shapes; there
   is no whole-record kind replacement. Entity membership repair follows
   [§22.3](../contracts/22-repair.md#223-repair-authorization).
   One whole-record target remains bounded across field-level failures of that
@@ -1390,9 +1400,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   acceptance.
 - Protocol corrections remain separate provider attempts.
 
-- A records response whose functional-requirement claim no acceptance criterion or edge
-  case names is rejected at admission as `uncovered_member` and takes the request's
-  existing protocol correction, which names the covering kinds; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+- A records response whose behaviour-statement claim no acceptance criterion or edge
+  case names is rejected at admission as `uncovered_member`, and one with a
+  non-requirement statement naming both taken and untaken claims as `shared_member`. Each
+  takes the request's existing protocol
+  correction, which names the governing kinds; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or

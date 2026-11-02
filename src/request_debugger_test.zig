@@ -1184,7 +1184,7 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
 const coverage_variant = "{{\"type\":\"object\",\"properties\":{{\"kind\":{{\"const\":\"{s}\"}},\"text\":{{\"type\":\"string\",\"maxLength\":16}}}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}}";
 const coverage_schema = std.fmt.comptimePrint("{{\"type\":\"object\",\"properties\":{{\"entries\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ coverage_variant ++ "," ++ coverage_variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}}},\"required\":[\"entries\"],\"additionalProperties\":false}}", .{ "rule", "check" });
 const coverage_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "entries" }, .{ .items = {} }, .{ .property = "ids" } };
-const coverage_rule: @import("domain/model_result_schema.zig").ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"} };
+const coverage_rule: @import("domain/model_result_schema.zig").ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
 
 /// A captured request replays admission's native coverage (ADR 0038), which the
 /// recorded provider schema bytes cannot express.
@@ -1195,16 +1195,33 @@ fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: deb
     try std.testing.expectEqual(.invalid, checked.schema);
     try std.testing.expectEqualStrings("uncovered_member", checked.reason.?);
     try std.testing.expectEqualStrings("/entries/0/ids/1", checked.path.?);
+    // The record also replays exclusivity (ADR 0038 Decision 5): a partly shared item is
+    // rejected, and a wholly shared one is admitted for its owner's native delete.
+    const shared = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"rule\",\"text\":\"s\"},\"ids\":[2,4]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}");
+    const shared_check = try fixture.provider.provider().inspect(a, selected, shared);
+    try std.testing.expectEqualStrings("shared_member", shared_check.reason.?);
+    try std.testing.expectEqualStrings("/entries/1", shared_check.path.?);
+    const repeated = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"rule\",\"text\":\"s\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2]}]}");
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, repeated)).schema);
     // Without the record the same bytes pass, so the record is what replays admission.
     var unrestricted = selected;
     unrestricted.coverages = &.{};
     try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, uncovered)).schema);
     // A record that does not fit the captured schema cannot be read or replayed.
     var foreign = selected;
-    foreign.coverages = &.{.{ .path = coverage_path, .allowed = &.{ 2, 4 }, .coverage = .{ .kind_property = "content", .covered = &.{"ghost"}, .covering = &.{"check"} } }};
+    foreign.coverages = &.{.{ .path = coverage_path, .allowed = &.{ 2, 4 }, .coverage = .{ .kind_property = "content", .covered = &.{"ghost"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } }};
     try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, foreign));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, foreign, .{})));
     try std.testing.expectEqualDeep(selected.coverages, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).coverages);
+    // A recorded rule without its exclusive kinds doesn't decode, so replay never
+    // admits what live admission rejected.
+    const recorded = try std.json.Stringify.valueAlloc(a, selected, .{});
+    const stripped = try std.mem.replaceOwned(u8, a, recorded, ",\"exclusive\":[\"rule\"]", "");
+    try std.testing.expect(!std.mem.eql(u8, recorded, stripped));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, stripped));
+    const unowned = try std.mem.replaceOwned(u8, a, recorded, ",\"owning\":[]", "");
+    try std.testing.expect(!std.mem.eql(u8, recorded, unowned));
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, unowned));
 }
 
 fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {

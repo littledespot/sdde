@@ -130,7 +130,12 @@ Renderers own:
   passive-registry binding is staged with plan-input state so a crash cannot record a different
   planning input.
 
-- Reference citations are not rendered into the business-only file.
+- Each acceptance-criterion, functional-requirement and entity record shows one engine-rendered
+  source line: the files and merged line ranges its claims cite, from the same trace as
+  `reference-context.md`'s requirement sources (grammar: F0100 §5.6). It is a display, never
+  provenance: readback compares it with the line the projection derives and never mints a
+  binding or a passive literal. A record that cites no source line shows none. No other
+  reference citation is rendered into `spec.md`.
 - On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the
   fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered
   literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for
@@ -155,7 +160,7 @@ Renderers own:
 - Completed `reference-context.md` renders requirement-keyed claim-to-citation
   links from validated canonical lineage. Each citation retains its captured
   reference-state identity, source ID, block and span. Pending views have no
-  generated-record links. The editable `spec.md` grammar is unchanged.
+  generated-record links or source lines.
 - The engine loads their canonical IR, renders the expected bytes, and checks the view for exact
   equality.
 - A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the

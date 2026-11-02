@@ -53,7 +53,7 @@ Changed authority invalidates affected descendants through the stage rules below
   classification, dispositions and complete original-occurrence coverage (ADR 0024).
   Inconsistent stored authority rejects instead of being inferred from matching
   display bytes. Request-native exact scope binds its snapshot and eligible occurrence
-  bytes; `model-request-debug/v14` retains it for diagnostics, not state recovery.
+  bytes; `model-request-debug/v16` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
   port.
 - **Review evidence.** State holds no post-generation review evidence (ADR 0023).

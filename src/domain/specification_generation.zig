@@ -328,20 +328,6 @@ pub fn statement(content: spec.Content(spec.BusinessValue)) ?spec.BusinessValue 
     };
 }
 
-/// ADR 0035: identical statements in two single-statement kinds are redundant
-/// only when the kept occurrence covers the other's evidence. A functional
-/// requirement is always kept; otherwise the earlier occurrence is.
-pub fn restatement(allocator: std.mem.Allocator, earlier: spec.RecordProposal, later: spec.RecordProposal) Error!?enum { earlier, later } {
-    if (std.meta.activeTag(earlier.content) == std.meta.activeTag(later.content)) return null;
-    const earlier_statement = statement(earlier.content) orelse return null;
-    const later_statement = statement(later.content) orelse return null;
-    if (!try equalTyped(spec.BusinessValue, allocator, earlier_statement, later_statement)) return null;
-    if (later.content == .functional_requirement) {
-        return if (coversEvidence(later.source_group_ids, later.provenance, earlier.source_group_ids, earlier.provenance)) .earlier else null;
-    }
-    return if (coversEvidence(earlier.source_group_ids, earlier.provenance, later.source_group_ids, later.provenance)) .later else null;
-}
-
 /// ADR 0035: a record restates the primary user story when its statement equals
 /// the story and the story covers its evidence. The story is never removed, and
 /// a functional requirement is always kept.
@@ -355,6 +341,12 @@ pub fn restatesStory(allocator: std.mem.Allocator, story: spec.AttributedValue, 
 /// A covered restatement; its repair is a native delete with no model call.
 pub fn restatementIssue(index: usize, observed: ?candidate.Replacement) candidate.Issue {
     return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .restatement, .observed = observed };
+}
+
+/// ADR 0038 Decision 5: a statement record whose every claim a requirement or an earlier
+/// such record already names; its repair is a native delete with no model call.
+pub fn repeatedStatementIssue(index: usize, observed: ?candidate.Replacement) candidate.Issue {
+    return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .repeated_statement, .observed = observed };
 }
 
 /// The kept occurrence cites every group, claim, citation and clarification

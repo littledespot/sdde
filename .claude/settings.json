@@ -3,6 +3,10 @@
     "allow": [
       "Bash(zig)",
       "Bash(zig *)",
+      "Bash(sed *)",
+      "Bash(grep *)",
+      "Bash(python3 *)",
+      "Bash(python *)",
       "Bash(SDDE_REQUEST_PROJECTION=* zig build *)",
       "Edit(**/*.md)",
       "Bash(./scripts/test-integration.sh)",

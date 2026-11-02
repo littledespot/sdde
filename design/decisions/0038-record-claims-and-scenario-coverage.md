@@ -1,4 +1,4 @@
-# ADR 0038: Records name their claims; functional requirements need scenarios
+# ADR 0038: Records name their claims; requirements own their claims; behaviour statements need scenarios
 
 - **Status:** Accepted
 - **Date:** 2026-10-25
@@ -13,6 +13,13 @@
      run fails if they run out;
   4. claims become one per requirement for list sources by bringing back the list-item
      split.
+
+  Amended 2 November 2026 (FIX06 D16.1; user: "the above recommendations are approved",
+  then "No, behaviour kinds only"): one statement record per claim (Decision 5), and
+  coverage for every behaviour statement, not assumptions or non-goals (Decision 2).
+  Amended again on 2 November 2026 after the D16.1 set (FIX06 D16.2; user: "approved",
+  then "Yes, exempt FRs"): Decision 5's repeats are deleted natively and requirements are
+  exempt.
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -23,6 +30,11 @@
   - §12 (record binding and `model-request-debug/v12`), §17.3 and §17.5 (record
     authoring and coverage), §22 (a scenario gap takes protocol correction), F0100 and
     the §32 index.
+  - Since 2 November 2026: §12 and §22 also take a `shared_member` correction, and §17
+    and §22 a native delete of a repeated statement; request descriptions advance to
+    `model-request-debug/v16` and reports to `spec-e2e-report/v14`;
+    [ADR 0035](0035-cross-kind-restatement.md) keeps only its story comparison and its
+    same-kind delete.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -50,16 +62,20 @@ only block.
      states keep reading back.
    - Entities keep selecting whole groups. Repairs stay content-only and keep the
      record's claims.
-2. **A functional requirement's claims need a scenario.** In one records response,
-   every claim a `functional_requirement` names must also be named by an
-   `acceptance_criterion` or `edge_case`. The rule needs no claim categories or
-   keywords: title and purpose claims aren't named by functional requirements.
+2. **A behaviour statement's claims need a scenario.** In one records response, every
+   claim a `functional_requirement`, `business_rule`, `user_visible_outcome` or
+   `prohibited_behavior` names must also be named by an `acceptance_criterion` or
+   `edge_case`. Assumptions and non-goals are scope statements that no scenario tests,
+   so they need none. The rule needs no claim categories or keywords: title and
+   purpose claims aren't named by behaviour statements. (Functional requirements only,
+   until 2 November 2026.)
 3. **A gap takes the request's protocol correction.** The rule is a native admission
    constraint beside ADR 0023's `exact_members`: the result-schema module records it on
    the records array (`Coverage`), response admission rejects an uncovered claim as
    `uncovered_member` at its exact location (`/records/<i>/claim_ids/<j>`), and the
    records step's existing `retry-limit` bounds the correction. Exhaustion fails the
-   run. It asks for missing content and never removes any.
+   run. It asks for missing content and never removes any. Decision 5's partly taken
+   statement, `shared_member`, takes the same route.
    - Request descriptions record the constraint so replay enforces the same admission;
      `model-request-debug` advances to v12.
 4. **List sources yield one claim per requirement.** ADR 0036 Decision 3's native
@@ -67,6 +83,40 @@ only block.
    list items becomes one quoted claim per item, so a list requirement can be checked
    on its own. Its withdrawal rested on a wrong reading: the same five-claim input
    produced both 2 and 304 records, so claim count wasn't driving record inflation.
+5. **Requirements own their claims** (2 November 2026, amended the same day). In one
+   records batch, a claim is taken for a `business_rule`, `user_visible_outcome`,
+   `assumption`, `non_goal` or `prohibited_behavior` record when a
+   `functional_requirement` names it, before or after that record, or an earlier record
+   of those kinds does. Scenarios are exempt, since they test what a statement states.
+   - **Repeated statement:** such a record whose every claim is taken restates them, and
+     the records validator deletes it natively with no model call (`repeated_statement`;
+     user, 2 November 2026: "approved"). It runs after ADR 0035's story comparison, so a
+     record restating the story keeps that rule. It is kept when it holds an exact copy
+     no other record of the batch holds, so no exact value is lost (user: "Yes, keep
+     it"); each delete is decided on the batch it leaves. Deleting it leaves every claim
+     and exact copy the batch names in place.
+   - **Partly taken statement:** such a record naming taken claims and others too is
+     rejected at response admission as `shared_member` at `/records/<i>`, before any
+     coverage gap. The correction offers the record's shape, names the exclusive and
+     owning kinds (`exclusive`), and lists every taken claim's naming in such records
+     (`shared`), so one retry can fix them all (user: "Yes, list every location").
+   - **Requirements are exempt** (user, 2 November 2026: "Yes, exempt FRs"): a
+     requirement is never deleted or rejected by this rule, so one prose claim holding
+     two obligations may yield two requirements. Deleting the second would lose the
+     obligation it alone states.
+   - The result-schema rule records the exclusive and owning kinds beside the covering
+     kinds, as required members.
+   - It replaces ADR 0035's comparison between records in one batch (user: "Yes, Q16
+     replaces it"). ADR 0035's same-kind delete runs first and is unchanged.
+   - The first version, which corrected every second naming at the claim and deleted
+     none, failed 2 of 3 loan-renewal runs: no claim ID at the located position was
+     admissible, and the model returned the same records ([FIX06](../../fixes/FIX06.md)
+     Q16 set result). Deleting a repeat instead is an exception to FIX06 §2 rule 1,
+     decided by the user.
+   - The records prompt keeps its "at most one" sentence, requirements included, so the
+     model sees what the first version's set saw (user: "Yes, keep it").
+   - It is measured together with FIX06 D12.1, records requests with no unpublished
+     drafts, as one change set.
 
 ## Consequences
 
@@ -95,9 +145,18 @@ only block.
     never restate a requirement claim by claim."). It was a single-run patch, and the
     27 October 08:31 and 09:40 hello-world runs still restated FR-001 claim by claim, so
     it was removed on 28 October 2026 ([FIX06](../../fixes/FIX06.md) Q1a, D1.2).
-    Claim-by-claim restatement is left unpatched; FIX06 Q6 and Q8 measure it. The list
-    split stays for now: it is what gives a refusal requirement its own claim and
-    scenario.
+    Claim-by-claim restatement was left unpatched until Decision 5 removed it natively
+    on 2 November 2026. The list split stays: it is what gives a refusal requirement
+    its own claim and scenario.
+  - **Repeated statements (Decision 5)** are judged on claim IDs and exact copies, not
+    wording:
+    - a business rule or prohibition stating a second obligation of an FR's prose claim
+      is deleted like a repeat; requirements alone are exempt;
+    - admission judges the response as returned, so coverage is required of a record the
+      session then deletes, and a statement taken only through a record that ADR 0035
+      then deletes as a story restatement is kept;
+    - a repeated statement with a typed-text or exact-copy defect takes that unit repair
+      before the session can delete it.
   - **Identical records naming different claims** are not evidence-equivalent, so the
     native duplicate rule blocks them as `competing_records` instead of deleting one
     (ADR 0035 Decision 3).
@@ -123,4 +182,35 @@ only block.
     names `uncovered_member` at the claim's location.
   - Replay: a recorded coverage round-trips, rejects an uncovered response, and a record
     that doesn't fit the captured schema is refused.
+  - Requirements own their claims (Decision 5):
+    - at the result-schema rule, each value in one exclusive item is admitted, an
+      exclusive kind with no scenario is admitted, covering items may repeat a value,
+      owning items are unconstrained, and an exclusive item whose every value is taken,
+      by an owning item before or after it or an earlier exclusive item, is admitted;
+    - an exclusive item naming taken and untaken values, of another kind or the same
+      kind, is rejected at the item before any coverage gap, and replay restores the rule;
+    - the correction lists every taken value's naming in such items (several items, two
+      in one item, behind an opening artefact, none in a wholly taken item), and a
+      response whose first such item differs, whose only shared item is wholly taken, or
+      with none is refused;
+    - exclusive or owning kinds that repeat, are covering kinds, overlap each other, or
+      aren't offered reject, and so does a rule on arrays nested in an outer array;
+    - a recorded rule without its exclusive or owning kinds doesn't decode;
+    - at the records packet, an uncovered functional requirement, business rule,
+      user-visible outcome or prohibited behavior rejects; an assumption or non-goal
+      needs no scenario; every non-requirement statement kind rejects when partly taken,
+      by a requirement before or after it or an earlier statement; wholly taken ones and
+      two requirements sharing a claim are admitted;
+    - in the session, a batch with outcomes restating requirements before and after them
+      and a second requirement on one claim has both outcomes deleted natively, one at a
+      time, refuses a model value for the delete, and keeps the requirements and
+      scenarios;
+    - a repeated statement holding the batch's only copy of an exact value is kept; one
+      whose value a requirement also holds is deleted; of two holders, the first goes and
+      the last stays;
+    - against the real records schema, a partly taken record's correction locates and
+      outlines the record node and lists the taken naming;
+    - a scripted records response that restates a requirement as a business rule
+      publishes with the rule deleted and no correction. Every scripted records batch has
+      one claim, so a partly taken record is proven at admission only.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

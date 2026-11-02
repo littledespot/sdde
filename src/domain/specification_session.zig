@@ -196,11 +196,12 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     defer arena.deinit();
     const a = arena.allocator();
     const selected = try unit(index);
-    const entity_decision: ?g.spec.ApplicabilityProposal = if (selected == .records) decision: {
-        const checked = current.units[2] orelse return error.InvalidSpecificationUnit;
+    // Records follow an accepted entities unit, which owns the entity family. Its
+    // decision isn't sent to the records request.
+    if (selected == .records) {
+        const checked = current.units[entities_index] orelse return error.InvalidSpecificationUnit;
         if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
-        break :decision checked.response.content.entities.decision();
-    } else null;
+    }
     var excluded_list: std.ArrayList(@import("model_result_schema.zig").ExcludedVariant) = .empty;
     if (selected == .records) try excluded_list.append(a, .{ .kind = "entity" });
     if (selected == .entities) for (std.meta.tags(g.spec.Kind)) |kind| {
@@ -296,11 +297,14 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     };
     packets.release(result);
     result = contextual_operation;
-    // Only dependent units receive earlier drafts. The evidence catalogue and
-    // native dependency snapshots remain complete for generation and repair.
+    // Only the entities unit receives an earlier draft, the brief. Records are
+    // written from the sources, claims and record requirements alone, so no
+    // unpublished draft wording reaches a published record. The evidence
+    // catalogue and native dependency snapshots remain complete for generation
+    // and repair.
     switch (selected) {
-        .brief, .primary_user_story => {},
-        .entities, .records => if (current.units[0]) |checked| {
+        .brief, .primary_user_story, .records => {},
+        .entities => if (current.units[0]) |checked| {
             const business = @import("specification_projection.zig");
             const contextual = try packets.withContext(business.Brief, allocator, result, "brief", try business.brief(a, context, checked.response.content.brief));
             packets.release(result);
@@ -315,10 +319,6 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
             packets.release(result);
             result = contextual;
         }
-        const business = @import("specification_projection.zig");
-        const contextual = try packets.withContext(business.EntityDecision, allocator, result, "entities", try business.entities(a, context, entity_decision.?));
-        packets.release(result);
-        result = contextual;
     }
     const fixed = try packets.withExcludedVariants(allocator, result, excluded);
     defer packets.release(fixed);
@@ -328,14 +328,42 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
 }
 
-/// ADR 0038: every claim a functional requirement names needs an acceptance
-/// criterion or edge case that names it too. Response admission enforces it, so a
-/// gap takes the request's existing protocol correction.
+/// ADR 0038: every claim a behaviour statement (requirement, rule, outcome or
+/// prohibition) names needs an acceptance criterion or edge case that names it too;
+/// assumptions and non-goals are scope statements that no scenario tests. Functional
+/// requirements own their claims: a business rule, outcome, assumption, non-goal or
+/// prohibition whose every claim a requirement or an earlier one of those names restates
+/// them, so it is deleted natively (`repeatedStatementIssue`); one naming such claims
+/// and others too is rejected at response admission, like an uncovered claim, and takes
+/// the request's protocol correction. Requirements are never deleted or rejected here,
+/// so one prose claim may yield several.
 pub const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
     .kind_property = "content",
-    .covered = &.{@tagName(g.spec.Kind.functional_requirement)},
-    .covering = &.{ @tagName(g.spec.Kind.acceptance_criterion), @tagName(g.spec.Kind.edge_case) },
+    .covered = recordKinds(&.{ .requirement, .behaviour }),
+    .covering = recordKinds(&.{.scenario}),
+    .exclusive = recordKinds(&.{ .behaviour, .scope }),
+    .owning = recordKinds(&.{.requirement}),
 };
+/// Each record kind's part in ADR 0038's cross-item rules, by exhaustive switch.
+const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
+fn recordRole(kind: g.spec.Kind) RecordRole {
+    return switch (kind) {
+        .functional_requirement => .requirement,
+        .business_rule, .user_visible_outcome, .prohibited_behavior => .behaviour,
+        .assumption, .non_goal => .scope,
+        .acceptance_criterion, .edge_case => .scenario,
+        .entity => .entity,
+    };
+}
+fn recordKinds(comptime roles: []const RecordRole) []const []const u8 {
+    comptime {
+        var names: []const []const u8 = &.{};
+        for (std.meta.tags(g.spec.Kind)) |kind| for (roles) |role| {
+            if (recordRole(kind) == role) names = names ++ &[_][]const u8{@tagName(kind)};
+        };
+        return names;
+    }
+}
 fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selected: g.Unit, cursor: usize) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -529,20 +557,68 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Conte
                 if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
             };
         }
-        return restatementIssue(a, current, proposed.records, model);
+        if (try restatementIssue(a, current, proposed.records, model)) |issue| return issue;
+        return repeatedStatementIssue(a, proposed.records, model);
     }
     return null;
 }
 
-/// ADR 0035 restatements within this batch, then against the story. Records in
-/// different batches bind different groups, so none covers another.
-fn restatementIssue(a: std.mem.Allocator, current: Session, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
-    for (records, 0..) |later, index| for (records[0..index], 0..) |earlier, prior_index| {
-        if (try g.restatement(a, earlier, later)) |removed| {
-            const target = if (removed == .later) index else prior_index;
-            return g.restatementIssue(target, try observedRecord(model, target));
+/// ADR 0038 Decision 5: the first non-requirement statement record whose every claim a
+/// requirement or an earlier such record in the batch names, by the same rule response
+/// admission applies, unless it holds an exact copy no other record of the batch holds.
+/// Deleting it leaves every claim and exact copy the batch names in place. Each delete
+/// is decided on the batch it leaves, so of two records holding the same last exact
+/// copy, the later one stays. Records in different batches bind different groups, so
+/// they share no claim.
+fn repeatedStatementIssue(a: std.mem.Allocator, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
+    for (records, 0..) |record, index| {
+        switch (recordRole(std.meta.activeTag(record.content))) {
+            .behaviour, .scope => {},
+            .requirement, .scenario, .entity => continue,
         }
+        if (record.provenance.claim_ids.len == 0) continue;
+        for (record.provenance.claim_ids) |claim| {
+            if (!claimTaken(records, index, claim)) break;
+        } else if (try exactCopiesHeldElsewhere(a, records, index)) return g.repeatedStatementIssue(index, try observedRecord(model, index));
+    }
+    return null;
+}
+/// Whether another record of the batch holds every exact copy `records[index]` holds.
+fn exactCopiesHeldElsewhere(a: std.mem.Allocator, records: []const g.spec.RecordProposal, index: usize) Error!bool {
+    const values = try p.recordValues(a, records[index].content);
+    defer a.free(values);
+    for (values) |value| for (value.segments) |segment| {
+        if (segment != .exact_copy) continue;
+        for (records, 0..) |other, position| {
+            if (position != index and try holdsExactCopy(a, other, segment.exact_copy.claim_id)) break;
+        } else return false;
     };
+    return true;
+}
+fn holdsExactCopy(a: std.mem.Allocator, record: g.spec.RecordProposal, claim: @import("reference_reconciliation.zig").ClaimId) Error!bool {
+    const values = try p.recordValues(a, record.content);
+    defer a.free(values);
+    for (values) |value| for (value.segments) |segment| {
+        if (segment == .exact_copy and std.meta.eql(segment.exact_copy.claim_id, claim)) return true;
+    };
+    return false;
+}
+/// Whether a requirement names `claim`, or a non-requirement statement before `index` does.
+fn claimTaken(records: []const g.spec.RecordProposal, index: usize, claim: @import("reference_reconciliation.zig").ClaimId) bool {
+    for (records, 0..) |record, position| {
+        if (!@import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, record.provenance.claim_ids, claim)) continue;
+        switch (recordRole(std.meta.activeTag(record.content))) {
+            .requirement => return true,
+            .behaviour, .scope => if (position < index) return true,
+            .scenario, .entity => {},
+        }
+    }
+    return false;
+}
+
+/// ADR 0035 restatements of the story, decided before ADR 0038 Decision 5's repeated
+/// statements, so a record restating both keeps the story's rule.
+fn restatementIssue(a: std.mem.Allocator, current: Session, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
     const story = completedStory(current) orelse return null;
     for (records, 0..) |record, index| if (try g.restatesStory(a, story, record)) return g.restatementIssue(index, try observedRecord(model, index));
     return null;

@@ -89,7 +89,7 @@ as `cardinality`, and repair inserted each missing disposition with its own call
   the new `member` value; no other correction changes.
 - **Report contract.** It gains one schema reason value, `missing_member`. The
   `competing` member of reconciliation `Relations` is no longer set. It stays in the
-  report contract until FIX06 §2.13 allows its removal. The dispositions occurrence set
+  report contract until FIX06 §2.12 allows its removal. The dispositions occurrence set
   of the reconciliation source is deleted; it was never reported or persisted, and the
   request projection is unchanged by its removal.
 - **Risk.** Some omissions that an insert used to resolve will exhaust their corrections

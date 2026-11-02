@@ -14,7 +14,7 @@ pub const Kind = union(Review) { source: source.Decision, preservation: comparis
 pub const ComparisonContext = struct {
     omission_ordinal: u32,
     omission_detail: []const u8,
-    /// The `baseline-acquisition/v9` view: the request's presented comparison.
+    /// The `baseline-acquisition/v11` view: the request's presented comparison.
     view: comparison.PresentedView,
     members: []const comparison_context.ClaimMeaning,
     sources: []const comparison.Span,

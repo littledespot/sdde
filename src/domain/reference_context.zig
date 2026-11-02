@@ -15,7 +15,7 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, traces: ?[
     try write(w, "\n\n## Referenced Files\n\n");
     for (value.inputs.corpus.sources) |source| {
         w.print("- **SRC-{d}** ", .{source.id.ordinal}) catch return error.OutOfMemory;
-        const path = try std.mem.concat(allocator, u8, &.{ value.directory.bytes, "/", source.path.bytes });
+        const path = try @import("reference_ingestion.zig").displayPath(allocator, value.directory, source.path);
         defer allocator.free(path);
         try markdown.code(w, path);
         try write(w, "\n");

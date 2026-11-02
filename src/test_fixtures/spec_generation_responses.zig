@@ -394,47 +394,50 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const selected = try fixtureGroups(allocator, context, value.provenance.claim_ids, .question);
                 return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, .{ .clarification = .{ .reason = .missing, .question = .{ .value = value.value, .signal_ids = selected.source_group_ids } } });
             }
-            var proposed: g.Response = .{ .content = switch (unit) {
-                .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
-                .primary_user_story => .{ .primary_user_story = value },
-                .entities => entity: {
-                    const include = options.entities_required != options.contradict_entities;
-                    const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
-                    if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
-                    break :entity .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value, .records = records } };
-                },
-                .records => result: {
-                    var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
-                    for (std.enums.values(g.spec.Kind)) |kind| {
-                        if (omittedKind(options, kind)) continue;
-                        if ((kind != .functional_requirement and kind != .user_visible_outcome and kind != .acceptance_criterion) or (options.omit_exact and kind == .user_visible_outcome)) continue;
-                        for (all.entries) |item| {
-                            const retained = eligibleRecordClaim(dispositions, item.claim.id);
-                            if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
-                            const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
-                            if (kind == .acceptance_criterion and item.claim.content == .model) {
-                                const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = .{ .given = selected.value, .when = selected.value, .then = selected.value };
-                                try records.append(allocator, .{ .content = .{ .acceptance_criterion = criterion }, .provenance = selected.provenance });
+            var proposed: g.Response = .{
+                .content = switch (unit) {
+                    .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
+                    .primary_user_story => .{ .primary_user_story = value },
+                    .entities => entity: {
+                        const include = options.entities_required != options.contradict_entities;
+                        const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
+                        if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
+                        break :entity .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value, .records = records } };
+                    },
+                    .records => result: {
+                        var records: std.ArrayList(g.spec.Model.RecordProposal) = .empty;
+                        // One statement record per claim (ADR 0038): each claim's functional
+                        // requirement carries its chunk's exact value, which no second record
+                        // restates.
+                        for (std.enums.values(g.spec.Kind)) |kind| {
+                            if (omittedKind(options, kind)) continue;
+                            if (kind != .functional_requirement and kind != .acceptance_criterion) continue;
+                            for (all.entries) |item| {
+                                const retained = eligibleRecordClaim(dispositions, item.claim.id);
+                                if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
+                                const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
+                                if (kind == .acceptance_criterion and item.claim.content == .model) {
+                                    const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = .{ .given = selected.value, .when = selected.value, .then = selected.value };
+                                    try records.append(allocator, .{ .content = .{ .acceptance_criterion = criterion }, .provenance = selected.provenance });
+                                }
+                                if (kind != .functional_requirement or item.claim.content != .model) continue;
+                                var text: std.ArrayList(r.text.BusinessSegment) = .empty;
+                                try text.appendSlice(allocator, selected.value.segments);
+                                if (!options.omit_exact and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
+                                    if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
+                                    try text.append(allocator, .{ .literal = .{ .value = " " } });
+                                    try text.append(allocator, if (options.normalize_exact)
+                                        .{ .literal = .{ .value = exact_item.claim.content.preserved_token.value.raw_value.bytes } }
+                                    else
+                                        .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
+                                };
+                                try records.append(allocator, .{ .content = .{ .functional_requirement = .{ .text = .{ .segments = try text.toOwnedSlice(allocator) } } }, .provenance = selected.provenance });
                             }
-                            if (kind == .functional_requirement and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .functional_requirement = .{ .text = selected.value } }, .provenance = selected.provenance });
-                            if (kind == .user_visible_outcome and item.claim.content == .model and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
-                                if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
-                                const token = exact_item.claim.content.preserved_token;
-                                var outcome: std.ArrayList(r.text.BusinessSegment) = .empty;
-                                try outcome.appendSlice(allocator, selected.value.segments);
-                                try outcome.append(allocator, .{ .literal = .{ .value = " " } });
-                                try outcome.append(allocator, if (options.normalize_exact)
-                                    .{ .literal = .{ .value = token.value.raw_value.bytes } }
-                                else
-                                    .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
-                                const exact: g.spec.BusinessValue = .{ .segments = try outcome.toOwnedSlice(allocator) };
-                                try records.append(allocator, .{ .content = .{ .user_visible_outcome = .{ .text = exact } }, .provenance = selected.provenance });
-                            };
                         }
-                    }
-                    break :result .{ .records = records.items };
+                        break :result .{ .records = records.items };
+                    },
                 },
-            } };
+            };
             if (unit == .brief) if (options.brief_text) |texts| {
                 inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
                     @field(proposed.content.brief, field).value = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = texts[index] } }}) };

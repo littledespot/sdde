@@ -484,7 +484,7 @@ test "report measures separate sends, corrections, re-sends, stages and publicat
         testAttempt(2, 2, 1, .atomic_repair, .specification_unit, .unavailable), // its re-send
         testAttempt(3, 1, null, .semantic_review, .semantic_review, .not_sent),
     };
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .terminal_step = "g9-reconcile", .diagnostic = "RepairNoProgress", .attempts = &attempts, .total_tokens = 45 };
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .terminal_step = "g9-reconcile", .diagnostic = "RepairNoProgress", .attempts = &attempts, .total_tokens = 45 };
     const measured = try fromReport(a, report);
     try testing.expectEqual(@as(u64, 4), measured.sends);
     try testing.expectEqual(@as(u64, 1), measured.not_sent);
@@ -677,7 +677,7 @@ test "measures and set summaries are closed, versioned documents" {
     defer arena.deinit();
     const a = arena.allocator();
     const limits: strict.Limits = .{ .maximum_depth = 64 };
-    const reported = try fromReport(a, .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
+    const reported = try fromReport(a, .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
     const measured: Run = .{ .run = "run", .case_id = "case", .measurement = .{ .measured = .{ .log_threshold = .warning, .report = .{ .measured = reported }, .events = .{ .runaways = 1 } } } };
     const encoded = try std.json.Stringify.valueAlloc(a, measured, .{});
     try testing.expectEqualDeep(measured, try strict.decode(Run, a, encoded, limits));
@@ -703,7 +703,7 @@ test "a set summary keeps every attempt and pools events with their opportunitie
     var arena: std.heap.ArenaAllocator = .init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v12", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed };
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed };
     var failed_report = report;
     failed_report.status = .workflow_failed;
     failed_report.workflow_outcome = .failed;

@@ -563,11 +563,17 @@ defined response-level correction containing:
   every constraint that schema syntax can express; `exact_members` uniqueness stays
   native and is reported as `duplicate_member` with parent scope on the enclosing
   array. A native-count member set's completeness (`missing_member`, at the array;
-  ADR 0046) and ADR 0038's coverage (`uncovered_member`) are native the same way.
+  ADR 0046) and ADR 0038's coverage and exclusivity (`uncovered_member`,
+  `shared_member`) are native the same way.
   A `missing_member` correction also names the first omitted member (`member`).
   An `uncovered_member` correction also names the compiled rule's covering kinds
   (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
-  (FIX06 D4.1, decided 30 October 2026); no other correction changes. Correction does not repeat schema subtrees. Syntax correction uses that
+  (FIX06 D4.1, decided 30 October 2026), and a `shared_member` correction, located at
+  the partly taken record and offering its shape, names its exclusive and owning kinds
+  (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
+  naming in such records (`shared`; FIX06 D16.1 and D16.2, 2 November 2026); no other
+  correction changes. A wholly taken record is never corrected: the records validator
+  deletes it natively (`repeated_statement`, ADR 0038 Decision 5). Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.

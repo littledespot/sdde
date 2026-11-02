@@ -22,6 +22,11 @@ pub const SourceId = struct {
 };
 pub const BlockId = struct { source: SourceId, ordinal: u32 };
 pub const RelativePath = struct { bytes: []const u8 };
+/// The repository-relative display path of a source in the selected reference
+/// directory, as every rendered view shows it. Caller owns the result.
+pub fn displayPath(allocator: std.mem.Allocator, directory: RelativePath, source: RelativePath) std.mem.Allocator.Error![]u8 {
+    return std.mem.concat(allocator, u8, &.{ directory.bytes, "/", source.bytes });
+}
 pub const FileObservation = identity.FileObservation;
 pub const Observation = @import("source_inventory.zig").Observation;
 pub const Descriptor = @import("source_inventory.zig").Descriptor;
