@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v13" };
+pub const Version = enum { @"model-request-debug/v16" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v13");
+pub const current_version = @tagName(Version.@"model-request-debug/v16");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v13",
+    version: Version = .@"model-request-debug/v16",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -33,8 +33,6 @@ pub const Description = struct {
     members: []const @import("model_result_schema.zig").MemberChoice = &.{},
     /// Native cross-item coverage the schema bytes cannot express (ADR 0038).
     coverages: []const @import("model_result_schema.zig").CoverageChoice = &.{},
-    /// Native conditional required items the schema bytes cannot express (ADR 0042).
-    required_items: []const @import("model_result_schema.zig").RequiredItems = &.{},
 
     pub fn from(request: *const provider.IdentifiedProviderNeutralModelRequest, selected: *const binding.ValidatedProviderModelBinding, kind: provider.ProviderOperationKind) Description {
         return .{
@@ -59,7 +57,6 @@ pub const Description = struct {
             .exact_scope = request.exact_scope,
             .members = request.response_schema.memberChoices(),
             .coverages = request.response_schema.coverageChoices(),
-            .required_items = request.response_schema.requiredItems(),
         };
     }
 
@@ -89,7 +86,7 @@ pub const Description = struct {
         // just as the canonical schema syntax adapter does.
         const parsed_schema = try @import("strict_json.zig").parse(scratch.allocator(), value.schema, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }, true, null);
         const selected_schema = @import("model_result_schema.zig").compileSelected(scratch.allocator(), parsed_schema.value, value.schema) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
-        const recorded = @import("model_result_schema.zig").restrictRecorded(scratch.allocator(), selected_schema, value.members, value.coverages, value.required_items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
+        const recorded = @import("model_result_schema.zig").restrictRecorded(scratch.allocator(), selected_schema, value.members, value.coverages) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
         recorded.release();
         const fields = @import("model_text_field.zig").inspectSchema(selected_schema.root(), value.field_policies, value.prose_fields);
         if (!fields.valid or (fields.requires_exact_scope and value.exact_scope == null)) return error.InvalidJsonDocument;

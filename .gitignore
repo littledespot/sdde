@@ -10,3 +10,4 @@ zig-out/
 .claude/settings.local.json
 .claude/worktrees/
 CLAUDE.local.md
+__pycache__/

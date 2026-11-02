@@ -368,7 +368,6 @@ fn validateCapture(example: comparison.Case, capture: Capture) Error!void {
             if (std.meta.eql(coverage.origin, finding.native.origin)) {
                 const review: reviews.Review = switch (finding.native.kind) {
                     .source => .source,
-                    .principles => .principles,
                     .preservation => .preservation,
                 };
                 if (coverage.review == null or coverage.review.? != review) return error.InvalidAssessment;
@@ -388,7 +387,6 @@ fn validateFindingJudgments(example: comparison.Case, capture: Capture, judgment
         if (!std.meta.eql(finding.native.kind, judgment.kind) or !std.meta.eql(finding.native.requirement, judgment.requirement) or
             !contracts.id(judgment.provenance.assessor) or !contracts.text(judgment.explanation) or judgment.source_refs.len == 0 or judgment.output_refs.len == 0) return error.InvalidAssessment;
         if (std.meta.activeTag(judgment.expected_kind) != std.meta.activeTag(judgment.kind) or judgment.correct != std.meta.eql(judgment.kind, judgment.expected_kind)) return error.InvalidAssessment;
-        if (judgment.kind == .principles and judgment.project_refs.len == 0) return error.InvalidAssessment;
         for (judgment.project_refs, 0..) |reference, reference_index| {
             if (!contracts.text(reference.quote)) return error.InvalidAssessment;
             const document = for (capture.project_documents) |document| {
@@ -934,7 +932,6 @@ const FindingTest = struct {
             .kind = .{ .source = .ambiguous },
             .detail = "MOCK model incorrectly claims the consent condition is ambiguous.",
             .source_ids = &.{.{ .ordinal = 1 }},
-            .principle_citations = &.{},
             .missing_obligation = null,
             .question = "MOCK is consent necessary?",
             .authority_gap = null,
@@ -1060,30 +1057,6 @@ test "finding judgments reject foreign identities kinds quotes duplicates and un
     defer partial.deinit(a);
     try std.testing.expectEqual(Evidence.incomplete, partial.evidence);
     try std.testing.expectEqual(@as(?bool, false), partial.findings[0].correct);
-}
-
-test "principle finding assessments require quoted frozen project policy and exact declared vocabulary" {
-    const a = std.testing.allocator;
-    var capture = FindingTest.capture();
-    var finding = FindingTest.native();
-    finding.kind = .{ .principles = .compatible };
-    capture.findings = &.{.{ .native = finding, .output_id = "initial-records", .purpose = .semantic_review, .raw_verification = .complete }};
-    capture.review_coverage = &.{.{ .origin = finding.origin, .output_id = "initial-records", .review = .principles, .projected = true, .expected_findings = 1 }};
-    var judgment = FindingTest.judgment();
-    judgment.kind = finding.kind;
-    judgment.expected_kind = finding.kind;
-    judgment.correct = true;
-    var entry = FindingTest.entry();
-    entry.findings = &.{judgment};
-    try std.testing.expectError(error.InvalidAssessment, evaluate(a, Test.example(), capture, entry));
-    judgment.project_refs = &.{.{ .path = "principles/approval.md", .quote = "Retain source-required approval conditions." }};
-    entry.findings = &.{judgment};
-    const valid = try evaluate(a, Test.example(), capture, entry);
-    defer valid.deinit(a);
-    try std.testing.expectEqual(@as(?bool, true), valid.findings[0].correct);
-    judgment.project_refs = &.{.{ .path = "principles/approval.md", .quote = "Approval is optional." }};
-    entry.findings = &.{judgment};
-    try std.testing.expectError(error.InvalidAssessment, evaluate(a, Test.example(), capture, entry));
 }
 
 test "final current fidelity requires explicit current issues while retaining earlier harmful events" {

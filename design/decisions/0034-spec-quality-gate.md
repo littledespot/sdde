@@ -4,7 +4,7 @@
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026: "The plan will not
   start until spec workflow is stable and producing high quality output, update the
-  documentation". It decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) A6's scope question. It
+  documentation". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A6's scope question. It
   replaces A6's proposed bar, which was "until Specify publishes on both development
   cases".
 - **Amends:**
@@ -12,7 +12,7 @@
   - the design.md §32 index;
   - AGENTS.md "Current project state";
   - FIX05 A6 and §6;
-  - `.claude/known-work.md`;
+  - `.claude/known-work.md` (git `194e29a`);
   - ADR 0033's two references to FIX05 A6.
 
   The overall design remains **Proposed design**.

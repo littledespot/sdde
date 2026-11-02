@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-25
 - **Decision authority:** The user's decisions on 25 October 2026 on
-  [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B4:
+  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B4:
   - "make budget configurable and increase to 125000", with the priority "quality over
     cost, but never waste";
   - "make the token cap an external setting, that is stored and loaded from
@@ -13,8 +13,9 @@
   the validated content as a failed incomplete specification.
 - **Amends:**
   - [ADR 0011](0011-provider-owned-request-limits.md) "Workflow token accounting" and
-    [ADR 0023](0023-advisory-post-generation-review.md) "Budget and incomplete advice":
-    the budget's owner and value, not its accounting;
+    [ADR 0023](0023-advisory-post-generation-review.md) "Budget and incomplete advice"
+    (withdrawn with post-generation review on 1 November 2026): the budget's owner and
+    value, not its accounting;
   - [ADR 0005](0005-workflow-defined-operations.md): the selected workflow policy no
     longer owns the budget;
   - §9 (configuration shape and workflow policy), §12 (model boundary accounting), the
@@ -50,7 +51,7 @@ cost and approved a larger, configurable budget.
 2. **It stays one total limit per execution.** The composition root passes the decoded
    value to the workflow pipeline runner, which starts that execution's token ledger
    from it. Accounting, overshoot retention, the prohibition on calls at or above the
-   budget and fatal budget rejection are unchanged (ADR 0011, ADR 0023).
+   budget and fatal budget rejection are unchanged (ADR 0011).
 3. **Workflow policy and compiled graphs no longer carry it.** Policy profiles keep
    only their capabilities and terminal outcomes. Compiled workflow authority drops the
    budget, so a configuration change is never a change to a bound workflow graph, and

@@ -42,7 +42,6 @@ const reference_model = @import("../application/reference_model_workflow.zig");
 const specification = @import("../application/specification_workflow.zig");
 const source_omission = @import("../application/source_omission_repair_workflow.zig");
 const support_repair = @import("../application/specification_support_repair_workflow.zig");
-const advice_stop = @import("../application/specification_advice_stop_workflow.zig");
 const specification_support = @import("../application/specification_support_workflow.zig");
 const specification_repair = @import("../application/specification_repair_workflow.zig");
 const specification_rendering = @import("../application/specification_rendering_workflow.zig");
@@ -188,18 +187,11 @@ pub const Assembly = struct {
     merge_source_reconciliation: source_omission.Merge(.reconciliation),
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
-    stop_specification_advice: advice_stop.Stop,
-    stop_specification_protocol_advice: advice_stop.StopProtocol,
-    stop_specification_repair_advice: advice_stop.StopRepair,
-    stop_specification_protocol_repair_advice: advice_stop.StopProtocolRepair,
     check_specification_support_localization: specification_support.CheckLocalization,
     build_specification_support_loss: specification_support.BuildLossInput,
     collect_specification_support_loss: specification_support.CollectLoss,
     apply_specification_support: specification_support.Apply,
-    advance_specification_review: specification_support.Advance,
     initialize_specification_review: specification_support.Initialize,
-    initialize_specification_review_history: specification_support.InitializeHistory,
-    reuse_specification_review: specification_support.Reuse,
     build_authority_observations: authority.BuildObservations,
     retire_authority: authority.Retire,
     authorize_coverage_repair: coverage_repair.Authorize,
@@ -228,7 +220,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 171 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 164 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -384,18 +376,11 @@ pub const Assembly = struct {
             .merge_source_reconciliation = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
-            .stop_specification_advice = .{ .allocator = allocator },
-            .stop_specification_protocol_advice = .{ .allocator = allocator },
-            .stop_specification_repair_advice = .{ .allocator = allocator },
-            .stop_specification_protocol_repair_advice = .{ .allocator = allocator },
             .check_specification_support_localization = .{},
             .build_specification_support_loss = .{ .allocator = allocator },
             .collect_specification_support_loss = .{ .allocator = allocator },
             .apply_specification_support = .{ .allocator = allocator },
-            .advance_specification_review = .{ .allocator = allocator },
             .initialize_specification_review = .{ .allocator = allocator },
-            .initialize_specification_review_history = .{ .allocator = allocator },
-            .reuse_specification_review = .{ .allocator = allocator },
             .build_authority_observations = .{ .allocator = allocator },
             .retire_authority = .{},
             .check_specification = .{},
@@ -494,18 +479,11 @@ pub const Assembly = struct {
             entry(source_omission.Merge(.reconciliation), &self.merge_source_reconciliation),
             entry(specification_support.BuildInput, &self.build_specification_support),
             entry(specification_support.Collect, &self.collect_specification_support),
-            entry(advice_stop.Stop, &self.stop_specification_advice),
-            entry(advice_stop.StopProtocol, &self.stop_specification_protocol_advice),
-            entry(advice_stop.StopRepair, &self.stop_specification_repair_advice),
-            entry(advice_stop.StopProtocolRepair, &self.stop_specification_protocol_repair_advice),
             entry(specification_support.CheckLocalization, &self.check_specification_support_localization),
             entry(specification_support.BuildLossInput, &self.build_specification_support_loss),
             entry(specification_support.CollectLoss, &self.collect_specification_support_loss),
             entry(specification_support.Apply, &self.apply_specification_support),
-            entry(specification_support.Advance, &self.advance_specification_review),
             entry(specification_support.Initialize, &self.initialize_specification_review),
-            entry(specification_support.InitializeHistory, &self.initialize_specification_review_history),
-            entry(specification_support.Reuse, &self.reuse_specification_review),
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
             entry(structured_tokens.Extract, &self.extract_structured_facts),

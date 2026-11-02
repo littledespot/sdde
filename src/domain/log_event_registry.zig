@@ -72,8 +72,6 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .model_provider_stopped => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code, .outcome }, &.{ .input_tokens, .output_tokens })),
         // ADR 0039: every re-send of a runaway names the attempt it repeats.
         .model_runaway_resent => adrRequired(definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{ .input_tokens, .output_tokens })),
-        // ADR 0040: advice that closed incomplete names its reason and unassessed count.
-        .review_incomplete => adrRequired(definition(event_type, .warning, &.{.diagnostic_code}, &.{.count})),
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),
@@ -162,7 +160,7 @@ test "closed event registry validates required and unexpected fields" {
 }
 
 test "exactly the events an ADR requires are always emitted" {
-    const required = [_]telemetry.EventType{ .model_response_normalized, .model_provider_stopped, .model_runaway_resent, .review_incomplete };
+    const required = [_]telemetry.EventType{ .model_response_normalized, .model_provider_stopped, .model_runaway_resent };
     for (std.enums.values(telemetry.EventType)) |event_type| {
         const expected: Emission = if (std.mem.indexOfScalar(telemetry.EventType, &required, event_type) != null) .always else .threshold;
         try std.testing.expectEqual(expected, eventDefinition(event_type).emission);

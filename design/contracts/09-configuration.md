@@ -373,7 +373,7 @@ input ([ADR 0015](../decisions/0015-specification-principle-review.md)).
 null environment/file-kind explicitly includes every matching scope. Matching rows
 contribute their category union; every row includes `core` and `custom`. Spec uses
 an explicit Spec row with null environment/file-kind. Missing section or applicable
-row rejects a principle-consuming operation. Unrelated workflows need not supply it.
+row rejects a principle-capturing operation. Unrelated workflows need not supply it.
 The existing config reader owns structural decoding; one principle-policy compiler
 validates rows, names and categories. No model, workflow prompt or mechanical
 `toolchain.yaml` supplies another selection table.
@@ -428,9 +428,9 @@ Resolution is explicit:
 3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
 4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;
 5. select categories solely from the configured stage/environment/file-kind hint table and include every chunk from those files in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
-6. include the exact selected raw spans in Specify's focused requirement–principle assessment (§17.3.1), and in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; provider size errors follow the workflow's explicit outcome transitions;
+6. include the exact selected raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures and selects them but sends them in no request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
 7. validate only transport facts deterministically: configured root, containment, identity, filename-to-hint mapping, UTF-8, source-capture byte/count ceilings, stable spans, registry joins, and prompt-selection coverage;
-8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Under [ADR 0023](../decisions/0023-advisory-post-generation-review.md), Specify retains those post-generation findings as advice; they alone create no mandatory Plan obligation or clarification. Plan still validates current policy and resolves its native required decisions at its own gate.
+8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Specify runs no principle assessment ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)); Plan validates current policy and resolves its native required decisions at its own gate.
 
 - Semantic principle prose is never parsed or compiled into a deterministic validator, even when
   it resembles YAML, a table, a template, or a formal rule.
@@ -446,23 +446,24 @@ Resolution is explicit:
 
 - The filename is a guide used by the engine, not a claim that the contents obey a schema.
 - Category selection deliberately errs toward inclusion: `core` and `custom` are considered for
-  Spec consistency assessment and all technical stages; other category hints use explicit
-  configuration. The Spec assessment has an explicit selection scope in that same table;
+  Spec capture and all technical stages; other category hints use explicit
+  configuration. Spec capture has an explicit selection scope in that same table;
   missing selection authority is not an empty selection or a fallback to every file.
 - The model never chooses which files to open and never sees an operational principle path—only
   registered IDs, category hints, raw bounded spans, and citations.
 
 - Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`,
-  and compared by direct typed metadata/raw-byte equality at every consuming Spec assessment,
+  and compared by direct typed metadata/raw-byte equality at every consuming Spec capture,
   plan, tasks, implement and fresh clarification-rerun gate.
-- [ADR 0015](../decisions/0015-specification-principle-review.md) admits selected principles
-  to the focused [Spec assessment](17-specify.md#1731-requirementprinciple-consistency-review).
-  Extraction, source-preservation review and business-content generation retain their
+- [ADR 0015](../decisions/0015-specification-principle-review.md): Spec captures and
+  selects principles and runs no assessment. Capturing principle files is not
+  performing an assessment; state and evidence distinguish captured inputs from any
+  executed assessment. Extraction, source-preservation review and business-content generation retain their
   reference/answer authority; principle prose cannot invent, erase or override business intent.
 - An updated principle can resolve `PNN` or `TNN` only through cited, current authority
   resolution; it cannot supply a missing business answer or resolve an `SNN` by itself.
-- A changed registry invalidates dependent policy assessments and the current plan/downstream
-  task approvals through shared dependency invalidation. Reassess at the consuming gate;
+- A changed registry invalidates the current plan/downstream task approvals through
+  shared dependency invalidation. Reassess at the consuming gate;
   do not rewrite or re-extract unchanged business sources solely to refresh policy evidence.
 - No content fingerprint is used.
 
@@ -484,7 +485,7 @@ contract > planning > runtime-only`.
 | Reference reader, decoder, source map, chunker, extraction/reconciliation contract or reference safety | Reingest references in Specify and invalidate affected descendants. |
 | Specification schema, business boundary, passive-literal scanner or renderer/parser | Regenerate and revalidate Specify. |
 | Toolchain, project mechanical layer, environment, portability, file-kind/path, parser, command, dependency, sandbox or capability policy | Return to Plan; reconcile previously published implementation when applicable under §24.5. |
-| Semantic principles | Refresh dependent policy assessments at the consuming gate, rebuild Plan's complete cited selection and invalidate affected plan/task approvals; do not change business requirements. |
+| Semantic principles | Recapture at the consuming gate, rebuild Plan's complete cited selection and invalidate affected plan/task approvals; do not change business requirements. |
 | Compatible logging/model binding or unrelated workflow definition | Retain the semantic stage; apply the validated runtime change and any logging-transition obligation. Changes are compared by bound `WorkflowId`, not inventory position. |
 | Project/artifact root, bound workflow identity/graph, serializer or unsupported schema/renderer change | Block with `BOOTSTRAP_ADMINISTRATIVE_MIGRATION_REQUIRED`; no implicit conversion, pointer advance or hot swap. |
 

@@ -14,11 +14,6 @@ pub const ContentBuffer = [3]provider.ModelVisibleContent;
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
 pub const Request = opaque {
-    /// Native eligibility for optional review completion, never token policy.
-    pub fn advisoryAssessment(self: *const Request) ?packets.AdvisoryAssessment {
-        if (self.prepared() == null) return null;
-        return (self.packet() orelse return null).advisoryAssessment();
-    }
     /// Authored resource aliases retained by this exact request selection.
     pub fn sourceResources(self: *const Request) SourceResources {
         const value = storage(self);
@@ -246,26 +241,22 @@ pub const Selection = struct {
         if (!std.mem.eql(u8, definition.bytes, prior.result_definition.?.bytes) or
             !std.mem.eql(u8, current.packet.body(), old.packet.body())) return false;
         if (!@import("model_exact_values.zig").same(current.packet.exactScope(), old.packet.exactScope())) return false;
-        if ((current.packet.advisoryAssessment() != null) != (old.packet.advisoryAssessment() != null)) return false;
-        if (current.packet.advisoryAssessment()) |assessment| if (old.packet.advisoryAssessment() == null or
-            assessment.projection != old.packet.advisoryAssessment().?.projection) return false;
         const canonical = self.result.content.result_schema.select(definition) orelse return false;
         if (canonical != prior.result.content.result_schema) return false;
         const Restrictions = struct {
             excluded: []const @import("model_result_schema.zig").ExcludedVariant,
             choices: []const @import("model_result_schema.zig").IntegerChoice,
-            required: []const @import("model_result_schema.zig").RequiredItems,
             fields: []const @import("model_text_field.zig").Binding,
             omissions: []const @import("model_field_presentation.zig").Omission,
         };
         const codec = @import("canonical_json.zig");
-        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .required = current.packet.requiredItems(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(current_restrictions);
-        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .required = old.packet.requiredItems(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(old_restrictions);
         if (!std.mem.eql(u8, current_restrictions, old_restrictions)) return false;
-        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0 or current.packet.requiredItems().len != 0)
-            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies(), current.packet.requiredItems()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
+        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0)
+            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
         else
             null;
         defer if (effective) |restricted| restricted.release();
@@ -354,9 +345,8 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     const excluded = if (input != null and input.? == .packet) input.?.packet.excludedVariants() else &.{};
     const integer_choices = if (input != null and input.? == .packet) input.?.packet.integerChoices() else &.{};
     const field_policies = if (input != null and input.? == .packet) input.?.packet.fieldPolicies() else &.{};
-    const required_items = if (input != null and input.? == .packet) input.?.packet.requiredItems() else &.{};
-    const restriction = if (excluded.len != 0 or integer_choices.len != 0 or field_policies.len != 0 or required_items.len != 0)
-        @import("model_result_schema.zig").restrictFieldPolicies(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices, field_policies, required_items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
+    const restriction = if (excluded.len != 0 or integer_choices.len != 0 or field_policies.len != 0)
+        @import("model_result_schema.zig").restrictFieldPolicies(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices, field_policies) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
     else
         null;
     defer if (restriction) |owned| owned.release();
@@ -405,8 +395,7 @@ pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?
     var next = storage(current).*;
     try preparation.validateRequest(try current.source(owned.request.model_visible_input_id), owned.request);
     if (correction) |value| {
-        if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema or
-            !packets.sameAdvisoryAssessment(if (current.packet()) |packet| packet.advisoryAssessment() else null, if (value.previous.packet()) |packet| packet.advisoryAssessment() else null)) return error.ModelRequestAssociationInvalid;
+        if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema) return error.ModelRequestAssociationInvalid;
         _ = try value.previous.protocolRepetition(value.rejected, value.diagnostic);
         const operation_id = value.rejected.operationId();
         if (operation_id.model_request_id != current.id() or operation_id.kind != .inference or operation_id.model_attempt_ordinal.value == 0)

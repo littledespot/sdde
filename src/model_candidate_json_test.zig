@@ -266,12 +266,10 @@ test "fixed source review reconstructs bound claims and rejects an echoed union"
     const model = @import("domain/specification_support_model.zig");
     const required: @import("domain/specification_support_evidence.zig").Requirements = .{
         .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
-        .eligible_claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } },
+        .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
-        .positive_claims = .eligible_subset,
+        .positive_claims = .exact_set,
         .positive_evidence = .bound_claims,
-        .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
-        .candidate_bound = true,
     };
     const wire = "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}";
     try std.testing.expectEqualDeep(&[_]@import("domain/reference_reconciliation.zig").ClaimId{.{ .ordinal = 1 }}, (try model.decode(a, wire, required)).provenance.claim_ids);
@@ -292,14 +290,12 @@ test "D1 source variants require questions only for gaps in focused findings" {
         .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
         .eligible_claim_ids = &.{.{ .ordinal = 1 }},
         .eligible_source_ids = &.{.{ .ordinal = 1 }},
-        .positive_claims = .eligible_subset,
+        .positive_claims = .exact_set,
         .positive_evidence = .bound_claims,
-        .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
-        .candidate_bound = false,
     };
     for (std.meta.tags(review.Decision)) |tag| {
         const gap = @import("domain/specification_support_evidence.zig").questionRequired(tag.finding());
-        const value: review.Value = .{ .kind = tag, .missing_obligation = if (tag == .candidate_omission) "MOCK Complete the requested action." else null, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
+        const value: review.Value = .{ .kind = tag, .missing_obligation = if (tag == .candidate_omission) "MOCK Complete the requested action." else null, .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
         const canonical = try json.encode(review.Value, a, value);
         try std.testing.expectEqualDeep(value, try json.decode(review.Value, a, canonical));
         const valid = try model.encode(a, value, required);
@@ -443,8 +439,6 @@ test "focused review evidence shapes follow native minima without excluding sour
         .eligible_source_ids = &.{.{ .ordinal = 7 }},
         .positive_claims = .eligible_subset,
         .positive_evidence = .bound_claims,
-        .supported_provenance = null,
-        .candidate_bound = false,
     };
     const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\",\"missing_obligation\":\"MOCK After cancellation notify the patient.\"}";
     try candidateSchemaCase("support", "finding", source_only, null, null);

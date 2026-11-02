@@ -14,25 +14,7 @@ pub const AssignmentContextId = struct {
     }
 };
 pub const AssignmentContext = struct { id: AssignmentContextId, body: []const u8 };
-/// Bound by the native post-generation assessment owner after projection validation.
-pub const AdvisoryAssessment = struct {
-    feature: @import("feature_identity.zig").FeatureId,
-    reference_state: @import("reference_identity.zig").StateId,
-    candidate_revision: u64,
-    projection: enum { source, principles },
-    dependencies: [32]u8,
-};
-
-pub fn sameAdvisoryAssessment(left: ?AdvisoryAssessment, right: ?AdvisoryAssessment) bool {
-    if (left == null or right == null) return left == null and right == null;
-    return left.?.candidate_revision == right.?.candidate_revision and left.?.projection == right.?.projection and
-        std.mem.eql(u8, left.?.feature.bytes, right.?.feature.bytes) and left.?.reference_state.eql(right.?.reference_state) and
-        std.mem.eql(u8, &left.?.dependencies, &right.?.dependencies);
-}
 pub const Packet = opaque {
-    pub fn advisoryAssessment(self: *const Packet) ?AdvisoryAssessment {
-        return storage(self).advisory_assessment;
-    }
     pub fn body(self: *const Packet) []const u8 {
         return storage(self).body;
     }
@@ -56,9 +38,6 @@ pub const Packet = opaque {
     }
     pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
         return storage(self).integer_choices;
-    }
-    pub fn requiredItems(self: *const Packet) []const schema.RequiredItems {
-        return storage(self).required_items;
     }
     pub fn proseFields(self: *const Packet) []const @import("model_text_wire.zig").ProseField {
         return storage(self).prose_fields;
@@ -94,14 +73,12 @@ const Storage = struct {
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
-    required_items: []const schema.RequiredItems = &.{},
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     exact_scope: ?@import("model_exact_values.zig").Scope = null,
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     presentation_omissions: []const @import("model_field_presentation.zig").Omission = &.{},
     assignment_contexts: []const AssignmentContext = &.{},
-    advisory_assessment: ?AdvisoryAssessment = null,
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
@@ -166,29 +143,6 @@ pub fn withBody(a: std.mem.Allocator, base: *const Packet, body: []const u8) Err
     return cloneWith(a, base, body, base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
 }
 
-/// No model-visible field, slot, workflow parameter or request purpose can mint
-/// this classification. The registered assessment owner binds its native scope.
-pub fn withAdvisoryAssessment(a: std.mem.Allocator, base: *const Packet, assessment: AdvisoryAssessment) Error!*Packet {
-    if (assessment.candidate_revision == 0 or base.unit() != .semantic_review or
-        (base.purpose() != .semantic_review and base.purpose() != .atomic_repair)) return error.InvalidModelInputPacket;
-    const parent = base.unit().semantic_review.parent_unit_owner_id;
-    if (parent != .specification_unit or
-        !std.mem.eql(u8, parent.specification_unit.feature_id.bytes, assessment.feature.bytes) or
-        !std.mem.eql(u8, parent.specification_unit.reference_state_id.bytes, assessment.reference_state.bytes)) return error.InvalidModelInputPacket;
-    if (base.advisoryAssessment() != null and !sameAdvisoryAssessment(base.advisoryAssessment(), assessment)) return error.InvalidModelInputPacket;
-    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
-    errdefer release(result);
-    const owned = storage(result).arena.allocator();
-    storage(result).advisory_assessment = .{
-        .feature = .{ .bytes = try owned.dupe(u8, assessment.feature.bytes) },
-        .reference_state = .{ .bytes = try owned.dupe(u8, assessment.reference_state.bytes) },
-        .candidate_revision = assessment.candidate_revision,
-        .projection = assessment.projection,
-        .dependencies = assessment.dependencies,
-    };
-    return result;
-}
-
 /// Copy native availability facts across packet projections. No model bytes
 /// can create or change these restrictions.
 pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant) Error!*Packet {
@@ -206,29 +160,11 @@ pub fn withIntegerChoices(allocator: std.mem.Allocator, base: *const Packet, add
     @memcpy(choices[base.integerChoices().len..], added);
     return withRestrictions(allocator, base, base.excludedVariants(), choices);
 }
-/// Add one owner's required-items rules (ADR 0042) beside every existing restriction.
-pub fn withRequiredItems(allocator: std.mem.Allocator, base: *const Packet, added: []const schema.RequiredItems) Error!*Packet {
-    const result = try cloneWith(allocator, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
-    errdefer release(result);
-    const a = storage(result).arena.allocator();
-    const required = try a.alloc(schema.RequiredItems, base.requiredItems().len + added.len);
-    for (base.requiredItems(), required[0..base.requiredItems().len]) |entry, *destination| destination.* = try entry.clone(a);
-    for (added, required[base.requiredItems().len..]) |entry, *destination| destination.* = try entry.clone(a);
-    storage(result).required_items = required;
-    return result;
-}
 /// All projections copy native metadata once, into the resulting packet's owner.
 fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice, contexts: []const AssignmentContext) Error!*Packet {
     const result = try createBound(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
     errdefer release(result);
     const a = storage(result).arena.allocator();
-    if (base.advisoryAssessment()) |assessment| storage(result).advisory_assessment = .{
-        .feature = .{ .bytes = try a.dupe(u8, assessment.feature.bytes) },
-        .reference_state = .{ .bytes = try a.dupe(u8, assessment.reference_state.bytes) },
-        .candidate_revision = assessment.candidate_revision,
-        .projection = assessment.projection,
-        .dependencies = assessment.dependencies,
-    };
     const copy = try a.alloc(schema.ExcludedVariant, excluded.len);
     for (excluded, copy) |entry, *destination| destination.* = .{ .kind = try a.dupe(u8, entry.kind) };
     storage(result).excluded_variants = copy;
@@ -249,13 +185,11 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
             .allowed = try a.dupe(i64, entry.allowed),
             .singleton = entry.singleton,
             .collection = entry.collection,
+            .member_count = entry.member_count,
             .coverage = if (entry.coverage) |rule| try rule.clone(a) else null,
         };
     }
     storage(result).integer_choices = selected;
-    const required = try a.alloc(schema.RequiredItems, base.requiredItems().len);
-    for (base.requiredItems(), required) |entry, *destination| destination.* = try entry.clone(a);
-    storage(result).required_items = required;
     const copied_contexts = try a.alloc(AssignmentContext, contexts.len);
     for (contexts, copied_contexts) |context, *destination| destination.* = .{
         .id = .{ .bytes = try a.dupe(u8, context.id.bytes) },

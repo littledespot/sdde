@@ -133,6 +133,73 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
     try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
 }
 
+test "source lines follow criteria requirements and entities and accept only the renderer's grammar" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const scalar: spec.Scalar = .{ .bytes = "Business content" };
+    // A multiline exact span continues its field on two-space lines; the source line
+    // after the blank line is never read as that continuation.
+    const exact: spec.Scalar = .{ .bytes = "Display `a`\n b", .code_spans = &.{.{ .start = 8, .end = 14 }} };
+    const records = [_]spec.CapturedRecord{
+        .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = scalar, .when = scalar, .then = scalar } }, .sources = &.{.{ .path = "references/a.md", .ranges = &.{.{ .first = 5, .last = 7 }} }} },
+        .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = exact } }, .sources = &.{
+            .{ .path = "references/a.md", .ranges = &.{ .{ .first = 3, .last = 4 }, .{ .first = 9, .last = 9 } } },
+            .{ .path = "references/odd`name.md", .ranges = &.{.{ .first = 9, .last = 9 }} },
+        } },
+        .{ .id = .{ .kind = .business_rule, .ordinal = 1 }, .content = .{ .business_rule = .{ .text = scalar } } },
+        .{ .id = .{ .kind = .entity, .ordinal = 1 }, .content = .{ .entity = .{ .name = scalar, .business_meaning = scalar, .relationships = &.{scalar} } }, .sources = &.{.{ .path = "references/a.md", .ranges = &.{.{ .first = 2, .last = 2 }} }} },
+    };
+    const document: spec.CapturedDocument = .{ .display_name = scalar, .primary_user_story = scalar, .records = &records, .entity_section = .present };
+    const rendered = try markdown.render(a, document);
+    for ([_][]const u8{
+        "**Then** Business content\n\n  - Source: `references/a.md` lines 5–7\n\n",
+        "- **FR-001**: Display `` `a`\n   b ``\n\n  - Source: `references/a.md` lines 3–4, 9; ``references/odd`name.md`` line 9\n\n",
+        "- **BR-001**: Business content\n\n### Key",
+        "- **RELATIONSHIP** Business content\n- Source: `references/a.md` line 2\n",
+    }) |expected| try testing.expect(std.mem.indexOf(u8, rendered, expected) != null);
+    try testing.expectEqualDeep(document, try markdown.parse(a, rendered));
+    try testing.expectEqualStrings(rendered, try markdown.render(a, try markdown.parse(a, rendered)));
+
+    // Structural drift in a source line rejects at parse.
+    inline for (.{
+        .{ "lines 5–7", "lines 5-7" },
+        .{ "lines 5–7", "line 5–7" },
+        .{ "lines 5–7", "lines 7–5" },
+        .{ "lines 5–7", "lines 05–7" },
+        .{ "lines 5–7", "lines 5–5" },
+        .{ "lines 5–7", "lines" },
+        .{ "`references/a.md` lines 5–7", "references/a.md lines 5–7" },
+        .{ "lines 3–4, 9;", "lines 9, 3–4;" },
+        .{ "lines 3–4, 9;", "lines 3–4, 5;" },
+        .{ "``references/odd`name.md`` line 9", "`references/a.md` line 12" },
+        .{ "``references/odd`name.md`` line 9", "``references/odd`name.md`` lines 9" },
+        .{ "; ``references", ", ``references" },
+        .{ "  - Source: `references/a.md` lines 5–7", "  - Sources: `references/a.md` lines 5–7" },
+        .{ "- **BR-001**: Business content\n", "- **BR-001**: Business content\n\n  - Source: `references/a.md` line 1\n" },
+    }) |mutation| {
+        const changed = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
+        try testing.expect(!std.mem.eql(u8, changed, rendered));
+        try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
+    }
+    // Directly under its field, a two-space line is that field's continuation, so a
+    // source line written there doesn't round-trip.
+    inline for (.{
+        .{ "Business content\n\n  - Source: `references/a.md` lines 5–7", "Business content\n  - Source: `references/a.md` lines 5–7" },
+        .{ "- Source: `references/a.md` line 2", "  - Source: `references/a.md` line 2" },
+    }) |mutation| {
+        const tight = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
+        try testing.expect(!std.mem.eql(u8, tight, rendered));
+        if (markdown.parse(a, tight)) |parsed| {
+            try testing.expect(!std.mem.eql(u8, tight, try markdown.render(a, parsed)));
+        } else |err| try testing.expectEqual(error.InvalidSpecification, err);
+    }
+    // Only criterion, requirement and entity records carry source lines.
+    var foreign = records;
+    foreign[2].sources = records[0].sources;
+    try testing.expectError(error.InvalidSpecification, markdown.render(a, .{ .display_name = scalar, .primary_user_story = scalar, .records = &foreign, .entity_section = .present }));
+}
+
 test "editable grammar rejects structural drift but permits an unnumbered new record" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -165,47 +232,25 @@ test "editable grammar rejects structural drift but permits an unnumbered new re
     try testing.expectError(error.InvalidSpecification, markdown.render(a, captured));
 }
 
-test "editable grammar carries the engine-owned review status line only in its canonical form" {
+test "editable grammar has no review status line after post-generation review removal" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const scalar: spec.Scalar = .{ .bytes = "Business content" };
-    var document: spec.CapturedDocument = .{
+    const document: spec.CapturedDocument = .{
         .display_name = scalar,
         .primary_user_story = scalar,
         .records = &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = scalar, .when = scalar, .then = scalar } } }},
         .entity_section = .omitted,
     };
-    const complete = try markdown.render(a, document);
-    try testing.expect(std.mem.indexOf(u8, complete, "Review status") == null);
-    document.review_status = .{ .unassessed = 3, .subjects = 12 };
     const rendered = try markdown.render(a, document);
-    try testing.expect(std.mem.startsWith(u8, rendered, "# Feature Specification: Business content\n\n**Review status: Incomplete — 3 of 12 review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n## User Scenarios & Testing _(mandatory)_\n"));
-    const parsed = try markdown.parse(a, rendered);
-    try testing.expectEqualDeep(document, parsed);
-    try testing.expectEqualStrings(rendered, try markdown.render(a, parsed));
-    for ([_]spec.ReviewStatus{ .{ .unassessed = 0, .subjects = 12 }, .{ .unassessed = 13, .subjects = 12 } }) |invalid| {
-        document.review_status = invalid;
-        try testing.expectError(error.InvalidSpecification, markdown.render(a, document));
-    }
-    inline for (.{
-        .{ "3 of 12", "03 of 12" },
-        .{ "3 of 12", "+3 of 12" },
-        .{ "3 of 12", "3 of  12" },
-        .{ "3 of 12", "0 of 12" },
-        .{ "3 of 12", "13 of 12" },
-        .{ "3 of 12", "three of 12" },
-        .{ "Incomplete — ", "Incomplete - " },
-        .{ "were not assessed.**", "were not assessed**" },
-        .{ " See reference-context.md for what was not assessed and why.", "" },
-    }) |mutation| {
-        const changed = try std.mem.replaceOwned(u8, a, rendered, mutation[0], mutation[1]);
-        try testing.expectError(error.InvalidSpecification, markdown.parse(a, changed));
-    }
-    const status_line = "**Review status: Incomplete — 3 of 12 review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n";
-    const moved = try std.mem.replaceOwned(u8, a, rendered, status_line, "");
-    const misplaced = try std.mem.replaceOwned(u8, a, moved, "### Primary User Story\n\n", "### Primary User Story\n\n" ++ status_line);
-    try testing.expectError(error.InvalidSpecification, markdown.parse(a, misplaced));
+    try testing.expect(std.mem.indexOf(u8, rendered, "Review status") == null);
+    try testing.expectEqualDeep(document, try markdown.parse(a, rendered));
+    // The retired engine status line is not editable grammar: a document that
+    // still carries it under the title is rejected rather than silently dropped.
+    const retired = try std.mem.replaceOwned(u8, a, rendered, "\n\n## User Scenarios", "\n\n**Review status: Incomplete — 3 of 12 review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n## User Scenarios");
+    try testing.expect(!std.mem.eql(u8, retired, rendered));
+    try testing.expectError(error.InvalidSpecification, markdown.parse(a, retired));
 }
 
 test "display escaping preserves whitespace Unicode delimiters and inert path spelling" {

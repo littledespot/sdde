@@ -71,7 +71,7 @@ pub const Runaway = struct {
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
         const rejected = switch (payload.source().source().outcome()) {
             .validated => |evidence| evidence,
-            .rejected, .cancelled, .advisory_stopped => null,
+            .rejected, .cancelled => null,
         };
         if (rejected) |evidence| if (evidence.request() != prepared) return error.OperationExecutionFailed;
         return .{ .outcome = context.?.action.execute(prepared, rejected), .delta = .{} };

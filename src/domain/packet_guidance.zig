@@ -7,7 +7,7 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const review = @import("specification_review_subject.zig");
 
-pub const version = "packet-guidance/v1";
+pub const version = "packet-guidance/v2";
 pub const Error = error{InvalidPacketGuidance} || std.mem.Allocator.Error;
 pub const max_bytes: u32 = 64 * 1024;
 const max_depth = 3;
@@ -39,7 +39,6 @@ fn SlotKey(comptime selected: fn (authority.Slot) bool) type {
 pub const FeaturePurpose = SlotKey(featurePurposeSlot);
 pub const RecordField = SlotKey(recordFieldSlot);
 pub const ReferenceUnit = std.meta.Tag(review.ReferenceSubject);
-pub const FieldPlacement = enum { in_record, standalone };
 pub const QuestionRule = enum { retained_gap, required, omitted };
 pub const RepairTail = enum { entity_record_meaning, value_choices };
 /// A reference task brackets its native ordinal.
@@ -80,10 +79,10 @@ fn Entries(comptime Key: type, comptime Value: type) type {
     return std.enums.EnumFieldStruct(Key, Value, null);
 }
 
-/// The closed `packet-guidance/v1` wire shape. Missing, extra, duplicate and
+/// The closed `packet-guidance/v2` wire shape. Missing, extra, duplicate and
 /// wrongly typed entries reject while decoding.
 pub const Wire = struct {
-    schema: enum { @"packet-guidance/v1" },
+    schema: enum { @"packet-guidance/v2" },
     feature_purposes: Entries(FeaturePurpose, []const u8),
     record_families: Entries(spec.Kind, []const u8),
     record_fields: Entries(RecordField, []const u8),
@@ -92,9 +91,6 @@ pub const Wire = struct {
         original_sources: []const u8,
         derived_evidence: []const u8,
         source_preservation: []const u8,
-        candidate_field: Entries(FieldPlacement, []const u8),
-        collection: []const u8,
-        entity_applicability: []const u8,
         reference: Entries(ReferenceUnit, []const u8),
     },
     summary_purpose: []const u8,
@@ -123,9 +119,6 @@ pub const ReviewScope = struct {
     original_sources: []const u8,
     derived_evidence: []const u8,
     source_preservation: []const u8,
-    candidate_field: std.EnumArray(FieldPlacement, []const u8),
-    collection: []const u8,
-    entity_applicability: []const u8,
     reference: std.EnumArray(ReferenceUnit, []const u8),
 };
 pub const SupportEvidence = struct {
@@ -169,9 +162,6 @@ pub fn fromWire(wire: Wire) error{InvalidPacketGuidance}!Guidance {
             .original_sources = wire.review_scope.original_sources,
             .derived_evidence = wire.review_scope.derived_evidence,
             .source_preservation = wire.review_scope.source_preservation,
-            .candidate_field = .init(wire.review_scope.candidate_field),
-            .collection = wire.review_scope.collection,
-            .entity_applicability = wire.review_scope.entity_applicability,
             .reference = .init(wire.review_scope.reference),
         },
         .summary_purpose = wire.summary_purpose,

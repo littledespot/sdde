@@ -4,42 +4,7 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const reference = @import("reference_reconciliation.zig");
 
-/// Address an independent feature value by its native requirement ID. This is
-/// a read-only projection; evidence admission still owns authority selection.
-pub fn featureField(inputs: authority.Inputs, id: authority.Id) ?spec.AttributedValue {
-    if (id.unit != .feature) return null;
-    return switch (id.slot) {
-        .display_name => if (inputs.specification) |content| content.display_name else if (inputs.brief) |brief| brief.title else null,
-        .description => if (inputs.brief) |brief| brief.description else null,
-        .primary_goal => if (inputs.brief) |brief| brief.primary_goal else null,
-        .primary_user_story => if (inputs.specification) |content| content.primary_user_story else null,
-        else => null,
-    };
-}
-
-/// The requirement ID and canonical value lens share one field association.
-pub fn valueField(id: authority.Id) authority.Error!@import("specification_candidate.zig").ValueField {
-    const candidates = @import("specification_candidate.zig");
-    if (id.unit != .record) return error.InvalidRequiredAuthority;
-    if (id.slot == .relationship) return .{ .relationship = std.math.sub(usize, id.member, 1) catch return error.InvalidRequiredAuthority };
-    if (id.member != 0) return error.InvalidRequiredAuthority;
-    inline for (std.meta.fields(candidates.ValueField)) |field| {
-        if (comptime field.type == void) if (std.mem.eql(u8, field.name, @tagName(id.slot))) return @unionInit(candidates.ValueField, field.name, {});
-    }
-    return error.InvalidRequiredAuthority;
-}
-pub fn recordField(inputs: authority.Inputs, id: authority.Id) authority.Error!?struct { record: spec.IdentifiedRecord, field: spec.AttributedValue } {
-    if (id.unit != .record) return null;
-    const content = inputs.specification orelse return error.InvalidRequiredAuthority;
-    for (content.records) |record| if (std.meta.eql(record.id, id.unit.record)) {
-        const selected = @import("specification_candidate.zig").attributedValue(.canonical, .{ .content = .{ .records = &.{record.proposal} } }, .{ .record = 0 }, try valueField(id)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-        return .{ .record = record, .field = selected };
-    };
-    return error.InvalidRequiredAuthority;
-}
-
-/// Collection membership shared by review subjects and their evidence lens.
-/// This selects existing records; it establishes neither requiredness nor support.
+/// The record family a feature collection requirement names.
 pub fn collectionFamily(slot: authority.Slot) ?spec.Kind {
     return switch (slot) {
         .acceptance_criteria => .acceptance_criterion,
@@ -47,16 +12,13 @@ pub fn collectionFamily(slot: authority.Slot) ?spec.Kind {
         else => null,
     };
 }
-pub fn collectionContains(slot: authority.Slot, kind: spec.Kind) authority.Error!bool {
-    if (slot == .scenario_coverage) return kind == .acceptance_criterion or kind == .edge_case or kind == .user_visible_outcome;
-    return kind == (collectionFamily(slot) orelse return error.InvalidRequiredAuthority);
-}
 
-pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
-    return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
+pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted) authority.Error!authority.Inputs {
+    return projectRecords(allocator, feature, @import("reference_support.zig").records(references));
 }
-pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
-    if ((content == null) != (brief == null)) return error.InvalidRequiredAuthority;
+/// Source readiness before generation: the feature requirements the sources must
+/// support, and the reference obligations. No candidate exists yet.
+pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: @import("reference_support.zig").Records) authority.Error!authority.Inputs {
     const items = references.items;
     const sources = try allocator.alloc(authority.Authority, 1);
     sources[0] = .{ .reference = items.state_id };
@@ -68,29 +30,7 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
             .requiredness = .{ .schema = .specification },
             .input_authorities = sources,
         });
-        // Schema family floors are distinct from collection membership: scenario
-        // coverage selects several families but adds no record-family floor.
-        // Missing mandatory families are an engine-observed gap. A model's
-        // positive review cannot authorize an empty successful specification.
-        if (content) |candidate| {
-            if (collectionFamily(slot)) |required| {
-                if (spec.requiresRecords(required) and !spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing, .subject = .candidate });
-            }
-        }
     }
-    if (content) |candidate| for (candidate.records) |record| {
-        switch (record.proposal.content) {
-            inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const slot: authority.Slot = @field(authority.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
-                const count = if (comptime field.type == spec.BusinessValue) 1 else @field(fields, field.name).len;
-                for (0..count) |index| try seeds.append(allocator, .{
-                    .id = .{ .kind = .feature_intent, .unit = .{ .record = record.id }, .slot = slot, .member = if (slot == .relationship) std.math.cast(u32, index + 1) orelse return error.InvalidRequiredAuthority else 0 },
-                    .requiredness = .{ .schema = .specification },
-                    .input_authorities = sources,
-                });
-            },
-        }
-    };
     // Complete reference accounting remains owned by the preceding reference
     // validators. Keep the exact IDs; do not infer field support from a signal.
     for (references.signals) |signal| try seeds.append(allocator, .{
@@ -113,5 +53,5 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
             .input_authorities = sources,
         });
     }
-    return .{ .feature = feature, .projection = if (content == null) .source_readiness else .specification, .specification = content, .brief = brief, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
+    return .{ .feature = feature, .projection = .source_readiness, .detected_at = .spec, .authorities = sources, .seeds = try seeds.toOwnedSlice(allocator), .evidence = &.{}, .forced_gaps = try gaps.toOwnedSlice(allocator), .references = references };
 }

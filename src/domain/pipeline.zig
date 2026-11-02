@@ -155,7 +155,6 @@ pub const DataKey = enum {
     specification_coverage,
     specification_coverage_repair,
     specification_support_review,
-    specification_review_history,
     specification_support_repair,
     source_omission_repair,
     specification_document,
@@ -451,7 +450,7 @@ fn validateRunnerAccountingTransition(
         .increment_model_attempt => {
             const value = transition orelse return error.MissingRunnerAccountingTransition;
             switch (value) {
-                .increment_model_attempt, .advisory_model_attempt_stopped => {},
+                .increment_model_attempt => {},
                 else => return error.UndeclaredRunnerAccountingTransition,
             }
         },

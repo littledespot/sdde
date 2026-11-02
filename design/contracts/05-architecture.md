@@ -3,7 +3,6 @@
 Part of the [proposed design](../design.md#5-logical-architecture), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-[View the logical architecture diagram](../diagrams/01-logical-architecture.md).
 
 ### 5.1 Layers
 

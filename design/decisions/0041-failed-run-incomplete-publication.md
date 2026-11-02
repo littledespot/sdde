@@ -1,7 +1,12 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
 - **Status:** Accepted, on hold (30 October 2026): E0 stopped by user decision ("stop E0")
-  during implementation; nothing is implemented.
+  during implementation; nothing is implemented. It named `specification-state/v20`
+  for its state; [ADR 0023](0023-advisory-post-generation-review.md)'s amendments took
+  v20 (D10.2, 31 October 2026) and v21 (post-generation review removal, FIX06 D13.1,
+  1 November 2026), so when this ADR resumes it takes v22. Since that removal no review
+  runs after generation, so "review" leaves the checks a failed view lists as not
+  completed, and ADR 0040's review line no longer exists.
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decision on 26 October 2026. Asked whether a
   required step that fails should also publish what it has, marked incomplete (for
@@ -35,7 +40,7 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v20`), §27 and F0002 (the `run.incomplete_published`
+    §24 (`specification-state/v22`; v20 and v21 were taken by ADR 0023's amendments), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, diagram 09, the [E2E harness](../harness/e2e.md) and
     the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
@@ -100,7 +105,7 @@ incomplete specification when a run pauses for clarification.
    - **No final requirement IDs.** Final IDs (`FR-001`, `AC-001` and the rest) exist only
      after whole-specification assembly, so the view lists validated records without
      them, as ADR 0017's view already does.
-   - Checks over the whole specification (coverage, cross-record rules, review) didn't
+   - Checks over the whole specification (coverage, cross-record rules) didn't
      run. The output says so and claims no result for them.
 3. **It is marked incomplete.** Rendering is deterministic from stored state.
    - `spec.md` starts with `**Status: Incomplete — the run failed.**` or
@@ -175,8 +180,7 @@ incomplete specification when a run pauses for clarification.
    7. **Tests.** The publishing list's "authority block" is a YAML administrative block;
       the runner's `authority` rejection publishes nothing. A `model_capture` exclusion
       test is added.
-   8. **Rendering.** `spec.md`: the title first, then the failure line, then ADR 0040's
-      review line when present. The failure line is `**Status: Incomplete — the run
+   8. **Rendering.** `spec.md`: the title first, then the failure line. The failure line is `**Status: Incomplete — the run
       failed.**` or `**Status: Incomplete — the run was blocked.**`, followed by one
       sentence naming the authored step ID and the diagnostic code. A section the run
       didn't produce reads "Not generated." Without a produced title the H1 is the
@@ -193,10 +197,9 @@ incomplete specification when a run pauses for clarification.
 8. **Design details** (approved 29 October 2026, "approve all 13").
    1. The failure line names the full authored step path, such as
       `generate/records/gen/request`.
-   2. The checks not completed are a closed list (coverage, cross-record, review), each
-      shown as not completed; no result is claimed either way.
-   3. ADR 0040's review line is never shown in the failed view: review is one of the checks
-      not completed (Decision 2).
+   2. The checks not completed are a closed list (coverage, cross-record), each shown as
+      not completed; no result is claimed either way.
+   3. Withdrawn 1 November 2026: ADR 0040's review line no longer exists.
    4. The failed view has no `spec.md` reader slot; it is never read back as input, and the
       completed reader rejects it.
    5. Without a produced title the H1 is `# Feature Specification: <feature-id>`.
@@ -217,7 +220,7 @@ incomplete specification when a run pauses for clarification.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v20 for the new variant. Earlier
+- **Persistence.** `specification-state` advances to v22 for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**

@@ -6,32 +6,25 @@
   principles improves Spec outcomes, preserving shared owners and single responsibility
 - **Amends:** Design §§9.4, 12.7–12.8, 17, 24.5 and 28, and their linked acceptance criteria
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): semantic
-  principle findings are advice and never become mandatory Plan obligations
+  principle findings never become mandatory Plan obligations
+- **Amended (FIX06 D13.1, 1 November 2026):** by the user's approval to remove both
+  post-generation reviews. Spec runs no principle consistency assessment. Principle
+  capture and the §9.4 Spec selection row stay: FIX06 D17.1 will give the records
+  call the captured principles as context. Principles are context and constraints,
+  never a requirement's origin (D13.4), and the workflow never modifies principle
+  files.
 
 ## Decision
 
-Specify includes a focused requirement–principle consistency assessment using the
-canonical principle capture/selection/guidance contracts. The assessment detects
-conflicts early; principles do not become business-source claims or permission to
-change requirements. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution)
-owns selection and [§17.3.1](../contracts/17-specify.md#1731-requirementprinciple-consistency-review)
-owns the assessment and its retained evidence and advice. Native principle
-capture, selection, citation and currentness checks remain mandatory; Plan still
-validates current policy under its own required authority. This grants no
-content-repair, upstream-rebuild or model-selection permission.
-
-Source-preservation review, policy assessment, authority reconciliation and
-clarification preparation retain separate responsibilities. Reuse the shared
-semantic-request/evidence path; introduce no second principle loader, policy
-registry, summary model or reconciliation mechanism.
-
-Clear business intent with a model-reported policy conflict remains intact and
-retains the cited finding as advice. The finding alone produces no mandatory Plan
-obligation or Spec clarification. An independently established unresolved
-required decision follows its native clarification owner. Plan validates current
-policy authority before publication; early assessment neither grants policy
-approval nor creates a Plan form before its required predecessor/input state
-exists.
+Specify captures the current principle registry and selection through the canonical
+principle capture/selection contracts ([§9.4](../contracts/09-configuration.md#94-project-principle-resolution))
+and runs no principle assessment. Principles do not become business-source claims
+or permission to change requirements. Capturing principle files is not performing an
+assessment: state and evidence distinguish captured inputs from any executed
+assessment. Native principle capture, selection and currentness checks remain
+mandatory; Plan validates current policy under its own required authority. This
+grants no content-repair, upstream-rebuild or model-selection permission, and the
+workflow never modifies principle files.
 
 The predecessor gates remain hard requirements: open Spec clarifications prevent
 Plan execution; open Spec or Plan clarifications prevent Tasks execution. Deferring
@@ -53,7 +46,7 @@ Filename hints use exact normalized Markdown basenames; unmatched names remain
 `custom`. Closed selection rows contain `stage`, `environment`, `fileKind` and
 `categories`; null environment/file-kind explicitly includes every matching scope.
 Matching rows contribute their category union. Each row includes `core` and `custom`.
-Spec assessment requires its explicit unrestricted Spec row. Missing applicable
+Spec capture requires its explicit unrestricted Spec row. Missing applicable
 selection authority rejects; unrelated workflows may omit the section.
 
 The config reader owns structure; the principle-policy compiler owns semantic
@@ -62,9 +55,7 @@ This does not amend the separate lineage-repair or answer-authentication decisio
 
 ## Scope and evidence
 
-This supersedes technical-stage-only principle selection for the assessment above;
+This supersedes technical-stage-only principle selection for the Spec capture above;
 reference extraction and business-content generation retain reference/validated-answer
 authority. This amendment does not change project principles or approve a live run.
-[§28](../contracts/28-testing.md) owns conformance requirements. Better conflict
-detection is the intended improvement; fewer clarifications or live success is not
-guaranteed.
+[§28](../contracts/28-testing.md) owns conformance requirements.

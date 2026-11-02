@@ -5,7 +5,6 @@ const models = @import("../contracts.zig");
 const values = @import("../../../src/application/pipeline_values.zig");
 const requests = @import("../../../src/application/model_request_workflow.zig");
 const authorization = @import("../../../src/application/provider_authorization_workflow.zig");
-const publication = @import("../../../src/application/specification_publication_workflow.zig");
 
 /// Diagnostic projection only: retirement may release transport before the
 /// runner rejects continuation. Protocol and provider rejections retain their own origins.
@@ -173,53 +172,9 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                     report.provider_diagnostic = @errorName(reason);
                     report.provider_origin = origin;
                 },
-                .advisory_stopped => |stop| {
-                    const evidence = stop.evidence;
-                    report.advisory_completion = .{ .reason = stop.reason, .origin = origin, .delivery = evidence.delivery(), .usage = evidence.usage() };
-                    report.last_model_origin = origin;
-                    report.last_model_usage = evidence.usage();
-                    switch (evidence.result()) {
-                        .failed => |failure| {
-                            report.provider_diagnostic = @tagName(failure.cause);
-                            report.provider_origin = origin;
-                            report.provider_content_diagnostic = failure.content;
-                        },
-                        .stopped => |reason| {
-                            report.provider_diagnostic = @tagName(reason);
-                            report.provider_origin = origin;
-                        },
-                        .complete => {},
-                    }
-                },
                 .cancelled => {},
             }
         }
-    }
-    if (view.slots[@intFromEnum(publication.state_schema.key)] != null) {
-        const published = try @import("../../../src/application/specification_values.zig").storage.read(&view, publication.state_schema, .publication_state);
-        var incomplete: std.ArrayList(c.IncompleteReview) = .empty;
-        if (published.review.advice_stop) |stop| try incomplete.append(allocator, .{ .review = .source, .reason = stop.reason, .unassessed = stop.unassessed.len, .subjects = stop.requirements.len });
-        if (published.principle_assessment.advice_stop) |stop| try incomplete.append(allocator, .{ .review = .principle, .reason = stop.reason, .unassessed = stop.unassessed.len, .subjects = stop.requirements.len });
-        report.incomplete_reviews = try incomplete.toOwnedSlice(allocator);
-    }
-    if (view.contains(.accounted_model_attempt)) {
-        if (@import("../../../src/application/workflow_model_accounting.zig").readAdvisoryStop(&view)) |receipt| {
-            const operation = receipt.request().protocolCorrection() orelse return error.MissingProviderEvidence;
-            const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-            const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, operation) orelse return error.MissingProviderEvidence;
-            const operations = runner.model_accounting orelse return error.MissingProviderEvidence;
-            const record = operations.current_operations.record(operation) orelse return error.MissingProviderEvidence;
-            const terminal = switch (record.state) {
-                .terminal => |value| value,
-                .assigned, .invoked => return error.MissingProviderEvidence,
-            };
-            const usage = for (ledger.accounted_operations.items) |accounted| {
-                if (accounted.id.eql(operation)) break if (accounted.reconciliation == .exact_usage) accounted.reconciliation.exact_usage else null;
-            } else return error.MissingProviderEvidence;
-            report.advisory_completion = .{ .reason = .protocol_exhausted, .origin = origin, .delivery = terminal.delivery(), .usage = usage };
-            report.last_model_origin = origin;
-            report.last_model_usage = usage;
-        } else |_| {}
     }
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);

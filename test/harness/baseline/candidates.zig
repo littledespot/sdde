@@ -52,8 +52,9 @@ pub const Tracker = struct {
         const brief_entry = current.units[0] orelse return error.MissingCandidateBrief;
         if (brief_entry.response != .content or brief_entry.response.content != .brief) return error.MissingCandidateBrief;
         const support = @import("../../../src/domain/reference_support.zig").records(context.references);
+        const directory = try @import("../../../src/application/pipeline_values.zig").read(view, @import("../../../src/application/reference_workflow_values.zig").directory, @import("../../../src/domain/reference_selector.zig").Directory);
         const bytes = try std.json.Stringify.valueAlloc(temporary, .{
-            .schema = "baseline-native-specification-candidate/v1",
+            .schema = "baseline-native-specification-candidate/v2",
             .native_content = content,
             .native_brief = brief_entry.response.content.brief,
             .native_reference_support = .{
@@ -64,7 +65,7 @@ pub const Tracker = struct {
                 .signals = support.signals,
                 .conflicts = support.conflicts,
             },
-            .document = try projection.project(temporary, context, content),
+            .document = try projection.project(temporary, context, .{ .bytes = directory.project_relative_path }, content),
             .brief = try projection.brief(temporary, context, brief_entry.response.content.brief),
         }, .{});
         try self.retain(a, bytes, firstPass(current));
@@ -286,6 +287,14 @@ test "native assembled observations resolve unrelated exact values and preserve 
         view.slots[@intFromEnum(input_schema.key)] = try values.create(a, input_schema, @TypeOf(inputs), inputs);
         const passive_schema = @import("../../../src/application/passive_literal_workflow.zig").registry_schema;
         view.slots[@intFromEnum(passive_schema.key)] = try values.create(a, passive_schema, @TypeOf(passive.registry), passive.registry);
+        const directory_schema = @import("../../../src/application/reference_workflow_values.zig").directory;
+        const directory: @import("../../../src/domain/reference_selector.zig").Directory = .{
+            .selector = .{ .bytes = "baseline" },
+            .project_relative_path = "references/baseline",
+            .root_identity = .{ .filesystem_id = 1, .file_id = 1 },
+            .directory_identity = .{ .filesystem_id = 1, .file_id = 2 },
+        };
+        view.slots[@intFromEnum(directory_schema.key)] = try values.create(a, directory_schema, @TypeOf(directory), directory);
         const safety_schema = @import("../../../src/application/toolchain_workflow_values.zig").valid;
         view.slots[@intFromEnum(safety_schema.key)] = try values.adopt(a, safety_schema, text.safety.ValidToolchain, text.safety.Owner, passive.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(passive.owner));
         passive_transferred = true;
@@ -308,6 +317,12 @@ test "native assembled observations resolve unrelated exact values and preserve 
         try std.testing.expect(std.mem.indexOf(u8, captured.value.object.get("document").?.object.get("primary_user_story").?.object.get("bytes").?.string, example[2]) != null);
         try std.testing.expect(captured.value.object.get("native_reference_support").?.object.get("claims").?.array.items.len == support.items.entries.len);
         try std.testing.expectEqualStrings(example[0], captured.value.object.get("native_reference_support").?.object.get("sources").?.array.items[0].object.get("bytes").?.string);
+        // Each requirement's shown source lines name the selected directory's file.
+        for (captured.value.object.get("document").?.object.get("records").?.array.items) |record| {
+            const shown = record.object.get("sources").?.array.items;
+            try std.testing.expectEqual(@as(usize, 1), shown.len);
+            try std.testing.expectEqualStrings("references/baseline/requirements.md", shown[0].object.get("path").?.string);
+        }
         const after = try std.json.Stringify.valueAlloc(a, .{ .session = try native.readSession(&view), .content = try authority_values.read(&view, authority.content_schema, .content), .support = @import("../../../src/domain/reference_support.zig").records((try native.readContext(&view)).references) }, .{});
         try std.testing.expectEqualStrings(before, after);
         const retained = tracker.latest.?.json.ptr;

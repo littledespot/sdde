@@ -109,7 +109,6 @@ const Native = struct {
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
     coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
-    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
     artifact: Artifact,
     exchange_key: []const u8,
 };
@@ -297,7 +296,6 @@ const Metadata = struct {
     exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     members: []const @import("../../../src/domain/model_result_schema.zig").MemberChoice = &.{},
     coverages: []const @import("../../../src/domain/model_result_schema.zig").CoverageChoice = &.{},
-    required_items: []const @import("../../../src/domain/model_result_schema.zig").RequiredItems = &.{},
 };
 fn measureRow(state: *State, scratch: std.mem.Allocator, base: Row, packet: []const u8, output: []const u8, schema: ?[]const u8, metadata: Metadata) !void {
     var result = base;
@@ -305,7 +303,7 @@ fn measureRow(state: *State, scratch: std.mem.Allocator, base: Row, packet: []co
     result.request_context = try requestContext(scratch, packet, metadata.contract);
     if (metadata.exact_scope) |scope_facts| result.request_context = .{ .state = if (scope_facts.occurrences.len == 0) .no_exact_values else .exact_values, .occurrence_count = scope_facts.occurrences.len };
     result.payload_sha256 = try c.hash(scratch, try std.mem.concat(scratch, u8, &.{ packet, "\x00", schema orelse "", "\x00", output }));
-    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = metadata.fields, .prose_fields = metadata.prose, .original_sources = metadata.sources, .metadata_contract = metadata.contract, .exact_scope = metadata.exact_scope, .members = metadata.members, .coverages = metadata.coverages, .required_items = metadata.required_items }, classifier) catch |err| {
+    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = metadata.fields, .prose_fields = metadata.prose, .original_sources = metadata.sources, .metadata_contract = metadata.contract, .exact_scope = metadata.exact_scope, .members = metadata.members, .coverages = metadata.coverages }, classifier) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.disposition = .malformed_capture;
         result.diagnostic = @errorName(err);
@@ -367,7 +365,6 @@ fn prompt(state: *State, path: []const u8) !void {
             .exact_scope = description.exact_scope,
             .members = description.members,
             .coverages = description.coverages,
-            .required_items = description.required_items,
             .artifact = source,
             .exchange_key = key,
         };
@@ -397,7 +394,7 @@ fn prompt(state: *State, path: []const u8) !void {
             try appendRow(state, unsupported);
             continue;
         };
-        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members, .coverages = description.coverages, .required_items = description.required_items });
+        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope, .members = description.members, .coverages = description.coverages });
     }
 }
 fn nativeFor(state: *State, a: std.mem.Allocator, path: []const u8, content: []const u8, schema: []const u8, step: []const u8, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?Native {
@@ -439,7 +436,7 @@ fn contextFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []c
     const output = try modelOutput(state, a, response_path, text_path, false, null);
     base.response = output.raw;
     base.disposition = output.disposition;
-    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| .{ .contract = known.metadata_contract, .fields = known.field_policies, .prose = known.prose_fields, .sources = known.original_sources, .exact_scope = known.exact_scope, .members = known.members, .coverages = known.coverages, .required_items = known.required_items } else .{}) else try appendRow(state, base);
+    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| .{ .contract = known.metadata_contract, .fields = known.field_policies, .prose = known.prose_fields, .sources = known.original_sources, .exact_scope = known.exact_scope, .members = known.members, .coverages = known.coverages } else .{}) else try appendRow(state, base);
 }
 fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []const u8, raw: std.json.Value, is_record: bool) !void {
     var base: Row = .{ .id = path, .family = if (is_record) .debugger_request else .calibration_call, .artifact = try artifact(state, path, bytes), .disposition = .malformed_capture };
@@ -507,7 +504,7 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
         }
     };
     const text = output.text orelse embedded_text orelse if (output.raw != null) exported else null;
-    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{}, .required_items = if (current) |known| known.required_items else &.{} }) else try appendRow(state, base);
+    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{} }) else try appendRow(state, base);
 }
 fn checkedHash(a: std.mem.Allocator, value: std.json.Value, name: []const u8, bytes: []const u8) !void {
     if (member(value, name)) |declared| {
@@ -548,7 +545,7 @@ fn embeddedChild(state: *State, a: std.mem.Allocator, source: Artifact, capture:
     if (current) |known| {
         if (!std.mem.eql(u8, schema, known.schema) or !@import("../../../src/domain/model_text_field.zig").same(policies, known.field_policies) or !@import("../../../src/domain/model_text_wire.zig").sameProseFields(prose, known.prose_fields)) return error.InvalidCaptureProjection;
     }
-    try measureRow(state, a, base, packet, output, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{}, .required_items = if (current) |known| known.required_items else &.{} });
+    try measureRow(state, a, base, packet, output, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null, .members = if (current) |known| known.members else &.{}, .coverages = if (current) |known| known.coverages else &.{} });
 }
 fn embeddedChildObserved(state: *State, a: std.mem.Allocator, source: Artifact, capture: std.json.Value, sample: bool) !void {
     embeddedChild(state, a, source, capture, sample) catch |err| {

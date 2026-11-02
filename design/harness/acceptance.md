@@ -101,9 +101,6 @@ and wrong timezone) and fifteen loan-renewal specimens. Each includes two faithf
 paraphrases, omissions, contradictions, unsupported scope and embedded instructions.
 These are assistant-prepared diagnostic specimens, not golden workflow outputs.
 
-- [Hello World review packet](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/REVIEW.md)
-- [Loan renewal review packet](../../test/integration/fixtures/wf-002-loan-renewal/calibration/REVIEW.md)
-
 Each evaluation case names a `grading_qualification` panel, human-review record
 and qualification record. The panel binds source IDs/bytes, rubric bytes, specimen
 bytes and proposed verdicts by SHA-256. Human review must approve that exact panel,
@@ -141,7 +138,7 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
   grader/acceptance evidence with an always-unresolved decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v11`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v14`: the single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.

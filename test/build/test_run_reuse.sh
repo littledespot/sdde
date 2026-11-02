@@ -8,7 +8,9 @@ reuse_zig=$1
 reuse_fixture=$2
 reuse_counted=$3
 reuse_policy=$4
-reuse_key_tool=$5
+# The build passes the key tool relative to its working directory; the checks run
+# from the throwaway repository.
+reuse_key_tool=$(CDPATH= cd -- "$(dirname -- "$5")" && pwd -P)/$(basename -- "$5")
 reuse_tmp=$(mktemp -d "${TMPDIR:-/tmp}/sdde-test-run-reuse.XXXXXX")
 reuse_tmp=$(CDPATH= cd -- "$reuse_tmp" && pwd -P)
 reuse_held=

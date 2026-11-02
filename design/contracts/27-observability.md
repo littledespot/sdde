@@ -17,7 +17,6 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 
 [View the Observability events sample](../code.md#observability-events).
 
-[View the feature logging pipeline](../diagrams/06-feature-logging.md).
 
 Event fields include the validated four-character workflow shortcode, run/feature/stage/node IDs, parent/correlation IDs, attempt, duration, workflow model-operation/model-slot identity, token usage, diagnostic codes, repair unit kind, command ID, exit code, and evidence status. Field definitions are registry-owned and sensitive content is excluded or redacted before serialization.
 
@@ -134,8 +133,7 @@ after `model.completed` for the same request and attempt
 ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 Its diagnostic is the exact closed stop reason (`OUTPUT_LIMIT`, `CONTENT_FILTERED`,
 `UNSUPPORTED_TOOL_REQUEST`, `MALFORMED_OUTPUT` or `CONTEXT_LIMIT`), with the outcome and
-the provider's reported input and output tokens. This applies to required and advisory
-inference alike. The event never retries, reclassifies or excuses the stop, and its
+the provider's reported input and output tokens. This applies to all inference. The event never retries, reclassifies or excuses the stop, and its
 logging rejection prevents continuation.
 
 An `OUTPUT_LIMIT` stop is re-sent once under
@@ -152,7 +150,7 @@ re-send is logged:
   carrying the diagnostic `RunawayRepeated`.
 
 Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
-its request description (`model-request-debug/v13`), not in a log field. A re-send that
+its request description (`model-request-debug/v16`), not in a log field. A re-send that
 succeeds removes neither event.
 
 At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt
@@ -161,12 +159,6 @@ description (both configured temperatures and the sampling), the provider reques
 the temperature sent, and the complete returned output with its stop reason and token
 counts. A repeated runaway's output is captured before the failure events and the stop.
 Higher levels log only the events.
-
-When post-generation advice closes incomplete, the runner emits one warning
-`review.incomplete`, with the incomplete-advice reason as its diagnostic code and the
-number of unassessed subjects as its count
-([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)). Its
-logging rejection prevents publication.
 
 Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
 hold since 30 October 2026; not implemented), when a failed Specify run publishes its
@@ -208,8 +200,5 @@ or a requirement for log replay during readback.
 The execution snapshot records the single configured `workflowTokenBudget`, aggregate
 actual tokens and unavailable-usage state. Every inference is charged once,
 including retries and stopped output, with no per-class pool or subtotal (ADR 0011).
-A global budget rejection remains
-fatal and cannot be reported as incomplete advice. An eligible non-budget advisory stop
-retains the original provider result and failed request; explicit incomplete advice
-records its current assignment suffix, reason, revision and producing origin when
-sent. Exhausted protocol correction records no new attempt or operation.
+A global budget rejection is fatal. Exhausted protocol correction records no new
+attempt or operation.

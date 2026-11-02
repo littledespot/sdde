@@ -5,7 +5,7 @@
   Decision 6, which it builds on.
 - **Date:** 2026-10-27
 - **Decision authority:** The user's direction on 27 October 2026, "updated the
-  documentation inline with option 1", choosing [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) B12's
+  documentation inline with option 1", choosing FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) B12's
   option 1: make entity meaning and relationship "**incidental** (rendered as code spans
   through the shared owner, no coverage credit)", instead of keeping the model's
   backticks in prohibited fields.

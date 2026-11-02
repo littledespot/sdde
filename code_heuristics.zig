@@ -7,4 +7,6 @@ test {
     _ = @import("build/code_heuristics/report.zig");
     _ = @import("build/code_heuristics/inventory.zig");
     _ = @import("build/code_heuristics/main.zig");
+    _ = @import("build/code_heuristics/brittleness.zig");
+    _ = @import("build/code_heuristics/suffix.zig");
 }

@@ -6,13 +6,8 @@ pub const Action = struct {
 
     pub fn execute(_: Action, current: @import("../../domain/specification_review.zig").Progress) Outcome {
         const collection = switch (current) {
-            .initial, .pending => return .next,
+            .initial => return .next,
             .source => |value| value,
-            .principles => |value| return switch (value.result) {
-                .accepted => .complete,
-                .pending => .next,
-                .rejected => .next,
-            },
         };
         return switch (collection) {
             .accepted => |value| if (value.candidate.pending_localization != null) .localize else .complete,

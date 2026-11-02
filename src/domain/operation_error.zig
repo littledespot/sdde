@@ -71,14 +71,13 @@ pub const Error = @import("pipeline_data.zig").ValueError ||
     @import("model_request_handoff.zig").Error ||
     @import("model_attempt_accounting.zig").Error ||
     @import("model_attempt_accounting.zig").RequestError ||
-    @import("model_attempt_decision.zig").Error ||
     @import("provider_operation_lifecycle.zig").Error ||
     @import("provider_invocation_validation.zig").Error ||
     @import("provider_invocation_validation.zig").RunawayError ||
     @import("provider_authorization_result.zig").Error ||
     @import("model_transport.zig").Error ||
     @import("workflow_output.zig").Error ||
-    @import("specification_support_repair.zig").Contract(.source).Error ||
+    @import("specification_support_repair.zig").Source.Error ||
     @import("workflow_artifact_registry.zig").FeaturePathError ||
     @import("model_invocation_result.zig").Error ||
     @import("toolchain.zig").Error ||

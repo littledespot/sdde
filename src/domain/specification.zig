@@ -44,6 +44,14 @@ pub const Kind = enum {
             .entity => "### Key Entities _(include if feature involves data)_",
         };
     }
+
+    /// The families whose records show the source lines their claims cite (§23).
+    pub fn showsSources(self: Kind) bool {
+        return switch (self) {
+            .acceptance_criterion, .functional_requirement, .entity => true,
+            .user_visible_outcome, .edge_case, .business_rule, .assumption, .non_goal, .prohibited_behavior => false,
+        };
+    }
 };
 
 /// Mandatory business-content families; optional section presence never changes
@@ -238,23 +246,23 @@ pub fn sameContent(allocator: std.mem.Allocator, a: IdentifiedContent, b: Identi
 /// Captured unescaped Markdown field; deliberately not BusinessText authority.
 pub const CodeSpan = struct { start: usize, end: usize };
 pub const Scalar = struct { bytes: []const u8, code_spans: []const CodeSpan = &.{} };
-pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar) };
-/// ADR 0040: engine-owned status of incomplete post-generation review. It is a
-/// view of stored advice stops, never review evidence or authority.
-pub const ReviewStatus = struct { unassessed: u32, subjects: u32 };
+/// One-based, inclusive source lines.
+pub const LineRange = struct { first: u32, last: u32 };
+/// One source file's merged cited lines, in ascending order: an engine-owned display
+/// of the record's lineage, never provenance authority.
+pub const SourceLines = struct { path: []const u8, ranges: []const LineRange };
+pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{} };
 pub const CapturedDocument = struct {
     display_name: Scalar,
     primary_user_story: Scalar,
     records: []const CapturedRecord,
     /// A missing section cannot assert a supported not_applicable decision.
     entity_section: enum { present, omitted },
-    review_status: ?ReviewStatus = null,
 };
 
 /// Shape validation only. Caller owns an arena for parsed/constructed records.
 /// Optional collections have no minimum count. H-008 owns required evidence.
 pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!void {
-    if (document.review_status) |status| if (status.unassessed == 0 or status.unassessed > status.subjects) return error.InvalidSpecification;
     try scalar(document.display_name);
     try scalar(document.primary_user_story);
     var previous: ?Kind = null;
@@ -269,6 +277,7 @@ pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!voi
                 if (other.id != null and std.meta.eql(id, other.id.?)) return error.InvalidSpecification;
             }
         } else if (require_ids) return error.InvalidSpecification;
+        try sources(kind, record.sources);
         switch (record.content) {
             inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| {
                 const value = @field(content, field.name);
@@ -278,6 +287,21 @@ pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!voi
                     for (value) |relationship| try scalar(relationship);
                 }
             },
+        }
+    }
+}
+
+/// Only a source-showing family carries lines; each file appears once with nonempty
+/// ranges, and ranges are ascending and merged, so one lineage has one display.
+fn sources(kind: Kind, files: []const SourceLines) Error!void {
+    if (!kind.showsSources() and files.len != 0) return error.InvalidSpecification;
+    for (files, 0..) |file, index| {
+        if (file.path.len == 0 or file.ranges.len == 0 or !std.unicode.utf8ValidateSlice(file.path) or
+            std.mem.indexOfAny(u8, file.path, "\r\n") != null) return error.InvalidSpecification;
+        for (files[0..index]) |prior| if (std.mem.eql(u8, prior.path, file.path)) return error.InvalidSpecification;
+        for (file.ranges, 0..) |range, at| {
+            if (range.first == 0 or range.last < range.first) return error.InvalidSpecification;
+            if (at != 0 and range.first <= file.ranges[at - 1].last +| 1) return error.InvalidSpecification;
         }
     }
 }

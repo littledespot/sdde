@@ -11,8 +11,3 @@ pub fn registry(a: std.mem.Allocator, prose: ?[]const u8) !r.Registry {
     if (prose) |bytes| captures[0] = .{ .entry = 1, .bytes = bytes };
     return r.build(a, .{ .inventory = .{ .root = .{ .path = "principles", .identity = .{ .filesystem_id = 1, .file_id = 1 } }, .entries = entries, .source_bytes = if (prose) |bytes| bytes.len else 0 }, .sources = captures }, .{ .hints = &.{.{ .basename = "core.md", .category = .core }}, .selections = &.{selection} }, null);
 }
-pub fn emptyAssessment(a: std.mem.Allocator, inputs: @import("../domain/required_authority.zig").Inputs) !@import("../domain/principle_assessment.zig").Canonical {
-    const policy_registry = try registry(a, null);
-    const assessment = @import("../domain/principle_assessment.zig");
-    return assessment.canonical(a, try assessment.project(a, .{ .business = try assessment.businessInput(a, inputs), .registry = policy_registry, .selection = try r.select(a, policy_registry, .{ .stage = .spec, .environment = null, .fileKind = null }) }));
-}

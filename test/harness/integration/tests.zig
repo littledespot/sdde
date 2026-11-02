@@ -129,8 +129,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "selection: input", "selection: missing-definition" },
         .{ "composition-part: content", "composition-part: classifications" },
         .{ "use: retain-json-part", "use: check-model-request-phase" },
-        // Draft admission cannot bypass the final review/publication contracts.
-        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: review", "  generate:\n    call: generate-specification\n    on:\n      ok: publish" },
+        // Draft admission cannot bypass assembly and coverage before publication.
+        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: assemble", "  generate:\n    call: generate-specification\n    on:\n      ok: publish" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
@@ -291,7 +291,7 @@ test "production E2E binding honors configured models and cannot succeed without
             _ = slot.object.swapRemove("reasoningEffort");
         }
         try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config, .{}) });
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "2026-09-11T00:00:00Z", .status = .input_invalid };
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
@@ -373,7 +373,7 @@ test "publication handoff captures poor output for adjudication without changing
     const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
     const captured = try fixture.capture(io, a, .cwd(), choice);
     const evaluation = @import("../e2e/evaluation.zig");
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "2026-09-11T00:00:00Z", .execution_id = "run-123", .expected_outcome = .publication, .evaluation_case_id = captured.evaluation.case.id, .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
     const inputs = try evaluation.inputs(a, report, captured.evaluation, "Readable but poor output.", "run-123");
     report.evaluation_inputs = inputs;
     try std.testing.expectEqualStrings("Readable but poor output.", inputs.specification);
@@ -494,7 +494,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "2026-09-16T00:00:00Z", .expected_outcome = .clarification, .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured }, .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
     try output.save(io, a, report);
     const bytes = try @import("../files.zig").read(io, a, dir.dir, "report.json");
     const retained = try @import("../contracts.zig").decode(c.Report, a, bytes);
@@ -527,7 +527,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "2026-09-11T00:00:00Z",
         .execution_id = "run-failed",
         .case_source = "chosen.case.json",
@@ -587,7 +587,7 @@ test "completed E2E reports retain the exact captured adjudication inputs" {
     captured.evaluation.rubric.pass_threshold_percent = 75.5;
     captured.evaluation.rubric_bytes = try std.json.Stringify.valueAlloc(a, captured.evaluation.rubric, .{});
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "2026-10-11T00:00:00Z",
         .execution_id = "MOCK-published-run",
         .expected_outcome = .publication,
@@ -650,7 +650,7 @@ test "E2E report finalization preserves workflow outcomes and exposes write and 
             else if (status == .generated)
                 try @import("../e2e/acceptance_test.zig").completed(a)
             else
-                .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
+                .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "2026-10-11T00:00:00Z", .expected_outcome = .publication, .status = .workflow_failed, .workflow_outcome = .failed, .diagnostic = "WorkflowTokenBudgetExceeded", .terminal_rejection = .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } };
             // Override only the standard file-sync operation; all other I/O
             // retains its real test implementation and original context.
             var vtable = io.vtable.*;
@@ -696,7 +696,7 @@ test "retired protocol rejection stays associated with its call across later fai
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
@@ -750,7 +750,7 @@ test "composition reports retain every field across retirement rendering and lat
     const a = arena.allocator();
     var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
-    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
     rejected.model_diagnostic = "InvalidModelEnvelope";
     rejected.last_model_call = 13;
@@ -801,7 +801,7 @@ test "candidate rejection reports retain the producing call separately from the 
     defer arena.deinit();
     const a = arena.allocator();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .status = .workflow_failed,
         .candidate_error = .{ .token_classifications = .{
@@ -839,10 +839,10 @@ test "later budget transport and capture stops retain separate protocol and exch
     for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output = if (ordinal < 35) .available else .not_projected };
     var retained: obs.LastModelRejection = .{};
     defer retained.deinit(std.testing.allocator);
-    try retained.observe(std.testing.allocator, 34, .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
+    try retained.observe(std.testing.allocator, 34, .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
     for (0..4) |stop| {
         var report: c.Report = .{
-            .schema = .@"spec-e2e-report/v11",
+            .schema = .@"spec-e2e-report/v14",
             .started_at_utc = "",
             .status = .workflow_failed,
             .workflow_outcome = .failed,
@@ -889,10 +889,10 @@ test "provider cause survives request release without inventing a candidate reje
         .exception = "AccessDeniedException",
         .request_id = "request-1",
     }};
-    var observed: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
+    var observed: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
     try obs.correlate(a, &calls, &observed);
     // The next projection has no active request or provider observation slots.
-    var released: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
+    var released: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
     try obs.correlate(a, &calls, &released);
     try std.testing.expectEqual(@as(usize, 1), released.last_model_call.?);
     try std.testing.expectEqualStrings("authorization_denied", released.provider_diagnostic.?);
@@ -938,7 +938,7 @@ test "unrepairable responses preserve complete production logs and forbid public
             try project.dir.createDirPath(io, std.fs.path.dirname(file.path).?);
             try project.dir.writeFile(io, .{ .sub_path = file.path, .data = file.bytes });
         }
-        var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed };
         {
             var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
             runtime.init(io, std.testing.allocator, project.dir, .{});
@@ -1072,7 +1072,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
     try std.testing.expectEqual(@as(usize, 3), counts.defects.len);
     var calls = [_]@import("../e2e/observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
     var observed: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "",
         .status = .workflow_failed,
         .workflow_outcome = .failed,
@@ -1087,7 +1087,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
         },
     };
     try @import("../e2e/observation.zig").correlate(a, &calls, &observed);
-    var retained: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
+    var retained: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
     try @import("../e2e/observation.zig").correlate(a, &calls, &retained);
     try std.testing.expectEqual(@as(u64, 932), retained.last_model_usage.?.total_tokens);
     try std.testing.expectEqual(@as(usize, 0), retained.repairs.len);
@@ -1135,7 +1135,7 @@ test "input failure report explains environment setup and escapes untrusted labe
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const report: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "2026-09-12T00:00:00Z",
         .case_id = "<script> [click](untrusted)",
         .status = .input_invalid,
@@ -1164,7 +1164,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
         .{ .origin = repair, .step = "repair", .output = .available },
     };
     var report: c.Report = .{
-        .schema = .@"spec-e2e-report/v11",
+        .schema = .@"spec-e2e-report/v14",
         .started_at_utc = "",
         .status = .workflow_failed,
         .last_model_origin = repair,
@@ -1213,6 +1213,16 @@ test "step events keep the newer exchange usage separate from an older rejected 
     report.candidate_error.?.token_classifications.origin = null;
     try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    // A missing classification has no producer: the assembled candidate keeps
+    // its diagnostic without a call link, while a lost origin above still rejects.
+    report.candidate_error.?.token_classifications.issues = .{ .missing = &.{.{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 1 }}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} };
+    try std.testing.expectEqual(.candidate, report.candidate_error.?.attribution());
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expect(report.candidate_model_call == null and report.candidate_model_step == null);
+    try std.testing.expect(std.mem.indexOf(u8, try @import("../e2e/report.zig").renderMarkdown(a, report), "Validation applies to the assembled candidate") != null);
+    report.candidate_error.?.token_classifications.issues.unknown = &.{.{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 99 }};
+    try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
+    try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
     // A correlation failure does not erase a successfully captured response.
     report.candidate_error = null;
     report.evidence_error = "MissingRequestEvidence";
@@ -1236,7 +1246,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [7]Diagnostic = undefined;
+    var retained: [6]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -1251,10 +1261,10 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         retained[0] = try (Diagnostic{ .reconciliation = rejected }).copy(a);
         const accounted = (try references.finish(scratch, global, proposal, input.context())).valid;
         const context: @import("../../../src/domain/specification_provenance.zig").Context = .{ .inputs = input.inputs, .references = accounted, .registry = input.context().registry, .current = input.context().current };
-        const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted, null, null);
+        const review_inputs = try @import("../../../src/domain/specification_authority.zig").project(scratch, input.inputs.corpus.feature_id, accounted);
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
-        retained[4] = try (Diagnostic{ .support_findings = .from(.source, omission_inputs, .unlocalized_omission) }).copy(a);
+        retained[4] = try (Diagnostic{ .support_findings = .from(omission_inputs, .unlocalized_omission) }).copy(a);
         const missing = (try @import("../../../src/domain/specification_support.zig").Source.validate(scratch, review_inputs, context.inputs, .{
             .review = .{ .entries = &.{} },
             .origin = origin,
@@ -1263,11 +1273,6 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
-        const registry = @import("../../../src/domain/principle_registry.zig");
-        const policies = try @import("../../../src/test_fixtures/principles.zig").registry(scratch, "Use UTC timestamps.\n");
-        const selection = try registry.select(scratch, policies, .{ .stage = .spec, .environment = null, .fileKind = null });
-        const citation = (try registry.validateCitation(policies, selection, .{ .chunk = .{ .ordinal = 8 }, .first_line = 1, .last_line = 1 })).?;
-        retained[5] = try (Diagnostic{ .principle_review = .{ .diagnostics = &.{.{ .issue = .invalid_evidence, .requirement = .{ .kind = .policy_predicate, .unit = .{ .decision = .{ .ordinal = 8 } }, .slot = .compliance }, .ordinal = 8, .revision = 1, .origin = origin, .entry_index = 7, .evidence = .{ .issue = .invalid_principle_citation, .rule = .{ .citations_required = true, .permitted_chunks = selection.chunks }, .citation = .{ .index = 0, .diagnostic = citation } } }} } }).copy(a);
         var current = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, context)).ready;
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
@@ -1282,10 +1287,10 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         partial.references.records.signals = &.{};
         partial.references.records.assignments.checked.prior.prior.source.fields = &.{.{ .unit = .signals, .field = .record, .origin = origin }};
         const gap = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, partial)).blocked;
-        retained[6] = try (Diagnostic{ .source_catalogue = gap }).copy(a);
+        retained[5] = try (Diagnostic{ .source_catalogue = gap }).copy(a);
     }
     for (retained) |diagnostic| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
@@ -1333,7 +1338,7 @@ test "events and reports preserve native repair changes and text spans after rel
     }
     try std.testing.expectEqual(.invalid_scalar, retained.reconciliation.issue.expected.text_issue.reason);
     for (merged, 0..) |merge, index| {
-        const report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
+        const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqual(index == 1, decoded.repairs[0].changed);
@@ -1386,10 +1391,10 @@ test "provider content rejection survives retirement and projects exact native e
     defer retained.deinit(std.testing.allocator);
     var reason = "missing_final_text".*;
     const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 2 } };
-    const observed: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
+    const observed: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
     try retained.observe(std.testing.allocator, 11, observed);
     @memset(&reason, 'x');
-    var terminal: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed };
+    var terminal: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed };
     try retained.observe(std.testing.allocator, 12, terminal);
     try retained.project(a, 12, &terminal);
     retained.deinit(std.testing.allocator);
@@ -1424,7 +1429,7 @@ test "native correction links retain first observation invalidation rebuild and 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var report: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
     try progress.observe(2, "authorize", report, null);
     report.last_operation_rejection = null;
     const permit: @import("../../../src/domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
@@ -1449,16 +1454,16 @@ test "native correction links retain first observation invalidation rebuild and 
     const removed_label = "first_" ++ "observed_defect";
     const obsolete = try std.mem.replaceOwned(u8, a, renamed, "first_native_rejection", removed_label);
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, obsolete));
-    const old_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v11", "spec-e2e-report/v2");
+    const old_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v14", "spec-e2e-report/v2");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, old_version));
-    const previous_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v11", "spec-e2e-report/v10");
+    const previous_version = try std.mem.replaceOwned(u8, a, renamed, "spec-e2e-report/v14", "spec-e2e-report/v13");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, previous_version));
-    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"spec-e2e-report/v11\",", "");
+    const missing_version = try std.mem.replaceOwned(u8, a, renamed, "\"schema\":\"spec-e2e-report/v14\",", "");
     try std.testing.expectError(error.InvalidEvaluationContract, @import("../contracts.zig").decode(c.Report, a, missing_version));
     const text = try @import("../e2e/report.zig").renderMarkdown(a, readback);
     try std.testing.expect(std.mem.indexOf(u8, text, "First native rejection") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "not proven root cause") != null);
-    var fresh: c.Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed };
+    var fresh: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed };
     try progress.project(a, &fresh);
     try std.testing.expect(fresh.first_native_rejection == null and fresh.corrections.len == 0 and fresh.outstanding_work.len == 0);
 }
@@ -1492,14 +1497,14 @@ test "build evidence preserves bytes deletion and incompleteness and marks crede
     }
 }
 
-const AdviceProductionRun = struct {
+const ProductionRun = struct {
     const Runner = @import("../../../src/application/workflow_pipeline_runner.zig").Runner;
     const Bindings = @import("../../../src/application/workflow_engine_child_bindings.zig");
     const execution = @import("../../../src/domain/workflow_execution.zig");
     const workflow = @import("../../../src/domain/workflow.zig");
     const admission = @import("../baseline/admission.zig");
     const provider = @import("../../../src/domain/llm_provider_operation.zig");
-    const Mode = enum { source_output_limit, global_budget, malformed_source_protocol, advisory_repair_output_limit, advisory_repair_protocol, required_output_limit, required_source_output_limit };
+    const Mode = enum { global_budget, required_output_limit, required_source_output_limit };
     allocator: std.mem.Allocator,
     runner: *Runner,
     base: Bindings.ChildBindings,
@@ -1508,19 +1513,9 @@ const AdviceProductionRun = struct {
     mode: Mode,
     sequence: usize = 0,
     exchanges: std.ArrayList(admission.Exchange) = .empty,
-    source_sends: usize = 0,
-    source_origins: std.ArrayList(@import("../../../src/domain/model_candidate_origin.zig").Origin) = .empty,
     required_source_sends: usize = 0,
-    protocol_closures: usize = 0,
-    protocol_limit: ?u32 = null,
-    repair_sends: usize = 0,
-    repair_origins: std.ArrayList(@import("../../../src/domain/model_candidate_origin.zig").Origin) = .empty,
-    repair_stops: usize = 0,
-    repair_permit: ?@import("../../../src/domain/workflow_retry.zig").Permit = null,
-    injected_findings: usize = 0,
-    generated_content: ?[]const u8 = null,
-    principle_sends: usize = 0,
-    principle_attempts: usize = 0,
+    records_sends: usize = 0,
+    semantic_after_generation: usize = 0,
     budget_before_stop: ?u128 = null,
     budget_stop_call: ?usize = null,
     stop_sends: usize = 0,
@@ -1558,18 +1553,6 @@ const AdviceProductionRun = struct {
     fn finalize(context: *anyopaque, outcome: @import("../../../src/domain/run_outcome.zig").Outcome) @import("../../../src/domain/run_outcome.zig").Outcome {
         return cast(context).base.finalizeOutcome(outcome);
     }
-    fn invalidPositiveDetail(a: std.mem.Allocator, body: []const u8) ![]const u8 {
-        var parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
-        defer parsed.deinit();
-        var value = &parsed.value;
-        if (value.object.getPtr("findings")) |findings| value = findings.array.items[0].object.getPtr("value").?;
-        const decision = value.object.get("kind") orelse value.object.get("decision").?;
-        try std.testing.expect(std.mem.eql(u8, decision.string, "supported") or std.mem.eql(u8, decision.string, "compatible"));
-        // JSON/schema allow the escaped scalar; native review detail admission
-        // rejects the control and authorizes its exact detail-only repair.
-        value.object.getPtr("detail").?.* = .{ .string = "Invalid review\x01detail" };
-        return std.json.Stringify.valueAlloc(a, parsed.value, .{});
-    }
     fn step(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
         const self = cast(context);
         const data = @import("../../../src/domain/pipeline_data.zig");
@@ -1578,16 +1561,11 @@ const AdviceProductionRun = struct {
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         var origin: ?Origin = null;
-        var projection: ?@FieldType(@import("../../../src/domain/model_input_packet.zig").AdvisoryAssessment, "projection") = null;
         var usage: ?provider.ProviderUsage = null;
         var stopped = false;
         var required_source = false;
-        var protocol_closure = false;
-        var repair_request = false;
-        var repair_stop = false;
+        var records = false;
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
-            protocol_closure = std.mem.eql(u8, entry.operation_id.bytes, "complete-advisory-protocol-request");
-            repair_stop = std.mem.eql(u8, entry.operation_id.bytes, "stop-specification-repair-advice") or std.mem.eql(u8, entry.operation_id.bytes, "stop-specification-protocol-repair-advice");
             if (!std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) break;
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
@@ -1601,46 +1579,24 @@ const AdviceProductionRun = struct {
                 std.testing.expectEqualDeep(request.binding().controls.temperature(.runaway_resend), request.prepared().?.temperature()) catch unreachable;
                 self.resend_sends += 1;
             } else std.testing.expectEqual(.configured, request.prepared().?.sampling) catch unreachable;
-            if (request.packet()) |packet| if (packet.advisoryAssessment()) |advice| {
-                projection = advice.projection;
-            };
-            repair_request = projection != null and request.id().purpose == .atomic_repair;
-            if (projection != null and self.generated_content == null) {
-                const support = @import("../../../src/application/specification_support_workflow.zig");
-                const source = support.inputs(&view, support.progress(&view) catch unreachable) catch unreachable;
-                const content = source.specification orelse source.principle_context.?.business.content;
-                self.generated_content = @import("../../../src/domain/canonical_json.zig").encode(@import("../../../src/domain/specification.zig").IdentifiedContent, self.allocator, content) catch unreachable;
-            }
-            if (repair_request) {
-                const permit = request.packet().?.repairPermit().?;
-                std.testing.expectEqualDeep(permit, self.runner.repair_retry.currentPermit().?) catch unreachable;
-                if (self.repair_permit) |prior| std.testing.expectEqualDeep(prior, permit) catch unreachable else self.repair_permit = permit;
-                const owned = @import("../../../src/application/required_authority_values.zig");
-                const repair_state = @import("../../../src/application/pipeline_values.zig").read(&view, @import("../../../src/application/specification_support_repair_workflow.zig").schema, owned.Value) catch unreachable;
-                std.testing.expectEqual(if (projection == .source) @as(std.meta.Tag(owned.Payload), .support_repair) else .principle_support_repair, std.meta.activeTag(owned.payload(repair_state).*)) catch unreachable;
-            }
-            required_source = projection == null and request.id().purpose == .semantic_review;
+            const generating = view.contains(.specification_generation_session) or view.contains(.identified_specification_content);
+            required_source = request.id().purpose == .semantic_review;
+            // Spec reviews sources only before generation.
+            if (required_source and generating) self.semantic_after_generation += 1;
+            records = request.id().immutable_unit_owner_id == .specification_unit and request.id().purpose == .initial_generation and
+                std.mem.eql(u8, request.packet().?.resultDefinition().?.bytes, "records");
             // Every request carries the configured model's registered controls,
             // whichever provider the shipped case selects.
             std.testing.expectEqual(request.binding().registry_entry.capabilities.inferenceControls(@import("../../../src/test_fixtures/model_temperatures.zig").temperatures), request.prepared().?.controls) catch unreachable;
-            if (projection == .principles) self.principle_attempts += 1;
-            var body = if (repair_request) "{}" else @import("../../../src/test_fixtures/spec_generation_responses.zig").build(arena.allocator(), view, .{ .attempt = attempt.value, .entities_required = self.mode == .global_budget }) catch |err| std.debug.panic("offline production candidate: {s}", .{@errorName(err)});
-            if (self.injected_findings == 0 and !repair_request and
-                ((self.mode == .advisory_repair_output_limit and projection == .source) or (self.mode == .advisory_repair_protocol and projection == .principles)))
-            {
-                body = invalidPositiveDetail(arena.allocator(), body) catch unreachable;
-                self.injected_findings += 1;
-            }
+            const body = @import("../../../src/test_fixtures/spec_generation_responses.zig").build(arena.allocator(), view, .{ .attempt = attempt.value, .entities_required = self.mode == .global_budget }) catch |err| std.debug.panic("offline production candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan = .{ .complete = .{ .content = body, .input_tokens = 5, .output_tokens = 2 } };
-            if ((self.mode == .source_output_limit and projection == .source) or
-                (self.mode == .advisory_repair_output_limit and repair_request) or
-                (self.mode == .required_output_limit and request.id().immutable_unit_owner_id == .specification_unit) or
+            if ((self.mode == .required_output_limit and request.id().immutable_unit_owner_id == .specification_unit) or
                 (self.mode == .required_source_output_limit and required_source))
             {
                 self.fake.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 5, .output_tokens = 2048 } };
                 stopped = true;
                 usage = provider.ProviderUsage.init(5, 2048, 2053).?;
-            } else if (self.mode == .global_budget and projection == .source and self.source_sends == 0) {
+            } else if (self.mode == .global_budget and records and self.records_sends == 0) {
                 const tokens = self.runner.tokenLedger().snapshot();
                 std.testing.expect(tokens.total_tokens < tokens.total_budget.value) catch unreachable;
                 self.budget_before_stop = tokens.total_tokens;
@@ -1648,10 +1604,7 @@ const AdviceProductionRun = struct {
                 self.fake.invocation_plan.complete.input_tokens = crossing_usage - 1;
                 self.fake.invocation_plan.complete.output_tokens = 1;
                 usage = provider.ProviderUsage.init(crossing_usage - 1, 1, crossing_usage).?;
-            } else {
-                if ((self.mode == .malformed_source_protocol and projection == .source) or (self.mode == .advisory_repair_protocol and repair_request)) self.fake.invocation_plan.complete.content = "{";
-                usage = provider.ProviderUsage.init(5, 2, 7).?;
-            }
+            } else usage = provider.ProviderUsage.init(5, 2, 7).?;
             break;
         };
         const before = self.fake.invocation_call_count;
@@ -1659,42 +1612,16 @@ const AdviceProductionRun = struct {
         if (self.fake.invocation_call_count != before) {
             std.testing.expectEqual(before + 1, self.fake.invocation_call_count) catch unreachable;
             self.exchanges.append(self.allocator, .{ .call = self.fake.invocation_call_count, .origin = origin.?, .usage = usage }) catch unreachable;
-            if (projection) |purpose| switch (purpose) {
-                .source => {
-                    self.source_sends += 1;
-                    self.source_origins.append(self.allocator, origin.?) catch unreachable;
-                },
-                .principles => self.principle_sends += 1,
-            };
-            if (self.mode == .global_budget and projection == .source) {
+            if (self.mode == .global_budget and records and self.records_sends == 0) {
                 std.testing.expect(self.budget_stop_call == null) catch unreachable;
                 self.budget_stop_call = self.fake.invocation_call_count;
             }
+            if (records) self.records_sends += 1;
             if (required_source) self.required_source_sends += 1;
-            if (repair_request) {
-                self.repair_sends += 1;
-                self.repair_origins.append(self.allocator, origin.?) catch unreachable;
-            }
             if (stopped) self.stop_sends += 1;
         }
         self.sequence += 1;
         const current: data.View = .{ .slots = self.runner.envelope.slots };
-        if (protocol_closure) {
-            const request = requests.readCurrent(&current, requests.prepared_schema) catch unreachable;
-            const ledger = @import("../../../src/application/pipeline_values.zig").read(&current, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger) catch unreachable;
-            const record = ledger.record(request.id()).?;
-            std.testing.expectEqual(.terminal, record.status) catch unreachable;
-            std.testing.expectEqual(.failed, record.terminal_reason.?) catch unreachable;
-            const receipt = @import("../../../src/application/workflow_model_accounting.zig").readAdvisoryStop(&current) catch unreachable;
-            self.protocol_limit = receipt.exhaustion().limit.value;
-            std.testing.expectEqual(if (self.mode == .advisory_repair_protocol) self.repair_sends else self.source_sends, receipt.exhaustion().completed_executions) catch unreachable;
-            self.protocol_closures += 1;
-        }
-        if (repair_stop and result == .outcome and result.outcome == .ok) {
-            std.testing.expect(!current.contains(.specification_support_repair)) catch unreachable;
-            std.testing.expect(self.runner.repair_retry.currentPermit() == null) catch unreachable;
-            self.repair_stops += 1;
-        }
         self.tracker.observe(&current, self.sequence, self.fake.invocation_call_count) catch |err| {
             self.failure = err;
             return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
@@ -1721,316 +1648,128 @@ fn featureLogRows(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, event: 
     return count;
 }
 
-/// Forwards every fact except `review.incomplete`, whose logging it rejects.
-const BlockIncompleteReviewLog = struct {
-    const barrier_port = @import("../../../src/ports/telemetry_barrier.zig");
-    const telemetry = @import("../../../src/domain/telemetry.zig");
-    const log_stream = @import("../../../src/domain/feature_log_stream.zig");
-    const prompt = @import("../../../src/domain/sanitized_prompt_log.zig");
-    inner: barrier_port.Barrier,
-    blocked: usize = 0,
-    fn barrier(self: *@This()) barrier_port.Barrier {
-        return .{ .context = self, .process_fn = process, .select_prompt_fn = selectPrompt, .process_prompt_fn = processPrompt, .report_failure_fn = reportFailure };
-    }
-    fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
-        const self: *@This() = @ptrCast(@alignCast(context));
-        if (fact.fact.event_type != .review_incomplete) return self.inner.process(fact);
-        self.blocked += 1;
-        return .{ .blocked = .LOG_FLUSH_FAILURE };
-    }
-    fn selectPrompt(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) bool {
-        const self: *@This() = @ptrCast(@alignCast(context));
-        return self.inner.selectPrompt(fragment);
-    }
-    fn processPrompt(context: *anyopaque, fragment: prompt.SanitizedPromptFragment) log_stream.Outcome {
-        const self: *@This() = @ptrCast(@alignCast(context));
-        return self.inner.processPrompt(fragment);
-    }
-    fn reportFailure(context: *anyopaque, workflow: telemetry.WorkflowShortcode, failure: log_stream.FailureCode) void {
-        const self: *@This() = @ptrCast(@alignCast(context));
-        self.inner.reportFailure(workflow, failure);
-    }
-};
-
-/// Rows of `event` with diagnostic `code` whose final `count` column is `count`.
-fn featureLogCountRows(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, event: []const u8, code: []const u8, count: usize) !usize {
-    var specs = try project.openDir(io, "specs", .{ .iterate = true });
-    defer specs.close(io);
-    var walker = try specs.walk(a);
-    defer walker.deinit();
-    const suffix = try std.fmt.allocPrint(a, "|{d}", .{count});
-    var rows: usize = 0;
-    while (try walker.next(io)) |entry| {
-        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".log") or std.mem.indexOf(u8, entry.path, "logs/events/") == null) continue;
-        const bytes = try entry.dir.readFileAlloc(io, entry.basename, a, .limited(64 * 1024 * 1024));
-        var lines = std.mem.splitScalar(u8, bytes, '\n');
-        while (lines.next()) |line| {
-            if (std.mem.indexOf(u8, line, event) != null and std.mem.indexOf(u8, line, code) != null and std.mem.endsWith(u8, line, suffix)) rows += 1;
-        }
-    }
-    return rows;
-}
-
-test "production workflow retains typed advice stops and enforces one global token budget" {
+test "production workflow enforces one global token budget and fails required stops typed" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
-    const Mode = AdviceProductionRun.Mode;
+    const Mode = ProductionRun.Mode;
     const admission = @import("../baseline/admission.zig");
     const io = std.testing.io;
-    for ([_]Mode{ .source_output_limit, .global_budget, .malformed_source_protocol, .advisory_repair_output_limit, .advisory_repair_protocol, .required_output_limit, .required_source_output_limit }) |mode| {
-        for ([_]bool{ false, true }) |block_incomplete_log| {
-            // ADR 0040: one incomplete-advice run also proves its log rejection blocks publication.
-            if (block_incomplete_log and mode != .source_output_limit) continue;
-            errdefer std.debug.print("offline advice production scenario: {s}, blocked review log: {}\n", .{ @tagName(mode), block_incomplete_log });
-            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-            defer arena.deinit();
-            const a = arena.allocator();
-            const choice = try c.parse(a, if (mode == .global_budget) @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json") else @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
-            var captured = try fixture.capture(io, a, .cwd(), choice);
-            // ADR 0037: the project configuration supplies the budget. A value unlike the
-            // shipped one shows the ledger starts from the configuration.
-            captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"workflowTokenBudget\": 125000", "\"workflowTokenBudget\": 90000");
-            try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"workflowTokenBudget\": 90000") != null);
-            if (mode == .required_source_output_limit) {
-                captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"sourcePreservationCheck\": false", "\"sourcePreservationCheck\": true");
-                try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"sourcePreservationCheck\": true") != null);
-            }
-            var project = std.testing.tmpDir(.{});
-            defer project.cleanup();
-            try fixture.materialize(io, project.dir, captured);
-            var runtime: Runtime = undefined;
-            runtime.init(io, std.testing.allocator, project.dir, .{});
-            defer runtime.deinit();
-            try std.testing.expect(runtime.boot == .ready);
-            var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .snapshots = try familySnapshots((try configured(a, captured)).family, "offline-advisory-credential") });
-            defer invocation.deinit();
-            const bindings = invocation.bindings();
-            try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
-            try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
-            try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
-            try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
-            const runner = &invocation.pipeline_runner.?;
-            var blocking: BlockIncompleteReviewLog = .{ .inner = runner.barrier };
-            if (block_incomplete_log) runner.barrier = blocking.barrier();
-            var clock: @import("../../../src/provider_authorization_test_fixture.zig").TestClock = .{};
-            runner.provider_clock = clock.port();
-            var authorization: @import("../../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = std.testing.allocator };
-            runtime.native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
-            var fake: @import("../../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
-                .allocator = std.testing.allocator,
-                .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = AdviceProductionRun.consumeLease },
-                .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 5, .output_tokens = 2 } },
-            };
-            runtime.native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
-            var tracker: admission.Tracker = .init(std.testing.allocator);
-            defer tracker.deinit();
-            var scripted: AdviceProductionRun = .{ .allocator = a, .runner = runner, .base = bindings, .fake = &fake, .tracker = &tracker, .mode = mode };
-            const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(scripted.bindings());
-            if (scripted.failure) |err| return err;
-            if (block_incomplete_log) {
-                try std.testing.expectEqual(@as(usize, 1), blocking.blocked);
-                try std.testing.expect(outcome == .execution_rejected);
-                try std.testing.expectEqual(.LOG_FLUSH_FAILURE, outcome.execution_rejected.logging);
-                const roots = runtime.boot.ready.roots.registry();
-                const selected_feature = try @import("../../../src/domain/feature_directory.zig").validate(a, .{ .bytes = choice.feature }, roots.featureDirectoryRoots());
-                const paths = try artifacts.resolveFeaturePaths(a, roots.featureArtifactRoots(), selected_feature);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.specification).project_relative, .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
-                continue;
-            }
-            // ADR 0011: every provider-applied stop, required or advisory, reaches the
-            // production feature log with its exact reason; nothing else emits it.
-            const provider_stops = try featureLogRows(io, a, project.dir, "|model.provider_stopped|", "|OUTPUT_LIMIT|");
-            // ADR 0039: each runaway is re-sent once and logged; the re-send's own
-            // runaway is logged as a stop and ends the request.
-            const resent = try featureLogRows(io, a, project.dir, "|model.runaway_resent|", "|OUTPUT_LIMIT|");
-            // A runaway is never logged as a missing final answer.
-            try std.testing.expectEqual(@as(usize, 0), try featureLogRows(io, a, project.dir, "|", "|MISSING_FINAL_TEXT|"));
-            switch (mode) {
-                .source_output_limit, .advisory_repair_output_limit, .required_output_limit, .required_source_output_limit => {
-                    try std.testing.expectEqual(@as(usize, 2), provider_stops);
-                    try std.testing.expectEqual(@as(usize, 1), resent);
-                    try std.testing.expectEqual(@as(usize, 1), scripted.resend_sends);
-                },
-                .global_budget, .malformed_source_protocol, .advisory_repair_protocol => {
-                    try std.testing.expectEqual(@as(usize, 0), provider_stops);
-                    try std.testing.expectEqual(@as(usize, 0), resent);
-                    try std.testing.expectEqual(@as(usize, 0), scripted.resend_sends);
-                },
-            }
-            // The E2E report marks each re-send and the attempt it repeats.
-            var report: @import("../e2e/contracts.zig").Report = .{ .schema = .@"spec-e2e-report/v11", .started_at_utc = "", .status = .workflow_failed };
-            try @import("../e2e/observation.zig").capture(a, runner, &report);
-            var marked: usize = 0;
-            for (report.attempts) |entry| if (entry.resends) |repeated| {
-                try std.testing.expectEqual(entry.origin.attempt.value - 1, repeated);
-                // Each attempt is attributed by the native identity the runaway targeted.
-                const stage = @import("../baseline/stages.zig").classify(entry.purpose, entry.owner_kind);
-                switch (mode) {
-                    .source_output_limit, .required_source_output_limit => try std.testing.expectEqual(.review, stage),
-                    .advisory_repair_output_limit => try std.testing.expectEqual(.repair, stage),
-                    .required_output_limit => try std.testing.expectEqual(.generation, stage),
-                    .global_budget, .malformed_source_protocol, .advisory_repair_protocol => return error.TestUnexpectedResult,
-                }
-                marked += 1;
-            };
-            try std.testing.expectEqual(scripted.resend_sends, marked);
-            // ADR 0040: only advice that closed incomplete is logged as such.
-            const incomplete_rows = try featureLogRows(io, a, project.dir, "|review.incomplete|", "|");
-            switch (mode) {
-                .source_output_limit, .advisory_repair_output_limit, .malformed_source_protocol, .advisory_repair_protocol => try std.testing.expectEqual(@as(usize, 1), incomplete_rows),
-                .global_budget, .required_output_limit, .required_source_output_limit => {
-                    try std.testing.expectEqual(@as(usize, 0), incomplete_rows);
-                    try std.testing.expectEqual(@as(usize, 0), report.incomplete_reviews.len);
-                },
-            }
-            const audit = tracker.snapshot(true);
-            try admission.validate(a, audit, scripted.exchanges.items);
-            const escaped = try admission.measure(audit, scripted.exchanges.items);
-            try std.testing.expectEqual(.measured, escaped.status);
-            try std.testing.expectEqual(@as(u64, 0), escaped.escaped_values);
-            try std.testing.expectEqual(@as(u64, 0), escaped.escaped_origins);
-            try std.testing.expect(escaped.admitted_values > 0);
-            const tokens = runner.tokenLedger().snapshot();
-            const required_stop = mode == .required_output_limit or mode == .required_source_output_limit;
-            var actual_tokens: u128 = 0;
-            for (scripted.exchanges.items) |exchange| actual_tokens += exchange.usage.?.total_tokens;
-            try std.testing.expectEqual(actual_tokens, tokens.total_tokens);
-            try std.testing.expectEqual(@as(u64, 90_000), tokens.total_budget.value);
-            const roots = runtime.boot.ready.roots.registry();
-            const selected_feature = try @import("../../../src/domain/feature_directory.zig").validate(a, .{ .bytes = choice.feature }, roots.featureDirectoryRoots());
-            const paths = try artifacts.resolveFeaturePaths(a, roots.featureArtifactRoots(), selected_feature);
-            if (mode == .global_budget) {
-                try std.testing.expect(outcome == .execution_rejected);
-                try std.testing.expect(outcome.execution_rejected == .token_budget);
-                try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
-                try std.testing.expectEqual(@as(u128, 90_001), tokens.total_tokens);
-                try std.testing.expect(scripted.budget_before_stop.? > 0);
-                const last = scripted.exchanges.items[scripted.exchanges.items.len - 1];
-                try std.testing.expectEqual(tokens.total_tokens, scripted.budget_before_stop.? + last.usage.?.total_tokens);
-                try std.testing.expectEqual(scripted.budget_stop_call.?, scripted.exchanges.items.len);
-                try std.testing.expectEqual(fake.invocation_call_count, scripted.budget_stop_call.?);
-                try std.testing.expectEqual(@as(usize, 1), scripted.source_sends);
-                try std.testing.expectEqual(@as(usize, 0), scripted.principle_sends + scripted.principle_attempts);
-                const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                const support = @import("../../../src/application/specification_support_workflow.zig");
-                const progress = try support.progress(&view);
-                const inputs = try support.inputs(&view, progress);
-                try std.testing.expect(inputs.advice_stop == null);
-                try std.testing.expect(!view.contains(.published_workflow_output));
-                var entity_fields: usize = 0;
-                for (audit.checks) |check| if (check.subject == .specification and check.subject.specification.unit == .entities and check.subject.specification.record_kind == .entity) {
-                    entity_fields += 1;
-                };
-                try std.testing.expect(entity_fields >= 2);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.specification).project_relative, .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
-                continue;
-            }
-            if (required_stop) {
-                try std.testing.expect(outcome == .execution);
-                try std.testing.expectEqual(.failed, outcome.executionStatus().?);
-                // The runaway and its re-send both stopped; the request fails typed.
-                try std.testing.expectEqual(@as(usize, 2), scripted.stop_sends);
-                try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
-                try std.testing.expectEqual(@as(usize, 0), scripted.source_sends + scripted.principle_sends);
-                if (mode == .required_source_output_limit) {
-                    try std.testing.expectEqual(@as(usize, 2), scripted.required_source_sends);
-                    const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                    const support = @import("../../../src/application/specification_support_workflow.zig");
-                    const progress = try support.progress(&view);
-                    try std.testing.expect(progress == .initial);
-                    const inputs = try support.inputs(&view, progress);
-                    try std.testing.expect(inputs.advice_stop == null);
-                }
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.specification).project_relative, .{}));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
-                continue;
-            }
-            try std.testing.expectEqual(.ok, outcome.executionStatus().?);
-            if (mode == .advisory_repair_protocol) {
-                try std.testing.expect(scripted.source_sends > 0);
-                for (scripted.source_origins.items, 0..) |origin, index| {
-                    try std.testing.expectEqual(@as(u32, 1), origin.attempt.value);
-                    for (scripted.source_origins.items[0..index]) |prior| try std.testing.expect(prior.request.value != origin.request.value);
-                }
-            } else try std.testing.expectEqual(switch (mode) {
-                .malformed_source_protocol => @as(usize, scripted.protocol_limit.?) + 1,
-                // The runaway and its one re-send (ADR 0039).
-                .source_output_limit => @as(usize, 2),
-                // The review, then the repair's runaway and its re-send.
-                .advisory_repair_output_limit => @as(usize, 3),
-                else => @as(usize, 1),
-            }, scripted.source_sends);
-            try std.testing.expectEqual(@as(usize, 1) + (if (mode == .advisory_repair_protocol) scripted.repair_sends else 0), scripted.principle_attempts);
-            try std.testing.expectEqual(@as(usize, 1) + (if (mode == .advisory_repair_protocol) scripted.repair_sends else 0), scripted.principle_sends);
-            const state_bytes = try project.dir.readFileAlloc(io, paths.get(.workflow_state).project_relative, a, .limited(64 * 1024 * 1024));
-            const restored = try @import("../../../src/domain/specification_state.zig").parse(a, state_bytes, .{ .bytes = choice.feature }, runtime.boot.ready.workflows.registry().contractSource());
-            const state = restored.specified().?;
-            try std.testing.expectEqualStrings(scripted.generated_content.?, try @import("../../../src/domain/canonical_json.zig").encode(@import("../../../src/domain/specification.zig").IdentifiedContent, a, state.content));
-            const stop = if (mode == .advisory_repair_protocol) state.principle_assessment.advice_stop.? else state.review.advice_stop.?;
-            const result = if (mode == .advisory_repair_protocol) state.principle_assessment.result else state.review.result;
-            try std.testing.expectEqual(@as(@import("../../../src/domain/required_authority.zig").AdviceStop.Reason, switch (mode) {
-                .source_output_limit, .advisory_repair_output_limit => .provider_output_limit,
-                .malformed_source_protocol, .advisory_repair_protocol => .protocol_exhausted,
-                .global_budget, .required_output_limit, .required_source_output_limit => unreachable,
-            }), stop.reason);
-            try std.testing.expect(stop.origin != null);
-            try std.testing.expect(stop.unassessed.len > 0);
-            try std.testing.expectEqual(state.review.candidate_revision, stop.candidate_revision);
-            var incomplete: usize = 0;
-            for (result.entries) |entry| if (entry.outcome == .assessment_incomplete) {
-                incomplete += 1;
-            };
-            try std.testing.expectEqual(stop.unassessed.len, incomplete);
-            if (mode == .malformed_source_protocol) {
-                try std.testing.expectEqual(@as(usize, 1), scripted.protocol_closures);
-                for (scripted.source_origins.items, 0..) |source_origin, index| {
-                    try std.testing.expectEqualDeep(scripted.source_origins.items[0].request, source_origin.request);
-                    try std.testing.expectEqual(index + 1, source_origin.attempt.value);
-                }
-                try std.testing.expectEqualDeep(scripted.source_origins.items[scripted.source_origins.items.len - 1], state.review.advice_stop.?.origin.?);
-            } else if (mode == .advisory_repair_protocol) {
-                try std.testing.expectEqual(@as(usize, 1), scripted.protocol_closures);
-                try std.testing.expectEqual(@as(usize, scripted.protocol_limit.?) + 1, scripted.repair_sends);
-                for (scripted.repair_origins.items, 0..) |origin, index| {
-                    try std.testing.expectEqualDeep(scripted.repair_origins.items[0].request, origin.request);
-                    try std.testing.expectEqual(index + 1, origin.attempt.value);
-                }
-                try std.testing.expectEqualDeep(scripted.repair_origins.items[scripted.repair_origins.items.len - 1], stop.origin.?);
-                try std.testing.expect(state.review.advice_stop == null);
-            } else try std.testing.expectEqual(@as(usize, 0), scripted.protocol_closures);
-            const repair_mode = mode == .advisory_repair_output_limit or mode == .advisory_repair_protocol;
-            try std.testing.expectEqual(@as(usize, @intFromBool(repair_mode)), scripted.injected_findings);
-            try std.testing.expectEqual(@as(usize, @intFromBool(repair_mode)), scripted.repair_stops);
-            try std.testing.expect(runner.repair_retry.currentPermit() == null);
-            try std.testing.expect(!(@import("../../../src/domain/pipeline_data.zig").View{ .slots = runner.envelope.slots }).contains(.specification_support_repair));
-            if (mode == .advisory_repair_output_limit) {
-                // The repair's runaway and its re-send; the stop names the re-send.
-                try std.testing.expectEqual(@as(usize, 2), scripted.repair_sends);
-                try std.testing.expectEqualDeep(scripted.repair_origins.items[1], stop.origin.?);
-            } else if (!repair_mode) try std.testing.expectEqual(@as(usize, 0), scripted.repair_sends);
-            if (mode != .advisory_repair_protocol) try std.testing.expect(state.principle_assessment.advice_stop == null);
-            try std.testing.expect(state.coverage.obligations.len > 0);
-            for (state.coverage.obligations) |obligation| try std.testing.expect(obligation.exact_targets.len > 0);
-            // ADR 0040: the incomplete review is logged with its reason and count,
-            // recorded in the report, and marked in both published views.
-            const code = try std.ascii.allocUpperString(a, @tagName(stop.reason));
-            try std.testing.expectEqual(@as(usize, 1), try featureLogCountRows(io, a, project.dir, "|review.incomplete|", try std.fmt.allocPrint(a, "|{s}|", .{code}), stop.unassessed.len));
-            const reviewed = if (mode == .advisory_repair_protocol) @as(@TypeOf(report.incomplete_reviews[0].review), .principle) else .source;
-            try std.testing.expectEqual(@as(usize, 1), report.incomplete_reviews.len);
-            try std.testing.expectEqual(reviewed, report.incomplete_reviews[0].review);
-            try std.testing.expectEqual(stop.reason, report.incomplete_reviews[0].reason);
-            try std.testing.expectEqual(stop.unassessed.len, report.incomplete_reviews[0].unassessed);
-            try std.testing.expectEqual(stop.requirements.len, report.incomplete_reviews[0].subjects);
-            const specification = try project.dir.readFileAlloc(io, paths.get(.specification).project_relative, a, .limited(64 * 1024 * 1024));
-            const status = try std.fmt.allocPrint(a, "\n\n**Review status: Incomplete — {d} of {d} review subjects were not assessed.** See reference-context.md for what was not assessed and why.\n\n", .{ stop.unassessed.len, state.review.seeds.len + state.principle_assessment.requirements.len });
-            try std.testing.expect(std.mem.indexOf(u8, specification, status) != null);
-            const context_view = try project.dir.readFileAlloc(io, paths.get(.reference_context).project_relative, a, .limited(64 * 1024 * 1024));
-            const heading = try std.fmt.allocPrint(a, "### {s} Review: Incomplete ({s})\n\n{d} of {d} subjects were not assessed:\n", .{ if (reviewed == .principle) "Principle" else "Source", @tagName(stop.reason), stop.unassessed.len, stop.requirements.len });
-            try std.testing.expect(std.mem.indexOf(u8, context_view, "\n## Review Status\n") != null);
-            try std.testing.expect(std.mem.indexOf(u8, context_view, heading) != null);
-            try std.testing.expectEqual(fake.invocation_call_count, scripted.exchanges.items.len);
+    for (std.meta.tags(Mode)) |mode| {
+        errdefer std.debug.print("offline production scenario: {s}\n", .{@tagName(mode)});
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const choice = try c.parse(a, if (mode == .global_budget) @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json") else @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+        var captured = try fixture.capture(io, a, .cwd(), choice);
+        // ADR 0037: the project configuration supplies the budget. A value unlike the
+        // shipped one shows the ledger starts from the configuration.
+        captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"workflowTokenBudget\": 125000", "\"workflowTokenBudget\": 90000");
+        try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"workflowTokenBudget\": 90000") != null);
+        if (mode == .required_source_output_limit) {
+            captured.config = try std.mem.replaceOwned(u8, a, captured.config, "\"sourcePreservationCheck\": false", "\"sourcePreservationCheck\": true");
+            try std.testing.expect(std.mem.indexOf(u8, captured.config, "\"sourcePreservationCheck\": true") != null);
         }
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        var runtime: Runtime = undefined;
+        runtime.init(io, std.testing.allocator, project.dir, .{});
+        defer runtime.deinit();
+        try std.testing.expect(runtime.boot == .ready);
+        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{ .snapshots = try familySnapshots((try configured(a, captured)).family, "offline-production-credential") });
+        defer invocation.deinit();
+        const bindings = invocation.bindings();
+        try std.testing.expectEqual(.ok, bindings.invokeValidateOperationRegistry());
+        try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
+        try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
+        try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
+        const runner = &invocation.pipeline_runner.?;
+        var clock: @import("../../../src/provider_authorization_test_fixture.zig").TestClock = .{};
+        runner.provider_clock = clock.port();
+        var authorization: @import("../../../src/adapters/provider/fake_provider_authorization.zig").FakeProviderAuthorization = .{ .allocator = std.testing.allocator };
+        runtime.native.model_requests.prepare_authorization.action = .{ .authorization = authorization.port() };
+        var fake: @import("../../../src/adapters/provider/fake_llm_provider.zig").FakeLLMProvider = .{
+            .allocator = std.testing.allocator,
+            .authorization_leases = .{ .context = @ptrCast(runner), .clock = runner.provider_clock.?, .runtime = runner.runtime, .consume_fn = ProductionRun.consumeLease },
+            .invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = 5, .output_tokens = 2 } },
+        };
+        runtime.native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
+        var tracker: admission.Tracker = .init(std.testing.allocator);
+        defer tracker.deinit();
+        var scripted: ProductionRun = .{ .allocator = a, .runner = runner, .base = bindings, .fake = &fake, .tracker = &tracker, .mode = mode };
+        const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(scripted.bindings());
+        if (scripted.failure) |err| return err;
+        try std.testing.expectEqual(@as(usize, 0), scripted.semantic_after_generation);
+        // ADR 0011: every provider-applied stop reaches the production feature log
+        // with its exact reason; nothing else emits it.
+        const provider_stops = try featureLogRows(io, a, project.dir, "|model.provider_stopped|", "|OUTPUT_LIMIT|");
+        // ADR 0039: each runaway is re-sent once and logged; the re-send's own
+        // runaway is logged as a stop and ends the request.
+        const resent = try featureLogRows(io, a, project.dir, "|model.runaway_resent|", "|OUTPUT_LIMIT|");
+        // A runaway is never logged as a missing final answer.
+        try std.testing.expectEqual(@as(usize, 0), try featureLogRows(io, a, project.dir, "|", "|MISSING_FINAL_TEXT|"));
+        const required_stop = mode != .global_budget;
+        try std.testing.expectEqual(@as(usize, if (required_stop) 2 else 0), provider_stops);
+        try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), resent);
+        try std.testing.expectEqual(@as(usize, @intFromBool(required_stop)), scripted.resend_sends);
+        // The E2E report marks each re-send and the attempt it repeats.
+        var report: @import("../e2e/contracts.zig").Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed };
+        try @import("../e2e/observation.zig").capture(a, runner, &report);
+        var marked: usize = 0;
+        for (report.attempts) |entry| if (entry.resends) |repeated| {
+            try std.testing.expectEqual(entry.origin.attempt.value - 1, repeated);
+            // Each attempt is attributed by the native identity the runaway targeted.
+            const stage = @import("../baseline/stages.zig").classify(entry.purpose, entry.owner_kind);
+            try std.testing.expectEqual(@as(@TypeOf(stage), if (mode == .required_source_output_limit) .review else .generation), stage);
+            marked += 1;
+        };
+        try std.testing.expectEqual(scripted.resend_sends, marked);
+        const audit = tracker.snapshot(true);
+        try admission.validate(a, audit, scripted.exchanges.items);
+        const escaped = try admission.measure(audit, scripted.exchanges.items);
+        try std.testing.expectEqual(.measured, escaped.status);
+        try std.testing.expectEqual(@as(u64, 0), escaped.escaped_values);
+        try std.testing.expectEqual(@as(u64, 0), escaped.escaped_origins);
+        try std.testing.expect(escaped.admitted_values > 0);
+        const tokens = runner.tokenLedger().snapshot();
+        var actual_tokens: u128 = 0;
+        for (scripted.exchanges.items) |exchange| actual_tokens += exchange.usage.?.total_tokens;
+        try std.testing.expectEqual(actual_tokens, tokens.total_tokens);
+        try std.testing.expectEqual(@as(u64, 90_000), tokens.total_budget.value);
+        const roots = runtime.boot.ready.roots.registry();
+        const selected_feature = try @import("../../../src/domain/feature_directory.zig").validate(a, .{ .bytes = choice.feature }, roots.featureDirectoryRoots());
+        const paths = try artifacts.resolveFeaturePaths(a, roots.featureArtifactRoots(), selected_feature);
+        try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.specification).project_relative, .{}));
+        try std.testing.expectError(error.FileNotFound, project.dir.access(io, paths.get(.workflow_state).project_relative, .{}));
+        if (mode == .global_budget) {
+            try std.testing.expect(outcome == .execution_rejected);
+            try std.testing.expect(outcome.execution_rejected == .token_budget);
+            try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, outcome.execution_rejected.token_budget);
+            try std.testing.expectEqual(@as(u128, 90_001), tokens.total_tokens);
+            try std.testing.expect(scripted.budget_before_stop.? > 0);
+            const last = scripted.exchanges.items[scripted.exchanges.items.len - 1];
+            try std.testing.expectEqual(tokens.total_tokens, scripted.budget_before_stop.? + last.usage.?.total_tokens);
+            try std.testing.expectEqual(scripted.budget_stop_call.?, scripted.exchanges.items.len);
+            try std.testing.expectEqual(fake.invocation_call_count, scripted.budget_stop_call.?);
+            try std.testing.expectEqual(@as(usize, 1), scripted.records_sends);
+            const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(!view.contains(.published_workflow_output));
+            var entity_fields: usize = 0;
+            for (audit.checks) |check| if (check.subject == .specification and check.subject.specification.unit == .entities and check.subject.specification.record_kind == .entity) {
+                entity_fields += 1;
+            };
+            try std.testing.expect(entity_fields >= 2);
+            continue;
+        }
+        try std.testing.expect(outcome == .execution);
+        try std.testing.expectEqual(.failed, outcome.executionStatus().?);
+        // The runaway and its re-send both stopped; the request fails typed.
+        try std.testing.expectEqual(@as(usize, 2), scripted.stop_sends);
+        try std.testing.expectEqual(.RunawayRepeated, runner.last_operation_rejection.?.cause);
+        if (mode == .required_source_output_limit) {
+            try std.testing.expectEqual(@as(usize, 2), scripted.required_source_sends);
+            const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect((try @import("../../../src/application/specification_support_workflow.zig").progress(&view)) == .initial);
+        } else try std.testing.expectEqual(@as(usize, 0), scripted.required_source_sends);
     }
 }
 

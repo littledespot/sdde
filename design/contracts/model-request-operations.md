@@ -16,8 +16,7 @@ Detailed contracts for the explicit YAML model-request operations governed by
 > Every rule below still applies to its stage: inputs, transitions, ownership, rejection,
 > cleanup and accounting. Read "explicit step", "YAML selects" and "explicit YAML retry" as
 > that stage within the one step. `retry-limit` is a parameter of the `request-model` step,
-> which declares no deadline. Only a step marked `advisory: allowed` maps `more` and
-> `blocked`. Retry authority names that step instead of the accounting step; ordinary,
+> which declares no deadline. Retry authority names that step instead of the accounting step; ordinary,
 > atomic-repair and dependent counting scopes are unchanged. Correction and closure stay
 > distinct stages. Retirement (release) stays an explicit YAML step.
 

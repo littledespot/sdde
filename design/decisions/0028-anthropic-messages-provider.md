@@ -4,7 +4,7 @@
 - **Date:** 2026-10-21
 - **Decision authority:** The user's instruction "implement a claude connector" on
   21 October 2026, referring to the proposal in
-  [fixes/claude_connector.md](../../fixes/claude_connector.md). The user also
+  `fixes/claude_connector.md` (git `194e29a`). The user also
   required that "the implementation must strive to reusability", with one common
   layer that both connectors use. The user then chose:
   - "All three" models: Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5;

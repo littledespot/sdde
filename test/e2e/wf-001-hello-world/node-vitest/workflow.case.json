@@ -96,10 +96,6 @@
       "destination": ".sddtoolkit/workflows/spec/generation.schema.json"
     },
     {
-      "source": "design/workflows/spec/principle.prompt.md",
-      "destination": ".sddtoolkit/workflows/spec/principle.prompt.md"
-    },
-    {
       "source": "design/workflows/spec/support.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/support.prompt.md"
     },

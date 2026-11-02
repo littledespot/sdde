@@ -9,7 +9,7 @@ const Guidance = guidance.Guidance;
 
 /// Presentation of an already-bound source-review assignment, not a new
 /// ownership, eligibility or finding policy. Business purposes remain shared
-/// with authoring and principle review; these evidence roles are source-only.
+/// with authoring; these evidence roles are source-only.
 pub const SourceReviewScope = struct {
     original_sources: []const u8,
     derived_evidence: []const u8,
@@ -19,9 +19,6 @@ pub const SourceReviewScope = struct {
 pub fn sourceReviewScope(g: *const Guidance, subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
     const scope = g.review_scope;
     return .{ .original_sources = scope.original_sources, .derived_evidence = scope.derived_evidence, .instruction = switch (subject) {
-        .candidate_field => |field| scope.candidate_field.get(if (field.record != null) .in_record else .standalone),
-        .collection => scope.collection,
-        .entity_applicability => scope.entity_applicability,
         .source_preservation => scope.source_preservation,
         .reference => |reference| scope.reference.get(std.meta.activeTag(reference)),
     } };

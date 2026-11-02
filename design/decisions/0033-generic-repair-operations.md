@@ -5,7 +5,7 @@
   per-owner repair operations carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
-  documentation on the yes, ass suggested". It decides [FIX05](../../fixes/Z_FIX05.md#21-fix05-retired--28-october-2026) W3
+  documentation on the yes, ass suggested". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) W3
   as restated after [ADR 0030](0030-engine-owned-model-request.md) and
   [ADR 0031](0031-stage-actions.md). The suggestion was:
   - generic repair operations, with each owner supplying only its own rules;
@@ -35,6 +35,10 @@
     key populations;
   - [F0100](../features/F0100-SpecWorkflow.md): the per-owner repair operations of the
     Spec definition.
+- **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
+  2026): the `reference-dispositions` authorizer no longer selects an insert or a
+  delete (an omitted or repeated disposition is corrected at admission); its
+  replacement path is unchanged. E4's freeze is taken after that change.
 
   The overall design remains **Proposed design**.
 
@@ -47,7 +51,8 @@ The Specify definition repairs invalid model output through 29 per-owner operati
 - 6 parse;
 - 7 merge.
 
-Two native advisory repair stops sit alongside them. Seven of the routes make a model call
+The two native advisory repair stops that sat alongside them were removed with
+post-generation review on 1 November 2026 (FIX06 D13.1). Seven of the routes make a model call
 with the `repair` slot: reference text, reference extraction, reference reconciliation,
 specification support, specification unit, and source-omission extraction and
 reconciliation. Several authorizers can also send a native repair straight to merge
@@ -101,8 +106,8 @@ variant only for the operations it uses today:
 That is 13 owners and 29 variants, one per removed operation. A step that names an owner
 with no variant for its operation rejects at compilation.
 
-The model call stays a separate `request-model` step (ADR 0030). Release, the advisory
-repair stop steps and every routed outcome stay YAML steps.
+The model call stays a separate `request-model` step (ADR 0030). Release and every
+routed outcome stay YAML steps.
 
 ### Owner rules stay with the owner
 
@@ -131,7 +136,8 @@ The YAML `owner` value is a typed selector, not a policy choice:
   allowances, not defect identity (ADR 0005). Caller flags cannot select a policy
   (ADR 0023).
 - **The pre-generation phase witness** stays bound inside authorize, input and merge for
-  source-omission owners, whatever `owner` says (§22.5, ADR 0023).
+  source-omission owners, whatever `owner` says (§22.5,
+  [ADR 0023](0023-advisory-post-generation-review.md#pre-generation-source-repair)).
 - **The no-invention branch** of §14.4 survives inside `authorize-repair` for the owners
   where it applies today.
 
@@ -199,8 +205,6 @@ requires.
 - **§22.1's distinction** is between authorization categories and phases, not operation
   IDs. Pre-generation source repair and native generation repair remain distinct
   authorized repairs, as distinct owners with distinct rules.
-- **Advisory repair stops** (`stop-specification-repair-advice`,
-  `stop-specification-protocol-repair-advice`) stay native stop steps (ADR 0023).
 - **Model calls, prompts, slots, tokens and the budget.**
 
 ### §14.4
@@ -276,7 +280,8 @@ confirmed on 23 October 2026:
 4. **"Compiled operation" means the compiled step instance,** matching the code.
 5. **§22.1's "distinct authorized operations"** means distinct authorization categories,
    not distinct operation IDs.
-6. **Advisory repair stops stay native stop steps** outside the four operations.
+6. **Advisory repair stops stay native stop steps** outside the four operations. Moot
+   since 1 November 2026: the stops were removed with post-generation review.
 7. **All Specify owners convert in one change,** after A1 and the first A2 conversion, and
    the enum is Specify-only for now.
 8. **Evidence:** structural conversion on offline evidence (as ADR 0031's derived
@@ -318,8 +323,7 @@ All offline:
   - the three reconciliation authorizers feeding one merge;
   - coverage `blocked`;
   - specification support's `merge_validate`;
-  - the no-invention branch;
-  - both advisory repair stops.
+  - the no-invention branch.
 - **`owner` checks.** A YAML `owner` that disagrees with the native owner is a terminal
   runner rejection, or a compile error where provable. `owner` cannot widen scope, reset
   a count or change a defect key.

@@ -98,8 +98,13 @@ Renderers own:
   a new exact binding merely by borrowing model-request eligibility.
 - Ordinary segments are NFC-normalized prose; explicit passive and exact segments are inert
   inline code. Adjacent display spans may share a fence while their canonical identities remain
-  separate. Code samples render as deterministic fenced blocks in reference context and are
-  excluded from business-specification exact-copy choices.
+  separate. An exact segment that the field's literal text wraps directly in one balanced pair
+  from the exact-value boundary owner's closed wrapper table, with no punctuation inside the
+  pair, gets no fence: the pair already delimits it, and it renders as escaped text
+  ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 6). A segment that ends in
+  the owner's terminal punctuation keeps its fence. Its segment and lineage are unchanged.
+  Code samples render as deterministic fenced blocks in reference context and are excluded
+  from business-specification exact-copy choices.
 - A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the
   specification.
 - A new user-written filename/path/URI cannot become a model repair or operational path: it
@@ -125,7 +130,12 @@ Renderers own:
   passive-registry binding is staged with plan-input state so a crash cannot record a different
   planning input.
 
-- Reference citations are not rendered into the business-only file.
+- Each acceptance-criterion, functional-requirement and entity record shows one engine-rendered
+  source line: the files and merged line ranges its claims cite, from the same trace as
+  `reference-context.md`'s requirement sources (grammar: F0100 §5.6). It is a display, never
+  provenance: readback compares it with the line the projection derives and never mints a
+  binding or a passive literal. A record that cites no source line shows none. No other
+  reference citation is rendered into `spec.md`.
 - On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the
   fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered
   literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for
@@ -150,13 +160,7 @@ Renderers own:
 - Completed `reference-context.md` renders requirement-keyed claim-to-citation
   links from validated canonical lineage. Each citation retains its captured
   reference-state identity, source ID, block and span. Pending views have no
-  generated-record links. The editable `spec.md` grammar is unchanged.
-- When any post-generation review is incomplete, `spec.md` renders one engine-owned
-  status line under its title, `**Review status: Incomplete — N of M review subjects
-  were not assessed.**`, pointing to `reference-context.md`, whose `## Review Status`
-  section lists each incomplete source or principle review's reason and unassessed
-  subjects ([ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)).
-  A fully reviewed specification renders neither.
+  generated-record links or source lines.
 - The engine loads their canonical IR, renders the expected bytes, and checks the view for exact
   equality.
 - A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the

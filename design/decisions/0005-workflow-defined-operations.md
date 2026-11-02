@@ -30,10 +30,11 @@ and still declares its slot, resources, retry limit and outcome transitions. The
 order and the request's own protocol correction are no longer YAML steps. ADR 0030's
 23 October 2026 amendment removed provider token counting (so the optional-count rule
 below no longer applies) and took the request deadline from the model's catalogue entry
-instead of YAML, both implemented 24 October 2026. It also lets only a step marked
-`advisory: allowed` map the advisory outcomes, and lets one operation's single current
-contract consist of closed variants selected at compile time (see "Unversioned
-operation IDs" below), a mechanism ADR 0033 reuses.
+instead of YAML, both implemented 24 October 2026. It also lets one operation's single
+current contract consist of closed variants selected at compile time (see "Unversioned
+operation IDs" below), a mechanism ADR 0033 uses. Its advisory variant and
+`advisory: allowed` marking were withdrawn on 1 November 2026 with post-generation review
+(FIX06 D13.1).
 
 **Stage-action amendment (22 October 2026, not yet implemented):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
@@ -98,12 +99,10 @@ workflow behavior without duplicating large resources at every node.
   `invoke-model`. Under [ADR 0033](0033-generic-repair-operations.md) (not yet
   implemented), the four generic repair operations each keep one contract and one ID.
   That contract has a closed variant per repair owner, and the compiler selects it from
-  the step's `owner` at compile time. Under [ADR 0030](0030-engine-owned-model-request.md)
-  as amended on 23 October 2026 (not yet implemented), `request-model` keeps one contract
-  and one ID with an ordinary and an advisory variant, selected at compile time by the
-  step's optional `advisory: allowed`. Both use the one contract-variant mechanism that
-  ADR 0030 builds ("Contract variants"); a variant is a complete contract, and one closed
-  step parameter selects it.
+  the step's `owner` at compile time. They use the one contract-variant mechanism that
+  [ADR 0030](0030-engine-owned-model-request.md) builds ("Contract variants"); a variant
+  is a complete contract, and one closed step parameter selects it. `request-model` has
+  one contract with no variants.
 - Both `invoke` and `steps.*.use` name that ID directly.
 - No operation-version field, version suffix, range, compatibility alias or parallel
   legacy contract is retained.

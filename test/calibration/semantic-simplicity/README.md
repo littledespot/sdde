@@ -212,8 +212,7 @@ The integration scenario writes `.zig-cache/semantic-simplicity/phase0/`:
 `development-plan.json`, 24 development `source-inputs/*.json` files and
 `dry-run.json`, including fixture SHA-256 identities, counts, synthetic accounting,
 authority exclusions and unmeasured/live-not-run status. These are regenerated
-projections, not hand-maintained source files. Retained evidence and limitations
-are recorded in [phase0-results.md](phase0-results.md).
+projections, not hand-maintained source files.
 The retained 15 October results and `phase0-dry-run.json` describe the earlier
 Luna freeze and remain historical. A fresh integration run writes the current
 GPT-OSS model and new protocol SHA-256 to the cache report; that offline report

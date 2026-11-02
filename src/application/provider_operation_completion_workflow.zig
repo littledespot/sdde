@@ -14,7 +14,7 @@ pub const Complete = struct {
         .requires = &@import("../domain/workflow_provider_operation.zig").completion_requires,
         .produces = &.{.terminal_provider_operation},
         .invalidates = &.{.invoked_provider_operation},
-        .outcomes = &.{ .ok, .more, .failed, .cancelled },
+        .outcomes = &.{ .ok, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
         .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .terminal_provider_operation } },
@@ -39,11 +39,6 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
     if (!source.operationId().eql(invoked.id)) return error.OperationExecutionFailed;
     const terminal: lifecycle.Terminal = switch (source.outcome()) {
         .validated => |evidence| switch (evidence.result()) {
-            .complete => .completed,
-            .stopped => |reason| .{ .stopped = reason },
-            .failed => |failure| .{ .failed = failure },
-        },
-        .advisory_stopped => |stop| switch (stop.evidence.result()) {
             .complete => .completed,
             .stopped => |reason| .{ .stopped = reason },
             .failed => |failure| .{ .failed = failure },

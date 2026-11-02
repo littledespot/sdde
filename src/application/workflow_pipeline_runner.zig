@@ -40,7 +40,6 @@ const outcome_association = @import("../domain/workflow_outcome_association.zig"
 const outcome_binding = @import("workflow_outcome_binding.zig");
 
 const ExpectedAccounting = union(enum) {
-    advisory_stop: retry.Exhaustion,
     none,
     attempt: attempt.Attempt,
     assignment,
@@ -230,18 +229,9 @@ pub const Runner = struct {
             const state = if (self.model_accounting) |*value| value else return .{ .rejected = .authority };
             const request = retained_request orelse return .{ .rejected = .authority };
             const current = attempt.accounting(state.attempts);
-            const decision = values.read(&input_data, model_accounting.schema, @import("../domain/model_attempt_decision.zig").Decision) catch return .{ .rejected = .authority };
-            switch (decision.outcome()) {
-                .admitted => |evidence| if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
-                    !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority },
-                .advisory_stopped => |receipt| {
-                    const correction = request.protocolCorrection() orelse return .{ .rejected = .authority };
-                    if (receipt.request() != request or request.advisoryAssessment() == null or
-                        current.attemptsReserved(request.id()) != correction.model_attempt_ordinal.value or
-                        !current.stageRunEpochId().eql(request.id().stage_run_epoch_id) or
-                        !permitsStoppedAttemptConsumer(step.*, &input_data, request)) return .{ .rejected = .authority };
-                },
-            }
+            const evidence = model_accounting.readAttempt(&input_data) catch return .{ .rejected = .authority };
+            if (evidence.requestId() != request.id() or current.attemptsReserved(request.id()) != evidence.ordinal().value or
+                !current.stageRunEpochId().eql(request.id().stage_run_epoch_id)) return .{ .rejected = .authority };
         }
         var operation_id: ?provider.ProviderOperationId = null;
         var authorization_deadline: ?u64 = null;
@@ -318,7 +308,6 @@ pub const Runner = struct {
         var attempt_input: @FieldType(operations.StepInput, "model_attempt") = null;
         var provider_input: @FieldType(operations.StepInput, "provider_operation") = null;
         var expected: ExpectedAccounting = .none;
-        var model_attempt_exhaustion: ?retry.Exhaustion = null;
         // ADR 0039: a runaway's one re-send is its own attempt, outside `retry-limit`.
         var runaway_resend: ?provider.ProviderOperationId = null;
         if (step.runner_accounting == .increment_model_attempt) {
@@ -360,31 +349,19 @@ pub const Runner = struct {
             var admitted_count: u64 = 0;
             if (request_assignment) |assignment| {
                 const admitted = self.repair_retry.beginAssignmentAttempt(step.id, authority.limit, assignment) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) {
-                    const exhausted = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority };
-                    if (step.runner_accounting != .increment_model_attempt or retained_request == null or
-                        retained_request.?.advisoryAssessment() == null or retained_request.?.protocolCorrection() == null) return .{ .rejected = .{ .retry_limit = exhausted } };
-                    model_attempt_exhaustion = exhausted;
-                    expected = .{ .advisory_stop = exhausted };
-                    admitted_count = admitted.exhausted;
-                } else admitted_count = admitted.allowed;
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+                admitted_count = admitted.allowed;
             } else if (repair_permit) |permit| {
                 const admitted = self.repair_retry.beginAttempt(step.id, authority.limit, permit) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority };
-                if (admitted == .exhausted) {
-                    const exhausted = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority };
-                    if (step.runner_accounting != .increment_model_attempt or retained_request == null or
-                        retained_request.?.advisoryAssessment() == null or retained_request.?.protocolCorrection() == null) return .{ .rejected = .{ .retry_limit = exhausted } };
-                    model_attempt_exhaustion = exhausted;
-                    expected = .{ .advisory_stop = exhausted };
-                    admitted_count = admitted.exhausted;
-                } else admitted_count = admitted.allowed;
+                if (admitted == .exhausted) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, admitted.exhausted) orelse return .{ .rejected = .authority } } };
+                admitted_count = admitted.allowed;
             } else {
                 if (self.retry_execution_counts[index] > authority.limit.value) return .{ .rejected = .{ .retry_limit = retry.Exhaustion.init(step.id, authority.limit, self.retry_execution_counts[index]) orelse return .{ .rejected = .authority } } };
                 // Compiled limits are u32; exhaustion is checked before increment.
                 self.retry_execution_counts[index] += 1;
                 admitted_count = self.retry_execution_counts[index];
             }
-            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, model_attempt_exhaustion != null)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |failure| return .{ .rejected = .{ .logging = failure } };
         };
         // The compiler supplies the retry-derived allowance. Only a committed
         // advance through a validated finite population grants another traversal.
@@ -464,7 +441,6 @@ pub const Runner = struct {
             .repair_permit = self.repair_retry.currentPermit(),
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
             .model_attempt = attempt_input,
-            .model_attempt_exhaustion = model_attempt_exhaustion,
             .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
             .provider_invocation = if (validates_observation) call else null,
             .provider_operation = provider_input,
@@ -595,7 +571,7 @@ pub const Runner = struct {
                     // events record it (ADR 0039).
                     switch (stopped.outcome()) {
                         .validated => |observed| if (observed.runaway() == .first) return null,
-                        .rejected, .cancelled, .advisory_stopped => {},
+                        .rejected, .cancelled => {},
                     }
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,
@@ -619,11 +595,6 @@ pub const Runner = struct {
         inline for (.{ step.produces, step.replaces }) |keys| for (keys) |key| {
             produced.slots[@intFromEnum(key)] = view.slots[@intFromEnum(key)];
         };
-        // ADR 0040: advice that closed incomplete is logged once, by its stop operation.
-        if (step.outcome_association == .advisory_completion and candidate.outcome == .ok) {
-            const stopped = @import("specification_advice_stop_workflow.zig").closedAdvice(&produced) catch return .LOG_SERIALIZATION_FAILURE;
-            if (self.events().reviewIncomplete(step.id, @tagName(stopped.reason), stopped.unassessed.len)) |failure| return failure;
-        }
         const diagnostic = @import("candidate_validation_diagnostics.zig").read(&produced) catch return .LOG_SERIALIZATION_FAILURE;
         if (diagnostic) |value| {
             if (value == .support_findings and value.support_findings.repair_rejection == null) {
@@ -634,11 +605,10 @@ pub const Runner = struct {
         }
         if (candidate.delta.repair_transition) |transition| {
             if (transition == .validated) return self.events().validation(step.id, candidate.outcome, if (transition.validated.result == .recurring) "REPAIR_RECURRING" else null, null);
-            if (transition == .abandoned_advice) return self.events().validation(step.id, candidate.outcome, "ADVISORY_REPAIR_ABANDONED", null);
             const event: @import("../domain/telemetry.zig").EventType = switch (transition) {
                 .authorized => .repair_requested,
                 .merged => .repair_applied,
-                .validated, .abandoned_advice => unreachable,
+                .validated => unreachable,
                 .merged_validated => |value| if (value.result == .resolved) .repair_applied else .repair_rejected,
             };
             if (self.events().repair(step.id, event, candidate.outcome, if (event == .repair_rejected) "REPAIR_RECURRING" else null)) |failure| return failure;
@@ -769,16 +739,7 @@ pub const Runner = struct {
         }
         var pending: ?model_accounting.Pending = null;
         defer if (pending) |unapplied| unapplied.discard();
-        if (expected == .advisory_stop) {
-            if (candidate.outcome != .more) return .{ .rejected = .authority };
-            const stopped = model_accounting.readAdvisoryStop(&.{ .slots = candidate.delta.data_writes }) catch return .{ .rejected = .authority };
-            const transition = candidate.delta.runner_accounting_transition orelse return .{ .rejected = .authority };
-            if (transition != .advisory_model_attempt_stopped or transition.advisory_model_attempt_stopped != stopped) return .{ .rejected = .authority };
-            const view = self.envelope.view(contract) catch return .{ .rejected = .authority };
-            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .authority };
-            if (stopped.request() != request or !std.meta.eql(stopped.exhaustion(), expected.advisory_stop)) return .{ .rejected = .authority };
-        }
-        if (expected != .none and expected != .advisory_stop) {
+        if (expected != .none) {
             const expected_outcome: workflow.OutcomeTag = if (expected == .completion) expected.completion.outcome else .ok;
             if (candidate.outcome != expected_outcome) return .{ .rejected = .authority };
             const transition = candidate.delta.runner_accounting_transition orelse return .{ .rejected = .authority };
@@ -787,7 +748,7 @@ pub const Runner = struct {
                 .assignment => .assigned_provider_operation,
                 .invocation => .invoked_provider_operation,
                 .completion => .terminal_provider_operation,
-                .none, .advisory_stop => unreachable,
+                .none => unreachable,
             }));
             // Only application of the declared runner transition creates evidence.
             if (candidate.delta.data_writes[key] != null or candidate.delta.data_replacements[key] != null) return .{ .rejected = .authority };
@@ -813,7 +774,7 @@ pub const Runner = struct {
                     if (transition != .advance_provider_operation or !candidate.delta.data_invalidations.contains(facts.source.key())) return .{ .rejected = .authority };
                     pending = state.prepareCompletion(current, request.prepared().?, facts, transition.advance_provider_operation) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
                 },
-                .none, .advisory_stop => unreachable,
+                .none => unreachable,
             }
             candidate.delta.data_writes[key] = pending.?.value;
             if (expected == .invocation) {
@@ -826,7 +787,7 @@ pub const Runner = struct {
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!retry.permitsTransition(contract.repair_role, candidate.delta.repair_transition)) return .{ .rejected = .authority };
         const repair_required = switch (contract.repair_role) {
-            .none, .validate, .abandon_advice => false,
+            .none, .validate => false,
             .authorize => candidate.outcome == .ok or candidate.outcome == .more,
             .merge => candidate.outcome == .ok or candidate.outcome == .more,
             .merge_validate => candidate.outcome == .ok or candidate.outcome == .invalid,
@@ -836,21 +797,13 @@ pub const Runner = struct {
             const unchanged = switch (transition) {
                 .merged => |value| !value.changed,
                 .merged_validated => |value| !value.changed,
-                .authorized, .validated, .abandoned_advice => false,
+                .authorized, .validated => false,
             };
             if (unchanged) {
                 const exhausted = self.repair_retry.unchangedExhaustion(transition) catch return .{ .rejected = .authority };
                 return .{ .rejected = .{ .retry_limit = exhausted orelse return .{ .rejected = .authority } } };
             }
         }
-        if (candidate.delta.repair_transition) |transition| if (transition == .abandoned_advice) {
-            const view = self.envelope.view(contract) catch return .{ .rejected = .authority };
-            const request = requests.readCurrent(&view, requests.prepared_schema) catch return .{ .rejected = .authority };
-            const packet = request.packet() orelse return .{ .rejected = .authority };
-            const permit = packet.repairPermit() orelse return .{ .rejected = .authority };
-            if (request.advisoryAssessment() == null or !std.meta.eql(permit, transition.abandoned_advice) or
-                !@import("advisory_request_completion_workflow.zig").permitsAbandonment(&view, request)) return .{ .rejected = .authority };
-        };
         const repair_pending = if (candidate.delta.repair_transition) |transition|
             self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority }
         else
@@ -1023,23 +976,4 @@ fn runtimeTerminal(runtime: pipeline.NodeRuntime) ?execution.Rejection {
         .cancelled => .cancelled,
         .deadline_exhausted => .deadline_exhausted,
     };
-}
-
-/// A stopped decision grants no inference, assignment or attempt authority.
-/// Only its native closure and the validated advisory-completion owner consume it.
-fn permitsStoppedAttemptConsumer(step: compilation.CompiledStep, view: *const data.View, request: *const @import("../domain/model_request_handoff.zig").Request) bool {
-    if (step.side_effect != .none or step.runner_accounting != .none or step.capabilities.len != 0 or
-        step.retry_authority != null or request.advisoryAssessment() == null) return false;
-    const ledger = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return false;
-    const record = ledger.record(request.id()) orelse return false;
-    if (step.outcome_association == .advisory_request_closure and request_lifecycle_selection.closesAdvisoryProtocol(step.requires)) return record.status == .invoked;
-    if (step.outcome_association == .advisory_completion and record.status == .terminal and record.terminal_reason == .failed) {
-        const facts = @import("advisory_request_completion_workflow.zig").read(view) catch return false;
-        return facts.request == request;
-    }
-    if (@import("model_transport_workflow.zig").isAdvisoryProtocolRetirement(step.requires, step.invalidates) and record.status == .terminal and record.terminal_reason == .failed) {
-        const facts = @import("advisory_request_completion_workflow.zig").read(view) catch return false;
-        return facts.request == request;
-    }
-    return false;
 }

@@ -97,11 +97,6 @@ pub const Value = union(enum) {
     not_applicable: Positive,
 };
 
-/// Complete findings for one native record assignment. The model may reorder
-/// entries, but cannot choose which required fields are assessed.
-pub const BatchFinding = struct { requirement_ordinal: u32, value: Value };
-pub const Batch = struct { findings: []const BatchFinding };
-
 /// Resolve only subject-bound or diagnostic claims. An unlocalized negative
 /// finding may use source-only evidence, never an arbitrary eligible subset.
 /// Null means no claim set can be bound to this verdict for the subject.
@@ -111,7 +106,6 @@ fn resolvedClaims(required: evidence.Requirements, kind: Decision, location: los
     // promoted into a positive authored association.
     if (required.rule(kind.finding(), location).fixedClaims()) |claims| return claims;
     if (kind == .candidate_omission) return &.{};
-    if (required.supported_provenance) |provenance| return provenance.claim_ids;
     if (required.positive_claims == .exact_set) return required.eligible_claim_ids;
     if ((kind == .supported or kind == .not_applicable) and required.eligible_claim_ids.len != 0) return null;
     if (required.eligible_claim_ids.len == 1) return required.eligible_claim_ids;
@@ -120,13 +114,6 @@ fn resolvedClaims(required: evidence.Requirements, kind: Decision, location: los
 }
 fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) json.Error![]const r.ClaimId {
     return resolvedClaims(required, kind, location) orelse error.InvalidJsonDocument;
-}
-
-/// Whether an unlocalized verdict of this kind can be canonicalized for the
-/// subject. An advisory assignment withholds every verdict that does not
-/// resolve; every subject of required review resolves (ADR 0023).
-pub fn resolves(required: evidence.Requirements, kind: Decision) bool {
-    return resolvedClaims(required, kind, .{ .unlocalized = .{} }) != null;
 }
 
 pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.Requirements) json.Error!Canonical {

@@ -104,20 +104,17 @@ Required cases include:
     allowed/disallowed `not_applicable`, unknown ownership and downstream discovery
     of an upstream-owned gap.
   - Require the same closed outcomes and routing semantics in every domain.
-  - Under ADR 0023, retain positive and adverse post-generation findings with
-    `assessment_complete` candidate bindings. Neither finding type can discharge
-    a native forced gap, create clarification authority or authorize repair.
-  - Reject incomplete, duplicate, foreign and stale whole-unit, record-family and
-    principle assignments before append. A record family spans every record of its
-    kind and stops atomically. Reject forged supported resolutions, deterministic
-    methods or candidate bindings on persisted advisory findings.
+  - Under ADR 0023, no semantic review runs after generation: publication proceeds
+    on the native checks alone, and no finding can discharge a native forced gap,
+    create clarification authority or authorize repair.
+  - Reject incomplete, duplicate, foreign and stale preservation comparisons before
+    append. Reject forged supported resolutions and deterministic methods.
   - Preserve pre-generation source repair while rejecting authorization, packet
     construction and merge after any generation session/content exists, including
     retained permits and direct custom-workflow operation bindings.
   - After a repair makes references generation-ready, require the original
     readiness/preservation validation purpose even with optional preservation
-    disabled. Reject foreign/stale scope, removed-target progress and advisory
-    closure. Block initialization with an active repair or a child suspending it;
+    disabled. Reject foreign/stale scope and removed-target progress. Block initialization with an active repair or a child suspending it;
     accept settled native validation with retired review projections.
   - Through the production schema/decoder/admission path, accept positive native
     readiness source-purpose evidence with explicit nonempty original source IDs
@@ -132,31 +129,21 @@ Required cases include:
 - **Semantic Markdown principle capture:**
   - Use filename-only category hints and deterministic applicable-category selection.
   - Require complete chunk accounting and exact mechanical `toolchain.yaml` exclusion.
-  - Supply current selected spans to the focused Spec policy assessment (§17.3.1),
-    keeping extraction, source-preservation and business generation authority separate.
-  - Cover the UTC/greeting conflict and unrelated privacy/retention constraints:
-    preserve clear requirements and retain cited advisory findings. Review alone
-    creates no mandatory Plan obligation or Spec question; Plan independently
-    validates its current required policy. Genuine native business gaps remain SNN.
-  - Reject omitted/foreign/stale assessment evidence and altered advisory bindings.
-    Changed principles refresh dependent assessments and approvals without rewriting
-    business intent. Empty/unrelated principles invent neither requirements nor questions.
-  - Prove no Spec-to-PNN predecessor cycle, no policy approval inferred from review,
-    and no old no-conflict result certifying Plan's current policy compliance.
-  - Distinguish principle capture from assessment execution on a source-gap pause;
-    do not report an unexecuted assessment as passed. Preserve supported business
-    intent where selected principles conflict and retain the original cited advice.
-  - Include requirements supported only by validated answers and authenticated Spec
-    edits; their current bindings and policy assessment cannot be skipped on rerun.
+  - Spec captures and selects principles and runs no assessment (ADR 0015); keep
+    extraction, source-preservation and business generation authority separate.
+    Changed principles invalidate Plan input and approvals without rewriting business
+    intent. Empty/unrelated principles invent neither requirements nor questions.
+  - Prove no Spec-to-PNN predecessor cycle and no policy approval inferred from Spec.
+  - Distinguish principle capture from assessment execution; never report an
+    unexecuted assessment as passed.
 - **Clarifications:**
   - Prove subject-key equality/deduplication, `S/P/T` ordinal ceilings and execution-private allocation.
   - Distinguish open-submission from closed-audit view editability.
   - Require exact complete conflict-set/view projection.
   - Reject stale answers; exercise authority/user resolution on rerun.
   - An open Spec clarification prevents all planning/model work; an open Spec or
-    Plan clarification prevents all task-generation/model work. Test advisory
-    principle handoffs alongside open questions and reject attempts to relabel or drop those
-    questions. Closed file status without current validated resolution cannot pass.
+    Plan clarification prevents all task-generation/model work. Reject attempts to
+    relabel or drop those questions. Closed file status without current validated resolution cannot pass.
   - Both need producers prepare identifiable subjects, current evidence and exact user
     decisions through §12.7. Identical review text for different S/P/T subjects must
     not produce indistinguishable questions or shared answer authority. Preserve IDs,
@@ -219,7 +206,7 @@ Required cases include:
     accepted, on hold since 30 October 2026; not implemented, would publish a failed
     incomplete specification instead). A successful correction may reach a valid
     clarification pause.
-  - Source, generation, candidate-review and residual open-registry pauses all publish
+  - Source, generation and residual open-registry pauses all publish
     the validated incomplete specification through the same path, remain ungraded,
     and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.
   - Inject failure/interruption at every write; record no new successful completion afterward.
@@ -344,7 +331,7 @@ Architecture tests also:
 - once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
   YAML-addressable model-request stage, keep each stage's narrow ports and keep its kernel
   orchestrator capability-free. The ADR's acceptance list covers the spy-binding,
-  equivalence, compiler, advisory-request, contract-variant and failure-location tests;
+  equivalence, compiler, contract-variant and failure-location tests;
   its catalogue-deadline tests landed with the deadline move on 24 October 2026;
 - once [ADR 0031](../decisions/0031-stage-actions.md) is implemented for a stage action, run its
   architecture and registry checks, each with rejected fixtures. These cover:
@@ -579,7 +566,7 @@ that inject a correct diagnosis do not establish complete recovery.
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |
 | Inconclusive or malformed need | Existing bounded correction only where authorized; exhaustion or no safe correction fails with no new spec/forms, including when other valid questions exist |
-| Optional applicability | No-conflict preserved source → unjustified negative → question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
+| Optional applicability | No-conflict preserved source → unjustified negative → question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR and validated readback; policy conflicts retain business intent and Plan ownership. |
 | Source finding variants | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
 | Freshness and publication | Source/policy/answer changes rebuild affected evidence; pending readback does not trust question prose; protected forms survive; logs/report distinguish error, incomplete publication and completed scoring |
 

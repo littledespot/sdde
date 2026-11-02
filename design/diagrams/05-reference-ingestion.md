@@ -49,7 +49,8 @@ flowchart TD
     CLASSIFY -->|Invalid candidate| DIAGNOSTIC
     TOKENS -->|Preservation contradicts positive empty| DIAGNOSTIC
     LITERALS -->|Invalid or stale| FAILED
-    DISPOSITIONS -->|Missing, duplicate, foreign or invalid| DIAGNOSTIC
+    DISPOSITIONS -->|Invalid record, relationship or cycle| DIAGNOSTIC
+    DISPOSITIONS -->|"Missing or repeated claim after correction (ADR 0046)"| FAILED
     SIGNALS -->|Invalid| DIAGNOSTIC
     CONFLICTS -->|Invalid| DIAGNOSTIC
     RECORDS -->|Incomplete or invalid| DIAGNOSTIC

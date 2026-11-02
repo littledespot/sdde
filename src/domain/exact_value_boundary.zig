@@ -52,6 +52,20 @@ pub const Utf8Prose = struct {
     pub fn evaluate(self: Utf8Prose, start: usize, end: usize, edges: Edges) Evidence {
         return evaluateSpan(self.bytes, start, end, edges);
     }
+
+    /// Whether the accepted span's innermost enclosing wrapper pair sits directly
+    /// around it, with no terminal punctuation between the span and the pair. It
+    /// witnesses lexical delimitation only, like `evaluate`; whether a renderer then
+    /// adds a delimiter of its own is §23's rule.
+    pub fn directlyWrapped(self: Utf8Prose, start: usize, end: usize, edges: Edges) bool {
+        switch (evaluateSpan(self.bytes, start, end, edges)) {
+            .rejected => return false,
+            .accepted => |span| if (span.enclosing_wrappers == 0) return false,
+        }
+        // An accepted wrapper leaves a scalar on both sides of the span.
+        const closing = closingWrapper(previous(self.bytes, start).scalar) orelse return false;
+        return next(self.bytes, end).scalar == closing;
+    }
 };
 
 /// Evaluate an already exact byte span, without finding a value or changing any
@@ -147,8 +161,8 @@ fn previous(prose: []const u8, index: usize) Scalar {
     return next(prose, cursor);
 }
 /// Whether prose ends with terminal punctuation: the one closed policy that exact-value
-/// boundaries and the acceptance-criterion clause join share (§23). Invalid or
-/// truncated UTF-8 at the end is not terminal.
+/// boundaries, the acceptance-criterion clause join and the exact-copy code span share
+/// (§23). Invalid or truncated UTF-8 at the end is not terminal.
 pub fn endsWithTerminal(prose: []const u8) bool {
     var start = prose.len;
     while (start > 0) {
@@ -193,6 +207,46 @@ fn wrapper(scalar: u21) bool {
         ')', ']', '}', 0x00bb, 0x2019, 0x201d, 0x203a, 0x3009, 0x300b, 0x300d, 0x300f, 0x3011, 0xff09, 0xff3d, 0xff5d => true,
         else => false,
     };
+}
+
+test "a value is directly wrapped only by one balanced table pair around its exact bytes" {
+    const field: Edges = .{ .left = .field_edge, .right = .field_edge };
+    const Case = struct { prose: []const u8, value: []const u8 };
+    // Accepted: straight, curly and CJK quotes, groups, nested pairs, terminal
+    // punctuation after the pair and a value that ends in its own punctuation.
+    for ([_]Case{
+        .{ .prose = "display the exact text \"Hello, World!\" on the screen", .value = "Hello, World!" },
+        .{ .prose = "and displays \"Renewal refused.\"", .value = "Renewal refused." },
+        .{ .prose = "Export \u{201c}report.csv\u{201d}, then stop.", .value = "report.csv" },
+        .{ .prose = "Use the code (ZX-9).", .value = "ZX-9" },
+        .{ .prose = "Name it ('build')", .value = "build" },
+        .{ .prose = "\u{300c}\u{4e2d}\u{6587}\u{300d}", .value = "\u{4e2d}\u{6587}" },
+    }) |case| {
+        const prose = Utf8Prose.parse(case.prose).?;
+        const start = std.mem.indexOf(u8, case.prose, case.value).?;
+        try std.testing.expect(prose.directlyWrapped(start, start + case.value.len, field));
+    }
+    // Rejected: no wrapper, punctuation inside the pair, a pair around a longer
+    // phrase, mismatched or one-sided wrappers, a continuation after the pair and a
+    // reference-adjacent edge that lends no delimiter.
+    for ([_]Case{
+        .{ .prose = "display Hello, World! on the screen", .value = "Hello, World!" },
+        .{ .prose = "Export \"report.csv.\" now", .value = "report.csv" },
+        .{ .prose = "say \"report.csv twice\"", .value = "report.csv" },
+        .{ .prose = "Export \"report.csv' now", .value = "report.csv" },
+        .{ .prose = "Export \"report.csv now", .value = "report.csv" },
+        .{ .prose = "Export \"report.csv\"s now", .value = "report.csv" },
+        .{ .prose = "a\"report.csv\" now", .value = "report.csv" },
+    }) |case| {
+        const prose = Utf8Prose.parse(case.prose).?;
+        const start = std.mem.indexOf(u8, case.prose, case.value).?;
+        try std.testing.expect(!prose.directlyWrapped(start, start + case.value.len, field));
+    }
+    const quoted = Utf8Prose.parse("\"report.csv\"").?;
+    try std.testing.expect(quoted.directlyWrapped(1, 11, field));
+    try std.testing.expect(!quoted.directlyWrapped(1, 11, .{ .left = .reference_boundary, .right = .field_edge }));
+    try std.testing.expect(!quoted.directlyWrapped(0, 12, field));
+    try std.testing.expect(!quoted.directlyWrapped(5, 5, field));
 }
 
 test "terminal ends follow the one closed table, and no byte sequence panics" {

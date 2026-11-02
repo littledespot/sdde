@@ -109,7 +109,7 @@ fn orderedClaims(a: std.mem.Allocator, claims: []const r.ClaimId) std.mem.Alloca
 fn retryScope(a: std.mem.Allocator, producer: Producer, feature: @import("feature_identity.zig").FeatureId, state: r.extraction.identity.StateId, projection: authority.Projection) authority.Error![32]u8 {
     switch (projection) {
         .source_readiness, .source_preservation => {},
-        .specification, .principle_assessment, .registered_obligations => return error.InvalidRequiredAuthority,
+        .registered_obligations => return error.InvalidRequiredAuthority,
     }
     const scope = .{ .contract = @typeName(Family), .producer = producer, .feature = feature, .source_state = state, .projection = projection };
     return (try atomic.snapshot(@TypeOf(scope), a, scope)).bytes;
@@ -144,7 +144,7 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
     const inputs = admitted.inputs;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const projection = (try pendingReview(a, permit, inputs.feature, records.items.state_id)) orelse return null;
-    if (authority.assessmentPolicy(inputs.projection) == .advisory or projection != inputs.projection) return error.InvalidRequiredAuthority;
+    if (projection != inputs.projection) return error.InvalidRequiredAuthority;
     const repaired_claims = admitted.candidate.omission_conflict_claims;
     if (repaired_claims.len != 0 and std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, .{ .conflict_claims = try orderedClaims(a, repaired_claims) })).bytes)) {
         var resolved = true;
@@ -169,7 +169,6 @@ pub fn admittedValidation(a: std.mem.Allocator, permit: retry.Permit, admitted: 
         const selected = try subject(a, inputs, entry.requirement);
         if (!std.mem.eql(u8, &permit.key.target, &(try atomic.snapshot(Subject, a, selected)).bytes)) continue;
         const resolved = entry.candidate_defect == null and switch (entry.outcome) {
-            .assessment_complete, .assessment_incomplete => return error.InvalidRequiredAuthority,
             .resolved_exactly_one, .resolved_explicit_not_applicable, .resolved_explicit_exception => true,
             .clarification_required, .upstream_rework_required, .administrative_block => false,
         };
@@ -230,10 +229,6 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 /// model-assisted; absence of a unique location cannot authorize a repair.
 pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
     if (!@import("specification_support_evidence.zig").validObligation(finding, review.missing_obligation)) return error.InvalidRequiredAuthority;
-    if (authority.assessmentPolicy(inputs.projection) == .advisory) {
-        if (location != .unlocalized or review.preservation != null) return error.InvalidRequiredAuthority;
-        return;
-    }
     if (review.preservation) |proof| {
         if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
         const derived = comparisons.validate(a, inputs, sources, subject_id, review, proof) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
@@ -253,17 +248,8 @@ fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, subjec
     }
     if (location == .unlocalized or location == .unsupported_summary) return;
     if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
-    if (location == .candidate) {
-        // The evidence owner binds these claims to the current reviewed subject.
-        // Their presence permits this attribution; it does not prove entailment.
-        switch (subject_id.unit) {
-            .feature, .record => {},
-            .source, .signal, .token, .conflict, .decision => return error.InvalidRequiredAuthority,
-        }
-        if (inputs.specification == null and @import("specification_authority.zig").featureField(inputs, subject_id) == null) return error.InvalidRequiredAuthority;
-        if (review.provenance.claim_ids.len == 0) return error.InvalidRequiredAuthority;
-        return;
-    }
+    // No candidate exists before generation, so none can be blamed.
+    if (location == .candidate) return error.InvalidRequiredAuthority;
     if (review.source_ids.len == 0) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     switch (location) {

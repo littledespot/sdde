@@ -192,6 +192,42 @@ test "stored classification replay rejects omitted native duties and forged pres
     }
 }
 
+test "only a classification rejection naming missing entries alone is producerless" {
+    const validation = @import("domain/token_classification_validation.zig");
+    const Diagnostic = @import("domain/candidate_validation_diagnostic.zig").Diagnostic;
+    const id: tokens.CandidateId = .{ .source_id = .{ .ordinal = 1 }, .extractor_id = .markdown_inline_code_v1, .ordinal = 1 };
+    const missing: validation.Issues = .{ .missing = &.{id}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{} };
+    var rejection: validation.Rejection = .{
+        .scope = .{ .state_id = .{ .bytes = "state" }, .chunk_id = .{ .bytes = "chunk" } },
+        .revision = 2,
+        .issues = missing,
+        .choices = validation.choices(.claims),
+        .observed = &.{},
+    };
+    try std.testing.expect(validation.producerless(missing));
+    try std.testing.expectEqual(.candidate, (Diagnostic{ .token_classifications = rejection }).attribution());
+    // A named defective classification has a producer, so a lost origin stays missing evidence.
+    for ([_]validation.Issues{
+        .{ .missing = &.{}, .duplicate = &.{id}, .unknown = &.{}, .forbidden = &.{} },
+        .{ .missing = &.{}, .duplicate = &.{}, .unknown = &.{id}, .forbidden = &.{} },
+        .{ .missing = &.{id}, .duplicate = &.{}, .unknown = &.{}, .forbidden = &.{id} },
+    }) |issues| {
+        try std.testing.expect(!validation.producerless(issues));
+        rejection.issues = issues;
+        try std.testing.expectEqual(.missing_response, (Diagnostic{ .token_classifications = rejection }).attribution());
+    }
+    // An origin contradicts the producerless rule, so no call link is accepted.
+    rejection.issues = missing;
+    rejection.origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    try std.testing.expectEqual(.missing_response, (Diagnostic{ .token_classifications = rejection }).attribution());
+    rejection.issues.duplicate = &.{id};
+    try std.testing.expect((Diagnostic{ .token_classifications = rejection }).attribution() == .response);
+    // The origin rule answers only for classifications the entry holds.
+    const entry: extraction.TextValidatedResult = .{ .scope = rejection.scope, .token_classifications = &.{}, .outcome = .{ .claims = &.{} } };
+    try std.testing.expectEqual(@as(?@import("domain/model_candidate_origin.zig").Origin, null), try validation.rejectionOrigin(entry, missing));
+    try std.testing.expectError(error.InvalidReferenceExtraction, validation.rejectionOrigin(entry, .{ .missing = &.{id}, .duplicate = &.{}, .unknown = &.{id}, .forbidden = &.{} }));
+}
+
 test "structured Markdown preserves raw code and link destinations without interpreting their interiors" {
     const scan = @import("domain/markdown_code_spans.zig");
     const Expected = struct { form: scan.Form, bytes: []const u8 };

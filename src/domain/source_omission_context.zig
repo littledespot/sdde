@@ -159,8 +159,6 @@ fn conflictMeaning(value: Conflict) ConflictMeaning {
 
 const Subject = @import("specification_review_subject.zig").LossSubject;
 pub const FixedSubject = union(enum) {
-    business: @FieldType(Subject, "business"),
-    brief_field: @FieldType(Subject, "brief_field"),
     pending_subject: @FieldType(Subject, "pending_subject"),
     reference: union(enum) {
         source: r.extraction.identity.SourceId,
@@ -172,8 +170,6 @@ pub const FixedSubject = union(enum) {
 
 pub fn fixedSubject(value: Subject) FixedSubject {
     return switch (value) {
-        .business => |subject| .{ .business = subject },
-        .brief_field => |subject| .{ .brief_field = subject },
         .pending_subject => |subject| .{ .pending_subject = subject },
         .reference => |subject| .{ .reference = switch (subject) {
             .source => |source| .{ .source = source },

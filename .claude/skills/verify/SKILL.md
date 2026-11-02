@@ -30,7 +30,7 @@ are never part of this skill.
    - changed contracts and files;
    - tests added or changed, with their accepted and rejected cases;
    - every command run, verbatim, with its pass or fail result (quote failures);
-   - documentation, ADR or traceability updates, or why none were needed;
+   - governing ADR or contract updates, or why none were needed;
    - unresolved uncertainty and approved deviations;
    - evidence not produced: always state that no live E2E ran, and name any check
      that could not run and why.

@@ -69,6 +69,10 @@ the engine, its prompts or its deterministic code.
      | `placeholder` | Template filler or unresolved placeholder text |
      | `rendering_artefact` | Escaping, joining, punctuation or formatting the engine introduced |
      | `engine_vocabulary_leak` | Engine or schema vocabulary in published text |
+
+     The `Source:` line under each AC, FR and EN is the engine's decided display of the
+     record's cited lines (23-rendering.md §23). Don't count it as a defect or against a
+     business-facing criterion. Section 3 step 7 checks the links themselves.
    - **Scores:** score from the anchors. Give `maximum_score` only when no defect the
      criterion names remains. Don't reward length, demand particular wording or
      invent requirements.
@@ -117,7 +121,7 @@ the engine, its prompts or its deterministic code.
    | `prompt_conflict` | Instructions, context or examples push toward the defect | The conflicting lines |
    | `model_noncompliance` | The instruction was clear and the model departed from it | Instruction and output |
    | `assembly_or_render` | Deterministic code introduced it | Clean model output beside the published bytes |
-   | `review_miss` | A review call assessed the content and passed it | That call's input and verdict |
+   | `review_miss` | A required (pre-generation) source-review call assessed the content and passed it; no review runs after generation | That call's input and verdict |
    | `repair_harm` | A repair turned a correct value into a defect | `report.json` `repairs` and `corrections` |
 
 3. **Locate it in the repository.** Give `path:line`.
@@ -131,10 +135,11 @@ the engine, its prompts or its deterministic code.
    - `likely`: one link is inferred.
    - `speculative`: a plausible mechanism only.
    - `first_native_rejection` shows chronology, not cause.
-5. **Check review verdicts.** Each review call's `model_output.txt` holds its
-   findings. Note any finding whose type doesn't match what it describes; filing an
-   unsupported addition as `candidate_omission` is a known pattern. Such findings
-   count against finding-type accuracy.
+5. **Check review verdicts.** Only required pre-generation source review runs (no
+   review runs after generation since FIX06 D13.1). When it ran, each review call's
+   `model_output.txt` holds its findings. Note any finding whose type doesn't match
+   what it describes; filing an unsupported addition as `candidate_omission` is a
+   known pattern. Such findings count against finding-type accuracy.
 6. **Grade every repair.** For each entry in `report.json` `repairs` (and each repair
    attempt `measures.json` lists), compare the value before and after and give exactly
    one grade, independently of any defect's origin class:
@@ -145,10 +150,29 @@ the engine, its prompts or its deterministic code.
    | `neutral` | The value changed, the targeted defect's status didn't, and nothing was lost |
    | `harmful` | A new defect appears, or content the old value had is lost, whether or not the target was fixed |
    | `no_progress` | The repair returned the old value, or its result recurs (`RepairNoProgress`, recurring) |
+7. **Check every record's links.**
+   - **Where the links are:** the run's `reference-context.md`. Its "Generated Requirement
+     Sources" section lists each record's claims and citations, for every family, and its
+     "Source Citations" section quotes the cited lines.
+   - **Label each record exactly once.** Judge whether the cited lines state what the record
+     says:
+
+     | Label | Meaning |
+     | --- | --- |
+     | `supported` | The cited lines state everything the record says |
+     | `partial` | They state part of it; the record adds content they don't state |
+     | `unsupported` | They don't state what the record says |
+
+   - **A scenario** is `supported` when its cited lines state the behaviour it tests.
+   - **A false link counts twice.** A `partial` or `unsupported` link that makes invented
+     content look sourced is also an `unsupported_addition` defect (section 2), and the
+     defect's evidence names the link.
+   - **The measure:** false links (`partial` plus `unsupported`) per record family, over
+     the records of that family.
 
 ## 4. Recommend changes that generalize
 
-Read [known-work.md](../../known-work.md) first. For each group of defects that share
+Read the open work in [fixes/FIX06.md](../../../fixes/FIX06.md) first. For each group of defects that share
 an origin, propose one change at the owning abstraction, with:
 
 - **The failure class.** Name the general class and the invariant it breaks, never a
@@ -157,12 +181,11 @@ an origin, propose one change at the owning abstraction, with:
 - **The owner.** Name the prompt, schema, composition, renderer, validator or review
   assignment to change, with its `path:line`. Prefer deterministic code for anything
   computable.
-- **Existing work.** Cite any known-work item that already covers the defect, and
+- **Existing work.** Cite any FIX06 item that already covers the defect, and
   prefer its approved or proposed fix.
 - **Authority.** Check the accepted ADRs (`design/decisions/`, indexed in design.md
   §32) for any rule the change would break, or ask the `design-router` agent. Label
-  any change that needs an ADR or policy amendment as a **Decision**. For example,
-  letting post-generation review change the output amends ADR 0023.
+  any change that needs an ADR or policy amendment as a **Decision**.
 - **Expected effect.** State the effect on the intent measures, and the regression
   risk.
 - **Verification.** Give the offline test at the owning boundary first, then what a
@@ -179,11 +202,11 @@ separate from engine and prompt changes. Don't edit code, prompts, rubrics or ca
   corrections, re-sends, runaways, admission rejections, repairs and latency, and its
   per-stage sends, tokens and shares. Take stages only from `measures.json`; never
   group attempts by step name. A run whose report is `unavailable` (missing, or older
-  than `spec-e2e-report/v11`) has no report-derived measures at all: no sends, tokens,
+  than `spec-e2e-report/v14`) has no report-derived measures at all: no sends, tokens,
   corrections, re-sends, repairs or stages, only its call-evidence and feature-log
   counts. An `unmeasurable` run gives only which retained record couldn't be read or
-  trusted; report it, and take nothing else from its records. Flag spending that bought no quality, such as review calls that passed the
-  defects found above.
+  trusted; report it, and take nothing else from its records. Flag spending that bought
+  no quality.
 - **Unpublished run.** Report the terminal step, the typed rejection and the
   diagnostics. Trace the failing value as in section 3, including any review
   verdicts, and recommend as in section 4.
@@ -201,38 +224,47 @@ Write these to `evaluations/e2e/<run>/`, next to the numbered copies:
   3. A rubric table with each criterion's score, cited evidence and defects.
   4. Each defect, with its spec and source lines, origin class, producing call and
      step, prompt or code `path:line`, confidence and quoted evidence.
-  5. The ranked recommendations.
-  6. The cost profile.
-  7. Changes since the newest earlier `evaluations/e2e/*/evaluation.json` for the
+  5. The link check: false links per record family, and each `partial` or
+     `unsupported` record with its cited lines.
+  6. The ranked recommendations.
+  7. The cost profile.
+  8. Changes since the newest earlier `evaluations/e2e/*/evaluation.json` for the
      same case, if there is one: which defects were fixed, persisted or are new, and
      how the scores changed.
-  8. Limits: what was not checked, and the remaining uncertainty.
+  9. Limits: what was not checked, and the remaining uncertainty.
 - **`evaluation.json`**, the same content as data, in this shape:
 
   ```text
-  {"schema":"e2e-assistant-evaluation/v2","advisory":true,"run","report_schema","case_id",
+  {"schema":"e2e-assistant-evaluation/v3","advisory":true,"run","report_schema","case_id",
    "build":{"revision","modified","source_sha256"},"rubric":{"id","revision"},"results":[rubric-judgment/v2 results],
    "aggregate_percent","threshold_met","critical_failures":[],
    "defects":[{"id","class","criteria","spec_lines","source_lines","description","evidence",
      "origin":{"class","call","step","repository_path","lines"},"confidence"}],
    "repairs":[{"origin":{"request","attempt"},"operation","target","grade","evidence"}],
+   "links":[{"record","claim_ids":[],"label","evidence"}],
    "recommendations":[{"id","defects","failure_class","owning_path","change","expected_effect","risk","verification"}],
    "measures":"measures.json"}
   ```
 
-  `defects[].class` and `repairs[].grade` use the closed vocabularies in sections 2 and
-  3. Costs and counts come from `measures.json` (section 5); never restate them here.
+  `defects[].class`, `repairs[].grade` and `links[].label` use the closed vocabularies in
+  sections 2 and 3. Costs and counts come from `measures.json` (section 5); never restate them here.
   `build.source_sha256` distinguishes uncommitted trees that share a revision.
 
 In chat, give:
 - the advisory aggregate and any critical failures;
 - the top findings, with their origins;
+- false links per record family;
 - the path to `evaluation.md`.
 
 One run is one sample, so claim no reliability. Remind the user that acceptance needs
 their own adjudication. Ask before writing anything outside `evaluations/`.
 
 ## 7. Review-accuracy labels (B2)
+
+This section applies only to runs that contain review findings: required
+pre-generation source review, or post-generation review if it returns (FIX06 H2).
+Since FIX06 D13.1 (1 November 2026) no review runs after generation, so a current run
+has no principle findings.
 
 When asked to label review findings, write
 `evaluations/b2-review-accuracy/<set>/<case>/labels.json` in this shape, with a

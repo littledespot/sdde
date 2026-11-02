@@ -1,8 +1,8 @@
 //! Native disposition membership, relationship and graph validation.
-//! Redundancy preserves the same claim, variant and validated edge set.
+//! Admission binds one disposition per assigned claim (FIX06 D2.3); this
+//! readback remains the authority behind it.
 const std = @import("std");
 const r = @import("reference_reconciliation.zig");
-const v = @import("reference_reconciliation_validation.zig");
 const d = r.diagnostic;
 const tokens = @import("reference_token_disposition.zig");
 
@@ -31,16 +31,16 @@ pub const RepairChoices = struct {
     }
 };
 
-/// Project the canonical checker, not a second relationship policy. A missing
-/// sibling or another defect can prevent any single edit from validating; in
-/// that case leave choices unresolved and retain ordinary bounded repair.
+/// Project the canonical checker, not a second relationship policy. Another
+/// defect can prevent any single edit from validating; in that case leave
+/// choices unresolved and retain ordinary bounded repair.
 pub fn repairChoices(a: std.mem.Allocator, items: r.Items, supplied: []const r.ClaimDispositionProposal, index: usize, claim: r.ClaimId) r.Error!?RepairChoices {
-    if (index > supplied.len) return error.InvalidReferenceReconciliation;
+    if (index >= supplied.len) return error.InvalidReferenceReconciliation;
     if ((try r.item(items, claim)).claim.content != .model) return error.InvalidReferenceReconciliation;
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
-    const values = try scratch.alloc(r.ClaimDisposition, supplied.len + @as(usize, if (index == supplied.len) 1 else 0));
+    const values = try scratch.alloc(r.ClaimDisposition, supplied.len);
     for (supplied, 0..) |proposal, i| values[i] = try proposal.canonical(scratch);
     const selected = &values[index];
     selected.* = .{ .claim_id = claim, .disposition = .retained, .related_claim_ids = &.{} };
@@ -160,22 +160,6 @@ fn record(items: r.Items, value: r.ClaimDisposition) ?d.Issue {
         .superseded, .conflicting => if (value.related_claim_ids.len == 0) return issue(.cardinality, value, .nonempty),
     }
     return null;
-}
-
-/// No survivor meaning is selected: both occurrences must express the same
-/// locally valid edges. Deletion leaves graph, signal and conflict obligations
-/// unchanged; their complete validation still follows the merge.
-pub fn redundancy(allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!d.Relations {
-    const values = parsed.proposal.global.claim_dispositions;
-    const items = parsed.input.progress.plan.layout.items;
-    for (values, 0..) |value, index| for (values[0..index]) |prior| {
-        if (prior.claim_id.ordinal != value.claim_id.ordinal) continue;
-        const left = try prior.canonical(allocator);
-        const right = try value.canonical(allocator);
-        if (record(items, left) == null and record(items, right) == null and left.disposition == right.disposition and v.sameMembers(left.related_claim_ids, right.related_claim_ids)) return .{ .redundant = index };
-        return .{ .competing = true };
-    };
-    return .{};
 }
 
 fn issue(rule: d.Rule, actual: r.ClaimDisposition, expected: d.Constraint) d.Issue {

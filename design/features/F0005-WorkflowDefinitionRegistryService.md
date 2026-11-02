@@ -287,7 +287,7 @@ required inputs and define the `parse` successor, as in the
   workflow root.
 - An operation parameter that expects a prompt, schema, example, JSON-composition
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
-  `packet-guidance/v1` (ADR 0016 packet-guidance amendment) resource accepts only a
+  `packet-guidance/v2` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - Two workflows may bind the same captured resource, but one workflow cannot declare two
   aliases for the same source.
@@ -301,24 +301,19 @@ required inputs and define the `parse` successor, as in the
   `end.blocked`, `end.failed`, and `end.cancelled`.
   - **Contract variants** ([ADR 0030](../decisions/0030-engine-owned-model-request.md)
     "Contract variants", not yet implemented). An operation's one contract may consist of
-    closed variants. One closed step parameter selects the variant at compile time; an
-    optional selector names the one variant its absence selects.
+    closed variants. One required closed step parameter selects the variant at compile
+    time.
   - Each variant is a complete contract: outcomes, all data effects including `optional`
-    and `replaces`, side effect, per-outcome association descriptors, repair role, and
+    and `replaces`, side effect, association descriptors, repair role, and
     whether retry authority is required or forbidden, with its maximum and native key
     population.
   - Registry admission validates each variant independently, and registry-wide checks
     cover every variant. This rule, the rules below, compiled-graph validation, registry
     publication and the runner all check the step's own variant, never a union.
-  - Its two users:
-    - `request-model` (ADR 0030 as amended on 23 October 2026): the ordinary variant
-      (`ok`, `invalid`, `failed`, `cancelled`) and the advisory variant, selected by
-      `advisory: allowed`, which adds `more` and `blocked` with their deferred-carrier
-      descriptors. The marker selects no policy; advisory classification stays native
-      (ADR 0023).
-    - The four generic repair operations of
-      [ADR 0033](../decisions/0033-generic-repair-operations.md): one variant per `owner`,
-      which is required.
+  - Its user: the four generic repair operations of
+    [ADR 0033](../decisions/0033-generic-repair-operations.md), one variant per `owner`.
+    `request-model` has one contract; its advisory variant was withdrawn on 1 November
+    2026 with post-generation review (FIX06 D13.1).
 - The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   and `cancelled`; the compiler converts them to the corresponding internal tagged-union
   variants.
@@ -515,10 +510,7 @@ service is published.
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
 > `request-model` step per model request instead of the request-lifecycle bindings described
 > below. A `request-model` step declares the slot, resources and `retry-limit`, and maps
-> `ok`, `invalid`, `failed` and `cancelled`. Only a step marked
-> `advisory: allowed` also maps `more` and `blocked`, and only such a step may; that marker
-> selects `request-model`'s advisory contract variant (see the variant rule in §3's
-> outcome-mapping bullet). The step declares no deadline; as for today's
+> `ok`, `invalid`, `failed` and `cancelled`. The step declares no deadline; as for today's
 > authorization-preparation binding, the compiler rejects a `timeout-ms`. A fixed kernel
 > orchestrator runs the bindings' rules as the stages ADR 0030 lists, and YAML can no
 > longer name them. The step's capability set is the exact union of its stage bindings'
@@ -635,7 +627,7 @@ service is published.
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
   immutable schema and exact captured bytes. JSON-composition resources (§3.2) and
-  `packet-guidance/v1` resources (ADR 0016 packet-guidance amendment) are also decoded
+  `packet-guidance/v2` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with

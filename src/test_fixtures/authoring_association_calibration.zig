@@ -165,11 +165,9 @@ const Observation = struct {
     costs_complete: bool = false,
     rejection: ?[]const u8 = null,
     issue: ?@import("../domain/specification_candidate.zig").Issue = null,
-    projection_error: ?[]const u8 = null,
     origins: []const ReplayOrigin = &.{},
     costs: []const Cost = &.{},
     responses: []const g.CanonicalResponse = &.{},
-    review_packets: []const []const u8 = &.{},
 };
 
 pub fn run() !void {
@@ -227,12 +225,6 @@ pub fn run() !void {
         for (0..2) |_| try starts.append(a, records_start);
         states[index] = .{ .context = prepared.context, .seed = current };
         const candidate = try session.assemble(a, text.validator, prepared.context, current);
-        const projected = try @import("../domain/specification_authority.zig").project(a, current.feature, prepared.context.references, candidate.content, current.units[0].?.response.content.brief);
-        const review = @import("../domain/specification_support.zig").Source;
-        const id: @import("../domain/required_authority.zig").Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .description };
-        const review_packet = try review.packetFor(a, projected, prepared.context, prepared.guidance, .{ .finding = id });
-        defer packets.release(review_packet);
-        try shared.writeAt(a, output, example.id, "seed-review.packet.json", review_packet.body());
         try shared.writeAt(a, output, example.id, "seed.json", try std.json.Stringify.valueAlloc(a, .{ .session = current, .brief = current.units[0].?.response.content.brief, .candidate = candidate.content }, .{}));
         // Expectation labels and authored context seeds never become initial
         // brief/story inputs. Later business context uses resolved prior units.
@@ -522,11 +514,6 @@ fn consumeTrial(a: std.mem.Allocator, directory: []const u8, schema: *const sche
     result.origins = origins.items;
     result.costs = costs.items;
     result.responses = native.items;
-    if (result.status == .admitted_content) result.review_packets = reviewPackets(a, state.context, current, trial.requests[0].unit) catch |err| {
-        if (err == error.OutOfMemory) return err;
-        result.projection_error = @errorName(err);
-        return result;
-    };
     return result;
 }
 
@@ -574,19 +561,6 @@ fn receivedCount(a: std.mem.Allocator, directory: []const u8, trial: Trial) !usi
     return count;
 }
 
-fn reviewPackets(a: std.mem.Allocator, context: @import("../domain/specification_provenance.zig").Context, current: session.Session, unit_name: []const u8) ![]const []const u8 {
-    const candidate = try session.assemble(a, text.validator, context, current);
-    const inputs = try @import("../domain/specification_authority.zig").project(a, current.feature, context.references, candidate.content, current.units[0].?.response.content.brief);
-    var projections: std.ArrayList([]const u8) = .empty;
-    for (inputs.seeds) |seed| {
-        const selected = if (std.mem.eql(u8, unit_name, "brief")) seed.id.kind == .feature_intent and seed.id.unit == .feature and (seed.id.slot == .display_name or seed.id.slot == .description or seed.id.slot == .primary_goal) else if (std.mem.eql(u8, unit_name, "primary_user_story")) seed.id.kind == .feature_intent and seed.id.unit == .feature and seed.id.slot == .primary_user_story else if (std.mem.eql(u8, unit_name, "entities")) seed.id.kind == .entity_applicability or (seed.id.unit == .record and seed.id.unit.record.kind == .entity) else (seed.id.unit == .record and seed.id.unit.record.kind != .entity) or (seed.id.kind == .feature_intent and seed.id.unit == .feature and @import("../domain/specification_authority.zig").collectionFamily(seed.id.slot) != null);
-        if (!selected) continue;
-        const packet = try @import("../domain/specification_support.zig").Source.packetFor(a, inputs, context, try shippedGuidance(a), .{ .finding = seed.id });
-        defer packets.release(packet);
-        try projections.append(a, try a.dupe(u8, packet.body()));
-    }
-    return projections.items;
-}
 fn exportRequest(a: std.mem.Allocator, schema: *const schema_owner.Schema, id: []const u8, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !Request {
     return exportRequestAt(a, output, schema, id, current, context, try shared.read(a, "design/workflows/spec/generation.context.json"));
 }

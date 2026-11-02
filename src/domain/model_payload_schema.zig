@@ -55,6 +55,56 @@ fn covered(items: *const envelope.Array, coverage: schema.Coverage, wanted: i64)
     }
     return false;
 }
+/// One naming of a taken value in an exclusive item that also names an untaken one
+/// (ADR 0038 Decision 5). A value is taken when an owning item names it anywhere or an
+/// earlier exclusive item does. An exclusive item naming only taken values is admitted:
+/// its owner deletes it without a model call. Owning items are never constrained.
+pub const SharedNaming = struct { item: usize, position: usize };
+/// The next such naming at or after `from`, in response order. Admission takes its
+/// rejection from the first, and a correction lists every one; it tolerates items that
+/// never passed admission.
+pub fn nextSharedNaming(items: *const envelope.Array, coverage: schema.Coverage, from: SharedNaming) ?SharedNaming {
+    var index = from.item;
+    var position = from.position;
+    while (index < items.count()) : ({
+        index += 1;
+        position = 0;
+    }) {
+        const item = items.at(index).?;
+        if (!hasKind(item, coverage.rule.kind_property, coverage.rule.exclusive)) continue;
+        const listed = (if (item == .object) item.object.get(coverage.property) else null) orelse continue;
+        if (listed != .array) continue;
+        if (!namesNew(items, coverage, index, listed.array)) continue;
+        while (position < listed.array.count()) : (position += 1) {
+            const wanted = listedValue(listed.array.at(position).?) orelse continue;
+            if (taken(items, coverage, index, wanted)) return .{ .item = index, .position = position };
+        }
+    }
+    return null;
+}
+
+/// Whether `listed`, exclusive item `index`'s values, includes an untaken one.
+fn namesNew(items: *const envelope.Array, coverage: schema.Coverage, index: usize, listed: *const envelope.Array) bool {
+    for (0..listed.count()) |position| {
+        const wanted = listedValue(listed.at(position).?) orelse continue;
+        if (!taken(items, coverage, index, wanted)) return true;
+    }
+    return false;
+}
+
+/// Whether `wanted` is taken for exclusive item `index`: an owning item names it, or an
+/// exclusive item before `index` does.
+fn taken(items: *const envelope.Array, coverage: schema.Coverage, index: usize, wanted: i64) bool {
+    for (0..items.count()) |position| {
+        const item = items.at(position).?;
+        const owning = hasKind(item, coverage.rule.kind_property, coverage.rule.owning);
+        if (!owning and !(position < index and hasKind(item, coverage.rule.kind_property, coverage.rule.exclusive))) continue;
+        const listed = (if (item == .object) item.object.get(coverage.property) else null) orelse continue;
+        if (listed != .array) continue;
+        for (0..listed.array.count()) |value| if (listedValue(listed.array.at(value).?) == wanted) return true;
+    }
+    return false;
+}
 
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.
@@ -73,17 +123,6 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     continue;
                 };
                 if (validateValue(child, property.schema)) |diagnostic| return diagnostic.within(.{ .property = property.name });
-            }
-            // ADR 0042: an array needs an item when its sibling takes a listed
-            // value. The location names the empty array.
-            for (properties) |property| {
-                if (property.schema.* != .array) continue;
-                const rule = property.schema.array.required_when orelse continue;
-                const list = object.get(property.name) orelse continue;
-                if (list.array.count() != 0) continue;
-                const sibling = object.get(rule.property) orelse continue;
-                if (sibling != .string) continue;
-                for (rule.values) |listed| if (std.mem.eql(u8, sibling.string, listed)) return (reject(.missing_required_item, property.schema)).within(.{ .property = property.name });
             }
         },
         .string => |bounds| {
@@ -134,19 +173,35 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             for (0..count) |index| {
                 if (validateValue(value.array.at(index).?, contract.items)) |diagnostic| return diagnostic.within(.{ .index = index });
             }
-            // Each item already names one allowed member and the count equals the
-            // member count, so the only remaining defect is a repeat; a missing
-            // member then shows up as a repeat or as the item count.
+            // Each item already names one allowed member, so a defect is a repeat
+            // or, without repeats, a member no item names. When the schema states
+            // the member count, a missing member already failed as the item count.
             if (contract.members) |members| {
                 for (1..count) |index| {
                     const key = memberKey(value.array.at(index).?, members.property);
                     for (0..index) |prior| if (memberKey(value.array.at(prior).?, members.property) == key) return (reject(.duplicate_member, node)).item(index);
                 }
+                for (members.values) |wanted| {
+                    for (0..count) |index| {
+                        if (memberKey(value.array.at(index).?, members.property) == wanted) break;
+                    } else {
+                        var diagnostic = reject(.missing_member, node);
+                        diagnostic.member = wanted;
+                        return diagnostic;
+                    }
+                }
             }
-            // ADR 0038: every value a covered item names needs a covering item
-            // that names it too. The location names the uncovered value.
+            // ADR 0038: no exclusive item names both taken and untaken values, and every
+            // value a covered item names needs a covering item that names it too. The
+            // location names the partly taken item, whose whole shape the correction
+            // offers, or the uncovered value.
             if (contract.coverage) |coverage| {
                 const listed = schema.findProperty(contract.items.object, coverage.property).?.schema.array.items;
+                if (nextSharedNaming(value.array, coverage, .{ .item = 0, .position = 0 })) |shared| {
+                    var diagnostic = reject(.shared_member, contract.items);
+                    diagnostic.coverage = coverage;
+                    return diagnostic.within(.{ .index = shared.item });
+                }
                 for (0..count) |index| {
                     const item = value.array.at(index).?;
                     if (!hasKind(item, coverage.rule.kind_property, coverage.rule.covered)) continue;
@@ -155,7 +210,7 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                         const wanted = listedValue(values.at(position).?) orelse continue;
                         if (!covered(value.array, coverage, wanted)) {
                             var diagnostic = reject(.uncovered_member, listed);
-                            diagnostic.covering = coverage.rule;
+                            diagnostic.coverage = coverage;
                             return diagnostic.within(.{ .index = position }).within(.{ .property = coverage.property }).within(.{ .index = index });
                         }
                     }

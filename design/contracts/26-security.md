@@ -86,8 +86,8 @@ Model and reference content are untrusted data:
 - An event is emitted iff the registry marks it ADR-required (`always`) or
   `rank(event) >= rank(configured threshold)`. **ADR-required emission amendment
   (user-approved, 28 October 2026):** an event an ADR requires to be logged
-  (`model.response_normalized`, `model.provider_stopped`, `model.runaway_resent`,
-  `review.incomplete`, and `run.incomplete_published` once ADR 0041 lands) is emitted at every
+  (`model.response_normalized`, `model.provider_stopped`, `model.runaway_resent`, and
+  `run.incomplete_published` once ADR 0041 lands) is emitted at every
   configured level, so an incomplete result is never published, nor a runaway re-sent,
   without its record.
 - The closed proof-of-concept `LogEventDefinitionRegistry` is exactly the table in F0002 Section

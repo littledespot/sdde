@@ -2,16 +2,19 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, uncovered_member, missing_required_item };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, uncovered_member, shared_member, missing_member };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
     reason: Reason,
     expected: *const schema.Node,
     expected_location: enum { value, parent } = .value,
-    /// ADR 0038: for `uncovered_member`, the compiled coverage rule, borrowed like
-    /// `expected`, so a correction can name the kinds that cover.
-    covering: ?schema.ItemCoverage = null,
+    /// ADR 0038: for `uncovered_member` and `shared_member`, the compiled cross-item
+    /// rule and the property it governs, borrowed like `expected`, so a correction can
+    /// name the kinds it governs and find every naming.
+    coverage: ?schema.Coverage = null,
+    /// For `missing_member`, the first assigned member no item names.
+    member: ?i64 = null,
     // Compiler depth bounds traversal; this is not a response size/token limit.
     segments: [schema.max_depth + 2]Segment = @splat(.{ .property = "" }),
     length: usize = 0,
@@ -31,8 +34,9 @@ pub const Diagnostic = struct {
             .enum_mismatch => "Schema validation failed: this value is not among the allowed values.",
             .unknown_variant => "Schema validation failed: this discriminator does not identify an allowed kind.",
             .duplicate_member => "Schema validation failed: this item repeats an assigned member; return exactly one item for every assigned member.",
+            .missing_member => "Schema validation failed: no item names this assigned member; return exactly one item for every assigned member.",
             .uncovered_member => "Schema validation failed: no item of a kind in covering.kinds names this value; add one that does, as the instructions require.",
-            .missing_required_item => "Schema validation failed: with the value given for that property, this list needs at least one item; add the items the instructions require, or correct that value.",
+            .shared_member => "Schema validation failed: this item names values that an item of a kind in exclusive.owning names, or an earlier item of a kind in exclusive.kinds names, as well as values none of those items names. Rewrite this item to name and state only the values none of those items names. shared lists every such naming in this response.",
         };
     }
 
@@ -58,7 +62,7 @@ pub const Diagnostic = struct {
     pub fn eql(self: Diagnostic, other: Diagnostic) bool {
         if (self.reason != other.reason or self.expected != other.expected or
             self.expected_location != other.expected_location or self.length != other.length or
-            !std.meta.eql(self.covering, other.covering)) return false;
+            !std.meta.eql(self.coverage, other.coverage) or self.member != other.member) return false;
         for (self.segments[0..self.length], other.segments[0..other.length]) |left, right| {
             if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
             switch (left) {

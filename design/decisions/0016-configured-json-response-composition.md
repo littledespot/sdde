@@ -134,7 +134,10 @@ workflow resources own the semantic guidance that native packet builders present
 One closed `packet-guidance/v1` resource holds exactly one text for each registered
 key: feature and record purposes, source-review scopes, the reconciliation summary
 purpose, support-evidence guidance and the semantic tails of native repair
-requirements. The keys are closed native enums, derived from the native registries
+requirements. Since 1 November 2026 (FIX06 D13.1) the resource is `packet-guidance/v2`:
+the review scopes of the removed post-generation review (`candidate_field.in_record`,
+`candidate_field.standalone`, `collection`, `entity_applicability`) are gone, and v1
+rejects. The keys are closed native enums, derived from the native registries
 where one exists, so the compiler rejects a missing, extra, duplicate, mistyped or
 empty entry and an unsupported version. One `capture-packet-guidance` step publishes
 the compiled guidance as run data; consuming operations declare `.packet_guidance`

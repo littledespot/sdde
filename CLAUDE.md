@@ -32,9 +32,10 @@ toward smaller semantic decisions hasn't been accepted.
 - The design documents AGENTS.md routes to are large. Use the `design-router` agent
   to collect the governing clauses with citations, rather than reading whole files.
 - Before you propose, implement, review or decide an engine change:
-  - read [.claude/known-work.md](.claude/known-work.md), a dated snapshot of known
-    failure classes and open work;
+  - read the open work in [fixes/FIX06.md](fixes/FIX06.md);
   - check the accepted ADRs for any rule the change would break.
+- Put a durable project rule in AGENTS.md, never in auto-memory. Memory holds only
+  conversational preferences that no repository file states.
 
 ## Live commands
 
@@ -61,7 +62,7 @@ The user starts a live Spec case with `/live-e2e <case>`.
   runs the validation ladder and writes the definition-of-done report.
 - Before reporting a change complete, have the `contract-reviewer` agent review the
   diff against the AGENTS.md review rules.
-- These files are policy, so every edit to them prompts: AGENTS.md, CLAUDE.md,
-  accepted ADRs, and the Claude Code settings and hooks. Change them only when the
-  request includes that policy change.
-- [.claude/README.md](.claude/README.md) describes this configuration for maintainers.
+- These files are policy: AGENTS.md, CLAUDE.md, accepted ADRs, and the Claude Code
+  settings and hooks. Change them only when the request includes that policy change.
+  Markdown edits and `zig` commands don't prompt. Edits to the settings and hooks do,
+  and so does every live or billed step.

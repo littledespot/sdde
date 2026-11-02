@@ -28,10 +28,15 @@
   enforces the same admission. [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
   (26 October 2026) advanced them to `model-request-debug/v13`, whose controls record
   the temperature value each attempt sent, so replay of a runaway re-send sends its
-  own temperature. The same v13 also records
+  own temperature. The same v13 also recorded
   [ADR 0042](0042-principle-verdict-citations-at-admission.md)'s required-items
   constraint and carries [ADR 0043](0043-model-facing-exact-text-names.md)'s
-  model-facing names.
+  model-facing names. FIX06 D13.1 (1 November 2026) deleted that constraint with
+  principle review and advanced descriptions to `model-request-debug/v14`, without
+  the `required_items` member. ADR 0038 Decision 5 (2 November 2026) advanced them to
+  `model-request-debug/v15`, whose recorded coverage carries the exclusive kinds, and its
+  amendment the same day to `model-request-debug/v16`, which also carries the owning
+  kinds.
 
 ## Diagnostic execution boundary
 

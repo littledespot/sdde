@@ -38,9 +38,6 @@ pub const Complete = struct {
 
 /// Sealed result association only; no second parsing, validation or token charge.
 pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!selection.Closure {
-    if (@import("workflow_model_accounting.zig").readAdvisoryStop(view)) |receipt| {
-        return @import("advisory_protocol_request_completion_workflow.zig").readCurrent(view, receipt);
-    } else |_| {}
     const result = try payload.readCurrent(view);
     const source = result.source().source();
     const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch |operation_error| return operation_error;
@@ -55,12 +52,8 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
             .ok => .accepted,
             // Explicit closure abandons invalid content; it does not assert retry exhaustion.
             .invalid, .failed => .failed,
-            .more => deferred: {
-                _ = try @import("advisory_request_completion_workflow.zig").closing(view);
-                break :deferred .failed;
-            },
             .cancelled => .cancelled,
-            .needs_user, .blocked => return error.OperationExecutionFailed,
+            .more, .needs_user, .blocked => return error.OperationExecutionFailed,
         },
         .outcome = outcome,
     };

@@ -37,16 +37,22 @@ pub const Rejection = struct {
 };
 pub const Result = union(enum) { valid: extraction.Classified, invalid: Rejection };
 
-/// A missing value has no producer. Otherwise use the first defective current
-/// item, not the last collection repair's origin or the candidate retry anchor.
+/// A missing value has no producer, so a rejection naming only missing entries
+/// describes the assembled candidate rather than a response.
+pub fn producerless(issues: Issues) bool {
+    return issues.missing.len != 0 and issues.duplicate.len == 0 and issues.unknown.len == 0 and issues.forbidden.len == 0;
+}
+
+/// Use the first defective current item, not the last collection repair's
+/// origin or the candidate retry anchor.
 pub fn rejectionOrigin(entry: extraction.TextValidatedResult, issues: Issues) extraction.Error!?@import("model_candidate_origin.zig").Origin {
     if (entry.token_classifications.len != entry.classification_origins.len) return error.InvalidReferenceExtraction;
+    if (producerless(issues)) return null;
     for (entry.token_classifications, entry.classification_origins) |classification, origin| {
         inline for (.{ issues.duplicate, issues.unknown, issues.forbidden }) |ids| {
             for (ids) |id| if (std.meta.eql(classification.id(), id)) return origin;
         }
     }
-    if (issues.missing.len != 0) return null;
     return error.InvalidReferenceExtraction;
 }
 

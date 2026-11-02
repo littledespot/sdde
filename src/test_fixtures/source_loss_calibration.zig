@@ -121,7 +121,7 @@ pub fn baselineReviewBody(a: std.mem.Allocator, packet: *const packets.Packet) !
 }
 
 fn exportHistoricalReview(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, packet: *const packets.Packet) !void {
-    try exportBody(a, schema, id, "review", packet, try baselineReviewBody(a, packet), try read(a, "test/calibration/source-review-scope/baseline.prompt.md"));
+    try exportBody(a, schema, id, "review", packet, try baselineReviewBody(a, packet), try read(a, root ++ "/review-baseline.prompt.md"));
 }
 fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet, bytes: []const u8, origin: ?ReviewOrigin) !void {
     const ordinal = prepared.pending.pending_localization.?;
@@ -282,32 +282,6 @@ pub fn admitBrief(a: std.mem.Allocator, context: provenance.Context, brief: spec
     };
 }
 
-pub fn admitContent(a: std.mem.Allocator, context: provenance.Context, content: spec.IdentifiedContent) !spec.IdentifiedContent {
-    var result = content;
-    result.display_name = try admitAttributed(a, context, content.display_name, .spec_title);
-    result.primary_user_story = try admitAttributed(a, context, content.primary_user_story, .spec_story);
-    result.entities.basis = try admitAttributed(a, context, content.entities.basis, .spec_entity_basis);
-    const records = try a.dupe(spec.IdentifiedRecord, content.records);
-    for (records) |*record| {
-        const value = record.proposal;
-        var inspection: provenance.Inspection = .{};
-        record.proposal = provenance.inspectRecord(.model, a, text.validator, context, .{
-            .content = try provenance.modelRecord(a, @import("../domain/reference_support.zig").records(context.references), value.content),
-            .source_group_ids = value.source_group_ids,
-            .provenance = .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids },
-        }, &inspection) catch |err| {
-            if (inspection.text_issue) |issue| switch (issue.reason) {
-                .ambiguous_exact => return error.AmbiguousCalibrationExactValue,
-                .embedded_insertion_syntax => return error.EmbeddedCalibrationInsertionSyntax,
-                else => {},
-            };
-            return err;
-        };
-    }
-    result.records = records;
-    return result;
-}
-
 /// A current native admission rejection is a measured negative case, never an
 /// omitted panel row or a fabricated review request. Frozen inputs stay intact.
 pub const AdmissionReason = enum { ambiguous_exact, embedded_insertion_syntax };
@@ -449,15 +423,8 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, assigned.selection);
     const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
     var brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
-    var candidate: ?spec.IdentifiedContent = null;
-    if (example.candidate_file) |path| {
-        const captured = try @import("../domain/strict_json.zig").decode(struct { brief: spec.Brief, candidate: spec.IdentifiedContent }, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited), .{ .maximum_depth = 128 });
-        brief = captured.brief;
-        candidate = try admitContent(a, provenance_context, captured.candidate);
-        brief = try admitBrief(a, provenance_context, brief);
-        try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
-    } else brief = try admitBrief(a, provenance_context, brief);
-    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (candidate != null) brief else null);
+    brief = try admitBrief(a, provenance_context, brief);
+    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished);
     return .{ .inputs = inputs, .context = provenance_context, .guidance = &(try @import("packet_guidance.zig").shipped(a)).guidance, .brief = brief, .passive = passive };
 }
 
@@ -477,7 +444,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     const prepared = try prepareContext(a, example);
     errdefer prepared.passive.deinit();
     const inputs = prepared.inputs;
-    if (example.mode != .signal or authority.assessmentPolicy(inputs.projection) != .required) return error.InvalidCalibrationAssignment;
+    if (example.mode != .signal or inputs.projection != .source_readiness) return error.InvalidCalibrationAssignment;
     const provenance_context = prepared.context;
     const sources = provenance_context.inputs;
     const ledger = try authority.build(a, inputs);
@@ -676,7 +643,6 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
     var admission_rejections: std.ArrayList(AdmissionRejection) = .empty;
     var unavailable: std.ArrayList(Unavailable) = .empty;
     var prepared_cases: usize = 0;
-    var advisory_cases: usize = 0;
     var pre_generation_cases: usize = 0;
     for (cases) |example| {
         const current = prepareContext(a, example) catch |err| {
@@ -686,7 +652,9 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             continue;
         };
         defer current.passive.deinit();
-        if (example.mode == .candidate and current.inputs.specification == null) {
+        // Post-generation review is removed: a generated-candidate case has no
+        // current review to prepare, whether or not a frozen candidate exists.
+        if (example.mode == .candidate) {
             const missing: Unavailable = .{ .case_id = example.id };
             try unavailable.append(a, missing);
             try writeUnavailable(a, output, missing);
@@ -695,12 +663,6 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         prepared_cases += 1;
         try writeExactScope(a, output, example.id, current);
         if (prepared_cases == 1) try currentAssociationChecks(a, example);
-        if (authority.assessmentPolicy(current.inputs.projection) == .advisory) {
-            advisory_cases += 1;
-            const target: authority.Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = if (example.target == .primary_user_story) .primary_user_story else .description };
-            try advisoryProbe(a, example.id, current, target, .{ .candidate_omission = .{ .source_ids = try sourceIds(a, current), .detail = example.missing, .missing_obligation = example.missing_obligation } });
-            continue;
-        }
         pre_generation_cases += 1;
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
@@ -767,14 +729,12 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
     try std.testing.expectEqualDeep(@as([]const AdmissionRejection, &.{
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
     }), admission_rejections.items);
-    try std.testing.expectEqual(@as(usize, 1), advisory_cases);
     try std.testing.expectEqual(@as(usize, 1), pre_generation_cases);
-    try std.testing.expectEqual(@as(usize, 10), unavailable.items.len);
+    try std.testing.expectEqual(@as(usize, 11), unavailable.items.len);
     try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len + unavailable.items.len);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/native-admission.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .input_cases = cases.len,
         .prepared_cases = prepared_cases,
-        .current_advisory_cases = advisory_cases,
         .current_pre_generation_comparisons = pre_generation_cases,
         .pre_review_rejections = admission_rejections.items,
         .unavailable_cases = unavailable.items,
@@ -782,37 +742,6 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         .model_calls = @as(usize, 0),
     }, .{}) });
     try prepareHandoffControls(a, schema);
-}
-
-fn sourceIds(a: std.mem.Allocator, prepared: PreparedContext) ![]const r.extraction.identity.SourceId {
-    const result = try a.alloc(r.extraction.identity.SourceId, prepared.context.inputs.corpus.sources.len);
-    for (prepared.context.inputs.corpus.sources, result) |source, *id| id.* = source.id;
-    return result;
-}
-
-fn advisoryProbe(a: std.mem.Allocator, id: []const u8, prepared: PreparedContext, target: authority.Id, value: @import("../domain/specification_support_model.zig").Value) !void {
-    const focused = try focus(a, prepared, target);
-    defer packets.release(focused.packet);
-    const bytes = try reviewResponse(a, prepared, focused.packet, .{ .target = target, .value = value });
-    const result = try support.collectFocused(a, prepared.inputs, prepared.context, prepared.guidance, focused.prior, focused.packet, bytes, null);
-    const candidate = switch (result) {
-        .pending => |candidate| candidate,
-        .accepted => |accepted| accepted.candidate,
-        .rejected => return error.InvalidCalibrationAdvice,
-    };
-    try std.testing.expect(candidate.pending_localization == null);
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, prepared.inputs, prepared.context, prepared.guidance, candidate));
-    const ledger = try authority.build(a, prepared.inputs);
-    const selected = for (ledger.requirements, 0..) |required, index| {
-        if (std.meta.eql(required.seed.id, target)) break candidate.review.entries[index].value;
-    } else return error.InvalidCalibrationTarget;
-    try std.testing.expect(selected.preservation == null and selected.loss == .unlocalized);
-    if (value == .candidate_omission) {
-        try std.testing.expectEqualStrings(value.candidate_omission.missing_obligation, selected.missing_obligation.?);
-        try std.testing.expectEqualStrings(value.candidate_omission.detail, selected.detail);
-        try std.testing.expectEqualDeep(value.candidate_omission.source_ids, selected.source_ids);
-    }
-    try write(a, id, "current-advisory.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .current_assignment = focused.packet.body(), .response = bytes, .finding = selected, .pending_localization = false, .loss_request = @as(?[]const u8, null), .publication_authority = false, .model_calls = @as(usize, 0) }, .{}));
 }
 
 fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
@@ -824,7 +753,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
     };
     const controls = try codec.decode([]const Control, a, try read(a, root ++ "/handoff.controls.associated.json"));
     for (controls) |control| {
-        if (control.fixture.mode == .candidate and control.fixture.candidate_file == null) {
+        if (control.fixture.mode == .candidate) {
             try writeUnavailable(a, output, .{ .case_id = control.fixture.id });
             continue;
         }
