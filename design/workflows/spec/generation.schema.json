@@ -125,44 +125,6 @@
         }
       ]
     },
-    "content_primary_user_story": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "const": "primary_user_story"
-        },
-        "value": {
-          "$ref": "#/$defs/business_value"
-        },
-        "signal_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "minItems": 1,
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "kind",
-        "signal_ids",
-        "value"
-      ],
-      "additionalProperties": false
-    },
-    "primary_user_story": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_primary_user_story"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        },
-        {
-          "$ref": "#/$defs/inconclusive"
-        }
-      ]
-    },
     "content_entities": {
       "type": "object",
       "properties": {

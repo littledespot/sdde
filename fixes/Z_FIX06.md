@@ -459,6 +459,54 @@ committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes t
   literals match A by substring (`"id"`, `"$defs"`). The "native code" diagnostic texts
   reach requests only in `user` parts (2,832 in the freeze), so they aren't in M.
 
+## T6. Structural counts in the measures
+
+**Implemented 3 November 2026; uncommitted.** Decided as FIX06 §2 rule 4 (H6.1) and widened
+the same day (user: "Yes, count them") to extraction outcomes, claim categories and fragments
+objects, so every scheduled screen has a count.
+- **Change:** `measures.structure` (`test/harness/e2e/measures.zig`) replaces `recordsCount`.
+  Through the production envelope parser it reads a response's discriminator and gives
+  records by `content.kind` (`specification.Kind`), the entities `disposition`
+  (`specification.Applicability`) and entity count, a `claims` response's claims by `category`
+  (`reference_extraction.Kind`) or `no_feature_claim`, and every `{"fragments":[...]}` object
+  read by `model_text_wire.compositionNodes`, with those inserting no reference apart. Wire
+  names come from their owning types (`ModelResponse`, `AuthoringRecord`, the extraction
+  `Content` and `Proposal`), and a build fails if one declares `model_tags`. An unknown kind
+  or category counts apart; a `records` or `claims` response without its array has no
+  structure. Run measures keep every call with its call, origin and optional structure, so a
+  request whose last attempt is unreadable is never measured by an earlier one
+  (`e2e-measures/v2`); the set summary (`e2e-measures-set/v2`) pools record-kind presence and
+  the `required` entities decision per run from each request's last attempt, claims per
+  category, `no_feature_claim` per extraction response and literal-only fragments per
+  response. `e2e-call` trials record the same structure (`trial.measure`), and the report's
+  version is now a closed enum, `call-diagnostic-report/v3`, its Markdown giving one structure
+  line per trial. design/harness/e2e.md ("Test one captured call", "Run measures") amended;
+  retired FIX06 IDs dropped from the measures files' headers and e2e.md.
+- **Proof:** accepted and rejected structures (every shape, behind the provider's malformed
+  opening, unknown kinds, a non-composition `fragments` field, missing arrays, non-JSON); set
+  pooling over final attempts with a rejected first attempt's edge case excluded, including
+  when the last attempt left no structure; every shape round-trips the strict decoder, and an
+  unknown kind, category or disposition rejects; the CLI reads real call directories with a
+  cut-off retry and a missing output; v1 measures and set documents and v2 and v4 call reports
+  rejected; a trial's structure round-trips the
+  saved report and renders, and a trial without a readable response has none. No engine or
+  request change.
+- **Baseline measured 3 November 2026** (offline, `evaluations/t6-baseline/`, one
+  `<set>-set.json` per set; v12/v13 reports are `unavailable`, so the D12.1 and D16.1 counts
+  come from call evidence only). Runs with the record kind or decision, loan-renewal (LR) and
+  hello-world (HW):
+
+  | Set | LR edge case | LR statement families (BR, AS, NG, PB) | LR outcome (UVO) | HW entities `required` | HW extraction `no_feature_claim` |
+  | --- | --- | --- | --- | --- | --- |
+  | D12.1 | 3 / 3 | 3 / 3 each | 1 / 3 | 3 / 3 | 0 / 3 |
+  | D16.1 | 2 / 3 | 0 / 3 | 2 / 3 | 3 / 3 | 0 / 3 |
+  | D16.2 | 1 / 3 | 0 / 3 | 0 / 3 | 1 / 2 | 1 / 3 |
+  | D12.2 | 4 / 5 | 0 / 5 | 0 / 5 | 2 / 4 | 1 / 5 |
+
+  Loan-renewal entities are `required` in every run of every set. Literal-only fragments:
+  D12.1 3 of 30 (HW) and 3 of 30 (LR) responses; D16.1 1 of 30 and 2 of 34; D16.2 0 of 50 and
+  2 of 30; D12.2 2 of 74 and 3 of 50.
+
 ## E6. Producerless rejection reported as a harness error
 
 **Implemented 31 October 2026; committed in `dac4c4c`.** Three Q4 hello-world runs ended

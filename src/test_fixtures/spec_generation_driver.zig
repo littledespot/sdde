@@ -485,7 +485,7 @@ pub const Driver = struct {
                 std.testing.expect(!view.contains(.required_authority_gate)) catch unreachable;
                 const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
                 const unit = @import("../domain/specification_session.zig").unit(session.completed) catch unreachable;
-                const prompt = std.Io.Dir.cwd().readFileAlloc(std.testing.io, generationPrompt(unit), arena.allocator(), .unlimited) catch unreachable;
+                const prompt = std.Io.Dir.cwd().readFileAlloc(std.testing.io, generationPrompt(unit) catch unreachable, arena.allocator(), .unlimited) catch unreachable;
                 var found_prompt = false;
                 for (current_request.prepared().?.content) |part| if (part == .guidance) {
                     found_prompt = found_prompt or std.mem.eql(u8, part.bytes(), prompt);
@@ -722,10 +722,11 @@ fn assertSupportMerge(allocator: std.mem.Allocator, before: *const data.View, af
     }
 }
 
-fn generationPrompt(unit: @import("../domain/specification_generation.zig").Unit) []const u8 {
+/// ADR 0047: the engine composes the story, so no generation request carries one.
+fn generationPrompt(unit: @import("../domain/specification_generation.zig").Unit) error{UnexpectedStoryRequest}![]const u8 {
     return switch (unit) {
         .brief => "design/workflows/spec/generation.prompt.md",
-        .primary_user_story => "design/workflows/spec/story.prompt.md",
+        .primary_user_story => error.UnexpectedStoryRequest,
         .entities => "design/workflows/spec/entities.prompt.md",
         .records => "design/workflows/spec/records.prompt.md",
     };

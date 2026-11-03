@@ -35,7 +35,7 @@ through `build.zig` steps; `zig build --help` lists them.
 | Offline integration scenarios | `zig build test-integration` |
 | Packaged executable in a clean directory | `zig build smoke` |
 | Complete offline verification | `zig build verify` |
-| Apply the user's adjudication record to a retained run | `zig build adjudicate-spec` |
+| Apply an adjudication record to a retained run | `zig build adjudicate-spec` |
 
 None of these makes a model call. These do, or run the engine, and each run needs
 explicit user approval naming the case or target project: `zig build run`,
@@ -313,10 +313,13 @@ Beyond the rules above, do not introduce:
 - Unit and integration tests are not E2E evidence, and the harnesses stay separate.
 - E2E runs the full production path with the real configured LLM. Nothing scripted
   substitutes; if it cannot finish, report the unmet criteria.
-- No model grades an E2E run. Acceptance comes only from a human-written
-  `human-spec-adjudication/v2` record applied with `zig build adjudicate-spec`; never
-  write that record or present advisory analysis as acceptance. Run directories
-  under `zig-out/` are immutable evidence.
+- The E2E harness makes no judge call. Acceptance comes only from a
+  `spec-adjudication-record/v1` applied with `zig build adjudicate-spec`; the
+  `/evaluate-e2e` skill writes and applies it, scoring under the case rubric and the
+  user's rulings in that skill (user decision, 3 November 2026). Only the user triggers
+  that skill; never start it yourself, and never write or apply that record outside a
+  user-triggered `/evaluate-e2e`. Run directories under `zig-out/` are immutable
+  evidence.
 
 ## Validation
 

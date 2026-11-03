@@ -1,5 +1,5 @@
 //! Bind a successful publication to the exact source, rubric and published
-//! bytes that offline human adjudication revalidates.
+//! bytes that offline adjudication revalidates.
 const std = @import("std");
 const c = @import("contracts.zig");
 const evaluator = @import("../contracts.zig");

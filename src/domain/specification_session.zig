@@ -7,6 +7,7 @@ const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
 const binding = @import("specification_source_binding.zig");
 pub const unit_count = std.meta.fields(g.Unit).len;
+pub const story_index = @intFromEnum(std.meta.Tag(g.Unit).primary_user_story);
 pub const entities_index = @intFromEnum(std.meta.Tag(g.Unit).entities);
 pub const records_index = @intFromEnum(std.meta.Tag(g.Unit).records);
 pub const Session = struct {
@@ -196,6 +197,8 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     defer arena.deinit();
     const a = arena.allocator();
     const selected = try unit(index);
+    // ADR 0047: no model request carries the engine-composed story.
+    if (selected == .primary_user_story) return error.InvalidSpecificationUnit;
     // Records follow an accepted entities unit, which owns the entity family. Its
     // decision isn't sent to the records request.
     if (selected == .records) {
@@ -266,7 +269,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);
     var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
-        .primary_user_story => "primary_user_story",
+        .primary_user_story => return error.InvalidSpecificationUnit,
         .entities => "entities",
         .records => "records",
     } });
@@ -372,6 +375,7 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     const positive = try binding.catalogue(a, records, .content);
     const questions = try binding.catalogue(a, records, .question);
     const returned_fields = switch (selected) {
+        .primary_user_story => return error.InvalidSpecificationUnit,
         inline else => |_, tag| @import("model_candidate_json.zig").selectedFieldBindings(g.ModelResponse, a, @field(std.meta.Tag(g.ModelResponse), @tagName(tag)), .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit,
     };
     const permits_exact = for (returned_fields) |field| {
@@ -406,7 +410,7 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
         .brief => inline for (.{ "title", "description", "primary_goal" }) |field| {
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
         },
-        .primary_user_story => try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "primary_user_story", .field = "signal_ids" } }, .allowed = positive_ids, .collection = .unique_subset }),
+        .primary_user_story => return error.InvalidSpecificationUnit,
         .entities => {
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = basis_ids.items, .collection = .unique_subset });
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
@@ -617,11 +621,30 @@ fn claimTaken(records: []const g.spec.RecordProposal, index: usize, claim: @impo
 }
 
 /// ADR 0035 restatements of the story, decided before ADR 0038 Decision 5's repeated
-/// statements, so a record restating both keeps the story's rule.
+/// statements, so a record restating both keeps the story's rule. ADR 0047: a record
+/// naming a claim that no other record names is kept, so every claim keeps a record.
 fn restatementIssue(a: std.mem.Allocator, current: Session, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
     const story = completedStory(current) orelse return null;
-    for (records, 0..) |record, index| if (try g.restatesStory(a, story, record)) return g.restatementIssue(index, try observedRecord(model, index));
+    for (records, 0..) |record, index| {
+        if (!try g.restatesStory(a, story, record) or !claimsNamedElsewhere(current, records, index)) continue;
+        return g.restatementIssue(index, try observedRecord(model, index));
+    }
     return null;
+}
+/// Whether another record of the batch, or of an earlier batch, names each claim
+/// `records[index]` names.
+fn claimsNamedElsewhere(current: Session, records: []const g.spec.RecordProposal, index: usize) bool {
+    const r = @import("reference_reconciliation.zig");
+    claims: for (records[index].provenance.claim_ids) |claim| {
+        for (records, 0..) |other, position| {
+            if (position != index and r.contains(r.ClaimId, other.provenance.claim_ids, claim)) continue :claims;
+        }
+        for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
+            if (r.contains(r.ClaimId, prior.provenance.claim_ids, claim)) continue :claims;
+        };
+        return false;
+    }
+    return true;
 }
 fn observedRecord(model: ?g.Response, index: usize) Error!?@import("specification_candidate.zig").Replacement {
     const response = model orelse return null;
@@ -633,7 +656,7 @@ fn observedRecord(model: ?g.Response, index: usize) Error!?@import("specificatio
 
 /// The admitted story content, when one exists to compare records against.
 fn completedStory(current: Session) ?g.spec.AttributedValue {
-    const checked = current.units[@intFromEnum(std.meta.Tag(g.Unit).primary_user_story)] orelse return null;
+    const checked = current.units[story_index] orelse return null;
     if (checked.response != .content or checked.response.content != .primary_user_story) return null;
     return checked.response.content.primary_user_story;
 }

@@ -94,7 +94,8 @@ fn command(init: std.process.Init) !bool {
         var random: [16]u8 = undefined;
         try io.randomSecure(&random);
         const id = try a.dupe(u8, &std.fmt.bytesToHex(random, .lower));
-        const trial = @import("trial.zig").execute(a, io, service, parent, .{ .id = id, .run = .{ .bytes = &run.name }, .sequence = index + 1 });
+        var trial = @import("trial.zig").execute(a, io, service, parent, .{ .id = id, .run = .{ .bytes = &run.name }, .sequence = index + 1 });
+        try @import("trial.zig").measure(a, &trial);
         trials.appendAssumeCapacity(trial);
         try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(a, "Trial {d}/{d}: {s}\n", .{ index + 1, options.repeats, @tagName(trial.outcome) }));
         if (!trial.canContinue()) break;

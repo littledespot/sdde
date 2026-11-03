@@ -8,6 +8,9 @@
 - **Amends:** Design §§16–17, their acceptance criteria, ADR 0020's record-task
   population and exact-kind gates, and ADR 0022's classification/disposition
   handoffs. The overall design remains **Proposed design**.
+- **Amended 3 November 2026** by [ADR 0047](0047-engine-composed-primary-story.md): the
+  engine-composed story is not an exact-copy target. Its exact role is incidental, so an
+  exact value in the story satisfies no exact duty.
 
 ## Record scheduling
 

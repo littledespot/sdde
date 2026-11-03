@@ -384,7 +384,7 @@ test "publication handoff captures poor output for adjudication without changing
         failed.workflow_outcome = outcome;
         try std.testing.expectError(error.GenerationNotCompleted, evaluation.inputs(a, failed, captured.evaluation, "stale output", "run-124"));
     }
-    // The capture is evidence for a human; it changes no workflow state.
+    // The capture is evidence for adjudication; it changes no workflow state.
     try std.testing.expectEqual(.generated, report.status);
     try std.testing.expectEqual(.ok, report.workflow_outcome.?);
     try std.testing.expectEqualStrings(captured.evaluation.rubric_bytes, inputs.rubric_bytes);
@@ -563,7 +563,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     const view = try @import("../files.zig").read(io, a, dir.dir, "report.md");
     try std.testing.expect(std.mem.indexOf(u8, view, "provider stopped generation at its output limit") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "100 input + 512 output = 612 tokens") != null);
-    try std.testing.expect(std.mem.indexOf(u8, view, "No model grades this run.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "The harness makes no judge call.") != null);
     const terminal = try @import("../e2e/report.zig").terminal(a, report, "runs", "example");
     for ([_][]const u8{ view, terminal }) |rendered|
         try std.testing.expect(std.mem.indexOf(u8, rendered, "JSON error: SyntaxError at line 2, column 8 (byte offset 9)") != null);
@@ -610,7 +610,7 @@ test "completed E2E reports retain the exact captured adjudication inputs" {
     try std.testing.expectEqualDeep(report.evaluation_inputs, retained.evaluation_inputs);
     try std.testing.expectEqual(@as(f64, 75.5), retained.evaluation_inputs.?.rubric.pass_threshold_percent.?);
     const markdown = try @import("../files.zig").read(io, a, dir.dir, "report.md");
-    try std.testing.expect(std.mem.indexOf(u8, markdown, "No model grades this run.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, markdown, "The harness makes no judge call.") != null);
     try std.testing.expect(std.mem.indexOf(u8, markdown, "unresolved (") != null);
 }
 
@@ -1273,12 +1273,12 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
-        var current = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, context)).ready;
-        current.completed = 1;
+        const current = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, context)).ready;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const groups = try @import("../../../src/domain/specification_source_binding.zig").catalogue(scratch, @import("../../../src/domain/reference_support.zig").records(accounted), .content);
         try std.testing.expect(groups.len > 0);
-        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .source_group_ids = &.{groups[0].signal_id}, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
+        const unsupported: @import("../../../src/domain/specification.zig").Model.AttributedValue = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .source_group_ids = &.{groups[0].signal_id}, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } };
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .brief = .{ .title = unsupported, .description = unsupported, .primary_goal = unsupported } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;

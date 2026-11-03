@@ -4,9 +4,9 @@ The evaluator sends captured requirements, a supplied specification and its rubr
 to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and
 writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
-The [live E2E harness](e2e.md) does not call this evaluator: since 19 October 2026
-(user decision) a published E2E run is assessed by human adjudication
-([R8](acceptance.md)).
+The [live E2E harness](e2e.md) does not call this evaluator: a published E2E run is
+adjudicated by the user-triggered `/evaluate-e2e` skill ([R8](acceptance.md); user
+decisions, 19 October and 3 November 2026).
 
 ## Run
 
@@ -156,7 +156,7 @@ The internal test environment supplies the evaluation selection:
     and judgment validation then reads the decoder-consumed bytes.
   - A rejected envelope keeps the original bytes, so the report carries the original
     parser diagnostic.
-  - Human adjudication proposals are not model output and stay strictly parsed.
+  - Adjudication records stay strictly parsed and get no envelope correction.
   - Raw `model_output.txt` evidence is unchanged. The evaluation report adds no
     separate normalization fact.
 - The evaluator sends its configured `max_output_tokens`, the judge model's
@@ -186,7 +186,7 @@ The internal test environment supplies the evaluation selection:
   guidance](https://developers.openai.com/api/docs/guides/latest-model#phase-parameter).
 
 See [R8 development acceptance](acceptance.md) for critical vetoes, grader
-qualification, human adjudication and the diagnostic run gate. Supplied-spec
+qualification, adjudication and the diagnostic run gate. Supplied-spec
 calibration retains raw scores while acceptance remains unresolved.
 
 ## Contracts and scoring
@@ -278,7 +278,7 @@ For scored criteria, the percentage is:
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in
-  judge inputs. Human review and live calibration are tracked in FIX06 (H1, H3; former FIX05 R8).
+  judge inputs. Human review and live calibration are tracked in FIX06 (H3; former FIX05 R8).
 
 ## Attempts and failures
 

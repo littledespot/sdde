@@ -2,6 +2,7 @@
 const std = @import("std");
 const debug = @import("../../../src/domain/request_debugger.zig");
 const replay = @import("../../../src/application/request_replay.zig");
+const measures = @import("../e2e/measures.zig");
 
 pub const Trial = struct {
     ordinal: u32,
@@ -13,6 +14,10 @@ pub const Trial = struct {
     request_bytes: ?usize = null,
     response_bytes: ?usize = null,
     validation: debug.Validation = .{},
+    /// The response's structure, read by the run measures' own owner; null without a
+    /// response the envelope parser reads. Structure only: semantic quality stays
+    /// unassessed.
+    structure: ?measures.Structure = null,
 
     pub fn canContinue(self: Trial) bool {
         return switch (self.outcome) {
@@ -47,4 +52,9 @@ pub fn execute(a: std.mem.Allocator, io: std.Io, service: replay.Service, parent
         trial.diagnostic = result.validation.reason;
     } else trial.outcome = .completed;
     return trial;
+}
+
+/// Records a trial's response structure, for any outcome that kept the response text.
+pub fn measure(a: std.mem.Allocator, trial: *Trial) error{OutOfMemory}!void {
+    trial.structure = if (trial.validation.model_text) |text| try measures.structure(a, text) else null;
 }

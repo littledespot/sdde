@@ -25,9 +25,7 @@ Judge an engine change by its effect on:
 
 Passing structural tests, or getting more model calls to succeed, is not enough. The
 intent statement guides judgment but isn't contract authority. Its proposed shift
-toward smaller semantic decisions hasn't been accepted, except for typing source claims
-so that optional specification sections appear only from claims of their kind
-([FIX06](fixes/FIX06.md) Q18 D18.1, 3 November 2026).
+toward smaller semantic decisions hasn't been accepted.
 
 ## Authority and open work
 
@@ -49,10 +47,9 @@ The user starts a live Spec case with `/live-e2e <case>`.
 
 ## E2E assessment
 
-- Use `/evaluate-e2e <run>` to assess a retained run. Its output is advisory analysis,
-  not a grade or a review; acceptance follows AGENTS.md
-  ([R8](design/harness/acceptance.md)). A published run exits nonzero until it is
-  adjudicated.
+- `/evaluate-e2e <run>` assesses and adjudicates a retained run; AGENTS.md "Testing
+  expectations" says who triggers it ([R8](design/harness/acceptance.md)). A published
+  run exits nonzero until it is adjudicated.
 
 ## Claude Code setup
 

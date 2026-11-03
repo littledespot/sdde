@@ -5,9 +5,7 @@ It explains what the engine is for and how success is judged. It orients judgmen
 it is not contract authority. It does not accept the [Proposed design](design.md),
 amend an [ADR](decisions/) or establish that any capability is implemented or
 proven. The refinement toward smaller semantic decisions remains under evaluation
-in [FIX06](../fixes/FIX06.md), except where the user accepted it on 3 November 2026:
-typing source claims so that optional specification sections appear only from claims of
-their kind (FIX06 Q18 D18.1). Where this statement and a governing contract
+in [FIX06](../fixes/FIX06.md). Where this statement and a governing contract
 differ, report the difference rather than choosing between them.
 
 ---

@@ -96,7 +96,9 @@ pub fn firstPass(current: session.Session) bool {
     for (current.units[0..session.records_index], 0..) |entry, index| {
         const checked_unit = entry orelse return false;
         const expected = session.unit(index) catch return false;
-        if (!std.meta.eql(checked_unit.unit, expected) or !originalUnit(checked_unit)) return false;
+        if (!std.meta.eql(checked_unit.unit, expected)) return false;
+        // The engine composes the story with no model origin (ADR 0047).
+        if (!(if (index == session.story_index) composedStory(checked_unit) else originalUnit(checked_unit))) return false;
     }
     const records = current.units[session.records_index] orelse return false;
     if (records.unit != .records or records.response != .content or records.response.content != .records or records.last_repair != null) return false;
@@ -115,6 +117,13 @@ fn originalUnit(checked: generation.Checked) bool {
     return origin.kind == .inference and origin.request.value != 0 and origin.attempt.value == 1;
 }
 
+/// The native story: content with no model origin, field origin or repair.
+fn composedStory(checked: generation.Checked) bool {
+    return checked.unit == .primary_user_story and checked.response == .content and checked.response.content == .primary_user_story and
+        checked.last_repair == null and checked.origins.initial == null and checked.origins.fields.len == 0 and
+        checked.origins.record_occurrences.next_ordinal == 0 and checked.origins.record_occurrences.values.len == 0;
+}
+
 fn makeChecked(unit: generation.Unit, request: usize) generation.Checked {
     const attributed: specification.AttributedValue = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "Original business behavior." } }} }, .source_group_ids = &.{}, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{}, .citation_ids = &.{} } };
     return .{
@@ -125,7 +134,8 @@ fn makeChecked(unit: generation.Unit, request: usize) generation.Checked {
             .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = attributed } },
             .records => .{ .records = &.{} },
         } },
-        .origins = .{ .initial = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } } },
+        // The engine-composed story has no model origin (ADR 0047).
+        .origins = if (unit == .primary_user_story) .{} else .{ .initial = .{ .request = .{ .value = request }, .attempt = .{ .value = 1 } } },
     };
 }
 
@@ -181,7 +191,17 @@ test "native first pass rejects missing corrected and repaired generation origin
     current.units = narrative;
     try std.testing.expect(!firstPass(current));
     narrative[0].?.origins.initial.?.attempt.value = 1;
+    // A story carrying a model origin or a repair is not the engine's story.
+    narrative[1].?.origins = .{ .initial = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } } };
     current.units = narrative;
+    try std.testing.expect(!firstPass(current));
+    narrative[1].?.origins = .{};
+    narrative[1].?.last_repair = .{ .authorization = .{ .bytes = "repair-test" }, .owner = .workflow_step, .operation = .replace, .revision_before = 1, .revision_after = 2, .changed = true, .origin = null };
+    current.units = narrative;
+    try std.testing.expect(!firstPass(current));
+    narrative[1].?.last_repair = null;
+    current.units = narrative;
+    try std.testing.expect(firstPass(current));
     batch.origins.initial.?.attempt.value = 2;
     current.record_batches = &.{batch};
     try std.testing.expect(!firstPass(current));
@@ -256,9 +276,14 @@ test "native assembled observations resolve unrelated exact values and preserve 
         var request: usize = 1;
         while (current.completed < session.unit_count) : (request += 1) {
             const unit = try session.unit(current.completed);
+            // The engine composes the story from the quoted source (ADR 0047).
+            if (unit == .primary_user_story) {
+                current = (try (@import("../../../src/actions/specification/compose_specification_story.zig").Action{ .validator = text.validator }).execute(a, current, context)).composed;
+                continue;
+            }
             const response: generation.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = narrative, .description = behavior, .primary_goal = narrative } },
-                .primary_user_story => .{ .primary_user_story = behavior },
+                .primary_user_story => unreachable,
                 .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = narrative } },
                 .records => batch: {
                     const bound = (try session.currentBinding(a, current, context)).records;

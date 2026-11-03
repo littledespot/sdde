@@ -16,6 +16,10 @@
   - ADR 0033's two references to FIX05 A6.
 
   The overall design remains **Proposed design**.
+- **Amended 3 November 2026** (user: "yes", to "should the evaluator's rubric scores decide
+  acceptance instead of your record?"): the `/evaluate-e2e` skill, which only the user
+  triggers, writes and applies each counted run's adjudication record
+  (`spec-adjudication-record/v1`). The user still declares the gate.
 
 ## Context
 
@@ -54,13 +58,13 @@ cases, hello-world and loan-renewal. The sixteen reserved qualification features
 never used for it.
 
 - **High quality.** Each counted published specification is accepted under
-  [R8](../harness/acceptance.md) by `zig build adjudicate-spec`, applying the user's
-  `human-spec-adjudication/v2` record. That covers:
+  [R8](../harness/acceptance.md) by `zig build adjudicate-spec`, applying the
+  `spec-adjudication-record/v1` the `/evaluate-e2e` skill writes. That covers:
   - the rubric bar: at least an 80% aggregate, and every critical criterion at least 3/4;
   - R8's deterministic mechanics: the expected native outcome, validated artifacts, an
     intact source and provenance join, and zero measured admission escape.
 
-  Advisory `/evaluate-e2e` analysis doesn't count, and no model grades a run.
+  The E2E harness makes no judge call; the skill scores the retained run afterwards.
 - **Stable.** Repeated live runs of each case on the same committed build show stable
   output. Every attempted run counts, including runs stopped by budget or deadline and
   malformed or exhausted runs (AGENTS.md). There is no fixed run count or pass rate: the
@@ -112,4 +116,4 @@ from the user's words, and await the user's confirmation:
   "Retained evidence"). Gate evidence should therefore come from the build Plan work
   starts from.
 - **Gate runs need approval.** Each live run the gate needs is billed and needs its own
-  approval, as today. Each published run needs the user's adjudication.
+  approval, as today. Each published run needs the skill's adjudication.

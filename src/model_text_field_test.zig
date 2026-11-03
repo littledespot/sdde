@@ -60,7 +60,7 @@ test "native model declarations distinguish shared text types and narrowed repla
     const bound = try codec.fieldBindings(g.ModelResponse, a, .{});
     try std.testing.expect(fields.valid(bound));
     const resource = try compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
-    for ([_][]const u8{ "brief", "primary_user_story", "entities", "records" }) |name| {
+    for ([_][]const u8{ "brief", "entities", "records" }) |name| {
         const selected = try schema.restrictFieldPolicies(a, resource.select(.{ .bytes = name }).?, &.{}, &.{}, bound);
         defer selected.release();
         const active = try fields.activeBindings(a, selected.selected().root(), bound);

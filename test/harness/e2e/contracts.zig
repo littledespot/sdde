@@ -210,6 +210,6 @@ pub const Report = struct {
     /// diagnostic and outcome are `terminal_step`, `diagnostic` and `workflow_outcome`,
     /// and its bytes stay in the run's `project/`. Null until E0 writes it.
     incomplete_publication: ?[]const Artifact = null,
-    /// Exact source, rubric and published bytes for offline human adjudication.
+    /// Exact source, rubric and published bytes for offline adjudication.
     evaluation_inputs: ?evaluator.Capture = null,
 };

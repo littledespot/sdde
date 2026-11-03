@@ -68,15 +68,14 @@ pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []con
 pub const AuthoringEntity = struct { content: spec.Content(spec.BusinessValue), signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 /// A non-entity record names the claims it supports from its batch's group (ADR 0038).
 pub const AuthoringRecord = struct { content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_identity.zig").ClaimId };
+/// ADR 0047: the engine composes the story, so no model response carries one.
 pub const ModelResponse = union(enum) {
-    pub const model_fields = .{ .primary_user_story = @import("text_field_policy.zig").Field.spec_story };
     brief: struct {
         pub const model_fields = .{ .title = @import("text_field_policy.zig").Field.spec_title, .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
         title: AuthoringValue,
         description: AuthoringValue,
         primary_goal: AuthoringValue,
     },
-    primary_user_story: AuthoringValue,
     entities: struct {
         pub const model_fields = .{ .basis = @import("text_field_policy.zig").Field.spec_entity_basis };
         disposition: spec.Applicability,
@@ -98,7 +97,7 @@ pub const ModelResponse = union(enum) {
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
                 .brief => |brief| .{ .brief = .{ .title = try wireValue(allocator, context, brief.title), .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
-                .primary_user_story => |story| .{ .primary_user_story = try wireValue(allocator, context, story) },
+                .primary_user_story => return error.InvalidSpecificationUnit,
                 .entities => |entities| entity: {
                     const records = try allocator.alloc(AuthoringEntity, entities.records.len);
                     for (entities.records, records) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content), .signal_ids = record.source_group_ids };
@@ -120,7 +119,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
     const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
     const available = switch (bound) {
         .brief => |value| value,
-        .primary_user_story => |value| value,
+        .primary_user_story => return error.InvalidSpecificationUnit,
         .entities => |value| value,
         .records => |value| value.catalogue,
     };
@@ -131,7 +130,6 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
         },
         .inconclusive => |failure| .{ .inconclusive = failure },
         .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .title = try associated(allocator, available, brief.title, .content), .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
-        .primary_user_story => |story| if (bound == .primary_user_story) .{ .content = .{ .primary_user_story = try associated(allocator, available, story, .content) } } else error.InvalidSpecificationUnit,
         .entities => |entities| if (bound == .entities) entity: {
             const records = try allocator.alloc(spec.Model.RecordProposal, entities.records.len);
             for (entities.records, records) |wire, *record| {
@@ -163,7 +161,8 @@ fn groupSubset(a: std.mem.Allocator, group: []const @import("reference_identity.
     if (selected.items.len != named.len) return error.InvalidSpecificationUnit;
     return selected.toOwnedSlice(a);
 }
-fn associated(a: std.mem.Allocator, available: @import("specification_source_binding.zig").Catalogue, value: AuthoringValue, mode: @import("specification_source_binding.zig").Mode) Error!spec.Values(.model).AttributedValue {
+/// The selected groups resolved natively, for a model value or the engine's story.
+pub fn associated(a: std.mem.Allocator, available: @import("specification_source_binding.zig").Catalogue, value: AuthoringValue, mode: @import("specification_source_binding.zig").Mode) Error!spec.Values(.model).AttributedValue {
     const selected = @import("specification_source_binding.zig").resolveGroups(a, available.records, available.inputs, value.signal_ids, mode) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
     return .{ .value = value.value, .source_group_ids = selected.source_group_ids, .provenance = selected.selection };
 }

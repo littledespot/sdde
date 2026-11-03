@@ -1,7 +1,7 @@
-//! Deterministic measures of one retained E2E run and of a set of runs (FIX06 T5(a),
-//! T5(c)). Every count comes from a closed record: the native report, the per-call
-//! evidence, a model response's schema discriminator and the feature event log. No
-//! prose is read or classified, and no measure is a verdict or acceptance. Every
+//! Deterministic measures of one retained E2E run and of a set of runs. Every count
+//! comes from a closed record: the native report, the per-call evidence, a model
+//! response's discriminator and the closed kinds its arrays carry, and the feature event
+//! log. No prose is read or classified, and no measure is a verdict or acceptance. Every
 //! function allocates from the caller's arena.
 const std = @import("std");
 const c = @import("contracts.zig");
@@ -16,13 +16,87 @@ const telemetry = @import("../../../src/domain/telemetry.zig");
 const provider = @import("../../../src/domain/llm_provider_operation.zig");
 const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
 const Merge = @import("../../../src/domain/atomic_repair.zig").Merge;
-const Unit = std.meta.Tag(@import("../../../src/domain/specification_source_binding.zig").Unit);
+const spec = @import("../../../src/domain/specification.zig");
+const claim = @import("../../../src/domain/reference_extraction.zig");
+const text_wire = @import("../../../src/domain/model_text_wire.zig");
+const generation = @import("../../../src/domain/specification_generation.zig");
+const extraction_parser = @import("../../../src/domain/reference_extraction_parser.zig");
+
+/// The wire names a response's structure is read by, each taken from the type that owns
+/// it: a renamed field or variant renames the key here, and a type that renames its wire
+/// tags (`model_tags`) fails the build instead of zeroing a count.
+const wire = struct {
+    /// Every model response and record content is a tagged union under this key.
+    const discriminator = "kind";
+    const Generated = std.meta.Tag(generation.ModelResponse);
+    const Extracted = std.meta.Tag(extraction_parser.Content);
+    const Entities = @FieldType(generation.ModelResponse, "entities");
+    const records = @tagName(Generated.records);
+    const records_array = std.meta.fieldInfo(@FieldType(generation.ModelResponse, "records"), .records).name;
+    const record_content = std.meta.fieldInfo(generation.AuthoringRecord, .content).name;
+    const entities = @tagName(Generated.entities);
+    const disposition = std.meta.fieldInfo(Entities, .disposition).name;
+    const entity_records = std.meta.fieldInfo(Entities, .records).name;
+    const claims = @tagName(Extracted.claims);
+    const claims_array = std.meta.fieldInfo(@FieldType(extraction_parser.Content, "claims"), .claims).name;
+    const category = std.meta.fieldInfo(claim.Proposal, .category).name;
+    const no_feature_claim = @tagName(Extracted.no_feature_claim);
+    comptime {
+        for (.{ generation.ModelResponse, extraction_parser.Content, spec.Content(spec.BusinessValue) }) |T| {
+            if (@hasDecl(T, "model_tags")) @compileError("structure reads variant names as wire tags");
+        }
+    }
+};
 
 pub const Error = error{ InvalidFeatureLog, OutOfMemory };
 
 pub const ReasonCount = struct { reason: []const u8, count: u64 };
-/// One model response whose schema discriminator is `records`, with its array length.
-pub const RecordsCall = struct { call: usize, origin: Origin, records: u64 };
+pub const KindCount = struct { kind: spec.Kind, count: u64 };
+pub const CategoryCount = struct { category: claim.Kind, count: u64 };
+/// One model response's structure: its discriminator and the closed kinds, categories
+/// and dispositions its arrays carry. Prose is never read.
+pub const Structure = struct {
+    shape: Shape,
+    /// `{"fragments":[...]}` text objects anywhere in the response, and those of them
+    /// whose fragments are all literal text, inserting no reference.
+    fragments: u64 = 0,
+    literal_fragments: u64 = 0,
+
+    pub const Shape = union(enum) {
+        records: Records,
+        entities: Entities,
+        claims: Claims,
+        no_feature_claim,
+        /// Any other discriminator, such as a story or reconciliation response.
+        other,
+    };
+    pub const Records = struct {
+        /// The `records` array's length.
+        total: u64,
+        /// Records by `content.kind`, in the kinds' declared order, nonzero counts only.
+        kinds: []const KindCount = &.{},
+        /// Records without a known `content.kind`.
+        unknown: u64 = 0,
+    };
+    pub const Entities = struct {
+        /// Null when `disposition` is missing or not a known applicability.
+        disposition: ?spec.Applicability,
+        /// The entity `records` array's length; null when it isn't an array.
+        records: ?u64,
+    };
+    pub const Claims = struct {
+        /// The `claims` array's length.
+        total: u64,
+        /// Claims by `category`, in the categories' declared order, nonzero counts only.
+        categories: []const CategoryCount = &.{},
+        /// Claims without a known `category`.
+        unknown: u64 = 0,
+    };
+};
+/// One retained call's response structure, with its call and origin. Every call whose
+/// context decodes is kept, so a request's last attempt is known even when its response
+/// has no structure: null when the output is missing or the envelope parser can't read it.
+pub const Response = struct { call: usize, origin: Origin, structure: ?Structure };
 /// Counts from the feature event log. Runaways, re-sends and normalized responses are
 /// logged at every threshold (§26.5); the other counts and the latency hold only events
 /// the run's `log_threshold` kept.
@@ -68,7 +142,7 @@ pub const Outcome = struct {
     };
 };
 pub const Run = struct {
-    schema: enum { @"e2e-measures/v1" } = .@"e2e-measures/v1",
+    schema: enum { @"e2e-measures/v2" } = .@"e2e-measures/v2",
     run: []const u8,
     /// The retained `case.json` identifier.
     case_id: []const u8,
@@ -102,7 +176,8 @@ pub const Measured = struct {
     /// `unavailable` when `report.json` is missing or has a known older version; the run
     /// still counts as an attempted workload.
     report: union(enum) { measured: Reported, unavailable },
-    records_calls: []const RecordsCall = &.{},
+    /// Every retained call output the production envelope parser reads, in call order.
+    responses: []const Response = &.{},
     /// Null when the run has no feature event log.
     events: ?Events = null,
 };
@@ -167,20 +242,88 @@ pub fn fromReport(a: std.mem.Allocator, report: c.Report) error{ OutOfMemory, Ac
     return result;
 }
 
-/// The record count of a response whose schema discriminator is `records`, read through
-/// the production envelope parser; null for any other or unparseable response.
-pub fn recordsCount(a: std.mem.Allocator, output: []const u8) error{OutOfMemory}!?u64 {
+/// A response's structure, read through the production envelope parser. Null for a
+/// response that doesn't parse to an object, or a `records` or `claims` response without
+/// its array; an `entities` response without a known disposition or an array keeps them
+/// null.
+pub fn structure(a: std.mem.Allocator, output: []const u8) error{OutOfMemory}!?Structure {
     var document = envelope.parseContent(a, output, null) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         else => return null,
     };
     defer document.deinit();
-    if (document.parsed.value != .object) return null;
-    const name = @tagName(Unit.records);
-    const kind = document.parsed.value.object.get("kind") orelse return null;
-    if (kind != .string or !std.mem.eql(u8, kind.string, name)) return null;
-    const records = document.parsed.value.object.get(name) orelse return null;
-    return if (records == .array) records.array.items.len else null;
+    const value = document.parsed.value;
+    if (value != .object) return null;
+    var result: Structure = .{ .shape = .other };
+    try countFragments(a, value, &result);
+    const kind = value.object.get(wire.discriminator) orelse return result;
+    if (kind != .string) return result;
+    if (std.mem.eql(u8, kind.string, wire.records)) {
+        const records = value.object.get(wire.records_array) orelse return null;
+        if (records != .array) return null;
+        result.shape = .{ .records = try recordKinds(a, records.array.items) };
+    } else if (std.mem.eql(u8, kind.string, wire.entities)) {
+        const disposition = value.object.get(wire.disposition);
+        const records = value.object.get(wire.entity_records);
+        result.shape = .{ .entities = .{
+            .disposition = if (disposition) |field| if (field == .string) std.meta.stringToEnum(spec.Applicability, field.string) else null else null,
+            .records = if (records) |field| if (field == .array) field.array.items.len else null else null,
+        } };
+    } else if (std.mem.eql(u8, kind.string, wire.claims)) {
+        const claims = value.object.get(wire.claims_array) orelse return null;
+        if (claims != .array) return null;
+        result.shape = .{ .claims = try claimCategories(a, claims.array.items) };
+    } else if (std.mem.eql(u8, kind.string, wire.no_feature_claim)) {
+        result.shape = .no_feature_claim;
+    }
+    return result;
+}
+
+fn recordKinds(a: std.mem.Allocator, items: []const std.json.Value) error{OutOfMemory}!Structure.Records {
+    var counts: std.EnumArray(spec.Kind, u64) = .initFill(0);
+    var unknown: u64 = 0;
+    for (items) |item| {
+        const kind = if (item == .object) if (item.object.get(wire.record_content)) |content| if (content == .object) content.object.get(wire.discriminator) else null else null else null;
+        const known = if (kind) |field| if (field == .string) std.meta.stringToEnum(spec.Kind, field.string) else null else null;
+        if (known) |value| counts.getPtr(value).* += 1 else unknown += 1;
+    }
+    var kinds: std.ArrayList(KindCount) = .empty;
+    for (std.meta.tags(spec.Kind)) |value| if (counts.get(value) != 0) try kinds.append(a, .{ .kind = value, .count = counts.get(value) });
+    return .{ .total = items.len, .kinds = try kinds.toOwnedSlice(a), .unknown = unknown };
+}
+
+fn claimCategories(a: std.mem.Allocator, items: []const std.json.Value) error{OutOfMemory}!Structure.Claims {
+    var counts: std.EnumArray(claim.Kind, u64) = .initFill(0);
+    var unknown: u64 = 0;
+    for (items) |item| {
+        const category = if (item == .object) item.object.get(wire.category) else null;
+        const known = if (category) |field| if (field == .string) std.meta.stringToEnum(claim.Kind, field.string) else null else null;
+        if (known) |value| counts.getPtr(value).* += 1 else unknown += 1;
+    }
+    var categories: std.ArrayList(CategoryCount) = .empty;
+    for (std.meta.tags(claim.Kind)) |value| if (counts.get(value) != 0) try categories.append(a, .{ .category = value, .count = counts.get(value) });
+    return .{ .total = items.len, .categories = try categories.toOwnedSlice(a), .unknown = unknown };
+}
+
+/// Counts the typed-text wire's composition objects, read by its own owner, anywhere in
+/// a response; a counted object's fragments aren't searched again.
+fn countFragments(a: std.mem.Allocator, value: std.json.Value, result: *Structure) error{OutOfMemory}!void {
+    switch (value) {
+        .object => |object| {
+            if (try text_wire.compositionNodes(a, value)) |nodes| {
+                defer a.free(nodes);
+                result.fragments += 1;
+                for (nodes) |node| {
+                    if (node != .literal) break;
+                } else result.literal_fragments += 1;
+                return;
+            }
+            var fields = object.iterator();
+            while (fields.next()) |field| try countFragments(a, field.value_ptr.*, result);
+        },
+        .array => |array| for (array.items) |item| try countFragments(a, item, result),
+        else => {},
+    }
 }
 
 /// Counts from the feature event log's segments, in order. Each segment is read as the
@@ -328,8 +471,20 @@ pub const CaseSet = struct {
     admission_rejections: Spread = .{},
     repairs: Spread = .{},
     latency_ms: Spread = .{},
-    /// Over every records call of the case's runs.
+    /// Over every records response of the case's runs.
     records_per_call: Spread = .{},
+    /// For each record kind, runs whose final records responses (each request's last
+    /// attempt) hold at least one record of it, over runs with a final records response.
+    record_kinds: []const KindPresence = &.{},
+    /// Runs whose final entities response says `required`, over runs whose final entities
+    /// response has a known disposition.
+    entities_required: Pooled = .{},
+    /// `no_feature_claim` responses over extraction responses, every attempt.
+    no_feature_claim: Pooled = .{},
+    /// Claims of each category in final claims responses, over their claims.
+    claim_categories: []const CategoryShare = &.{},
+    /// Responses holding a literal-only fragments object, over responses.
+    literal_fragments: Pooled = .{},
     /// One entry per stage.
     stages: []const StageSpread = &.{},
     pooled: struct {
@@ -349,8 +504,10 @@ pub const CaseSet = struct {
         changed_repairs: Pooled = .{},
     } = .{},
 };
+pub const KindPresence = struct { kind: spec.Kind, runs: Pooled };
+pub const CategoryShare = struct { category: claim.Kind, claims: Pooled };
 pub const Set = struct {
-    schema: enum { @"e2e-measures-set/v1" } = .@"e2e-measures-set/v1",
+    schema: enum { @"e2e-measures-set/v2" } = .@"e2e-measures-set/v2",
     runs: []const []const u8,
     cases: []const CaseSet,
 };
@@ -380,6 +537,10 @@ fn summarizeCase(a: std.mem.Allocator, id: []const u8, runs: []const Run, confli
     var values: std.EnumArray(Measure, std.ArrayList(f64)) = .initFill(.empty);
     var stage_sends: std.EnumArray(stages.Stage, std.ArrayList(f64)) = .initFill(.empty);
     var stage_tokens: std.EnumArray(stages.Stage, std.ArrayList(f64)) = .initFill(.empty);
+    var kind_runs: std.EnumArray(spec.Kind, u64) = .initFill(0);
+    var records_runs: u64 = 0;
+    var category_claims: std.EnumArray(claim.Kind, u64) = .initFill(0);
+    var final_claims: u64 = 0;
     for (runs) |run| {
         if (!std.mem.eql(u8, run.case_id, id)) continue;
         result.attempted += 1;
@@ -401,7 +562,44 @@ fn summarizeCase(a: std.mem.Allocator, id: []const u8, runs: []const Run, confli
             .unavailable => false,
         };
         result.pooled.published = add(result.pooled.published, @intFromBool(native), 1);
-        for (measured.records_calls) |call| try values.getPtr(.records_per_call).append(a, @floatFromInt(call.records));
+        for (measured.responses) |response| {
+            const shape = response.structure orelse continue;
+            switch (shape.shape) {
+                .records => |records| try values.getPtr(.records_per_call).append(a, @floatFromInt(records.total)),
+                .claims => result.no_feature_claim = add(result.no_feature_claim, 0, 1),
+                .no_feature_claim => result.no_feature_claim = add(result.no_feature_claim, 1, 1),
+                .entities, .other => {},
+            }
+            result.literal_fragments = add(result.literal_fragments, @intFromBool(shape.literal_fragments != 0), 1);
+        }
+        var present: std.EnumSet(spec.Kind) = .initEmpty();
+        var has_records = false;
+        var disposition: ?spec.Applicability = null;
+        // A request whose last attempt left no structure contributes nothing: an earlier,
+        // rejected attempt is never taken for it.
+        for (measured.responses, 0..) |response, index| {
+            if (!lastAttempt(measured.responses, index)) continue;
+            const shape = response.structure orelse continue;
+            switch (shape.shape) {
+                .records => |records| {
+                    has_records = true;
+                    for (records.kinds) |entry| present.insert(entry.kind);
+                },
+                .entities => |entities| if (entities.disposition) |value| {
+                    disposition = value;
+                },
+                .claims => |claims| {
+                    final_claims += claims.total;
+                    for (claims.categories) |entry| category_claims.getPtr(entry.category).* += entry.count;
+                },
+                .no_feature_claim, .other => {},
+            }
+        }
+        if (has_records) {
+            records_runs += 1;
+            for (std.meta.tags(spec.Kind)) |kind| kind_runs.getPtr(kind).* += @intFromBool(present.contains(kind));
+        }
+        if (disposition) |value| result.entities_required = add(result.entities_required, @intFromBool(value == .required), 1);
         if (measured.events) |logged| {
             try values.getPtr(.runaways).append(a, @floatFromInt(logged.runaways));
             try values.getPtr(.admission_rejections).append(a, @floatFromInt(logged.admissionRejections()));
@@ -444,7 +642,26 @@ fn summarizeCase(a: std.mem.Allocator, id: []const u8, runs: []const Run, confli
         .actual_tokens = spread(stage_tokens.getPtr(stage).items),
     };
     result.stages = by_stage;
+    if (records_runs != 0) {
+        const presence = try a.alloc(KindPresence, std.meta.tags(spec.Kind).len);
+        for (std.meta.tags(spec.Kind), presence) |kind, *value| value.* = .{ .kind = kind, .runs = .{ .events = kind_runs.get(kind), .opportunities = records_runs } };
+        result.record_kinds = presence;
+    }
+    if (final_claims != 0) {
+        const shares = try a.alloc(CategoryShare, std.meta.tags(claim.Kind).len);
+        for (std.meta.tags(claim.Kind), shares) |category, *value| value.* = .{ .category = category, .claims = .{ .events = category_claims.get(category), .opportunities = final_claims } };
+        result.claim_categories = shares;
+    }
     return result;
+}
+
+/// Whether a response is its request's last attempt in the run.
+fn lastAttempt(responses: []const Response, index: usize) bool {
+    const origin = responses[index].origin;
+    for (responses) |other| {
+        if (other.origin.request.value == origin.request.value and other.origin.attempt.value > origin.attempt.value) return false;
+    }
+    return true;
 }
 
 fn add(pooled: Pooled, observed: u64, opportunities: u64) Pooled {
@@ -536,13 +753,36 @@ test "report measures separate sends, corrections, re-sends, stages and publicat
     try testing.expectError(error.CaptureMismatch, fromReport(a, mismatched));
 }
 
-test "records are counted from the response's discriminator and array, never its prose" {
-    try testing.expectEqual(@as(?u64, 2), try recordsCount(testing.allocator, "{\"{ \"kind\":\"records\",\"records\":[{\"text\":\"a\"},{\"text\":\"b\"}]}"));
-    try testing.expectEqual(@as(?u64, 0), try recordsCount(testing.allocator, "{\"kind\":\"records\",\"records\":[]}"));
-    try testing.expectEqual(@as(?u64, null), try recordsCount(testing.allocator, "{\"kind\":\"primary_user_story\",\"value\":\"records\"}"));
-    try testing.expectEqual(@as(?u64, null), try recordsCount(testing.allocator, "{\"kind\":\"records\",\"records\":\"x\"}"));
-    try testing.expectEqual(@as(?u64, null), try recordsCount(testing.allocator, "[\"records\"]"));
-    try testing.expectEqual(@as(?u64, null), try recordsCount(testing.allocator, "not json"));
+test "a response's structure comes from its discriminator and closed kinds, never its prose" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // Records by kind, behind the provider's malformed opening; a record without a known
+    // kind counts apart.
+    const records = (try structure(a, "{\"{ \"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"condition\":\"acceptance_criterion\"}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"edge_case\"}},{\"content\":{\"kind\":\"edge_case\"}},{\"content\":{\"kind\":\"story\"}},{\"text\":\"a\"}]}")).?;
+    try testing.expectEqualDeep(Structure.Shape{ .records = .{ .total = 5, .kinds = &.{ .{ .kind = .edge_case, .count = 2 }, .{ .kind = .functional_requirement, .count = 1 } }, .unknown = 2 } }, records.shape);
+    try testing.expectEqualDeep(Structure.Shape{ .records = .{ .total = 0 } }, (try structure(a, "{\"kind\":\"records\",\"records\":[]}")).?.shape);
+    // The entities decision and its records; an unknown disposition is null.
+    try testing.expectEqualDeep(Structure.Shape{ .entities = .{ .disposition = .required, .records = 1 } }, (try structure(a, "{\"kind\":\"entities\",\"disposition\":\"required\",\"basis\":{\"value\":\"not_applicable\"},\"records\":[{}]}")).?.shape);
+    try testing.expectEqualDeep(Structure.Shape{ .entities = .{ .disposition = .not_applicable, .records = 0 } }, (try structure(a, "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"records\":[]}")).?.shape);
+    try testing.expectEqualDeep(Structure.Shape{ .entities = .{ .disposition = null, .records = null } }, (try structure(a, "{\"kind\":\"entities\",\"disposition\":\"maybe\"}")).?.shape);
+    // Extraction outcomes and claims by category.
+    try testing.expectEqualDeep(Structure.Shape{ .claims = .{ .total = 3, .categories = &.{ .{ .category = .business, .count = 1 }, .{ .category = .scope_guard, .count = 1 } }, .unknown = 1 } }, (try structure(a, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"scope_guard\",\"citations\":[1]},{\"category\":\"business\",\"citations\":[2]},{\"category\":\"edge_case\"}]}")).?.shape);
+    try testing.expectEqual(Structure.Shape.no_feature_claim, (try structure(a, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"claims\"}}")).?.shape);
+    // Fragments objects, read by the text wire's owner; literal-only ones count apart.
+    const story = (try structure(a, "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[\"A\",\"B\"]},\"signal_ids\":[1]}")).?;
+    try testing.expectEqual(Structure.Shape.other, story.shape);
+    try testing.expectEqual(@as(u64, 1), story.fragments);
+    try testing.expectEqual(@as(u64, 1), story.literal_fragments);
+    const inserted = (try structure(a, "{\"kind\":\"brief\",\"title\":{\"fragments\":[\"Run \",{\"kind\":\"passive\",\"passive_literal_id\":1}]},\"goal\":\"fragments\"}")).?;
+    try testing.expectEqual(@as(u64, 1), inserted.fragments);
+    try testing.expectEqual(@as(u64, 0), inserted.literal_fragments);
+    // A field named `fragments` beside others is not the wire's composition object.
+    try testing.expectEqual(@as(u64, 0), (try structure(a, "{\"kind\":\"brief\",\"value\":{\"fragments\":[\"A\"],\"extra\":1}}")).?.fragments);
+    // A known discriminator without its array, a non-object and non-JSON have no structure.
+    for ([_][]const u8{ "{\"kind\":\"records\",\"records\":\"x\"}", "{\"kind\":\"records\"}", "{\"kind\":\"claims\",\"claims\":{}}", "[\"records\"]", "not json" }) |output| {
+        try testing.expectEqual(@as(?Structure, null), try structure(a, output));
+    }
 }
 
 pub const Logged = struct { offset: u64, event_type: telemetry.EventType, code: ?[]const u8 = null };
@@ -684,7 +924,7 @@ test "measures and set summaries are closed, versioned documents" {
     // Unknown and missing members reject; the decoder requires every member.
     try testing.expectError(error.InvalidJsonDocument, strict.decode(Run, a, try std.mem.replaceOwned(u8, a, encoded, "\"run\":\"run\"", "\"run\":\"run\",\"grade\":1"), limits));
     try testing.expectError(error.InvalidJsonDocument, strict.decode(Run, a, try std.mem.replaceOwned(u8, a, encoded, "\"run\":\"run\",", ""), limits));
-    try testing.expect(std.meta.isError(strict.decode(Run, a, try std.mem.replaceOwned(u8, a, encoded, "e2e-measures/v1", "e2e-measures/v0"), limits)));
+    try testing.expect(std.meta.isError(strict.decode(Run, a, try std.mem.replaceOwned(u8, a, encoded, "e2e-measures/v2", "e2e-measures/v1"), limits)));
     const unavailable: Run = .{ .run = "old", .case_id = "case", .measurement = .{ .measured = .{ .log_threshold = .warning, .report = .unavailable } } };
     const unmeasurable: Run = .{ .run = "cut", .case_id = "case", .measurement = .{ .unmeasurable = .{ .reason = .feature_log } } };
     for ([_]Run{ unavailable, unmeasurable }) |run| try testing.expectEqualDeep(run, try strict.decode(Run, a, try std.json.Stringify.valueAlloc(a, run, .{}), limits));
@@ -696,7 +936,7 @@ test "measures and set summaries are closed, versioned documents" {
     const set = try summarize(a, &.{ measured, unavailable, unmeasurable }, null);
     const set_bytes = try std.json.Stringify.valueAlloc(a, set, .{});
     try testing.expectEqualDeep(set, try strict.decode(Set, a, set_bytes, limits));
-    try testing.expect(std.meta.isError(strict.decode(Set, a, try std.mem.replaceOwned(u8, a, set_bytes, "e2e-measures-set/v1", "e2e-measures-set/v2"), limits)));
+    try testing.expect(std.meta.isError(strict.decode(Set, a, try std.mem.replaceOwned(u8, a, set_bytes, "e2e-measures-set/v2", "e2e-measures-set/v1"), limits)));
 }
 
 test "a set summary keeps every attempt and pools events with their opportunities" {
@@ -723,10 +963,21 @@ test "a set summary keeps every attempt and pools events with their opportunitie
     later.protocol_corrections = 1;
     var other = try fromReport(a, report);
     other.sends = 25;
-    const records: []const RecordsCall = &.{.{ .call = 4, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } }, .records = 6 }};
+    const records: []const Response = &.{
+        .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .no_feature_claim } },
+        .{ .call = 2, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } }, .structure = .{ .shape = .{ .claims = .{ .total = 3, .categories = &.{ .{ .category = .business, .count = 2 }, .{ .category = .scope_guard, .count = 1 } } } } } },
+        // A rejected first attempt's edge case isn't in the run's final records.
+        .{ .call = 3, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .records = .{ .total = 2, .kinds = &.{.{ .kind = .edge_case, .count = 2 }} } } } },
+        .{ .call = 4, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } }, .structure = .{ .shape = .{ .records = .{ .total = 6, .kinds = &.{.{ .kind = .functional_requirement, .count = 6 }} } }, .literal_fragments = 1, .fragments = 1 } },
+        .{ .call = 5, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .entities = .{ .disposition = .required, .records = 1 } } } },
+    };
+    const other_records: []const Response = &.{
+        .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .records = .{ .total = 1, .kinds = &.{.{ .kind = .edge_case, .count = 1 }} } } } },
+        .{ .call = 2, .origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .entities = .{ .disposition = .not_applicable, .records = 0 } } } },
+    };
     const runs = [_]Run{
-        .{ .run = "one", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = published }, .events = .{ .runaways = 1, .latency_ms = 100 }, .records_calls = records } } },
-        .{ .run = "two", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = failed }, .events = .{ .latency_ms = 300 } } } },
+        .{ .run = "one", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = published }, .events = .{ .runaways = 1, .latency_ms = 100 }, .responses = records } } },
+        .{ .run = "two", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = failed }, .events = .{ .latency_ms = 300 }, .responses = other_records } } },
         .{ .run = "three", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = later }, .events = .{ .latency_ms = 200 } } } },
         // An unreadable report still counts as attempted; its log still measures.
         .{ .run = "four", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .unavailable, .events = .{ .latency_ms = 400 } } } },
@@ -749,7 +1000,19 @@ test "a set summary keeps every attempt and pools events with their opportunitie
     try testing.expectEqual(Pooled{ .events = 2, .opportunities = 5 }, loan.pooled.published);
     try testing.expectEqual(Pooled{ .events = 3, .opportunities = 60 }, loan.pooled.protocol_corrections);
     try testing.expectEqual(Pooled{ .events = 1, .opportunities = 60 }, loan.pooled.runaways);
-    try testing.expectEqual(Spread{ .values = 1, .minimum = 6, .median = 6, .maximum = 6 }, loan.records_per_call);
+    try testing.expectEqual(Spread{ .values = 3, .minimum = 1, .median = 2, .maximum = 6 }, loan.records_per_call);
+    // Presence counts each run's final attempt of every request: run one's final records
+    // hold no edge case, run two's do.
+    try testing.expectEqual(spec.Kind.edge_case, loan.record_kinds[@intFromEnum(spec.Kind.edge_case)].kind);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 2 }, loan.record_kinds[@intFromEnum(spec.Kind.edge_case)].runs);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 2 }, loan.record_kinds[@intFromEnum(spec.Kind.functional_requirement)].runs);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 2 }, loan.entities_required);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 2 }, loan.no_feature_claim);
+    try testing.expectEqual(Pooled{ .events = 2, .opportunities = 3 }, loan.claim_categories[@intFromEnum(claim.Kind.business)].claims);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 7 }, loan.literal_fragments);
+    // A case without such responses has no presence or category entries.
+    try testing.expectEqual(@as(usize, 0), set.cases[1].record_kinds.len);
+    try testing.expectEqual(@as(usize, 0), set.cases[1].claim_categories.len);
     // Each measured run gives every stage a sends value, zero included; a stage of
     // unknown usage gives no token value.
     const repair = loan.stages[@intFromEnum(stages.Stage.repair)];
@@ -777,4 +1040,63 @@ test "a set summary keeps every attempt and pools events with their opportunitie
     try testing.expectEqual(@as(u64, 2), lost.cases[0].attempted);
     try testing.expectEqual(@as(u64, 2), lost.cases[0].unmeasurable);
     try testing.expectEqual(Pooled{ .events = 0, .opportunities = 2 }, lost.cases[0].pooled.published);
+}
+
+test "a request whose last attempt left no structure is never measured by an earlier attempt" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .publication_check = .not_run };
+    const reported = try fromReport(a, report);
+    // The edge case and the `required` decision sit in rejected first attempts whose
+    // second attempts were cut off; another request's records give the run its records.
+    const responses: []const Response = &.{
+        .{ .call = 1, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .records = .{ .total = 1, .kinds = &.{.{ .kind = .edge_case, .count = 1 }} } } } },
+        .{ .call = 2, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } }, .structure = null },
+        .{ .call = 3, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .entities = .{ .disposition = .required, .records = 1 } } } },
+        .{ .call = 4, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 2 } }, .structure = null },
+        .{ .call = 5, .origin = .{ .request = .{ .value = 6 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .records = .{ .total = 1, .kinds = &.{.{ .kind = .functional_requirement, .count = 1 }} } } } },
+    };
+    const set = try summarize(a, &.{.{ .run = "cut", .case_id = "loan", .measurement = .{ .measured = .{ .log_threshold = .debug, .report = .{ .measured = reported }, .responses = responses } } }}, null);
+    const loan = set.cases[0];
+    try testing.expectEqual(Pooled{ .events = 0, .opportunities = 1 }, loan.record_kinds[@intFromEnum(spec.Kind.edge_case)].runs);
+    try testing.expectEqual(Pooled{ .events = 1, .opportunities = 1 }, loan.record_kinds[@intFromEnum(spec.Kind.functional_requirement)].runs);
+    try testing.expectEqual(Pooled{}, loan.entities_required);
+    // Every response with a structure still counts toward the per-response measures.
+    try testing.expectEqual(Spread{ .values = 2, .minimum = 1, .median = 1, .maximum = 1 }, loan.records_per_call);
+    try testing.expectEqual(Pooled{ .events = 0, .opportunities = 3 }, loan.literal_fragments);
+}
+
+test "response structures and their pooled counts round-trip as closed documents" {
+    var arena: std.heap.ArenaAllocator = .init(testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const limits: strict.Limits = .{ .maximum_depth = 64 };
+    const reported = try fromReport(a, .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed });
+    const responses: []const Response = &.{
+        .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .claims = .{ .total = 2, .categories = &.{.{ .category = .business, .count = 2 }} } } } },
+        .{ .call = 2, .origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .no_feature_claim } },
+        .{ .call = 3, .origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .other, .fragments = 1, .literal_fragments = 1 } },
+        .{ .call = 4, .origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .entities = .{ .disposition = .not_applicable, .records = 0 } } } },
+        .{ .call = 5, .origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .entities = .{ .disposition = null, .records = null } } } },
+        .{ .call = 6, .origin = .{ .request = .{ .value = 6 }, .attempt = .{ .value = 1 } }, .structure = .{ .shape = .{ .records = .{ .total = 3, .kinds = &.{.{ .kind = .edge_case, .count = 2 }}, .unknown = 1 } } } },
+        .{ .call = 7, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .structure = null },
+    };
+    const run: Run = .{ .run = "run", .case_id = "case", .measurement = .{ .measured = .{ .log_threshold = .warning, .report = .{ .measured = reported }, .responses = responses } } };
+    const encoded = try std.json.Stringify.valueAlloc(a, run, .{});
+    try testing.expectEqualDeep(run, try strict.decode(Run, a, encoded, limits));
+    // Kinds, categories and dispositions are closed; an unknown one rejects.
+    for ([_][2][]const u8{
+        .{ "\"kind\":\"edge_case\"", "\"kind\":\"story\"" },
+        .{ "\"category\":\"business\"", "\"category\":\"rule\"" },
+        .{ "\"disposition\":\"not_applicable\"", "\"disposition\":\"maybe\"" },
+        .{ "\"no_feature_claim\":{}", "\"no_feature_claim\":{\"reason\":1}" },
+    }) |change| {
+        try testing.expect(std.meta.isError(strict.decode(Run, a, try std.mem.replaceOwned(u8, a, encoded, change[0], change[1]), limits)));
+    }
+    const set = try summarize(a, &.{run}, null);
+    try testing.expect(set.cases[0].record_kinds.len != 0 and set.cases[0].claim_categories.len != 0);
+    const set_bytes = try std.json.Stringify.valueAlloc(a, set, .{});
+    try testing.expectEqualDeep(set, try strict.decode(Set, a, set_bytes, limits));
+    try testing.expect(std.meta.isError(strict.decode(Set, a, try std.mem.replaceOwned(u8, a, set_bytes, "\"kind\":\"edge_case\"", "\"kind\":\"story\""), limits)));
 }

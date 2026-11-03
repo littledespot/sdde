@@ -209,9 +209,15 @@ test "independent wire cases cover every selected specification result and neste
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.plain ++ "}");
+    // ADR 0047: the engine composes the story, so no schema selection or variant exists.
+    try std.testing.expectError(error.MissingSchemaSelection, checkCandidate("generation", "primary_user_story", response_wire.clarification));
+    {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        try std.testing.expectError(error.InvalidJsonDocument, decodeCandidate("generation", "brief", arena.allocator(), "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.plain ++ "}"));
+    }
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ ",\"records\":[]}");
-    inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
+    inline for (.{ "brief", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
     // with native validation covered by specification_generation_test.
     try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
@@ -228,7 +234,7 @@ test "independent wire cases cover every selected specification result and neste
         }
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         if (comptime std.mem.eql(u8, record[0], "entity")) try candidateSchemaCase("generation", "records", need, .enum_mismatch, "/record_kind") else try checkCandidate("generation", "records", need);
-        try candidateSchemaCase("generation", "primary_user_story", need, .unknown_property, "/record_kind");
+        try candidateSchemaCase("generation", "brief", need, .unknown_property, "/record_kind");
         if (comptime std.mem.eql(u8, record[0], "acceptance_criterion") or std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
     }
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
@@ -361,7 +367,7 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.plain ++ "}");
     try candidateSchemaCase("generation", "value", "{\"value\":{\"fragments\":[]}}", .array_length, "/value/fragments");
     try candidateSchemaCase("generation", "value", "{\"value\":\"\"}", .string_length, "/value");
-    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":{\"fragments\":[]}}", .array_length, "/value/fragments");
+    try candidateSchemaCase("generation", "brief", "{\"kind\":\"brief\",\"title\":{\"signal_ids\":[7],\"value\":{\"fragments\":[]}},\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}", .array_length, "/title/value/fragments");
 
     const review_prefix = "{\"kind\":\"";
     const review_tail = "\",\"source_ids\":[],\"detail\":\"\"}";
@@ -408,8 +414,8 @@ test "business values distinguish ordinary prose from explicit fragment composit
     const value = "{\"fragments\":[\"Display \",{\"kind\":\"passive\",\"passive_literal_id\":7},\" with UTC date/time.\"]}";
     try checkCandidate("generation", "value", "{\"value\":\"MOCK Display the status.\"}");
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ value ++ "}");
-    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}", .missing_required_property, "/signal_ids");
+    try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":{\"signal_ids\":[7],\"value\":" ++ value ++ "},\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
+    try candidateCase("generation", "brief", "{\"kind\":\"brief\",\"title\":{\"value\":" ++ value ++ "},\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}", .missing_required_property, "/title/signal_ids");
     try candidateCase("generation", "value", "{\"signal_ids\":[7],\"value\":" ++ value ++ "}", .unknown_property, "/signal_ids");
     try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .unknown_property, "/value/kind");
     for ([_][]const u8{
@@ -547,7 +553,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     inline for (.{ "member_claim_ids", "member_summary_ids" }) |field| {
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
-    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
+    try candidateCase("generation", "brief", "{\"kind\":\"brief\",\"title\":{\"signal_ids\":[7],\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "},\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}", .unknown_property, "/title/provenance");
     try candidateCase("support", null, "{\"kind\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
     try candidateCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":\"An observable result.\"}}}]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}", .unknown_property, "/conflicts/0/citation_ids");

@@ -1,7 +1,8 @@
-//! Apply a human's bound rubric judgment to one retained native E2E report.
+//! Apply an adjudication record's rubric judgment to the retained native E2E report
+//! --report names.
 const std = @import("std");
 const files = @import("files.zig");
-const human = @import("human_adjudication.zig");
+const adjudication = @import("adjudication.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
 const output = @import("output.zig");
 
@@ -30,13 +31,13 @@ pub fn main(init: std.process.Init) !void {
     var args: std.ArrayList([]const u8) = .empty;
     while (it.next()) |arg| try args.append(a, arg);
     if (args.items.len == 1 and std.mem.eql(u8, args.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build adjudicate-spec -- --report <relative-e2e-report.json> --review <relative-human-review.json> --output <existing-relative-directory>\nOffline only. Validates a human rubric judgment bound to the exact retained report. Creates a new adjudication directory; never changes the workflow or original report. Exit 0 accepted, 1 rejected/error, 2 unresolved.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build adjudicate-spec -- --report <relative-e2e-report.json> --review <relative-adjudication-record.json> --output <existing-relative-directory>\nOffline only. Validates a rubric judgment record against the retained report --report names. Creates a new adjudication directory holding copies of both and the decision; never changes the workflow or original report. Exit 0 accepted, 1 rejected/error, 2 unresolved.\n");
         return;
     }
     const options = parse(args.items) catch return fail(io, "Invalid arguments; use --help. No API call is possible.");
     const original = files.read(io, a, .cwd(), options.report) catch return fail(io, "Original report unavailable.");
-    const review = files.read(io, a, .cwd(), options.review) catch return fail(io, "Human review unavailable.");
-    const result = human.evaluate(a, review, original) catch |err| return fail(io, try std.fmt.allocPrint(a, "Adjudication rejected: {s}.", .{@errorName(err)}));
+    const review = files.read(io, a, .cwd(), options.review) catch return fail(io, "Adjudication record unavailable.");
+    const result = adjudication.evaluate(a, review, original) catch |err| return fail(io, try std.fmt.allocPrint(a, "Adjudication rejected: {s}.", .{@errorName(err)}));
     const parent = directories.open(io, .cwd(), options.output) catch return fail(io, "Output must be an existing safe directory.");
     defer parent.close(io);
     var random: [16]u8 = undefined;
@@ -47,37 +48,35 @@ pub fn main(init: std.process.Init) !void {
     defer dir.close(io);
     // Retain the exact authority inputs alongside their deterministic projection.
     try output.write(io, dir, "original-report.json", original);
-    try output.write(io, dir, "human-review.json", review);
+    try output.write(io, dir, "adjudication-record.json", review);
     try output.write(io, dir, "report.json", try std.json.Stringify.valueAlloc(a, result, .{ .whitespace = .indent_2 }));
     try output.write(io, dir, "report.md", try markdown(a, result));
-    try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(a, "Human acceptance: {s}\nAdjudication: {s}/{s}/report.md\n", .{ @tagName(result.acceptance), options.output, name }));
+    try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(a, "Acceptance: {s}\nAdjudication: {s}/{s}/report.md\n", .{ @tagName(result.acceptance), options.output, name }));
     switch (result.acceptance) {
         .passed => {},
         .failed => std.process.exit(1),
         .unresolved => std.process.exit(2),
     }
 }
-fn markdown(a: std.mem.Allocator, result: human.Adjudication) ![]const u8 {
+fn markdown(a: std.mem.Allocator, result: adjudication.Adjudication) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(a);
     defer out.deinit();
-    try out.writer.print("# Human specification adjudication\n\nAcceptance: **{s}**", .{@tagName(result.acceptance)});
+    try out.writer.print("# Specification adjudication\n\nAcceptance: **{s}**", .{@tagName(result.acceptance)});
     switch (result.acceptance) {
         .passed => {},
         .failed => |reason| try out.writer.print(" ({s})", .{@tagName(reason)}),
         .unresolved => |reason| try out.writer.print(" ({s})", .{@tagName(reason)}),
     }
-    try out.writer.print("\n\nOriginal report SHA-256: `{s}`\n\nHuman review SHA-256: `{s}`\n\nReviewer: ", .{ result.original_report_sha256, result.review_sha256 });
-    try @import("report.zig").escape(&out.writer, result.reviewer orelse "pending");
+    try out.writer.writeAll("\n\nReviewer: ");
+    try @import("report.zig").escape(&out.writer, result.reviewer);
     try out.writer.writeAll("\n\nReviewed UTC: ");
-    try @import("report.zig").escape(&out.writer, result.reviewed_at_utc orelse "pending");
-    if (result.human_judgment) |judgment| {
-        if (judgment.score_percent) |score| try out.writer.print("\n\nHuman rubric score: {d:.2}%", .{score});
-        for (judgment.results) |criterion| {
-            try out.writer.writeAll("\n\n- ");
-            try @import("report.zig").escape(&out.writer, criterion.criterion_id);
-            try out.writer.print(": {s}", .{@tagName(criterion.disposition)});
-            if (criterion.score) |score| try out.writer.print(" ({d})", .{score});
-        }
+    try @import("report.zig").escape(&out.writer, result.reviewed_at_utc);
+    if (result.judgment.score_percent) |score| try out.writer.print("\n\nRubric score: {d:.2}%", .{score});
+    for (result.judgment.results) |criterion| {
+        try out.writer.writeAll("\n\n- ");
+        try @import("report.zig").escape(&out.writer, criterion.criterion_id);
+        try out.writer.print(": {s}", .{@tagName(criterion.disposition)});
+        if (criterion.score) |score| try out.writer.print(" ({d})", .{score});
     }
     try out.writer.writeAll("\n\nThis is development acceptance. It does not change production workflow authority.\n");
     return out.toOwnedSlice();

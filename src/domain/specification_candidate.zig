@@ -194,6 +194,8 @@ fn attributed(comptime boundary: g.spec.Boundary, content: *g.Responses(boundary
         .title => if (content.* == .brief) &content.brief.title else error.InvalidSpecificationRepair,
         .description => if (content.* == .brief) &content.brief.description else error.InvalidSpecificationRepair,
         .primary_goal => if (content.* == .brief) &content.brief.primary_goal else error.InvalidSpecificationRepair,
+        // Unit validation still reports the engine-composed story's observed value;
+        // repair authorization rejects it as a target (ADR 0047).
         .story => if (content.* == .primary_user_story) &content.primary_user_story else error.InvalidSpecificationRepair,
         .entity_basis => if (content.* == .entities) &content.entities.basis else error.InvalidSpecificationRepair,
         .record => error.InvalidSpecificationRepair,

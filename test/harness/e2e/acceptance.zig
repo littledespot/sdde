@@ -1,5 +1,6 @@
 //! Development acceptance joins native outcomes and mechanical publication
-//! evidence. Humans own semantic acceptance; no model grades an E2E run.
+//! evidence. Semantic acceptance comes from the user-triggered /evaluate-e2e
+//! adjudication (R8); the harness makes no judge call.
 const std = @import("std");
 const c = @import("contracts.zig");
 const grading = @import("../contracts.zig");
@@ -32,7 +33,7 @@ pub const Reason = enum {
 pub const Result = union(enum) { passed, failed: Failure, unresolved: Reason };
 pub const Error = std.mem.Allocator.Error;
 
-/// A completed publication remains unresolved until source-bound human review.
+/// A completed publication remains unresolved until its source-bound adjudication.
 /// Stored acceptance and status names never substitute for native evidence.
 pub fn evaluate(a: std.mem.Allocator, report: c.Report) Error!Result {
     var scratch = std.heap.ArenaAllocator.init(a);
@@ -43,10 +44,10 @@ pub fn evaluate(a: std.mem.Allocator, report: c.Report) Error!Result {
     return .passed;
 }
 
-/// The human-review adapter owns reviewer/date/hash attestation. This boundary
-/// still checks native publication and revalidates the supplied human judgment
+/// The adjudication record owner checks reviewer and date. This boundary
+/// still checks native publication and revalidates the supplied judgment
 /// against the exact captured source and published specification.
-pub fn evaluateHuman(a: std.mem.Allocator, report: c.Report, human_result: judgment.Result) Error!Result {
+pub fn evaluateJudgment(a: std.mem.Allocator, report: c.Report, scored: judgment.Result) Error!Result {
     var scratch = std.heap.ArenaAllocator.init(a);
     defer scratch.deinit();
     const allocator = scratch.allocator();
@@ -54,7 +55,7 @@ pub fn evaluateHuman(a: std.mem.Allocator, report: c.Report, human_result: judgm
     if (native != .passed) return native;
     if (report.expected_outcome != .publication) return .{ .failed = .unexpected_outcome };
     const inputs = report.evaluation_inputs.?;
-    const checked = judgment.validate(allocator, null, inputs, try std.json.Stringify.valueAlloc(allocator, judgment.Proposal{ .results = human_result.results }, .{})) catch |err| {
+    const checked = judgment.validate(allocator, null, inputs, try std.json.Stringify.valueAlloc(allocator, judgment.Proposal{ .results = scored.results }, .{})) catch |err| {
         if (err == error.OutOfMemory) return error.OutOfMemory;
         return .{ .failed = .grading_mismatch };
     };

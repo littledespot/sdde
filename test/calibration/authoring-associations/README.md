@@ -1,7 +1,8 @@
 # Current authored-source association qualification
 
 This is a frozen diagnostic preparation for the Phase 5 replacement. It tests
-actual brief, primary-story, entity-decision and source-bound record responses.
+actual brief, entity-decision and source-bound record responses. The engine
+composes the primary story between them (ADR 0047), so no story request exists.
 The retired 22-call role panel remains a separate historical comparison: role
 classification and authored content are different tasks and their results must
 not be reported as a paired improvement estimate.
@@ -15,10 +16,10 @@ each record group. The third must not invent a duration or manufacture an
 unrelated clarification. All cases are development evidence, not a held-out
 qualification set.
 
-There are 24 logical trials: three cases × four tasks × two repetitions.
+There are 18 logical trials: three cases × three tasks × two repetitions.
 Records run once per current native group; the startup case includes its separate
 preserved-token group and equipment has two business groups. Consequently there
-are **28 physical sends**, not 24. Every record-group response, including an empty
+are **22 physical sends**, not 18. Every record-group response, including an empty
 one, remains in its logical collection trial and cost denominator. The manifest
 is authoritative for the prepared count; never omit a group to meet a call budget.
 
@@ -63,7 +64,7 @@ Freeze those exact bytes into an isolated run directory after offline checks and
 review every manifest pin before requesting approval. Later changes to dependencies
 require regeneration and a fresh frozen plan. Do not edit generated projections.
 
-Launch only after bounded approval of all 28 sends, the AWS destination and
+Launch only after bounded approval of all 22 sends, the AWS destination and
 the synthetic/captured requirements, derived evidence, non-public guidance and
 schemas. Reuse the authenticated native request debugger's `/api/replay`
 modified-request route with each complete frozen `edit.json` object. Select one
@@ -175,8 +176,7 @@ and fulfil their specific assigned purposes without unsupported additions. The
 brief preserves the intended feature meaning jointly: its title names the feature,
 its description explains the behavior and its goal explains the purpose. Do not
 require each of those fields to repeat every source clause. The entity basis must
-justify its decision, rather than restate every behavioral duty. The story must
-provide a coherent user narrative. Each complete record collection must preserve
+justify its decision, rather than restate every behavioral duty. Each complete record collection must preserve
 its assigned group obligations; individual records must fulfil their own field
 and family purposes, rather than each restating the entire group.
 The genuine-gap case must preserve the known behavior and identify the actual gap

@@ -390,14 +390,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             const unit = try @import("../domain/specification_session.zig").unit(current.completed);
             const assigned = try @import("../domain/specification_session.zig").currentBinding(allocator, current, context);
-            if (options.generation_gap and unit == .primary_user_story) {
+            if (options.generation_gap and unit == .entities) {
                 const selected = try fixtureGroups(allocator, context, value.provenance.claim_ids, .question);
                 return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, .{ .clarification = .{ .reason = .missing, .question = .{ .value = value.value, .signal_ids = selected.source_group_ids } } });
             }
             var proposed: g.Response = .{
                 .content = switch (unit) {
                     .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
-                    .primary_user_story => .{ .primary_user_story = value },
+                    // ADR 0047: the engine composes the story; no request asks for it.
+                    .primary_user_story => return error.UnexpectedStoryRequest,
                     .entities => entity: {
                         const include = options.entities_required != options.contradict_entities;
                         const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
@@ -449,13 +450,21 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const invalid: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
                 switch (unit) {
                     .brief => proposed.content.brief.title.value = invalid,
-                    .primary_user_story => if (options.repair_across_units) {
-                        proposed.content.primary_user_story.value = invalid;
-                    },
+                    .primary_user_story => return error.UnexpectedStoryRequest,
                     .entities => if (options.repair_across_units) {
                         proposed.content.entities.basis.value = invalid;
                     },
-                    .records => {},
+                    // The story is composed natively (ADR 0047), so the third model
+                    // unit repaired across units is the first record batch.
+                    .records => if (options.repair_across_units and proposed.content.records.len != 0) {
+                        const records = try allocator.dupe(g.spec.Model.RecordProposal, proposed.content.records);
+                        switch (records[0].content) {
+                            .acceptance_criterion => |*criterion| criterion.given = invalid,
+                            .functional_requirement => |*requirement| requirement.text = invalid,
+                            else => return error.InvalidFixture,
+                        }
+                        proposed.content.records = records;
+                    },
                 }
             }
             try associateFixtureResponse(allocator, context, assigned, &proposed);
@@ -789,7 +798,7 @@ fn associateFixtureResponse(allocator: std.mem.Allocator, context: @import("../d
     switch (response.*) {
         .content => |*content| switch (content.*) {
             .brief => |*brief| inline for (.{ "title", "description", "primary_goal" }) |field| try associateFixtureValue(allocator, context, &@field(brief, field)),
-            .primary_user_story => |*story| try associateFixtureValue(allocator, context, story),
+            .primary_user_story => return error.UnexpectedStoryRequest,
             .entities => |*entities| {
                 try associateFixtureValue(allocator, context, &entities.basis);
                 const selected = try allocator.dupe(g.spec.Model.RecordProposal, entities.records);

@@ -1085,7 +1085,7 @@ then applicable sections in this exact relative order:
 | Section | Native content field / record kind | Purpose |
 | --- | --- | --- |
 | Document H1 | `display_name` | Reference-grounded human feature name. |
-| Primary User Story | `primary_user_story` | Main user journey in plain business language. |
+| Primary User Story | `primary_user_story` | The source's business requirement sentences, joined natively in source order ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
 | Edge Cases | `edge_case` / `EC-*` | Boundary/error condition and expected business response. |
@@ -1238,8 +1238,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
 
-- Native proposals contain attributed title/story, `records` with one closed
-  content-kind variant and provenance per record, and the entity decision/basis.
+- Native proposals contain the attributed title, `records` with one closed
+  content-kind variant and provenance per record, and the entity decision/basis. The
+  engine composes the attributed story (ADR 0047).
 - They contain no generated IDs, paths, questions or completion fields.
 - Ordinary business values use the existing typed-text shape; canonical exact copies
   are engine-derived occurrence handles (ADR 0020), never a second copy of source bytes.
@@ -1257,17 +1258,17 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 ### 5.7 Generation, coverage and repair
 
 - The native generation candidate is a closed content/clarification/inconclusive union.
-- Content units are a feature brief (title, description, primary goal), primary story,
-  feature-wide entity applicability plus entity records, or a source-group batch
-  of non-entity records (§17.3). Each entity independently selects its support; each
+- Content units are a feature brief (title, description, primary goal), the
+  engine-composed primary story (ADR 0047), feature-wide entity applicability plus
+  entity records, or a source-group batch of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 - Native validation normalizes typed text, checks closed record variants, identical
   normalized records and covered restatements (ADR 0035), and keeps questions outside
   specification content.
 
-- The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
+- The model's `kind` selects `brief`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`
-  wrapper.
+  wrapper. No model response carries the story (ADR 0047).
 - Record-assignment clarifications also require a closed `record_kind`; narrative
   and applicability clarifications prohibit it. Native validation and the shared
   question builder retain the previous per-family clarification subject.
@@ -1298,8 +1299,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
-- Four configured calls reuse the same generation subgraph and generic model path;
-  narrative, applicability and records use concise purpose-specific guidance.
+- Three configured task types (brief, entities and one call per record group) reuse
+  the same generation subgraph and generic model path; narrative, applicability and
+  records use concise purpose-specific guidance. The registered action
+  `compose-specification-story` composes the story between the brief and entities,
+  with no model call (ADR 0047).
   The record schema defines each content variant once under one collection envelope.
 - Every retained business claim maps to native content keys; non-spec context remains in
   identified reference signals.
@@ -1324,8 +1328,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
   single-statement record that restates the primary user story is deleted only when the
-  story covers its evidence. A functional requirement and the story are always kept, and
-  an uncovered restatement is not flagged. Within one batch, a business rule, outcome,
+  story covers its evidence. A functional requirement and the story are always kept,
+  an uncovered restatement is not flagged, and a record naming a claim that no other
+  record names is kept ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). Within one batch, a business rule, outcome,
   assumption, non-goal or prohibition whose every claim a requirement or an earlier such
   record names is deleted natively too, unless it holds an exact copy no other record
   holds; one naming such claims and others is an admission
@@ -1563,7 +1568,7 @@ YAML definition.
   since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/e2e.md) captures the exact published specification for
-  separate human adjudication, and [FIX06](../../fixes/FIX06.md) tracks open work.
+  separate adjudication by the user-triggered `/evaluate-e2e`, and [FIX06](../../fixes/FIX06.md) tracks open work.
 
 ## 9. Traceability
 

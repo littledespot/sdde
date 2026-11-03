@@ -10,14 +10,48 @@ pub const Mode = enum { content, question };
 pub const Catalogue = struct { records: refs.Records, inputs: evidence.Inputs };
 pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
 pub const Association = struct { source_group_ids: []const r.SignalId, selection: spec.Selection };
+pub const Reason = enum { empty_catalogue, no_record_authoring_groups, no_story_requirements, story_not_admissible };
+/// Built only by `rejection` and `storyRejection`, and checked again on decode, so a
+/// reason and its issue always pair: `story_not_admissible` carries the unit issue
+/// that kept the engine-composed story out (ADR 0047); every other reason has none.
+/// A story reason has no model origin: the engine produced the story.
 pub const Rejection = struct {
     state_id: evidence.identity.StateId,
     partition_id: r.PartitionId,
     revision: u64,
     origin: ?@import("model_candidate_origin.zig").Origin,
-    reason: enum { empty_catalogue, no_record_authoring_groups } = .empty_catalogue,
+    reason: Reason = .empty_catalogue,
     eligible_signals: []const EligibleSignal,
+    issue: ?@import("specification_candidate.zig").Issue = null,
+
+    pub fn valid(self: Rejection) bool {
+        const story = self.reason == .no_story_requirements or self.reason == .story_not_admissible;
+        return (self.reason == .story_not_admissible) == (self.issue != null) and (!story or self.origin == null);
+    }
+
+    /// Decoding rejects an unpaired reason and issue, or a story reason with an origin.
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!Rejection {
+        const wire = try std.json.innerParse(Wire, a, source, options);
+        const result: Rejection = .{ .state_id = wire.state_id, .partition_id = wire.partition_id, .revision = wire.revision, .origin = wire.origin, .reason = wire.reason, .eligible_signals = wire.eligible_signals, .issue = wire.issue };
+        return if (result.valid()) result else error.UnexpectedToken;
+    }
+    /// The same fields without the pairing check; decoding only.
+    const Wire = struct {
+        state_id: evidence.identity.StateId,
+        partition_id: r.PartitionId,
+        revision: u64,
+        origin: ?@import("model_candidate_origin.zig").Origin,
+        reason: Reason,
+        eligible_signals: []const EligibleSignal,
+        issue: ?@import("specification_candidate.zig").Issue,
+    };
+    comptime {
+        std.debug.assert(std.meta.fields(Wire).len == std.meta.fields(Rejection).len);
+    }
 };
+/// Why the engine-composed story blocks (ADR 0047): no business claim to quote, or
+/// the composed value fails unit validation. Neither is repaired or retried.
+pub const StoryGap = union(enum) { no_requirements, not_admissible: @import("specification_candidate.zig").Issue };
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
 pub const RecordBound = struct { signal: r.SignalId, selection: spec.Selection, catalogue: Catalogue };
 pub const Bound = union(enum) { brief: Catalogue, primary_user_story: Catalogue, entities: Catalogue, records: RecordBound };
@@ -47,7 +81,6 @@ fn preservedTokensOnly(records: refs.Records, claims: []const r.ClaimId) Error!b
 }
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
-    primary_user_story: FieldGuidance,
     entities: FieldGuidance,
     records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, requirements: []const Requirement },
 };
@@ -55,7 +88,8 @@ pub const Guidance = union(enum) {
 pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement, record_kinds: []const spec.Kind) Error!Guidance {
     return switch (bound) {
         .brief => .{ .brief = .{ .title = try fieldGuidance(a, .display_name, mode), .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
-        .primary_user_story => .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, mode) },
+        // ADR 0047: the engine composes the story; no authoring request carries it.
+        .primary_user_story => return error.InvalidSpecificationBinding,
         .entities => .{ .entities = .{ .purpose = switch (mode) {
             .authoring => |purposes| try std.fmt.allocPrint(a, "{s}\n{s}", .{ (try fieldGuidance(a, .entities, mode)).purpose.?, @import("required_authority_description.zig").record(a, purposes, .entity) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding }),
             .repair => null,
@@ -186,7 +220,23 @@ pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
 pub fn rejection(a: std.mem.Allocator, references: r.Accounted) Error!Rejection {
     const records = refs.records(references);
     if (try recordCount(records) != 0) return error.InvalidSpecificationBinding;
-    const prior = references.records.assignments.checked.prior.prior;
     const available = try catalogue(a, records, .question);
-    return .{ .state_id = records.items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = prior.source.at(.signals, .record), .reason = if (available.len == 0) .empty_catalogue else .no_record_authoring_groups, .eligible_signals = available };
+    const prior = references.records.assignments.checked.prior.prior;
+    // A record catalogue gap belongs to the reconciliation signals response.
+    return blocked(references, if (available.len == 0) .empty_catalogue else .no_record_authoring_groups, prior.source.at(.signals, .record), null, available);
+}
+/// ADR 0047: the story's catalogue gives the engine nothing admissible to quote.
+/// The engine produced the story, so the rejection has no model origin.
+pub fn storyRejection(a: std.mem.Allocator, references: r.Accounted, gap: StoryGap) Error!Rejection {
+    const available = try catalogue(a, refs.records(references), .content);
+    return switch (gap) {
+        .no_requirements => blocked(references, .no_story_requirements, null, null, available),
+        .not_admissible => |issue| blocked(references, .story_not_admissible, null, issue, available),
+    };
+}
+fn blocked(references: r.Accounted, reason: Reason, origin: ?@import("model_candidate_origin.zig").Origin, issue: ?@import("specification_candidate.zig").Issue, available: []const EligibleSignal) Rejection {
+    const prior = references.records.assignments.checked.prior.prior;
+    const result: Rejection = .{ .state_id = refs.records(references).items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = origin, .reason = reason, .eligible_signals = available, .issue = issue };
+    std.debug.assert(result.valid());
+    return result;
 }

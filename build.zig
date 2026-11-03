@@ -169,8 +169,8 @@ fn define(b: *std.Build) Graph {
     }) });
     const run_adjudicator = b.addRunArtifact(adjudicator);
     if (b.args) |args| run_adjudicator.addArgs(args);
-    b.step("adjudicate-spec", "Apply a bound human rubric judgment offline, without model calls").dependOn(&run_adjudicator.step);
-    b.step("build-adjudicator", "Build the offline human adjudication tool").dependOn(&adjudicator.step);
+    b.step("adjudicate-spec", "Apply an adjudication record's rubric judgment offline, without model calls").dependOn(&run_adjudicator.step);
+    b.step("build-adjudicator", "Build the offline adjudication tool").dependOn(&adjudicator.step);
     const adjudicator_directory = b.addTempFiles();
     const adjudicator_binary = adjudicator_directory.addCopyFile(adjudicator.getEmittedBin(), adjudicator.out_filename);
     const adjudicator_help = std.Build.Step.Run.create(b, "run standalone offline adjudicator help");
@@ -187,7 +187,7 @@ fn define(b: *std.Build) Graph {
     adjudicator_denied.expectExitCode(1);
     adjudicator_denied.expectStdOutEqual("");
     adjudicator_denied.expectStdErrEqual("Invalid arguments; use --help. No API call is possible.\n");
-    const adjudicator_smoke = b.step("smoke-adjudicator", "Test isolated human adjudication startup without model calls");
+    const adjudicator_smoke = b.step("smoke-adjudicator", "Test isolated adjudication startup without model calls");
     adjudicator_smoke.dependOn(&adjudicator_help.step);
     adjudicator_smoke.dependOn(&adjudicator_denied.step);
     test_step.dependOn(adjudicator_smoke);
@@ -447,7 +447,7 @@ fn define(b: *std.Build) Graph {
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
     if (b.args) |args| run_e2e.addArgs(args);
-    b.step("e2e-spec", "Manually generate one selected case and capture it for human adjudication").dependOn(&run_e2e.step);
+    b.step("e2e-spec", "Manually generate one selected case and capture it for adjudication").dependOn(&run_e2e.step);
     b.step("build-e2e-harness", "Build the live E2E harness without an API call").dependOn(&e2e_executable.step);
     const e2e_directory = b.addTempFiles();
     const e2e_offline = offlineExecutable(b, e2e_executable);
