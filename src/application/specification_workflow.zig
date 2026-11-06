@@ -77,6 +77,31 @@ pub const Initialize = struct {
         return output;
     }
 };
+/// ADR 0047: the engine composes the story unit; a catalogue without business
+/// claims blocks with its typed rejection in place of the session.
+pub const ComposeStory = struct {
+    pub const Action = @import("../actions/specification/compose_specification_story.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .advance, .scope = .accounted_reference_reconciliation, .progress = .specification_generation_session };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    allocator: std.mem.Allocator,
+    action: Action,
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const current = try readSession(&input.step.data);
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
+        errdefer owned.destroy(owner);
+        const before = try session.iterationProgress(current);
+        owner.payload = switch (self.action.execute(owner.arena.allocator(), current, try readContext(&input.step.data)) catch |operation_error| return operation_error) {
+            .composed => |next| .{ .session = next },
+            .blocked => |gap| .{ .binding_rejected = gap },
+        };
+        const after = if (owner.payload == .session) try session.iterationProgress(owner.payload.session) else null;
+        var delta: pipeline.NodeDelta = .{};
+        delta.data_replacements[@intFromEnum(session_schema.key)] = values.adopt(self.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
+        const progress = after orelse return .{ .outcome = .blocked, .delta = delta };
+        return .{ .outcome = .ok, .delta = delta, .iteration = .{ .limit = progress.limit, .before = before.position, .after = progress.position } };
+    }
+};
 pub const Check = struct {
     pub const Action = @import("../actions/specification/check_specification_generation_progress.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };

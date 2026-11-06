@@ -135,8 +135,8 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
 }
 
 /// A judge response is model output: it crosses the engine's one model-envelope
-/// decoder, including its approved §22.6 opening-artifact exception. Human
-/// adjudication proposals do not. A rejected envelope keeps the original bytes so
+/// decoder, including its approved §22.6 opening-artifact exception. Adjudication
+/// records do not. A rejected envelope keeps the original bytes so
 /// judgment validation reports the original parser diagnostic.
 fn modelContent(a: std.mem.Allocator, payload: []const u8) error{OutOfMemory}![]const u8 {
     var document = @import("../../src/domain/model_envelope.zig").parseContent(a, payload, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else payload;

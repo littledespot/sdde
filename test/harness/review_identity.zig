@@ -1,4 +1,5 @@
-//! Canonical identity syntax for explicit human development-review declarations.
+//! Canonical identity syntax for development-review declarations: adjudication
+//! records and calibration-panel reviews.
 const std = @import("std");
 const c = @import("contracts.zig");
 

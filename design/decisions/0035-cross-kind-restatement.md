@@ -14,6 +14,9 @@
   records in one batch. A business rule, outcome, assumption, non-goal or prohibition whose
   every claim a requirement or an earlier such record names is deleted natively after this
   rule runs. Only the comparison with the story remains here.
+- **Amended 3 November 2026** by [ADR 0047](0047-engine-composed-primary-story.md): the
+  story comparison never deletes a record when no other record, in its batch or an earlier
+  one, names one of its claims.
 - **Amends:**
   - [F0100](../features/F0100-SpecWorkflow.md) §5.7: which duplicates can be deleted;
   - F0100's native validation summary;

@@ -19,7 +19,6 @@ resources:
   signals-prompt: spec/reconciliation-signals.prompt.md
   conflicts-prompt: spec/reconciliation-conflicts.prompt.md
   generation-prompt: spec/generation.prompt.md
-  story-prompt: spec/story.prompt.md
   generation-context: spec/generation.context.json
   entities-prompt: spec/entities.prompt.md
   records-prompt: spec/records.prompt.md
@@ -694,9 +693,8 @@ subgraphs:
         with: {prompt: generation-prompt}
         on: {ok: story, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       story:
-        call: generate-unit
-        with: {prompt: story-prompt}
-        on: {ok: entities, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+        use: compose-specification-story
+        on: {ok: entities, blocked: end.blocked, failed: end.failed}
       entities:
         call: generate-unit
         with: {prompt: entities-prompt}

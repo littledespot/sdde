@@ -2,7 +2,7 @@ const std = @import("std");
 const debug = @import("../../../src/domain/request_debugger.zig");
 
 pub const Report = struct {
-    schema: []const u8 = "call-diagnostic-report/v2",
+    schema: enum { @"call-diagnostic-report/v3" } = .@"call-diagnostic-report/v3",
     started_at_utc: []const u8,
     options: @import("options.zig").Options,
     parent_run: []const u8,
@@ -80,6 +80,7 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
         try w.print("## Trial {d}\n\nOutcome: {s}; elapsed: {d} ms", .{ trial.ordinal, @tagName(trial.outcome), @divTrunc(trial.elapsed_ns, std.time.ns_per_ms) });
         if (trial.status) |status| try w.print("; HTTP {d}", .{status});
         try w.print("\n\nExtraction: {s}; JSON: {s}; schema: {s}.\n\n", .{ @tagName(trial.validation.extraction), @tagName(trial.validation.json), @tagName(trial.validation.schema) });
+        if (trial.structure) |value| try structure(w, value);
         if (trial.validation.input_tokens) |tokens| try w.print("Input tokens: {d}. ", .{tokens});
         if (trial.validation.output_tokens) |tokens| try w.print("Output tokens: {d}. ", .{tokens});
         if (trial.diagnostic) |diagnostic| {
@@ -94,4 +95,28 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
         }
     }
     return out.toOwnedSlice();
+}
+
+/// One line of a response's structural counts; it names closed kinds only, never prose.
+fn structure(w: *std.Io.Writer, value: @import("../e2e/measures.zig").Structure) !void {
+    try w.writeAll("Structure: ");
+    switch (value.shape) {
+        .records => |records| {
+            try w.print("records {d}", .{records.total});
+            for (records.kinds) |entry| try w.print("; {s} {d}", .{ @tagName(entry.kind), entry.count });
+            if (records.unknown != 0) try w.print("; unknown kind {d}", .{records.unknown});
+        },
+        .entities => |entities| {
+            try w.print("entities {s}", .{if (entities.disposition) |disposition| @tagName(disposition) else "unknown"});
+            if (entities.records) |count| try w.print("; records {d}", .{count});
+        },
+        .claims => |claims| {
+            try w.print("claims {d}", .{claims.total});
+            for (claims.categories) |entry| try w.print("; {s} {d}", .{ @tagName(entry.category), entry.count });
+            if (claims.unknown != 0) try w.print("; unknown category {d}", .{claims.unknown});
+        },
+        .no_feature_claim => try w.writeAll("no_feature_claim"),
+        .other => try w.writeAll("other"),
+    }
+    try w.print("; fragments {d}, literal-only {d}.\n\n", .{ value.fragments, value.literal_fragments });
 }

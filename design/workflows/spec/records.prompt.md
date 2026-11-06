@@ -4,7 +4,7 @@ When supplied, record_requirements applies across the assembled specification.
 Family presence is structural; it does not establish that assigned obligations
 have been fulfilled.
 Include only supported records; optional families need no filler. Preserve each
-statement's role and obligation strength. Do not relabel positive requirements as
+statement's role. Do not relabel positive requirements as
 assumptions or non-goals, invent conditions, or repeat records to fill sections.
 Each record's claim_ids name the assigned requirements it states. Each assigned
 requirement is named by at most one functional requirement, business rule, user-visible

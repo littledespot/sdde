@@ -47,10 +47,9 @@ The user starts a live Spec case with `/live-e2e <case>`.
 
 ## E2E assessment
 
-- Use `/evaluate-e2e <run>` to assess a retained run. Its output is advisory analysis,
-  not a grade or a review; acceptance follows AGENTS.md
-  ([R8](design/harness/acceptance.md)). A published run exits nonzero until it is
-  adjudicated.
+- `/evaluate-e2e <run>` assesses and adjudicates a retained run; AGENTS.md "Testing
+  expectations" says who triggers it ([R8](design/harness/acceptance.md)). A published
+  run exits nonzero until it is adjudicated.
 
 ## Claude Code setup
 

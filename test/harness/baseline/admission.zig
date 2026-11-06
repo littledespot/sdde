@@ -318,7 +318,9 @@ pub const Tracker = struct {
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .description, .field = .value } } }, .spec_description, brief.description.value);
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .primary_goal, .field = .value } } }, .spec_goal, brief.primary_goal.value);
                 },
-                .primary_user_story => |story| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .story, .field = .value } } }, .spec_story, story.value),
+                // The engine composes the story from quoted source lines; it is not
+                // model text (ADR 0047).
+                .primary_user_story => {},
                 .entities => |entities| {
                     try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .entity_basis, .field = .value } } }, .spec_entity_basis, entities.basis.value);
                     try self.auditRecords(sequence, after_call, checked, record_offset, entities.records);
@@ -449,6 +451,8 @@ fn validSubject(subject: Subject, field: policy.Field, value: Value) bool {
             else
                 selected.record_kind == null and target.value.field == .value and field == (candidate.singletonTextField(target.value.subject) catch return false) and switch (target.value.subject) {
                     .title, .description, .primary_goal => selected.unit == .brief,
+                    // v14 reports retain model-written stories from before ADR 0047;
+                    // v15 removes this subject (FIX06 §7 H1).
                     .story => selected.unit == .primary_user_story,
                     .entity_basis => selected.unit == .entities,
                     .record => false,
@@ -602,12 +606,12 @@ test "native admitted values use shared policy and retain chronological downstre
     defer tracker.deinit();
     const literal = [_]text.BusinessSegment{.{ .literal = .{ .value = "Notify the sender after delivery." } }};
     const insertion = [_]text.BusinessSegment{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } }};
-    const subject: Subject = .{ .specification = .{ .unit = .primary_user_story, .field = .{ .target = .{ .value = .{ .subject = .story, .field = .value } } } } };
-    try tracker.inspect(2, 1, testOrigin(1), subject, .spec_story, .{ .business = .{ .segments = &insertion } });
+    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .description, .field = .value } } } } };
+    try tracker.inspect(2, 1, testOrigin(1), subject, .spec_description, .{ .business = .{ .segments = &insertion } });
     // Retaining/assembling the same admitted value does not invent a second
     // producer or inflate the escaped-value count.
-    try tracker.inspect(3, 1, testOrigin(1), subject, .spec_story, .{ .business = .{ .segments = &insertion } });
-    try tracker.inspect(5, 2, testOrigin(2), subject, .spec_story, .{ .business = .{ .segments = &literal } });
+    try tracker.inspect(3, 1, testOrigin(1), subject, .spec_description, .{ .business = .{ .segments = &insertion } });
+    try tracker.inspect(5, 2, testOrigin(2), subject, .spec_description, .{ .business = .{ .segments = &literal } });
     const usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
     const exchanges = [_]Exchange{
         .{ .call = 1, .origin = testOrigin(1), .usage = usage.init(10, 1, 11) },
@@ -684,7 +688,11 @@ test "audit observes native admitted slots and ignores rejected candidate payloa
     var transferred = false;
     defer if (!transferred) storage.destroy(owner);
     const field = [_]text.BusinessSegment{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } }};
-    owner.payload = .{ .checked = .{ .unit = .primary_user_story, .origins = .{ .initial = testOrigin(1) }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &field }, .source_group_ids = &.{}, .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } } } } } };
+    const attributed: specification.AttributedValue = .{ .value = .{ .segments = &field }, .source_group_ids = &.{}, .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } };
+    // The engine-composed story is not model text, so it is never audited (ADR 0047).
+    try tracker.unit(2, 1, .{ .unit = .primary_user_story, .origins = .{ .initial = testOrigin(1) }, .response = .{ .content = .{ .primary_user_story = attributed } } }, 0);
+    try std.testing.expectEqual(@as(usize, 0), tracker.checks.items.len);
+    owner.payload = .{ .checked = .{ .unit = .entities, .origins = .{ .initial = testOrigin(1) }, .response = .{ .content = .{ .entities = .{ .disposition = .not_applicable, .basis = attributed } } } } };
     const admitted = try values.adopt(a, native_spec.checked_schema, storage.Value, storage.Owner, owner, storage.view, storage.destroy, null);
     transferred = true;
     defer values.destroy(admitted);
@@ -693,7 +701,7 @@ test "audit observes native admitted slots and ignores rejected candidate payloa
     view.slots[@intFromEnum(native_spec.checked_schema.key)] = admitted;
     try tracker.observe(&view, 3, 1);
     try std.testing.expectEqual(@as(usize, 1), tracker.checks.items.len);
-    try std.testing.expectEqual(.reference_only, tracker.checks.items[0].violation.?.reason);
+    try std.testing.expectEqual(.prohibited_exact, tracker.checks.items[0].violation.?.reason);
     try std.testing.expectEqualDeep(testOrigin(1), tracker.checks.items[0].producer.model);
     owner.payload = .rejected;
     try tracker.observe(&view, 4, 1);

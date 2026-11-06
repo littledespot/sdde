@@ -188,7 +188,8 @@ fn targetBound(response: g.Response) Error!u32 {
     var count: usize = 1; // One conditional insertion is a whole-record repair target.
     switch (response.content) {
         .brief => count = 9,
-        .primary_user_story => count = 3,
+        // The engine composes the story; no model repair targets it (ADR 0047).
+        .primary_user_story => return error.InvalidSpecificationRepair,
         .entities, .records => {
             if (response.content == .entities) count += 3;
             for (g.recordCollection(.model, response.content).?) |record| {
@@ -347,9 +348,8 @@ fn repairTask(a: std.mem.Allocator, guidance: *const @import("packet_guidance.zi
         .title => .display_name,
         .description => .description,
         .primary_goal => .primary_goal,
-        .story => .primary_user_story,
         .entity_basis => .entities,
-        .record => return error.InvalidSpecificationRepair,
+        .story, .record => return error.InvalidSpecificationRepair,
     };
     return descriptions.task(a, guidance, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
 }

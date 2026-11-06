@@ -21,7 +21,6 @@ const Seed = struct {
     title: []const u8,
     description: []const u8,
     primary_goal: []const u8,
-    story: []const u8,
     entity_disposition: spec.Applicability,
     entity_basis: []const u8,
     given: []const u8,
@@ -203,7 +202,9 @@ pub fn run() !void {
         const selected = try binding.resolveGroups(a, @import("../domain/reference_support.zig").records(prepared.context.references), prepared.context.inputs, ids, .content);
         const seeds = try narrativeSeeds(a, example, selected);
         for (seeds) |seed| {
-            if (index == 0 and current.completed == 1) try singletonConstructionChecks(a, schema, current, prepared.context);
+            // ADR 0047: the engine composes the story between the model's units.
+            if (current.completed == session.story_index) current = (try compose_story.execute(a, current, prepared.context)).composed;
+            if (index == 0 and current.completed == 0) try singletonConstructionChecks(a, schema, current, prepared.context);
             const request = try exportRequest(a, schema, example.id, current, prepared.context);
             if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, prepared.context, seed)));
             try addTrials(a, &trials, example.id, request);
@@ -233,7 +234,7 @@ pub fn run() !void {
         try std.testing.expect(std.mem.indexOf(u8, brief_body, example.seed.description) == null);
     }
     try std.testing.expectEqual(@as(usize, 3), cases.len);
-    try std.testing.expectEqual(@as(usize, 24), trials.items.len);
+    try std.testing.expectEqual(@as(usize, 18), trials.items.len);
     const parent = try wirePreflight(a, output, trials.items);
     const paths = [_][]const u8{
         root ++ "/cases.json",                                     root ++ "/README.md",                            root ++ "/scorecard.template.json",
@@ -242,8 +243,8 @@ pub fn run() !void {
         "src/domain/specification.zig",                            "src/domain/specification_coverage.zig",         "src/domain/specification_authority.zig",
         "src/domain/specification_support_evidence.zig",           "src/domain/model_result_schema.zig",            "src/domain/model_schema_projection.zig",
         "src/adapters/provider/bedrock_request.zig",               "design/workflows/spec/generation.schema.json",  "design/workflows/spec/generation.context.json",
-        "design/workflows/spec/generation.prompt.md",              "design/workflows/spec/story.prompt.md",         "design/workflows/spec/entities.prompt.md",
-        "design/workflows/spec/records.prompt.md",                 "design/workflows/spec.workflow.yaml",           "design/workflows/spec/packet-guidance.json",
+        "design/workflows/spec/generation.prompt.md",              "design/workflows/spec/entities.prompt.md",      "design/workflows/spec/records.prompt.md",
+        "design/workflows/spec.workflow.yaml",                     "design/workflows/spec/packet-guidance.json",    "src/domain/specification_story.zig",
     };
     var dependencies: std.ArrayList(File) = .empty;
     for (paths) |path| try dependencies.append(a, try pin(a, path));
@@ -348,10 +349,10 @@ fn business(a: std.mem.Allocator, value: []const u8) !spec.BusinessValue {
 fn attributed(a: std.mem.Allocator, value: []const u8, selected: binding.Association) !spec.Values(.model).AttributedValue {
     return .{ .value = try business(a, value), .source_group_ids = selected.source_group_ids, .provenance = selected.selection };
 }
-fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Association) ![3]g.Response {
+const compose_story: @import("../actions/specification/compose_specification_story.zig").Action = .{ .validator = text.validator };
+fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Association) ![2]g.Response {
     return .{
         .{ .content = .{ .brief = .{ .title = try attributed(a, example.seed.title, selected), .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
-        .{ .content = .{ .primary_user_story = try attributed(a, example.seed.story, selected) } },
         .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name), .business_meaning = try business(a, "MOCK Controlled business entity seed."), .relationships = &.{} } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
     };
 }
@@ -397,14 +398,17 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
 fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
     const occurrences = try @import("../domain/specification_provenance.zig").exactOccurrences(a, @import("../domain/reference_support.zig").records(context.references), null);
     if (occurrences.len != 1) return error.InvalidCalibrationSingleton;
+    // The brief description is the obligation-bearing singleton a model writes.
     const prose = try std.fmt.allocPrint(a, "{s} MOCK The application starts successfully and displays its greeting and UTC date and time.", .{occurrences[0].bytes});
-    const wire = try codec.encode(g.ModelResponse, a, .{ .primary_user_story = .{ .value = try business(a, prose), .signal_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } } });
+    const groups: []const @import("../domain/reference_reconciliation.zig").SignalId = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } };
+    const plain: g.AuthoringValue = .{ .value = try business(a, "MOCK Startup display"), .signal_ids = groups };
+    const wire = try codec.encode(g.ModelResponse, a, .{ .brief = .{ .title = plain, .description = .{ .value = try business(a, prose), .signal_ids = groups }, .primary_goal = plain } });
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,
     };
-    try std.testing.expectEqual(@as(u32, 4), checked.response.content.primary_user_story.value.segments[0].exact_copy.claim_id.ordinal);
-    const echoed = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]}";
+    try std.testing.expectEqual(@as(u32, 4), checked.response.content.brief.description.value.segments[0].exact_copy.claim_id.ordinal);
+    const echoed = "{\"kind\":\"brief\",\"title\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]},\"description\":{\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]},\"primary_goal\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]}}";
     try std.testing.expectError(error.InvalidCalibrationPayload, admitResponse(a, schema, current, context, echoed));
 }
 
@@ -572,7 +576,7 @@ fn exportRequestAt(a: std.mem.Allocator, directory: []const u8, schema: *const s
     const name = if (group) |ordinal| try std.fmt.allocPrint(a, "records-{d}", .{ordinal}) else @tagName(selected);
     const prompt = try shared.read(a, switch (selected) {
         .brief => "design/workflows/spec/generation.prompt.md",
-        .primary_user_story => "design/workflows/spec/story.prompt.md",
+        .primary_user_story => return error.InvalidCalibrationCase,
         .entities => "design/workflows/spec/entities.prompt.md",
         .records => "design/workflows/spec/records.prompt.md",
     });

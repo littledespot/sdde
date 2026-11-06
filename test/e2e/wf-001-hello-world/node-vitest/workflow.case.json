@@ -76,10 +76,6 @@
       "destination": ".sddtoolkit/workflows/spec/generation.prompt.md"
     },
     {
-      "source": "design/workflows/spec/story.prompt.md",
-      "destination": ".sddtoolkit/workflows/spec/story.prompt.md"
-    },
-    {
       "source": "design/workflows/spec/generation.context.json",
       "destination": ".sddtoolkit/workflows/spec/generation.context.json"
     },

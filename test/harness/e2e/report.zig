@@ -122,7 +122,7 @@ fn writeJsonError(writer: *std.Io.Writer, diagnostic: @import("../../../src/doma
     }
 }
 
-/// Human view of the same structured report; it introduces no workflow verdict.
+/// Readable Markdown view of the same structured report; it introduces no workflow verdict.
 pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     defer out.deinit();
@@ -225,7 +225,7 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         "Use the failure step and diagnostics to locate the failed workflow operation. " ++
         "case.json and inputs.json retain the selected case and captured configuration, workflow resources, references and rubric. " ++
         "project/ contains the isolated inputs and any actual engine output. report.json provides the structured run record for automated comparisons.\n\n" ++
-        "No model grades this run. A published specification is assessed against the case rubric by human adjudication of this report, " ++
+        "The harness makes no judge call. A published specification is scored against the case rubric and adjudicated when the user triggers /evaluate-e2e on this report, " ++
         "using the exact source, rubric and specification bytes captured in report.json. " ++
         "Compare runs with the same source, rubric revision and model settings, and retain every failed or poor run. " ++
         "The report does not automatically tune or approve the workflow.\n");
@@ -257,7 +257,7 @@ fn explanation(report: c.Report) []const u8 {
             "The workflow failed. Inspect its outcome and separate provider/model diagnostics; no completed specification is available for adjudication.",
         .publication_missing, .artifact_missing, .artifact_unreadable, .artifact_changed => "The invocation did not provide all expected, unchanged published artifacts. Inspect publication evidence and the retained project; file existence alone cannot establish success.",
         .fixture_changed => "Source inputs changed during execution. This run is not accepted as a stable E2E comparison; use the retained capture to inspect what was executed.",
-        .generated => "The engine published its validated specification. Development acceptance requires human adjudication against the case rubric.",
+        .generated => "The engine published its validated specification. Development acceptance requires adjudication against the case rubric by the user-triggered /evaluate-e2e.",
         .threshold_unconfigured => "The case rubric has no acceptance threshold, so no run of it can be accepted. No workflow ran.",
     };
 }

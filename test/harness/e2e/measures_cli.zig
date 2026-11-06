@@ -1,4 +1,4 @@
-//! Offline measures of retained E2E runs (FIX06 T5). Reads each run directory
+//! Offline measures of retained E2E runs. Reads each run directory
 //! without following links, writes `<out>/<run>/measures.json`, and optionally a set
 //! summary. It never runs the engine and makes no model call.
 const std = @import("std");
@@ -54,7 +54,7 @@ pub fn main(init: std.process.Init) !void {
     var args: std.ArrayList([]const u8) = .empty;
     while (it.next()) |arg| try args.append(a, arg);
     if (args.items.len == 1 and std.mem.eql(u8, args.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-measures -- --run <relative-run-directory> [--run ...] --out <existing-relative-directory> [--set <new-relative-file.json>]\nOffline only; no model call is possible. Writes <out>/<run>/measures.json (e2e-measures/v1) per run and, with --set, one e2e-measures-set/v1 summary. Never overwrites a file.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-measures -- --run <relative-run-directory> [--run ...] --out <existing-relative-directory> [--set <new-relative-file.json>]\nOffline only; no model call is possible. Writes <out>/<run>/measures.json (e2e-measures/v2) per run and, with --set, one e2e-measures-set/v2 summary. Never overwrites a file.\n");
         return;
     }
     const options = parse(a, args.items) catch return fail(io, "Invalid arguments; use --help. No API call is possible.");
@@ -157,7 +157,7 @@ fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !measures.M
     return .{
         .log_threshold = (try @import("../../../src/domain/log_policy.zig").canonicalizeConfiguredLevel(configured.value().logs.level)).threshold,
         .report = if (reported) |value| .{ .measured = try measures.fromReport(a, value) } else .unavailable,
-        .records_calls = try recordsCalls(io, a, run),
+        .responses = try responses(io, a, run),
         .events = try featureEvents(io, a, run),
     };
 }
@@ -183,7 +183,7 @@ const report_schema = struct {
 
 const calls = "evidence/generation";
 
-fn recordsCalls(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measures.RecordsCall {
+fn responses(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const measures.Response {
     var names: std.ArrayList([]const u8) = .empty;
     {
         var dir = directories.open(io, run, calls) catch |err| switch (err) {
@@ -197,14 +197,15 @@ fn recordsCalls(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) ![]const meas
         }
     }
     std.mem.sort([]const u8, names.items, {}, lessThan);
-    var result: std.ArrayList(measures.RecordsCall) = .empty;
+    var result: std.ArrayList(measures.Response) = .empty;
     for (names.items) |name| {
         const context = try CallContext.decode(a, try files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/context.json", .{ calls, name })));
         const text = files.read(io, a, run, try std.fmt.allocPrint(a, "{s}/{s}/model_output.txt", .{ calls, name })) catch |err| switch (err) {
-            error.InputUnavailable => continue,
+            error.InputUnavailable => null,
             else => return err,
         };
-        if (try measures.recordsCount(a, text)) |records| try result.append(a, .{ .call = context.call, .origin = context.origin, .records = records });
+        // Every call is kept, so its request's last attempt is known even without a response.
+        try result.append(a, .{ .call = context.call, .origin = context.origin, .structure = if (text) |bytes| try measures.structure(a, bytes) else null });
     }
     return result.toOwnedSlice(a);
 }
@@ -318,6 +319,56 @@ fn putTestRun(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, name: []const 
     if (report) |bytes| try putTestFile(io, root, try std.fs.path.join(a, &.{ name, "report.json" }), bytes);
 }
 
+/// One retained call's current evidence and, when given, its model output.
+fn putTestCall(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, run: []const u8, call: usize, request: u32, attempt: u32, model_output: ?[]const u8) !void {
+    const context: CallContext = .{
+        .schema = .@"model-call-evidence/v3",
+        .call = call,
+        .origin = .{ .request = .{ .value = request }, .attempt = .{ .value = attempt } },
+        .request_step = "generate-records",
+        .slot = "spec_generation",
+        .attempt = attempt,
+        .provider = "aws-bedrock",
+        .model = "openai.gpt-oss-20b-1:0",
+        .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2", .family = .@"gpt-oss", .max_output_tokens = .{ .tokens = 16000 }, .request_timeout = .{ .milliseconds = 180000 } } },
+        .kind = .inference,
+        .reasoning_effort = "low",
+        .content = &.{.{ .user = "MOCK request" }},
+        .response_schema = "{\"type\":\"object\"}",
+        .response_mode = .prompt_only,
+    };
+    const directory = try std.fmt.allocPrint(a, "{s}/{s}/call-{d:0>4}", .{ run, calls, call });
+    try putTestFile(io, root, try std.fs.path.join(a, &.{ directory, "context.json" }), try std.json.Stringify.valueAlloc(a, context, .{}));
+    if (model_output) |bytes| try putTestFile(io, root, try std.fs.path.join(a, &.{ directory, "model_output.txt" }), bytes);
+}
+
+test "call evidence gives every call's structure and keeps calls without a readable response" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const io = std.testing.io;
+    var root = std.testing.tmpDir(.{});
+    defer root.cleanup();
+    try putTestRun(io, a, root.dir, "calls", null);
+    try putTestCall(io, a, root.dir, "calls", 1, 1, 1, "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"}}]}");
+    // The retry was cut off mid-object, and another request left no output.
+    try putTestCall(io, a, root.dir, "calls", 2, 1, 2, "{\"kind\":\"records\",\"records\":[{");
+    try putTestCall(io, a, root.dir, "calls", 3, 2, 1, null);
+    try putTestCall(io, a, root.dir, "calls", 4, 3, 1, "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"records\":[]}");
+    const run = try measure(io, a, root.dir, "calls");
+    const measured = run.measurement.measured;
+    try std.testing.expectEqual(@as(usize, 4), measured.responses.len);
+    try std.testing.expectEqual(@as(usize, 1), measured.responses[0].structure.?.shape.records.kinds.len);
+    try std.testing.expectEqual(@as(?measures.Structure, null), measured.responses[1].structure);
+    try std.testing.expectEqual(@as(?measures.Structure, null), measured.responses[2].structure);
+    try std.testing.expectEqual(@as(?@import("../../../src/domain/specification.zig").Applicability, .not_applicable), measured.responses[3].structure.?.shape.entities.disposition);
+    // The cut-off retry is its request's last attempt, so the rejected edge case isn't the
+    // run's: the run has no final records at all.
+    const set = try measures.summarize(a, &.{run}, null);
+    try std.testing.expectEqual(@as(usize, 0), set.cases[0].record_kinds.len);
+    try std.testing.expectEqual(measures.Pooled{ .events = 0, .opportunities = 1 }, set.cases[0].entities_required);
+}
+
 /// Why a retained run is unmeasurable; fails when it measured.
 fn reason(io: std.Io, a: std.mem.Allocator, root: std.Io.Dir, name: []const u8) !measures.Unmeasurable.Reason {
     return switch ((try measure(io, a, root, name)).measurement) {
@@ -342,7 +393,7 @@ test "a retained run measures its configured threshold and one feature log, and 
         const measured = run.measurement.measured;
         try std.testing.expectEqual(.warning, measured.log_threshold);
         try std.testing.expect(measured.report == .unavailable);
-        try std.testing.expectEqual(@as(usize, 0), measured.records_calls.len);
+        try std.testing.expectEqual(@as(usize, 0), measured.responses.len);
         try std.testing.expectEqual(@as(u64, 1), measured.events.?.runaways);
         try std.testing.expectEqual(@as(?u64, 300), measured.events.?.latency_ms);
     }

@@ -1482,7 +1482,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -2498,9 +2498,10 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
 fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, actual: usize) !void {
     const context = try @import("../../src/application/specification_workflow.zig").readContext(&.{ .slots = runner.envelope.slots });
     const groups = try @import("../../src/domain/specification_source_binding.zig").recordCount(@import("../../src/domain/reference_support.zig").records(context.references));
-    // The three singleton tasks and every retained complete group are dispatched
-    // once, including groups whose content-only record result is empty.
-    try std.testing.expectEqual(3 + groups, actual);
+    // The brief and entity tasks and every retained complete group are dispatched
+    // once, including groups whose content-only record result is empty. The
+    // engine composes the story without a request (ADR 0047).
+    try std.testing.expectEqual(2 + groups, actual);
 }
 
 /// Spec publishes from generation and native checks alone (D13.1): spec.md has no

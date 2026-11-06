@@ -26,10 +26,10 @@ live case from the repository root:
    ```
 
 4. Inspect the retained generation and publication results under
-   [Retained results](#retained-results). No model grades the run. Assess the
-   published specification against the case rubric through
-   [human adjudication](acceptance.md#adjudicate-a-published-run-offline); in
-   Claude Code, `/evaluate-e2e <run>` drafts an advisory rubric assessment and
+   [Retained results](#retained-results). The harness makes no judge call. In Claude
+   Code, `/evaluate-e2e <run>`, which only the user triggers, scores the published
+   specification against the case
+   rubric, [adjudicates](acceptance.md#adjudicate-a-published-run-offline) the run, and
    traces defects to the generation calls and prompts that produced them
    ([Rubric assessment](#rubric-assessment)).
 
@@ -87,7 +87,7 @@ content shape, that every repeat sends instead of the captured content and schem
 the debugger's modified replay
 ([ADR 0019](../decisions/0019-single-request-debugger.md)), validated by the same
 canonical schema compiler and provider serializer before any call. Provider, model
-and settings stay as selected; the report (`call-diagnostic-report/v2`) records the
+and settings stay as selected; the report (`call-diagnostic-report/v3`) records the
 edit file's SHA-256. `--reasoning-effort none` explicitly omits reasoning
 effort; other values must be supported by the selected model.
 
@@ -146,7 +146,10 @@ is never retried to fill that count.
 Each invocation retains dated `report.json` and `report.md` beneath
 `zig-out/e2e-call/<UTC-date-time>-<unique-id>/`, with immutable debugger request and
 available response records linked to the source call. Reports expose protocol and
-schema inspection, provider outcomes and actual usage. Semantic validation and
+schema inspection, provider outcomes and actual usage, and each trial's response
+structure, read by the run measures' owner (see "Run measures"): records by kind, the
+entities decision, an extraction outcome and its claims by category, and fragments
+objects. Structure counts closed kinds, never prose. Semantic validation and
 rubric quality assessment are **not assessed**. A schema-valid response does not
 establish workflow success, publication, semantic correctness or complete E2E
 acceptance. Compare every requested repeat, including failed exchanges.
@@ -303,8 +306,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 - After successful generation, the harness reads the specification actually published by
   that invocation and retains those exact bytes, with the captured sources and rubric,
-  as `evaluation_inputs` in `report.json`. No model grades the run; human adjudication
-  of the retained report is its rubric evaluation (user decision, 19 October 2026).
+  as `evaluation_inputs` in `report.json`. The harness makes no judge call (user
+  decision, 19 October 2026); `/evaluate-e2e`'s adjudication of the retained report is
+  its rubric evaluation (user decision, 3 November 2026).
 - The case rubric must declare an acceptance threshold. A rubric without one could
   never be accepted, so the run stops before generation with `threshold_unconfigured`
   and `ACCEPTANCE_THRESHOLD_UNCONFIGURED`.
@@ -369,8 +373,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 ### Rubric assessment
 
-- The rubric assesses semantic quality. Human adjudication of the retained report is
-  the only rubric evaluation with acceptance effect ([R8](acceptance.md)).
+- The rubric assesses semantic quality. `/evaluate-e2e`'s adjudication of the retained
+  report is the only rubric evaluation with acceptance effect ([R8](acceptance.md)).
 - A readable poor specification is retained unchanged after the engine's own gates
   accept it. There is no harness semantic prefilter or retry-until-good loop.
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
@@ -380,10 +384,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The [`/evaluate-e2e`](../../.claude/skills/evaluate-e2e/SKILL.md) Claude Code skill
   reads a retained run, scores the captured specification against its rubric with line
   citations, and traces each defect to the generation call, prompt and engine stage
-  that produced it. Its output is advisory assistant analysis written under the
-  Git-ignored `evaluations/` directory. It is not a grade, a human review or an
-  adjudication input, and its causal attributions are hypotheses backed by cited
-  evidence, not proof.
+  that produced it, writing under the Git-ignored `evaluations/` directory. Its rubric
+  scores become the run's adjudication record; its causal attributions stay
+  hypotheses backed by cited evidence, not proof.
 
 ## Retained results
 
@@ -470,10 +473,10 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   An explicitly clarification-expected case still requires valid native partial
   publication, registered clarification handles and measured zero admission escape.
 - Exit 0 requires passed acceptance and finalized reports. Missing thresholds,
-  critical human-score failures, uncertainty, missing human adjudication and
+  critical score failures, uncertainty, missing adjudication and
   unexpected terminal outcomes cannot pass. Native workflow state remains unchanged.
-- See [R8 acceptance](acceptance.md) for approved numeric/human authority, refreshed calibration panels and the offline
-  human adjudication command.
+- See [R8 acceptance](acceptance.md) for approved numeric authority, refreshed calibration panels and the offline
+  adjudication command.
 
 The terminal prints the development acceptance result explicitly.
 
@@ -679,14 +682,14 @@ doesn't decode configuration and is unaffected.
 
 `zig build e2e-measures -- --run <run> [--run ...] --out <dir> [--set <file>]` reads
 retained runs offline, without the engine or a model call. It writes
-`<dir>/<run>/measures.json` (`e2e-measures/v1`) and, with `--set`, one
-`e2e-measures-set/v1` summary, never overwriting a file. `--out` and `--set` must lie
+`<dir>/<run>/measures.json` (`e2e-measures/v2`) and, with `--set`, one
+`e2e-measures-set/v2` summary, never overwriting a file. `--out` and `--set` must lie
 under `evaluations/`, and neither may equal, contain or lie inside a `--run` directory.
 A missing report, call output or feature event log leaves its measures empty. A
 record that can't be read or trusted makes the run `unmeasurable`, naming which kind
 (`unreadable`, `configuration`, `report`, `call_evidence`, `feature_log` or
 `ambiguous_feature_log`); the run still counts as attempted, and nothing else is
-measured from it (FIX06 DT5). A run without a readable `case.json` can't be attributed
+measured from it. A run without a readable `case.json` can't be attributed
 to a case, and an operational failure of the measurement itself (cancellation,
 exhausted resources or an unexpected system error) isn't a property of the run; either
 stops the command. Every run is measured and summarized before anything is written, so
@@ -705,8 +708,14 @@ a stop leaves no partial output.
   version, makes the run unmeasurable.
 - From the retained project's `.sddtoolkit.json`: the configured `logs.level`, read by
   the engine's configuration decoder, as `log_threshold`.
-- From call evidence: records per records call, the `records` array length of each
-  response whose `kind` is `records`, read by the production envelope parser.
+- From call evidence: each call's response structure, read by the production envelope
+  parser with its call and origin. A call whose output is missing or unreadable is kept
+  without a structure, so a request's last attempt is always known. A `records` response gives its array length and its
+  records by `content.kind`; an `entities` response its `disposition` and entity count; a
+  `claims` response its claims by `category`; a `no_feature_claim` response its outcome.
+  Every response gives its `{"fragments":[...]}` objects, read by the typed-text wire's
+  owner, and those that insert no reference. Kinds, categories and dispositions are the
+  engine's closed enums; an unknown one counts apart. No prose is read.
 - From the feature event log: runaways (`model.provider_stopped` for the output
   limit), re-sends, normalized responses, admission rejections by code
   (`model.protocol_failed`, `model.schema_failed`), validation failures by code, and
@@ -721,7 +730,12 @@ a stop leaves no partial output.
   pools event counts with their opportunities: native publications per attempted run,
   with the attempts whose outcome is unknown counted beside it in `unmeasurable` and
   `report_unavailable`; corrections, re-sends, runaways and admission rejections per
-  send; escaped values per admitted value; and changed repairs per repair. Each stage
+  send; escaped values per admitted value; and changed repairs per repair. From the
+  response structures it pools, using each request's last attempt in a run: runs whose
+  records hold each record kind, over runs with records; runs whose entities decision is
+  `required`, over runs with a known decision; and claims of each category, over claims.
+  Over every attempt it pools `no_feature_claim` responses per extraction response and
+  responses holding a literal-only fragments object per response. Each stage
   has its own sends and actual-token spreads: every measured run gives each stage a
   sends value, zero included, and a stage of unknown usage gives no token value. A
   case's measured runs must share one log threshold, which the summary records: the
@@ -795,7 +809,7 @@ request-projection freezes, not by a live run.
   launcher cases, including argument forwarding, publication identity, evidence
   capture and failure reports. It makes no provider calls.
 - `zig build test-rubric-evaluator --summary all` checks the standalone evaluator's
-  judge mechanics, rubric acceptance and human adjudication offline.
+  judge mechanics, rubric acceptance and adjudication offline.
 - `zig build test-e2e-call --summary all` checks captured-call selection, diagnostic
   bindings, dispatch and report behavior offline.
 - `zig build test-e2e-call-launcher --summary all` checks argument forwarding,
@@ -839,7 +853,7 @@ request-projection freezes, not by a live run.
 
 The report records the one configured total budget for all model work, with
 aggregate actual usage including full overshoots. Global-budget rejection is a
-workflow failure. R8's rubric thresholds, expected publication and human adjudication
+workflow failure. R8's rubric thresholds, expected publication and adjudication
 remain independent of every native outcome.
 
 Human calibration and broader rerun/failure acceptance are tracked in

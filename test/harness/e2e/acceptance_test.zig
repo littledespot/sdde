@@ -10,7 +10,7 @@ const rubric_bytes =
     \\{"schema":"evaluation-rubric/v2","id":"MOCK-rubric","revision":1,"minimum_score":0,"maximum_score":4,"pass_threshold_percent":80,"criteria":[{"id":"coverage","description":"Preserve receipt display.","evidence":"Compare source and specification.","weight":1,"anchors":[{"score":0,"description":"Absent"},{"score":1,"description":"Mostly absent"},{"score":2,"description":"Materially incomplete"},{"score":3,"description":"Preserved with minor ambiguity"},{"score":4,"description":"Clearly preserved"}],"allow_not_applicable":false,"minimum_acceptable_score":3},{"id":"clarity","description":"Describe clear behavior.","evidence":"Compare source and specification.","weight":9,"anchors":[{"score":0,"description":"Absent"},{"score":1,"description":"Mostly absent"},{"score":2,"description":"Materially incomplete"},{"score":3,"description":"Preserved with minor ambiguity"},{"score":4,"description":"Clearly preserved"}],"allow_not_applicable":false,"minimum_acceptable_score":null}]}
 ;
 
-/// A complete passing human proposal for `completed`'s captured inputs.
+/// A complete passing rubric judgment for `completed`'s captured inputs.
 pub const passing = [_]judgment.CriterionResult{ criterion("coverage", 4), criterion("clarity", 4) };
 
 /// Synthetic offline evidence for gate tests; never a real adjudication record.
@@ -51,7 +51,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
 }
 
 /// The canonical validator's reading of `passing` against `report`'s capture.
-pub fn human(a: std.mem.Allocator, report: c.Report) !judgment.Result {
+pub fn passingJudgment(a: std.mem.Allocator, report: c.Report) !judgment.Result {
     return judgment.validate(a, null, report.evaluation_inputs.?, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &passing }, .{}));
 }
 
@@ -76,14 +76,14 @@ pub fn pause(a: std.mem.Allocator) !c.Report {
     return report;
 }
 
-test "E2E publication awaits human adjudication and status or stored pass never accepts" {
+test "E2E publication awaits adjudication and status or stored pass never accepts" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var complete = try completed(a);
     try std.testing.expect(!try gate.commandSucceeded(a, complete));
     try std.testing.expectEqual(.human_adjudication_required, (try gate.evaluate(a, complete)).unresolved);
-    try std.testing.expectEqual(.passed, try gate.evaluateHuman(a, complete, try human(a, complete)));
+    try std.testing.expectEqual(.passed, try gate.evaluateJudgment(a, complete, try passingJudgment(a, complete)));
     try gate.apply(a, &complete);
     try std.testing.expectEqual(.human_adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
@@ -153,11 +153,11 @@ test "E2E acceptance rejects a native admission escape and forged violation book
         .sequence = 1,
         .after_call = 1,
         .producer = .{ .model = origin },
-        .subject = .{ .specification = .{ .unit = .primary_user_story, .field = .{ .target = .{ .value = .{ .subject = .story, .field = .value } } } } },
-        .field = .spec_story,
+        .subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .description, .field = .value } } } } },
+        .field = .spec_description,
         .value = value,
         .value_sha256 = try a.dupe(u8, &std.fmt.bytesToHex(digest, .lower)),
-        .violation = try audit.check(a, report.admission_audit.?.sources, .spec_story, value),
+        .violation = try audit.check(a, report.admission_audit.?.sources, .spec_description, value),
     };
     try std.testing.expect(checks[0].violation != null);
     report.admission_audit.?.checks = checks;
@@ -168,21 +168,21 @@ test "E2E acceptance rejects a native admission escape and forged violation book
     try std.testing.expectEqual(.admission_evidence_invalid, (try gate.evaluate(a, report)).failed);
 }
 
-test "human quality cannot override native failure missing publication or artifacts" {
+test "a rubric judgment cannot override native failure missing publication or artifacts" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     for ([_]@import("../../../src/domain/workflow.zig").OutcomeTag{ .failed, .invalid, .blocked, .cancelled, .more }) |outcome| {
         var report = try completed(a);
         report.workflow_outcome = outcome;
-        try std.testing.expectEqual(.native_workflow_failed, (try gate.evaluateHuman(a, report, try human(a, report))).failed);
+        try std.testing.expectEqual(.native_workflow_failed, (try gate.evaluateJudgment(a, report, try passingJudgment(a, report))).failed);
     }
     var report = try completed(a);
     report.publication_check = .not_run;
-    try std.testing.expectEqual(.publication_failed, (try gate.evaluateHuman(a, report, try human(a, report))).failed);
+    try std.testing.expectEqual(.publication_failed, (try gate.evaluateJudgment(a, report, try passingJudgment(a, report))).failed);
     report = try completed(a);
     report.missing_artifact = .workflow_state;
-    try std.testing.expectEqual(.artifact_failed, (try gate.evaluateHuman(a, report, try human(a, report))).failed);
+    try std.testing.expectEqual(.artifact_failed, (try gate.evaluateJudgment(a, report, try passingJudgment(a, report))).failed);
 }
 
 test "E2E publication requires the generated status and an unconfigured threshold stays unresolved" {
@@ -190,16 +190,16 @@ test "E2E publication requires the generated status and an unconfigured threshol
     defer arena.deinit();
     const a = arena.allocator();
     var report = try completed(a);
-    const reviewed = try human(a, report);
+    const reviewed = try passingJudgment(a, report);
     for (std.meta.tags(c.Status)) |status| {
         report.status = status;
         const native = try gate.evaluate(a, report);
         if (status == .generated) {
             try std.testing.expectEqual(.human_adjudication_required, native.unresolved);
-            try std.testing.expectEqual(.passed, try gate.evaluateHuman(a, report, reviewed));
+            try std.testing.expectEqual(.passed, try gate.evaluateJudgment(a, report, reviewed));
         } else {
             try std.testing.expect(native != .passed);
-            try std.testing.expect(try gate.evaluateHuman(a, report, reviewed) != .passed);
+            try std.testing.expect(try gate.evaluateJudgment(a, report, reviewed) != .passed);
         }
     }
     // The threshold precondition stops before any workflow outcome exists.
@@ -207,30 +207,30 @@ test "E2E publication requires the generated status and an unconfigured threshol
     try std.testing.expectEqual(.grading_unresolved, (try gate.evaluate(a, report)).unresolved);
 }
 
-test "E2E human adjudication recomputes critical threshold and uncertainty from source-bound scores" {
+test "E2E adjudication recomputes critical threshold and uncertainty from source-bound scores" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     const report = try completed(a);
     var results = try a.dupe(judgment.CriterionResult, &passing);
     results[0].score = 2;
-    var reviewed = try human(a, report);
+    var reviewed = try passingJudgment(a, report);
     reviewed.results = results;
     // The claimed aggregate remains 100%; canonical accounting finds a critical failure.
-    try std.testing.expectEqual(.critical_failed, (try gate.evaluateHuman(a, report, reviewed)).failed);
+    try std.testing.expectEqual(.critical_failed, (try gate.evaluateJudgment(a, report, reviewed)).failed);
     results[0].score = 4;
     results[1].score = 3;
-    try std.testing.expectEqual(.threshold_failed, (try gate.evaluateHuman(a, report, reviewed)).failed);
+    try std.testing.expectEqual(.threshold_failed, (try gate.evaluateJudgment(a, report, reviewed)).failed);
     results[0].disposition = .uncertain;
     results[0].score = null;
-    try std.testing.expectEqual(.grading_unresolved, (try gate.evaluateHuman(a, report, reviewed)).unresolved);
+    try std.testing.expectEqual(.grading_unresolved, (try gate.evaluateJudgment(a, report, reviewed)).unresolved);
     results[0] = criterion("coverage", 4);
     results[1] = criterion("clarity", 4);
     results[0].evidence = &.{.{ .document_id = "requirements", .first_line = 9, .last_line = 9 }};
-    try std.testing.expectEqual(.grading_mismatch, (try gate.evaluateHuman(a, report, reviewed)).failed);
+    try std.testing.expectEqual(.grading_mismatch, (try gate.evaluateJudgment(a, report, reviewed)).failed);
 }
 
-test "E2E acceptance binds human grading inputs to current case generation and native sources" {
+test "E2E acceptance binds grading inputs to current case generation and native sources" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -251,7 +251,7 @@ test "E2E acceptance binds human grading inputs to current case generation and n
     try std.testing.expectEqual(.grading_mismatch, (try gate.evaluate(a, report)).failed);
 }
 
-test "E2E rendering separates publication from unresolved human acceptance and names no grader" {
+test "E2E rendering separates publication from unresolved acceptance and names no grader" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -261,6 +261,6 @@ test "E2E rendering separates publication from unresolved human acceptance and n
     try std.testing.expect(std.mem.indexOf(u8, rendered, "development acceptance: unresolved (human_adjudication_required)") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "grading") == null);
     const view = try @import("report.zig").renderMarkdown(a, report);
-    try std.testing.expect(std.mem.indexOf(u8, view, "No model grades this run.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, view, "The harness makes no judge call.") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "Judge") == null);
 }

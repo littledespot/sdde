@@ -121,7 +121,7 @@ Historical information cannot satisfy current authority by its presence alone.
 
 #### Specification IR
 
-The LLM returns `SpecificationContentProposal` semantic fields with no IDs or status. The engine assigns canonical record identifiers from the persisted `SpecificationIdLedger` and constructs `SpecificationIR`:
+The LLM returns `SpecificationContentProposal` semantic fields with no IDs or status; the engine composes the primary story from quoted business claims ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). The engine assigns canonical record identifiers from the persisted `SpecificationIdLedger` and constructs `SpecificationIR`:
 
 [View the Specification IR sample](../code.md#specification-ir).
 

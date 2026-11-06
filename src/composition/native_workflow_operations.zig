@@ -169,6 +169,7 @@ pub const Assembly = struct {
     source_preservation_policy: authority.SourcePreservationPolicy,
     project_source_preservation: authority.ProjectSourcePreservation,
     initialize_specification: specification.Initialize,
+    compose_specification_story: specification.ComposeStory,
     check_specification: specification.Check,
     build_specification_packet: specification.BuildInput,
     collect_specification: specification.Collect,
@@ -220,7 +221,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 164 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 165 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -339,6 +340,7 @@ pub const Assembly = struct {
             .source_preservation_policy = .{ .allocator = allocator },
             .project_source_preservation = .{ .allocator = allocator },
             .initialize_specification = .{ .allocator = allocator },
+            .compose_specification_story = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
             .project_specification_document = .{ .allocator = allocator },
             .build_authority_needs = .{ .allocator = allocator },
             .build_specification_need = .{ .allocator = allocator },
@@ -455,6 +457,7 @@ pub const Assembly = struct {
             entry(authority.SourcePreservationPolicy, &self.source_preservation_policy),
             entry(authority.ProjectSourcePreservation, &self.project_source_preservation),
             entry(specification.Initialize, &self.initialize_specification),
+            entry(specification.ComposeStory, &self.compose_specification_story),
             entry(specification.Check, &self.check_specification),
             entry(specification.BuildInput, &self.build_specification_packet),
             entry(specification.Collect, &self.collect_specification),

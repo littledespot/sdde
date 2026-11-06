@@ -21,7 +21,9 @@
   - 1 November 2026, FIX06 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
     no code span to an exact copy its text already wraps in a balanced pair (Decision 6);
   - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
-    its span, although every development-case value then stays doubled (Decision 6).
+    its span, although every development-case value then stays doubled (Decision 6);
+  - 3 November 2026, FIX06 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
+    which would have extended it to entity meaning and relationships, is withdrawn.
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -38,9 +40,6 @@
   [ADR 0024](0024-native-exact-token-authority.md)'s forcing rule is unchanged; it now
   reads quoted text. Reconciliation statements and signals stay model text. The overall
   design remains **Proposed design**.
-- **Amended by:** [ADR 0045](0045-entity-description-exact-values-as-code-spans.md)
-  (on hold; entity meaning and each relationship are incidental, so Decision 6 turns their
-  recognised exact values into exact copies).
 
 ## Context
 

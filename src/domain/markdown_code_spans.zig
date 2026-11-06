@@ -122,10 +122,15 @@ fn lineAt(bytes: []const u8, offset: usize) struct { usize, usize } {
 /// One source line, the top-level list item it belongs to and whether it is
 /// fenced code. Segments never decrease through a source: item `k` is segment
 /// `2k + 1`, and the lines after `k` items and before the next are segment `2k`.
+/// A heading line ends any item. `wording` is where the line's words start: after
+/// its indentation, and after a list marker only where `listSegments` accepts it as
+/// an item (so a wrapped `2024.` stays wording); a code line keeps every byte (0).
 pub const ListLine = struct {
     start: usize,
     segment: u32,
     code: bool,
+    heading: bool,
+    wording: usize,
 
     /// Whether the line belongs to a top-level list item, not a gap between items.
     pub fn inItem(self: ListLine) bool {
@@ -149,6 +154,8 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
     var item: ?u32 = null;
     var items: u32 = 0;
     var delimiter: ?u8 = null;
+    // The open nested list's delimiter, under the same interruption rule.
+    var nested: ?u8 = null;
     var boundary = true;
     var html_block = false;
     var comment_end: usize = 0;
@@ -159,17 +166,31 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
         while (block < ranges.len and (ranges[block].form != .code_block or ranges[block].end <= offset)) block += 1;
         const code = block < ranges.len and ranges[block].start <= offset;
         const blank = std.mem.trim(u8, line, " \t").len == 0;
-        if (code or offset < comment_end) {} else if (html_block and !blank) {} else if (blank) {
+        var heading = false;
+        // Words start after the indentation, and after a list marker only where
+        // this line's classification accepts it as an item marker.
+        var wording = indentation(line);
+        if (code) {
+            wording = 0;
+        } else if (offset < comment_end) {} else if (html_block and !blank) {} else if (blank) {
             html_block = false;
             boundary = true;
         } else if (line[0] == ' ' or line[0] == '\t') {
+            if (listMarker(line[wording..])) |marker| {
+                if (marker.bullet or marker.first or boundary or nested == marker.delimiter) {
+                    wording += marker.len;
+                    nested = marker.delimiter;
+                }
+            } else if (boundary) nested = null;
             boundary = false;
         } else if (isHeading(line) or isBlockSeparator(line) or isHtmlBlock(line) or std.mem.startsWith(u8, line, "<!--")) {
             // Each ends the open item and paragraph. A comment runs to its
             // closing line and an HTML block to a blank line.
             item = null;
             delimiter = null;
+            nested = null;
             boundary = true;
+            heading = isHeading(line);
             if (std.mem.startsWith(u8, line, "<!--")) {
                 comment_end = htmlEnd(bytes, offset) orelse bytes.len;
             } else html_block = isHtmlBlock(line);
@@ -178,19 +199,28 @@ pub fn listSegments(allocator: std.mem.Allocator, bytes: []const u8) std.mem.All
                 item = items;
                 items += 1;
                 delimiter = marker.delimiter;
+                nested = null;
+                wording = marker.len;
             }
             boundary = false;
         } else {
             if (boundary) {
                 item = null;
                 delimiter = null;
+                nested = null;
             }
             boundary = false;
         }
-        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code });
+        try result.append(allocator, .{ .start = offset, .segment = if (item) |value| 2 * value + 1 else 2 * items, .code = code, .heading = heading, .wording = wording });
         offset = next;
     }
     return result.toOwnedSlice(allocator);
+}
+
+fn indentation(line: []const u8) usize {
+    var cursor: usize = 0;
+    while (cursor < line.len and (line[cursor] == ' ' or line[cursor] == '\t')) cursor += 1;
+    return cursor;
 }
 
 const Marker = struct { len: usize, delimiter: u8, bullet: bool, first: bool };

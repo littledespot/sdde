@@ -17,17 +17,19 @@ expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
 registered open clarification handles.
 
-Raw model grades cannot authoritatively accept or reject a published
+Raw model grades in the harness cannot authoritatively accept or reject a published
 specification. The existing cost policy is unchanged; no alternate model,
 calibration call or new workflow diagnostic is authorized by this policy.
 
 **Amended 19 October 2026 (user decision):** the advisory grader is removed from
-E2E. An E2E run makes no judge call; human adjudication of its retained report is
-the only rubric evaluation of a published run. GPT-OSS-20B grading remains only in
-the standalone [supplied-spec evaluator](evaluator.md) and its qualification panels.
-The `/evaluate-e2e` Claude Code skill gives advisory assistant analysis of a retained
-run outside the harness and its cost policy. It is not a grade, a human review or an
-adjudication input.
+E2E. An E2E run makes no judge call. GPT-OSS-20B grading remains only in the
+standalone [supplied-spec evaluator](evaluator.md) and its qualification panels.
+
+**Amended 3 November 2026 (user decision):** the `/evaluate-e2e` Claude Code skill,
+outside the harness and its cost policy and triggered only by the user, adjudicates a
+published run: it scores the retained report under the case rubric and the user's
+rulings in the skill, writes the record below and applies it. Its record is the only
+rubric evaluation of a published run.
 
 ## Deterministic mechanics
 
@@ -62,31 +64,36 @@ production state.
 
 ## Adjudicate a published run offline
 
-A human supplies `human-spec-adjudication/v2`, either `outcome:{"pending":{}}` or
-`outcome:{"reviewed":{...}}`. A reviewed record requires `reviewer`,
-`reviewed_at_utc` in UTC ISO 8601, the exact original `report_sha256`, and
-`proposal:{"results":[...]}` using the same complete criterion/evidence contract
-as model judgments. Evidence cites inclusive, 1-based line ranges of the captured
-documents (`rubric-judgment/v2`). CR, LF and CRLF each end a line, and a final
+The `/evaluate-e2e` skill writes `spec-adjudication-record/v1`: `reviewer` (the skill
+and its SHA-256), `reviewed_at_utc` in UTC ISO 8601, and `proposal:{"results":[...]}`
+using the same complete criterion/evidence contract as model judgments. Nothing else
+writes or applies one (AGENTS.md). Evidence cites inclusive, 1-based line ranges of the
+captured documents (`rubric-judgment/v2`). CR, LF and CRLF each end a line, and a final
 terminator starts no extra line ([evaluator](evaluator.md)). An editor may show an
-empty last line after a final newline; citing it is out of range. The human must inspect the exact captured sources and
-published specification; copying an advisory model or assistant result is not human
-review.
+empty last line after a final newline; citing it is out of range. The skill scores the
+exact captured sources and published specification.
 
 ```sh
 zig build adjudicate-spec -- \
   --report zig-out/e2e-spec/<run>/report.json \
-  --review reviews/<run>.json \
-  --output zig-out/adjudications
+  --review evaluations/e2e/<run>/adjudication-record.json \
+  --output evaluations/adjudications
 ```
 
 The output directory must already exist. This command has no provider calls or
 credentials. It writes a new exclusive adjudication directory containing the exact
-original report, human record and deterministic JSON/Markdown decision. It never
-rewrites the original report. Exit 0 means accepted, 1 rejected/error, 2 unresolved.
-The human proposal is revalidated against the report's captured published inputs;
-case outcome, publication, admission audit and rubric policy are reapplied. Stale
-report hashes, unsupported evidence and substituted identities reject.
+original report, the record and deterministic JSON/Markdown decision. It never
+rewrites the original report. Exit 0 means accepted, 1 rejected/error, 2 unresolved. A
+rejected record leaves the run unadjudicated; it is reported, not corrected and
+re-applied. A run gets one record per `/evaluate-e2e` skill version (the record's
+`reviewer` names its SHA-256): the first one counts, and no later record under that
+version is written or applied. After the skill changes, the run's new adjudication
+supersedes the earlier one (user decision, 3 November 2026).
+The proposal is revalidated against the report's captured published inputs;
+case outcome, publication, admission audit and rubric policy are reapplied. Neither the
+record nor the decision (`spec-adjudication/v3`) carries a hash: `--report` names the run,
+and the directory's copies of the report and the record show what was judged (user
+decisions, 3 November 2026). Unsupported evidence and substituted identities reject.
 
 The baseline useful-completion calculation reuses rubric acceptance. It retains supplied model assessments as advisory diagnostics requiring human
 adjudication, including any calibrated model. Human assessments stay explicit. Historical
@@ -142,8 +149,8 @@ and qualification. No real grader is currently qualified by these pending record
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.
-- `human-spec-adjudication/v2`, `spec-adjudication/v2`: bound human judgment and
-  derived development acceptance.
+- `spec-adjudication-record/v1`, `spec-adjudication/v3`: the `/evaluate-e2e` skill's
+  rubric judgment and derived development acceptance.
 - `grader-calibration-panel/v1`, `grader-calibration-review/v1`,
   `grader-qualification/v1`: closed evidence records.
 

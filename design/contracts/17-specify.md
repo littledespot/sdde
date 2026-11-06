@@ -92,7 +92,6 @@ The LLM performs these semantic activities:
 Typed content covers these concerns; each concern does not require a separate call:
 
 - display title;
-- primary story;
 - observable outcomes;
 - acceptance-criteria candidates;
 - functional-requirement candidates;
@@ -104,7 +103,9 @@ Typed content covers these concerns; each concern does not require a separate ca
 - semantic ambiguity/open-question review.
 
 - The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state,
-  passive-literal values, clarification lifecycle, or execution status.
+  passive-literal values, clarification lifecycle, or execution status, and does not write
+  the primary story, which the engine composes
+  ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)).
 - Every initial brief/spec record has eligible effective reference claims from
   explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
@@ -210,9 +211,10 @@ requirements are never deleted or rejected by this rule. Every claim a behaviour
 statement names must also be named by an acceptance criterion or edge case. Admission
 rejects either defect for the request's existing protocol correction
 ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5). The shared finite native
-iteration contract in §6 fixes the population at three narrative assignments plus
-the native record-authoring group count and advances once per admitted assignment, even
-for an empty record array. It grants traversal only for committed progress and
+iteration contract in §6 fixes the population at the brief, the engine-composed story
+and the entities assignment plus the native record-authoring group count and advances
+once per admitted unit, even for an empty record array
+([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). It grants traversal only for committed progress and
 does not enlarge retry limits. Existing aggregate required families, entity
 membership, claim mapping and exact-token coverage still apply.
 An empty collection contributes no positive coverage.
@@ -239,7 +241,8 @@ acquire an owner from the last dispatched group; repair retains its evidence and
 current authorized unit, and unsupported ownership produces an explicit diagnostic
 rather than an invented association.
 
-Initial brief/story/entity responses and clarification questions select groups;
+Initial brief and entity responses and clarification questions select groups; the
+engine-composed story selects the groups whose claims it quotes;
 fixed value and record repairs do not. Protocol correction preserves the initial
 catalogue and schema. Value-only repair preserves the existing authored association,
 `S`, effective evidence bounds, siblings, revision and retry identity. Changing
@@ -259,23 +262,39 @@ view adds no selection or stored authority; pending output has no generated
 record links. Original requirement IDs appear only when captured as validated
 source associations, never inferred from headings or claim ordinals.
 
-For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
+For each feature-brief or specification unit other than the engine-composed story, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
-- **Consolidated generation:** the shipped workflow requests brief, primary story, feature entities and
-  source-group records as four sequential task types through one shared
-  generation subgraph. Narrative, applicability and record drafting receive their
+- **Consolidated generation:** the shipped workflow requests brief, feature entities and
+  source-group records as three sequential task types through one shared
+  generation subgraph: one call each for the brief and entities, and one per record group.
+  Narrative, applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
   repair task. Protocol correction retains that active assignment and its schema.
-  The primary story has its own concise prompt and uses the story purpose from the
-  workflow's packet guidance.
+  The registered action `compose-specification-story` composes the primary story
+  between the brief and entities, with no model call
+  ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)): its catalogue's
+  business claims in source order (corpus source, then first cited byte), each quote
+  made one paragraph from its cited source lines, whose heading, code and list
+  structure comes from the source reader's line structure (blank and heading lines
+  dropped, each line's indentation and leading list marker removed, code lines kept
+  as text, lines joined by one space; a quote of headings alone skipped), the quotes
+  joined by one space. The story selects the groups whose claims it quotes and it
+  passes the same unit validation as any unit, which recognises its exact values as
+  in model text. It has no clarification or inconclusive outcome; a catalogue with no
+  business claim blocks with `no_story_requirements`, and a composed story that fails
+  unit validation or exact recognition blocks with `story_not_admissible`, carrying
+  its unit issue. Neither is repaired or retried. Its exact role is incidental, so it discharges no
+  exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
+  record names. The story purpose in the workflow's packet guidance remains the
+  source-readiness subject only.
   Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
   Native recognition owns exact occurrence bookkeeping; supplied passive/source
   references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
   repair packets include an earlier draft only for the entities unit, which receives
-  the brief. Brief, story and records requests receive no sibling draft, so a batch
+  the brief. Brief and records requests receive no sibling draft, so a batch
   record can't copy unpublished draft wording (FIX06 D12.1). The brief draft is
   resolved business text; its canonical provenance, fragment wrappers and display-span
   bookkeeping remain native. Record-family purposes come from the workflow's
@@ -303,7 +322,7 @@ For each feature-brief or specification unit, the declared model operation retur
   and current snapshot/request eligibility. Multiple same-span eligible identities
   are ambiguity, never a model choice or catalogue-order tie breaker. Repair and
   correction retain their original narrower scope.
-  Story, record-family and field purposes are the workflow's packet guidance
+  Record-family and field purposes are the workflow's packet guidance
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)
   packet-guidance amendment). A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding

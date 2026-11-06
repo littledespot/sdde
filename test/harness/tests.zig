@@ -4,7 +4,7 @@ const judgment = @import("judgment.zig");
 const packet = @import("packet.zig");
 test {
     _ = @import("acceptance_test.zig");
-    _ = @import("human_adjudication_test.zig");
+    _ = @import("adjudication_test.zig");
     _ = @import("adjudicate_cli.zig");
     _ = @import("acceptance_gate_test.zig");
     _ = @import("grader_qualification_test.zig");
