@@ -29,7 +29,9 @@
       "Bash(cut *)",
       "Bash(diff *)",
       "Bash(jq *)",
-      "Bash(echo *)"
+      "Bash(echo *)",
+      "Bash(shasum *)",
+      "Bash(mkdir -p evaluations/*)"
     ],
     "ask": [
       "Bash(zig build run)",

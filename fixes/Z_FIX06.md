@@ -429,6 +429,16 @@ in FIX06 Q19.
   (3 November 2026).
 - **Runs** (3 November 2026, three per case, `2026-11-03T04-1*`, on `28213a7` modified,
   adjudicated under skill `af394020…`): no story defect in any; results in FIX06 §1.
+- **Runs with D12.3** (7 November 2026, three per case, `2026-11-06T22-4*`, on `f6ef0f6`
+  modified, report v15, adjudicated under skill `0b552067…`): all 6 published with 9–10 first
+  attempts each, no repair, correction or re-send; hello-world 3 of 3 pass, loan-renewal 0 of 3,
+  each failing on a lossy repeat outside the story (FIX06 §3); the story byte-identical per case
+  and without defect. Source review never ran, so D12.3 wasn't exercised.
+- **Motivation** (moved from FIX06 Q19): before ADR 0047, 26 of 30 weakenings since 29 October
+  were in the story; every loan-renewal story fell in one of three modes ("A borrower may
+  renew…", the source lines joined with no separator, invented login and selection steps), all
+  three in the D12.2 set; hello-world's story added timing, a display surface or an order in 4
+  of 8 publications since D12.1.
 
 ## Q12 D12.3. The story leaves pre-generation source review
 
@@ -449,6 +459,12 @@ Its live effect joins Q19's measurement set (FIX06 §3).
 - **Tests:** the readiness projection has seven feature subjects and no story slot, and a
   previous-version requirement has no policy; v3 guidance rejects a `primary_user_story`
   purpose and a v2 document; the FIX002 review rejects eight subjects, not nine.
+- **Q12 closed 7 November 2026.** Its last check, the story's invented-steps mode ("logs into
+  the library system and selects an active loan", `09-33-44Z`, `09-33-46Z`), didn't recur in
+  the 12 runs since ADR 0047. Q12's leftover restatements are in FIX06's one-owner hygiene
+  change. Not recommended: a typed obligation-strength field (07-domain-representations.md:160
+  forbids a duplicate modality field; making it matter needs a word check or engine-rendered
+  modal text).
 
 ## H1. Adjudication and `spec-e2e-report/v15`
 
@@ -465,6 +481,25 @@ Its live effect joins Q19's measurement set (FIX06 §3).
   them. The supplied-spec evaluator's decision (`evaluation-report/v7`) and the baseline's
   useful-completion state (`baseline-score/v4`) keep their own `human_adjudication_required`.
   `zig build verify` passed: 169 steps, 1,976 tests.
+
+## T7. One evaluator version per comparison
+
+Open part (whether skills `af394020…` and `0b552067…` count as one evaluator) stays in FIX06 T7.
+- **Skill edit, 3 November 2026** (user: "yes start item 2"): `e2e-assistant-evaluation/v4`
+  records `skill_sha256` and gives each defect a `basis` (`link` or `content`), and the
+  `restatement` class excludes a faithful one-paragraph story (D19.1), with the user's rulings
+  (FIX06 §7 H1). Skill `5690d0f0…a8865`.
+- **Re-score, 3 November 2026:** the D12.2 set's nine publications under that skill; identical
+  text scored identically. The five readings the rulings left open became the skill's rules
+  (user: "YES"): a link defect costs nothing beyond its content defect; a repeat that gives a
+  requirement's value states it, one that gives none is a summary; a weaker restatement in a
+  checkable outcome also costs `clarity-testability`; several minor additions stay minor;
+  repeating the source's own wording, or an outcome without its verb, isn't weakening. Seven of
+  the nine stored evidence as `"spec:7"` strings, which the adjudication record rejects, so H1's
+  adjudication under `af394020…` superseded the re-score.
+- **Skill edit, 7 November 2026** (user: "update the out of date items"): the measures note no
+  longer names a report version (SKILL.md:270-271); no scoring rule changed. Skill
+  `0b552067…0ca43`.
 
 ## T5. Brittleness counts
 
