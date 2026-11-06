@@ -257,50 +257,6 @@
     ]
   },
   {
-    "id": "captured-story",
-    "cohort": "development",
-    "sources": [
-      "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
-    ],
-    "source_path": "stories.md",
-    "claims": [
-      {
-        "source": 1,
-        "text": "The application must start successfully.",
-        "first": 5,
-        "last": 5
-      },
-      {
-        "source": 1,
-        "text": "When started, the application must display `Hello, World!`.",
-        "first": 6,
-        "last": 6
-      },
-      {
-        "source": 1,
-        "text": "The application must also output the date and time in UTC.",
-        "first": 7,
-        "last": 7
-      }
-    ],
-    "description": "When started, the application displays \"Hello, World!\" and outputs the current date and time in UTC.",
-    "missing": "The supplied subject omits the requirement that the application display the string \"Hello, World!\" as specified in the source. The source explicitly states that upon startup the application must display \"Hello, World!\" and output the current UTC date and time. The subject instead references an undefined token \"kindexact_copy\", thereby leaving the intended display text unrepresented.",
-    "mode": "candidate",
-    "target": "primary_user_story",
-    "candidate_file": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.associated.json",
-    "signal_text": "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the date and time in UTC.",
-    "verdicts": [
-      "preserved",
-      "preserved"
-    ],
-    "expected": "candidate",
-    "missing_obligation": "When started, the application must display Hello, World!.",
-    "grouping": "combined",
-    "source_group_ids": [
-      1
-    ]
-  },
-  {
     "id": "sterile-door",
     "cohort": "unused",
     "sources": [

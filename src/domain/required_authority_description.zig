@@ -87,7 +87,6 @@ pub fn question(allocator: std.mem.Allocator, g: *const Guidance, id: a.Id) a.Er
         .display_name => "What name should identify this feature's purpose?",
         .description => "What user-visible behavior is missing or undecided in the current source evidence?",
         .primary_goal => "What benefit should this feature provide to its users?",
-        .primary_user_story => "Who uses this feature, what do they do, and what result do they need? Supply only the elements missing from the current evidence.",
         .acceptance_criteria => "Which pass/fail outcome is still undecided? Describe when it applies and what the user should observe.",
         .functional_requirements => "What required behavior is missing or undecided? State its trigger and expected result without repeating behavior already established in the source.",
         .scenario_coverage => "Which source-required situation still needs a trigger or outcome clarified? Identify the situation and any exact output it requires.",

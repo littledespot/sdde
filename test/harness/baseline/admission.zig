@@ -451,9 +451,8 @@ fn validSubject(subject: Subject, field: policy.Field, value: Value) bool {
             else
                 selected.record_kind == null and target.value.field == .value and field == (candidate.singletonTextField(target.value.subject) catch return false) and switch (target.value.subject) {
                     .title, .description, .primary_goal => selected.unit == .brief,
-                    // v14 reports retain model-written stories from before ADR 0047;
-                    // v15 removes this subject (FIX06 §7 H1).
-                    .story => selected.unit == .primary_user_story,
+                    // The engine composes the story, so no model text audits it (ADR 0047).
+                    .story => false,
                     .entity_basis => selected.unit == .entities,
                     .record => false,
                 },
@@ -762,6 +761,9 @@ test "audit binds Subject and value kind to the native field policy instead of t
     try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), subject, .spec_title, reference_value));
     const wrong_record: Subject = .{ .specification = .{ .unit = .records, .record_kind = .functional_requirement, .field = .{ .target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .text } } } } };
     try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), wrong_record, .entity_name, .{ .business = .{ .segments = &nodes } }));
+    // ADR 0047: the engine composes the story, so no audited model value is a story.
+    const story: Subject = .{ .specification = .{ .unit = .primary_user_story, .field = .{ .target = .{ .value = .{ .subject = .story, .field = .value } } } } };
+    try std.testing.expectError(error.InvalidAdmissionAudit, tracker.inspect(2, 1, testOrigin(1), story, .spec_story, .{ .business = .{ .segments = &nodes } }));
 }
 
 test "admitted source-review questions retain exact native subjects and rejected questions remain candidates" {

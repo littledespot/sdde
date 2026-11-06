@@ -214,7 +214,15 @@ test "Specify projects registered native fields and complete reference obligatio
     const accounted = (try f.finish(allocator, final, try f.global(allocator, final), reference.context())).valid;
     const project: @import("actions/authority/build_specification_authority_requirements.zig").Action = .{};
     const before = try project.execute(allocator, .{ .bytes = "hello-world" }, accounted);
-    try std.testing.expectEqual(@as(usize, 11), before.seeds.len); // Eight mandatory slots, two signals, one exact value.
+    // Seven mandatory slots, two signals, one exact value. The engine composes the
+    // story, so source readiness has no story subject (ADR 0047).
+    try std.testing.expectEqual(@as(usize, 10), before.seeds.len);
+    try std.testing.expect(!@hasField(a.Slot, "primary_user_story"));
+    // A requirement of the previous contract version has no policy.
+    var previous = before.seeds[0].id;
+    previous.contract_version = a.version - 1;
+    try std.testing.expect(a.policy(previous) == null);
+    try std.testing.expect(a.policy(before.seeds[0].id) != null);
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
     try std.testing.expectEqualStrings("Hello, World!", before.references.?.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
     // Specify projects only source readiness: no generated content binds review
@@ -388,7 +396,7 @@ test "result identity scope cardinality and equivalent membership are rechecked 
             2 => wrong.feature.bytes = "another-feature",
             3 => entries[0].evidence_ids = &.{},
             4 => entries[0].outcome = .{ .resolved_explicit_not_applicable = .no_business_data },
-            5 => entries[0].requirement.contract_version = 2,
+            5 => entries[0].requirement.contract_version = a.version + 1,
             else => unreachable,
         }
         try std.testing.expectError(error.InvalidRequiredAuthority, validate.execute(allocator, inputs, observations, wrong));

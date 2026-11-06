@@ -399,7 +399,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned (FIX06
   D3.1; ADR 0016 packet-guidance amendment). A workflow declares one closed
-  `packet-guidance/v2` resource with exactly one text for each registered key; the
+  `packet-guidance/v3` resource with exactly one text for each registered key; the
   compiler rejects a missing, extra, duplicate, mistyped or empty entry and an
   unsupported version. One `capture-packet-guidance` step publishes it as run data,
   and each consuming operation declares `.packet_guidance` and receives it

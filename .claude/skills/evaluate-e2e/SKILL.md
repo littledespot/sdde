@@ -267,8 +267,8 @@ separate from engine and prompt changes. Don't edit code, prompts, rubrics or ca
   zig-out/e2e-spec/<run> --out evaluations/e2e`. Give its sends, tokens, protocol
   corrections, re-sends, runaways, admission rejections, repairs and latency, and its
   per-stage sends, tokens and shares. Take stages only from `measures.json`; never
-  group attempts by step name. A run whose report is `unavailable` (missing, or older
-  than `spec-e2e-report/v14`) has no report-derived measures at all: no sends, tokens,
+  group attempts by step name. A run whose report is `unavailable` (missing, or of an
+  older version than the build reads) has no report-derived measures at all: no sends, tokens,
   corrections, re-sends, repairs or stages, only its call-evidence and feature-log
   counts. An `unmeasurable` run gives only which retained record couldn't be read or
   trusted; report it, and take nothing else from its records. Flag spending that bought

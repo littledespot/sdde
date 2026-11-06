@@ -7,7 +7,7 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const review = @import("specification_review_subject.zig");
 
-pub const version = "packet-guidance/v2";
+pub const version = "packet-guidance/v3";
 pub const Error = error{InvalidPacketGuidance} || std.mem.Allocator.Error;
 pub const max_bytes: u32 = 64 * 1024;
 const max_depth = 3;
@@ -79,10 +79,10 @@ fn Entries(comptime Key: type, comptime Value: type) type {
     return std.enums.EnumFieldStruct(Key, Value, null);
 }
 
-/// The closed `packet-guidance/v2` wire shape. Missing, extra, duplicate and
+/// The closed `packet-guidance/v3` wire shape. Missing, extra, duplicate and
 /// wrongly typed entries reject while decoding.
 pub const Wire = struct {
-    schema: enum { @"packet-guidance/v2" },
+    schema: enum { @"packet-guidance/v3" },
     feature_purposes: Entries(FeaturePurpose, []const u8),
     record_families: Entries(spec.Kind, []const u8),
     record_fields: Entries(RecordField, []const u8),

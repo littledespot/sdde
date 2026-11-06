@@ -287,7 +287,7 @@ required inputs and define the `parse` successor, as in the
   workflow root.
 - An operation parameter that expects a prompt, schema, example, JSON-composition
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
-  `packet-guidance/v2` (ADR 0016 packet-guidance amendment) resource accepts only a
+  `packet-guidance/v3` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - Two workflows may bind the same captured resource, but one workflow cannot declare two
   aliases for the same source.
@@ -627,7 +627,7 @@ service is published.
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
   immutable schema and exact captured bytes. JSON-composition resources (§3.2) and
-  `packet-guidance/v2` resources (ADR 0016 packet-guidance amendment) are also decoded
+  `packet-guidance/v3` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with

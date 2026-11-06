@@ -414,6 +414,58 @@ replaces it" (ADR 0035's in-batch deletion); "Yes, list every location".
     events across both states ("not enough evidence"), and the unsupported-addition guard was
     undecided after three runs.
 
+## Q19 D19.2. The engine composes the story (ADR 0047)
+
+**Implemented 3 November 2026; committed in `f6ef0f6`.** Open parts and the keep decision stay
+in FIX06 Q19.
+- **Change:** `compose-specification-story` (`src/domain/specification_story.zig`) quotes the
+  catalogue's business claims in source order, one paragraph each; no story model call. The
+  story's exact role is incidental, ADR 0035's comparison keeps the only record naming a claim,
+  and a story with nothing to quote or failing unit validation blocks with
+  `no_story_requirements` or `story_not_admissible` (with its unit `issue`). The story prompt,
+  the generation schema's story variant, the `authoring-guidance` corpus and the old
+  authoring-associations `scorecard.json` are deleted (user: "YES").
+- **Checks:** `zig build verify` passed and the contract review found no remaining violation
+  (3 November 2026).
+- **Runs** (3 November 2026, three per case, `2026-11-03T04-1*`, on `28213a7` modified,
+  adjudicated under skill `af394020…`): no story defect in any; results in FIX06 §1.
+
+## Q12 D12.3. The story leaves pre-generation source review
+
+**Implemented 7 November 2026** (user: "apply recommendations", then "yes, advance both").
+Its live effect joins Q19's measurement set (FIX06 §3).
+- **Defect:** `09-15-31Z` ended `workflow_invalid` after 34 calls: the second readiness pass
+  filed the story purpose itself as a `candidate_omission`, which loss comparison couldn't
+  localize. The engine composes the story (ADR 0047), so a model review of it can only raise
+  false findings.
+- **Change:** `specification_authority.projectRecords` no longer seeds the story; the story's
+  required-authority policy, slot and clarification question and its packet-guidance purpose
+  are deleted; `packet-guidance/v3` and required-authority contract 2 (old versions reject).
+  ADR 0047 Decision 5 is amended, with 17-specify.md, F0100 §3.10, ADR 0016's
+  packet-guidance note, 12-model-boundary.md, F0005 and the §32 rows. The `captured-story`
+  case leaves the read source-loss corpus (`obligation/cases.associated.json`), with its
+  packet and its 12 `citation-completeness` files; unread historical corpora that still name
+  it are untouched.
+- **Tests:** the readiness projection has seven feature subjects and no story slot, and a
+  previous-version requirement has no policy; v3 guidance rejects a `primary_user_story`
+  purpose and a v2 document; the FIX002 review rejects eight subjects, not nine.
+
+## H1. Adjudication and `spec-e2e-report/v15`
+
+- **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…ec790`): the
+  D12.2 set's nine publications and the six ADR 0047 runs, each scored, recorded and applied
+  (`evaluations/e2e/<run>/`, `evaluations/adjudications/`, 15 applied decisions: 8 passed, 6
+  `critical_failed`, 1 `admission_evidence_invalid`, FIX06 §7 H1); no record was rejected. The
+  unpublished `09-15-31Z` has a failure trace only. Results in FIX06 §1.
+- **v15, implemented 7 November 2026** (user: "implement items 1 and 2"): `spec-e2e-report/v15`
+  and `baseline-acquisition/v12` carry ADR 0047's source-catalogue reasons and `issue`, the
+  publication reason renamed `adjudication_required`, and an admission audit that accepts no
+  story subject (rejected test in `test/harness/baseline/admission.zig`); design/harness/e2e.md
+  records the format history. Retained v12–v14 runs stay readable only by the build that made
+  them. The supplied-spec evaluator's decision (`evaluation-report/v7`) and the baseline's
+  useful-completion state (`baseline-score/v4`) keep their own `human_adjudication_required`.
+  `zig build verify` passed: 169 steps, 1,976 tests.
+
 ## T5. Brittleness counts
 
 **Implemented and taken 1 November 2026, on `30e0d2f` (the D10.2 tree), before D13.1;

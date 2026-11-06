@@ -696,8 +696,9 @@ specification-quality oracle. `src/domain/required_authority.zig` owns the
 closed requiredness/ownership policies, current support checks and outcomes.
 `specification_authority.zig` contributes the schema-derived Specify projection.
 
-- The projection includes the display name, primary story and evidence-backed entity
-  decision; each field of an existing identified content record; every accounted
+- The projection includes the display name, description, primary goal, acceptance
+  criteria, functional requirements, scenario coverage and evidence-backed entity
+  decision, but not the engine-composed primary story (ADR 0047 Decision 5); each field of an existing identified content record; every accounted
   reference signal/conflict; and each exact-preservation obligation.
 - Optional collections add no minimum record count.
 - The gate rebuilds this projection to reject omitted/invented entries.

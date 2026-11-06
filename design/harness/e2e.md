@@ -368,7 +368,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v14`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v15`; it stays null until ADR 0041 is
   implemented (FIX06 E0).
 
 ### Rubric assessment
@@ -608,8 +608,8 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v14`,
-`baseline-freeze/v3`, `baseline-acquisition/v11`, `baseline-score/v4` and
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v15`,
+`baseline-freeze/v3`, `baseline-acquisition/v12`, `baseline-score/v4` and
 `baseline-budget-feasibility/v2`. Step events remain
 `e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
 not yet implemented, model-request stages become events of one `request-model` step,
@@ -652,7 +652,12 @@ D12.1 set included, likewise stay adjudicable only by the build that made them. 
 amendment the same day (FIX06 D16.2) added the `repeated_statement` repair rule, which
 reports carry in their validation diagnostics, advancing `spec-e2e-report` to v14 and
 `baseline-acquisition` to v11; v13 runs, the D16.1 set included, stay adjudicable only by
-the build that made them.
+the build that made them. ADR 0047's source-catalogue reasons (`no_story_requirements`,
+`story_not_admissible` with its unit `issue`), the publication acceptance reason renamed
+`adjudication_required` and the removed story admission and source-review subjects (ADR 0047
+Decision 5, amended) advanced `spec-e2e-report` to v15 and `baseline-acquisition` to v12
+(FIX06 §7 H1); v14 runs, the D16.2 and D12.2 sets
+included, stay adjudicable only by the build that made them.
 `baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
 budget became the configured `workflowTokenBudget`
 ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Every configuration

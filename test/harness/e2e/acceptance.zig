@@ -28,7 +28,7 @@ pub const Reason = enum {
     missing_grading_evidence,
     grading_unresolved,
     invalid_clarifications,
-    human_adjudication_required,
+    adjudication_required,
 };
 pub const Result = union(enum) { passed, failed: Failure, unresolved: Reason };
 pub const Error = std.mem.Allocator.Error;
@@ -40,7 +40,7 @@ pub fn evaluate(a: std.mem.Allocator, report: c.Report) Error!Result {
     defer scratch.deinit();
     const native = try mechanical(scratch.allocator(), report);
     if (native != .passed) return native;
-    if (report.expected_outcome == .publication) return .{ .unresolved = .human_adjudication_required };
+    if (report.expected_outcome == .publication) return .{ .unresolved = .adjudication_required };
     return .passed;
 }
 

@@ -4878,8 +4878,8 @@ test "pre-generation localized disposition evidence replaces source review linea
         for (views) |inputs| {
             const ledger = try authority.build(a, inputs);
             const index = if (inputs.projection == .source_preservation) 0 else for (ledger.requirements, 0..) |required, i| {
-                if (required.seed.id.unit == .feature and required.seed.id.slot == .primary_user_story) break i;
-            } else return error.MissingStoryRequirement;
+                if (required.seed.id.unit == .feature and required.seed.id.slot == .description) break i;
+            } else return error.MissingDescriptionRequirement;
             const id = ledger.requirements[index].seed.id;
             const required = try admission.requirements(a, inputs, fixture.context.inputs, id);
             const entries = try a.dupe(support.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
@@ -6670,7 +6670,7 @@ test "selected evidence repair schemas preserve native minima across findings an
     }
 }
 
-test "FIX002 false cross-kind conflict and nine question repairs cannot publish a clarification" {
+test "FIX002 false cross-kind conflict and eight question repairs cannot publish a clarification" {
     const review = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;
     const authority = @import("domain/required_authority.zig");
@@ -6695,7 +6695,8 @@ test "FIX002 false cross-kind conflict and nine question repairs cannot publish 
             negative_count += 1;
         }
         try bindReviewClaims(a, inputs, fixture.context, entries);
-        try std.testing.expectEqual(@as(usize, 9), negative_count);
+        // Seven feature subjects (the engine-composed story is none, ADR 0047) and one conflict.
+        try std.testing.expectEqual(@as(usize, 8), negative_count);
         const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 1 } };
         var collected = try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), origin);
         try std.testing.expectEqual(negative_count, collected.rejected.rejection.diagnostics.len);

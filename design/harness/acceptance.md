@@ -56,10 +56,9 @@ JSON and Markdown carry a separate typed acceptance decision; finalization error
 cannot produce successful commands.
 
 The E2E command returns zero only for accepted cases. A mechanically valid
-publication remains `human_adjudication_required` and exits nonzero until separately
-adjudicated; failed and unresolved remain distinct in JSON. The supplied-spec
-evaluator also retains raw calibration diagnostics and exits 2 for pending human
-acceptance. Provider/input failures still exit 1. Model scoring never changes
+publication remains `adjudication_required` and exits nonzero until adjudicated; failed
+and unresolved remain distinct in JSON. The supplied-spec evaluator also retains raw
+calibration diagnostics and exits 2 for pending human acceptance. Provider/input failures still exit 1. Model scoring never changes
 production state.
 
 ## Adjudicate a published run offline
@@ -145,7 +144,7 @@ and qualification. No real grader is currently qualified by these pending record
   and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
   grader/acceptance evidence with an always-unresolved decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v14`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v15`: the single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.

@@ -286,8 +286,8 @@ For each feature-brief or specification unit other than the engine-composed stor
   unit validation or exact recognition blocks with `story_not_admissible`, carrying
   its unit issue. Neither is repaired or retried. Its exact role is incidental, so it discharges no
   exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
-  record names. The story purpose in the workflow's packet guidance remains the
-  source-readiness subject only.
+  record names. The story is no source-readiness subject and has no packet-guidance
+  purpose (ADR 0047 Decision 5, amended 7 November 2026).
   Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
