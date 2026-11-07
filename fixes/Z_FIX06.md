@@ -212,6 +212,30 @@ that adds no claim an unchanged merge).
   request projection is byte-identical to `entity-meaning-before`, since no offline scenario
   duplicates a claim.
 
+## Bare-value `reference_only` correction
+
+**Implemented 7 November 2026** (user: "fix the bare-message failure"). Not yet exercised
+live.
+- **Defect:** loan-renewal `2026-11-07T06-12-34Z-f549…` and `07-38-56Z-2627…` published
+  nothing: the records call wrote user-visible outcomes as the bare messages
+  `"Loan renewed!"` and `"Renewal refused."`, three times each, until retry exhaustion. Two
+  of the last seven loan-renewal runs; independent of the reverted one-owner hygiene change.
+- **Cause:** native recognition makes text that is exactly a source value one exact-value
+  node, so a prose-required field holds no prose and rejects as `reference_only`
+  (ADR 0036:156-158, unchanged). Its correction said "Typed insertions may supplement that
+  prose but cannot replace it", which describes insertions the model never used, so the
+  model resent the same bytes.
+- **Change:** the field registry's explanation (`text_field_policy.referenceOnly`) is
+  derived from the exact-copy role: where recognition runs it says an exact source value or
+  supplied display reference may appear within the prose but cannot be the whole text;
+  elsewhere it names only the reference (text-field-composition.md amended). No new reason,
+  `Issue` member or report version; correction text only (D4.1 extension).
+- **Proof:** a field-policy test pins the role split (accepted: `visible_outcome`; rejected:
+  `entity_meaning`, extraction and reconciliation fields), and an admission test checks a
+  bare value is corrected through that explanation; every offline request is
+  byte-identical, since no scenario reaches this correction, so the sent correction bytes
+  are pinned only at the owner.
+
 ## H1. Adjudication and `spec-e2e-report/v15`
 
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…ec790`): the

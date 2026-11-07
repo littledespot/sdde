@@ -157,6 +157,11 @@ stored-value validation enforce the same rule if a canonical value bypasses wire
 decoding. A prose-required value containing only insertions is a typed
 `reference_only` composition issue, rejected and corrected
 [as a unit](#composition-defects-are-corrected-as-a-unit) at response admission.
+Recognition can make the model's own typed text one exact value, so in a field whose
+exact-copy role isn't prohibited the issue's correction names an exact source value as
+well as a supplied display reference as what can't be the whole text; other fields admit
+a bare value as prose, and their correction names only the reference (FIX06,
+7 November 2026).
 
 Stored clarification state can undergo structural loading before reference
 ingestion supplies the current original sources. Its engine-owned questions must

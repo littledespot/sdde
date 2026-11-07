@@ -183,8 +183,11 @@ research. "Gap" means between measurement sets.
 **Next:**
 
 1. **E10** (§5): the `needs_user` alias, dead code and stale comments; no decision, no
-   request change. Q8 D8.3 is implemented ([Z_FIX06](Z_FIX06.md)); entity restatement is
-   recorded as a model limitation (§3 open problems).
+   request change. Q8 D8.3 and the bare-value correction are implemented
+   ([Z_FIX06](Z_FIX06.md)); entity restatement is recorded as a model limitation (§3 open
+   problems). The bare-value correction is kept or reverted on a repeated set of both cases
+   on one committed build, scored on published output and publication rate; sets where the
+   correction never fires are not enough evidence (as for D2.3 and D4.1).
 2. **Decision pending:** whether skill `1d66d882…` counts as the same evaluator as
    `af394020…` and `0b552067…`. Its two 7 November edits (retired-ID citations; the agent may
    start it when the user explicitly approves it for named runs) changed no scoring rule

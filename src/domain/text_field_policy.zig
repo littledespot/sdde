@@ -73,9 +73,20 @@ pub fn get(field: Field) Policy {
         .explanation = if (field == .entity_name)
             "An entity name is an identity label and may consist of supplied insertions. Its occurrence does not satisfy a behavioral exact-copy obligation."
         else
-            "Supply nonblank prose for this field's declared meaning or behavior. Typed insertions may supplement that prose but cannot replace it.",
+            referenceOnly(exact_role),
     };
 }
+/// The `reference_only` correction. Only a field whose exact-copy role isn't
+/// prohibited recognizes typed text as an exact source value, so only its
+/// correction names that value, including one typed with no prose around it.
+fn referenceOnly(exact_role: Role) []const u8 {
+    return switch (exact_role) {
+        .incidental, .obligation_bearing => reference_only_frame ++ "An exact source value or supplied display reference" ++ reference_only_tail,
+        .prohibited => reference_only_frame ++ "A supplied display reference" ++ reference_only_tail,
+    };
+}
+const reference_only_frame = "Supply nonblank prose for this field's declared meaning or behavior. ";
+const reference_only_tail = " may appear within that prose but cannot be the whole text.";
 pub const ReferencePhase = enum { extraction, reconciliation };
 pub fn referenceField(comptime phase: ReferencePhase, comptime name: []const u8) Field {
     return @field(Field, @tagName(phase) ++ "_" ++ name);
@@ -120,6 +131,22 @@ pub fn permits(field: Field, kind: Insertion) bool {
 /// Exact occurrences remain a canonical native representation and policy.
 pub fn permitsModel(field: Field, kind: Insertion) bool {
     return kind != .exact_copy and permits(field, kind);
+}
+
+test "the reference-only correction names an exact source value only where recognition runs" {
+    const exact = "exact source value";
+    for (std.meta.tags(Field)) |field| {
+        const value = get(field);
+        if (value.prose == .optional) continue;
+        try std.testing.expectEqualStrings(referenceOnly(value.exact_copy), referenceOnlyExplanation(field));
+        try std.testing.expectEqual(value.exact_copy != .prohibited, std.mem.indexOf(u8, referenceOnlyExplanation(field), exact) != null);
+    }
+    // Accepted: a bare value typed in an obligation-bearing field is named in its correction.
+    try std.testing.expect(std.mem.indexOf(u8, referenceOnlyExplanation(.visible_outcome), exact) != null);
+    // Rejected: fields that admit a bare value as prose are never told it can't be the whole text.
+    for ([_]Field{ .entity_meaning, .extraction_design, .reconciliation_business }) |field| {
+        try std.testing.expect(std.mem.indexOf(u8, referenceOnlyExplanation(field), exact) == null);
+    }
 }
 
 test "closed composition inventory has one justified identity exception and distinct coverage roles" {
