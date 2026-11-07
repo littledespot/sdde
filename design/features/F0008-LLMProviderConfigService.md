@@ -4,10 +4,9 @@
 
 **Decision authority:** Explicit user direction on 2026-09-02
 
-**Implementation:** Complete for the bounded read-only file-service increment.
-F0006's conditional bootstrap runner invokes this component exactly once when
-required and decodes its untrusted bytes. The ordinary invocation path now
-invokes that runner after exact workflow selection.
+**Implementation:** Complete. F0006's conditional bootstrap runner, invoked after
+exact workflow selection, invokes this component exactly once when required and
+decodes its untrusted bytes.
 
 **Compatibility:** None. `paths.providers` is required in the single current
 configuration contract. There is no legacy fixed-location reader, alias,
@@ -23,8 +22,8 @@ mutation.
 5-6, 9, 13.1, 15, and 25-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0004 —
 BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md); [F0006 —
-LLMProviderInterface](F0006-LLMProviderInterface.md); and the [path
-contract](../paths.md).
+LLMProviderInterface](F0006-LLMProviderInterface.md); and the [configuration
+paths](../contracts/09-configuration.md#91-required-configuration-shape).
 
 ---
 
@@ -83,11 +82,7 @@ bindings. The service performs no I/O and has no reload or mutation method.
 
 ## 4. Read and ownership contract
 
-The compiler-owned limit is:
-
-```text
-maxLLMProviderConfigBytes = 1,048,576
-```
+The compiler-owned limit is 1,048,576 bytes (`llm_provider_config.max_bytes`).
 
 The adapter rejects a missing file, wrong kind, linked component, linked leaf,
 project-root escape, identity replacement, short read, growth, shrink, or byte
@@ -159,13 +154,3 @@ Tests cover:
 - conditional single capture
 - ordinary-bootstrap non-probing
 - no fixed-location or source-example fallback.
-
-## 8. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Closed configuration field | F0001 and `sddtoolkit-config.schema.json` |
-| Path validation and opaque capability | F0004 and `design/paths.md` |
-| Provider-document decoding and registry | F0006 Sections 3-5 |
-| Filesystem and secret safety | Design Sections 25-26 |
-| Testing and packaging | Design Sections 28, 30-31 |

@@ -77,10 +77,8 @@ append, activation registry, transaction directory or recovery scan precedes it.
 ### 17.3 LLM work
 
 The [field-composition contract](text-field-composition.md) owns the complete native
-text-field inventory, prose requirements and insertion roles. The same policy
-drives presentation, admission, repair, exact coverage and stored readback.
-Structurally invalid values stop before semantic review; legitimate exact
-insertions retain lineage. Prose presence never certifies business meaning.
+text-field inventory, prose requirements and insertion roles that presentation,
+admission, repair, exact coverage and stored readback share.
 
 The LLM performs these semantic activities:
 
@@ -141,7 +139,7 @@ Typed content covers these concerns; each concern does not require a separate ca
   currentness, citation/selection validity and publication gates remain mandatory.
   A genuinely unresolved required decision uses the existing native clarification
   owner.
-  All inference, including correction, counts once against the single configured
+- All inference, including correction, counts once against the single configured
   workflow budget (ADR 0011, ADR 0037). Global exhaustion, overshoot or unavailable
   usage prohibits all later model calls. A global budget rejection ends the workflow
   with `WorkflowTokenBudgetExceeded`; it cannot become a completed specification.
@@ -149,30 +147,22 @@ Typed content covers these concerns; each concern does not require a separate ca
   [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
   since 30 October 2026; not implemented), it would publish a failed incomplete
   specification of the validated content.
-- Registered source-readiness and preservation projections require native
-  pre-generation phase facts. Generation sessions cannot be treated as readiness
-  merely because no brief has been produced yet. Late required-review projection
-  attempts reject. Generation initialization requires the canonical
-  required-authority projection set to be retired and no active native repair
-  permit, preventing earlier required review or dependent repair validation from
-  surviving into generation.
-- Source findings keep their closed evidence contract, including a nonblank
-  `missing_obligation` for `candidate_omission`, distinct from its explanation.
-  Source selection and field purpose bind the observation without proving its
-  meaning. Original sources establish
-  obligations, while claims/groups remain derived evidence. Exact/passive
-  references resolve through the canonical projector, not from display equality.
-- Pre-generation source-readiness and optional preservation review retain their
-  existing required semantics and bound loss-comparison contract in §22.1.
-  A source repair pins its original required review purpose in the native retry
-  scope. Becoming generation-ready cannot skip that review; the matching pending
-  validation remains required even when the optional preservation scan is disabled.
+- Pre-generation source-readiness and optional preservation review keep their
+  required semantics: [ADR 0023](../decisions/0023-advisory-post-generation-review.md)'s
+  pre-generation phase witness and retirement before generation initialization, the
+  loss-comparison contract of §22.1 and the source-repair retry scope of §22.5.
   Before authoring, a positive readiness source-purpose finding requires explicit
   nonempty original source IDs and empty canonical claims/citations/clarification
   selections, under the approved §12 rule. It retains model-assisted source
   authority without creating a candidate binding or authored association.
   Independently detected native generation/coverage defects retain their authorized
   repair or blocked outcome.
+- Source findings keep their closed evidence contract, including a nonblank
+  `missing_obligation` for `candidate_omission`, distinct from its explanation.
+  Source selection and field purpose bind the observation without proving its
+  meaning. Original sources establish
+  obligations, while claims/groups remain derived evidence. Exact/passive
+  references resolve through the canonical projector, not from display equality.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
@@ -196,7 +186,7 @@ open questions; initial clarification questions have a separate native eligibili
 scope and select only their actual evidence. Existing missing/ambiguous/conflicting
 reasons and inconclusive outcomes remain. A question does not establish a genuine
 user gap merely by having valid IDs. Field purposes, owned by the workflow's
-packet guidance, describe derivation from source-backed behavior, not a demand for prewritten titles, goals or stories.
+packet guidance, describe derivation from source-backed behavior, not a demand for prewritten titles or goals.
 Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
@@ -231,8 +221,8 @@ groups, independently of the decision basis. Native code derives its full suppor
 and citations through the shared source association and exact-recognition owners.
 A record batch cannot author an entity: the closed schema, native admission,
 canonical revalidation and repair boundary enforce the same ownership rule.
-The feature collection participates once in canonical IDs, coverage, review and
-stored readback; its fields and records retain their actual producing origins.
+The feature collection participates once in canonical IDs, coverage and stored
+readback; its fields and records retain their actual producing origins.
 The batch presentation's scope remains `assembled_specification`; an individual
 group may remain empty, including after earlier groups have satisfied a family.
 This presentation introduces no per-group minimum or per-family cardinality cap.
@@ -267,7 +257,7 @@ For each feature-brief or specification unit other than the engine-composed stor
 - **Consolidated generation:** the shipped workflow requests brief, feature entities and
   source-group records as three sequential task types through one shared
   generation subgraph: one call each for the brief and entities, and one per record group.
-  Narrative, applicability and record drafting receive their
+  Brief, entity-applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
   repair task. Protocol correction retains that active assignment and its schema.
@@ -286,8 +276,8 @@ For each feature-brief or specification unit other than the engine-composed stor
   unit validation or exact recognition blocks with `story_not_admissible`, carrying
   its unit issue. Neither is repaired or retried. Its exact role is incidental, so it discharges no
   exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
-  record names. The story purpose in the workflow's packet guidance remains the
-  source-readiness subject only.
+  record names. The story is no source-readiness subject and has no packet-guidance
+  purpose (ADR 0047 Decision 5).
   Generation and native unit repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
   value, prose expresses its meaning and types required exact values verbatim.
@@ -298,11 +288,12 @@ For each feature-brief or specification unit other than the engine-composed stor
   record can't copy unpublished draft wording (FIX06 D12.1). The brief draft is
   resolved business text; its canonical provenance, fragment wrappers and display-span
   bookkeeping remain native. Record-family purposes come from the workflow's
-  packet guidance; they and the response alternatives use the same native unit
+  packet guidance ([ADR 0016](../decisions/0016-configured-json-response-composition.md)
+  packet-guidance amendment); they and the response alternatives use the same native unit
   ownership; entity applicability and records are decided
   together in the feature entities unit. Batch records always exclude entities.
   Source evidence and native repair dependencies
-  remain complete; packet presentation does not change semantic review or retry policy.
+  remain complete; packet presentation does not change retry policy.
   Authoring packets resolve offered complete group requirements beside field
   purposes; initial values select their support while drafting. Record packets
   retain their fixed group and separate remaining context without repeating assigned claims.
@@ -314,17 +305,13 @@ For each feature-brief or specification unit other than the engine-composed stor
   establishes semantic entailment nor requires an empty batch. It does not assign
   every other duty in the source to that group. Under ADR 0024, only groups whose
   complete membership is preserved tokens are omitted from record scheduling;
-  this adds no context prohibition. Semantic support rests on the human review of the
-  published `spec.md`. Original sources remain available; citation
+  this adds no context prohibition. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
   Exact-value guidance exposes authorized literal/source context through one
   reference-owned projection; immutable native metadata retains occurrence identity
   and current snapshot/request eligibility. Multiple same-span eligible identities
   are ambiguity, never a model choice or catalogue-order tie breaker. Repair and
-  correction retain their original narrower scope.
-  Record-family and field purposes are the workflow's packet guidance
-  ([ADR 0016](../decisions/0016-configured-json-response-composition.md)
-  packet-guidance amendment). A rejected
+  correction retain their original narrower scope. A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding
   content within its authorized scope, not the rejected value's omissions. Literal
   values alone do not replace the behavior involving them. This guidance is not a
@@ -332,8 +319,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   Record kinds remain closed schema variants; an optional family has no dedicated
   call or required filler. Positive requirements cannot satisfy the assumption,
   non-goal or prohibited-behavior purposes merely
-  by having valid citations. Semantic assessment rests on the human review of the
-  published `spec.md`.
+  by having valid citations.
   Per-field validation, atomic repair, request identities and total-token accounting
   retain their existing owners. Request grouping grants no semantic repair authority.
   Original candidate indices/origins survive canonical section-order projection;
@@ -462,14 +448,12 @@ The engine validates:
 - no template placeholders or model-authored checklist state, guaranteed structurally: typed rendering emits none and readback accepts only its closed grammar;
 - artifact boundary: `spec.md` has no `Reference Context` heading; its only reference metadata
   is the source line §23 gives each criterion, requirement and entity;
-- unsupported technical content: whether code, filenames, paths, framework identifiers and implementation details belong in business requirements is judged by the human who reviews and edits the published `spec.md`. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
+- unsupported technical content: whether code, filenames, paths, framework identifiers and implementation details belong in business requirements is judged by the human who reviews and edits the published `spec.md`, with no lint ([§21.2](21-validation.md#212-specify-validators)). Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved specification-owned conflicts and blocking open questions;
 - complete successful authority reconciliation for every specification-owned required field/decision, with no warning-only, assumed, approximate, or later-stage substitute;
 - workflow artifact paths and complete output-set membership.
-
-There is no technical-leakage lint: it was never built and was removed on 28 October 2026 by user decision, because lexical shape alone is not a semantic rejection. The human who reviews and edits the published `spec.md` decides these cases; no native check replaces that judgment (ADR 0023).
 
 ### 17.6 Rendering and commit
 
@@ -478,7 +462,7 @@ After validation:
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
 3. render the mandatory `reference-context.md`, including completed requirement-to-source occurrence links;
-4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/advice within their existing canonical owners;
+4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision and canonical reference snapshot within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;
 7. stage the complete artifact set, exact workflow-artifact registry, bootstrap-authority state, feature-request state, passive-literal registry state, specification ID ledger, acknowledgement and clarification-registry states, writable clarification forms plus preservation preconditions for retained user-closed forms, specification-provenance state, canonical reference state, and next workflow-state record as one candidate output set;

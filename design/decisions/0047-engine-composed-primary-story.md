@@ -4,32 +4,37 @@
 - **Date:** 2026-11-03
 - **Decision authority:** The user's decisions on 3 November 2026:
   - D19.1, "Yes, may restate (Recommended)": the primary story may restate its source's
-    requirements in one paragraph, adding nothing ([FIX06](../../fixes/FIX06.md) Q19);
+    requirements in one paragraph, adding nothing ([Z_FIX06](../../fixes/Z_FIX06.md) Q19 D19.2);
   - "yes" to the Q19 preflight's question, "Should the engine write the story itself, from the
     source's requirement sentences, using these rules?", with the six rules in the Decision.
+  - Amended 7 November 2026 (user: "apply recommendations", then "yes, advance both"): Decision
+    5 now removes the story from pre-generation source review, advancing `packet-guidance` to v3
+    and the required-authority contract to 2.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
-  - [17-specify.md](../contracts/17-specify.md) §17.3: three model calls per specification
-    (brief, entities, record groups) and a native story; the story prompt clause; the
+  - [17-specify.md](../contracts/17-specify.md) §17.3: three model task types (brief,
+    entities, one call per record group) and a native story; the story prompt clause; the
     narrative-assignment population;
-  - [F0100](../features/F0100-SpecWorkflow.md) §5.2 "Main user journey", §5.7 and the four-call
-    text;
+  - [F0100](../features/F0100-SpecWorkflow.md) §5.2 (the story's purpose, formerly "Main
+    user journey"), §5.7 and the four-call text;
   - [text-field-composition.md](../contracts/text-field-composition.md): the story row's exact
     role;
   - ADR 0020: the story's group selection is native;
   - ADR 0024: the story is not an exact-copy target;
   - ADR 0035: the only-record exception;
+  - ADR 0016's packet-guidance amendment and F0100 §3.10: the story's purpose and readiness
+    subject (Decision 5, amended 7 November 2026);
   - the §32 index.
 
   The overall design remains **Proposed design**.
 
 ## Context
 
-Since 29 October, 26 of 30 weakened obligations and 15 of 59 unsupported additions scored in
-published specifications were in the model-written story ("A borrower may renew…", "logs into
-the library system and selects…"). Under the user's severity rulings (FIX06 H1) the story fails
-3 of the D12.2 set's 5 loan-renewal publications. Prompt wording moved the story between
-modes without removing them (FIX06 §1, Q12 D12.2).
+The model-written story held 26 of 30 weakened obligations scored in published specifications
+since 29 October ("A borrower may renew…") and added unsupported content, such as invented
+steps ("logs into the library system and selects…"). Prompt wording moved the story between
+these modes without removing them ([Z_FIX06](../../fixes/Z_FIX06.md) Q12 D12.2 and Q19
+D19.2).
 
 ADR 0036 already makes each claim's wording the engine's quote of its cited source lines, so
 obligation strength, conditions and negation are the source's own words by construction.
@@ -60,15 +65,18 @@ claims, but it can't paraphrase them.
    exact value.
 4. **The only record naming a claim is kept.** ADR 0035's story comparison never deletes a
    record when no other record names one of its claims.
-5. **The story purpose stays for review only.** The workflow's `primary_user_story` packet
-   guidance, including "Do not invent a persona or benefit or require a prewritten story.",
-   remains the pre-generation source-readiness subject (ADR 0023); no authoring request
-   carries it.
+5. **The story is no source-review subject** (amended 7 November 2026). Pre-generation source
+   readiness (ADR 0023) assesses the other required feature subjects, not the story: its
+   support is the provenance of the claims it quotes (Decision 1), and a catalogue with none
+   blocks (Decision 2), so a model review of it can only raise false findings (FIX06,
+   `2026-11-02T09-15-31Z`). The story has no required-authority policy, clarification question
+   or packet-guidance purpose; removing them advanced `packet-guidance` to v3 and the
+   required-authority contract to 2.
 6. **Workflow.** The `story` step is the registered action `compose-specification-story`. The
    story prompt and the generation schema's story variant are deleted.
 
-The story keeps its canonical `AttributedValue` shape, so no specification, state or report
-version changes.
+The story keeps its canonical `AttributedValue` shape, so no specification or state version
+changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/contracts.zig`).
 
 ## Consequences
 

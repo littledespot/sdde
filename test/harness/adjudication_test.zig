@@ -135,9 +135,9 @@ test "adjudication record and original E2E report are closed explicitly versione
         try std.testing.expectError(error.InvalidAdjudication, adjudication.evaluate(a, invalid, original));
     }
     for ([_][2][]const u8{
-        .{ "spec-e2e-report/v14", "spec-e2e-report/v13" },
+        .{ "spec-e2e-report/v15", "spec-e2e-report/v14" },
         .{ "\"origin\":\"live\",", "" },
-        .{ "\"schema\":\"spec-e2e-report/v14\",", "" },
+        .{ "\"schema\":\"spec-e2e-report/v15\",", "" },
         .{ "\"status\":", "\"untrusted_pass\":true,\"status\":" },
         // Retired advisory-grader fields are not readable report content.
         .{ "\"status\":", "\"evaluation\":null,\"status\":" },

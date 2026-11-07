@@ -76,7 +76,7 @@ Publication is terminal in the compiled graph: prepared output carries the valid
 This also excludes pure post-publication steps that could emit telemetry or fail
 after the required log stream has closed.
 
-The user-approved R39 clarification (20 September 2026) retains this ordering.
+The user's approved clarification of 20 September 2026 retains this ordering.
 Before close, persist `publication.prepared` with the validated intended outcome.
 Actual write success/failure is reported by the existing terminal result and harness
 report, not the closed feature log. Execution, admission, repair and retry events

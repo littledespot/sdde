@@ -53,6 +53,8 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{}, .key = "schema", .value = null },
         // Extra entries, including a feature slot owned by a record family.
         .{ .object = &.{"feature_purposes"}, .key = "acceptance_criteria", .value = text },
+        // The engine composes the story, so it has no review purpose (ADR 0047).
+        .{ .object = &.{"feature_purposes"}, .key = "primary_user_story", .value = text },
         .{ .object = &.{"record_fields"}, .key = "text", .value = text },
         .{ .object = &.{"review_scope"}, .key = "instruction", .value = text },
         // Review scopes of the removed post-generation review are not entries.
@@ -73,7 +75,7 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{"support_evidence"}, .key = "detail", .value = .{ .string = "MOCK\ndetail" } },
         .{ .object = &.{ "support_evidence", "question" }, .key = "omitted", .value = .{ .string = "MOCK\u{85}omitted" } },
         // Unsupported version.
-        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v1" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v2" } },
     }) |change| {
         var document = try std.json.parseFromSliceLeaky(std.json.Value, a, valid, .{});
         var target = &document;
@@ -82,14 +84,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v2\",", "{\"schema\":\"packet-guidance/v2\",\"schema\":\"packet-guidance/v2\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v3\",", "{\"schema\":\"packet-guidance/v3\",\"schema\":\"packet-guidance/v3\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v2\"",
+        "\"packet-guidance/v3\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),

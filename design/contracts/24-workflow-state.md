@@ -27,17 +27,17 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v21, since [ADR 0023](../decisions/0023-advisory-post-generation-review.md)'s
-1 November 2026 removal amendment: no post-generation review, principle assessment or
-incomplete-advice evidence, and the captured principle registry identity kept as its
-own `principle_registry` field, which the next run's capture reads as its prior
-registry; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
-(accepted, on hold since 30 October 2026; not implemented) takes the next version, v22,
-for its `spec_incomplete` variant when it resumes) over canonical `specification/v3`
-content; stage discriminators distinguish the variants. Earlier versions reject
-without migration, aliases or a compatibility reader. The pending variant retains
-reference and clarification data without claiming completed attributed content.
-Changed authority invalidates affected descendants through the stage rules below.
+`specification-state` contract (currently v21,
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md); v22 is reserved for
+the `spec_incomplete` variant of
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
+since 30 October 2026, not implemented) over canonical `specification/v3` content;
+stage discriminators distinguish the variants. Earlier versions reject without
+migration, aliases or a compatibility reader. The completed variant keeps the captured
+principle registry identity as its own `principle_registry` field, which the next
+run's capture reads as its prior registry. The pending variant retains reference and
+clarification data without claiming completed attributed content. Changed authority
+invalidates affected descendants through the stage rules below.
 
 - **Associations.** State stores required `source_group_ids` inside attributed
   values and shared-provenance records, with no persisted presentation roles and
@@ -56,28 +56,19 @@ Changed authority invalidates affected descendants through the stage rules below
   bytes; `model-request-debug/v16` retains it for diagnostics, not state recovery.
   Published-state validation needs no model request, historical capture or operation
   port.
-- **Review evidence.** State holds no post-generation review evidence (ADR 0023).
-  Pre-generation required review evidence retains nullable `authority_gap`, with the
-  same closed gap kind, separate sources, detail and question admitted at review;
-  readback revalidates the defect and any gap against the exact current subject and
-  authorities. Before any authored candidate exists, a positive readiness
-  source-purpose finding requires nonempty current original source IDs and empty
-  canonical claim, citation and clarification-response selections. Forged
-  deterministic methods, semantic-success substitutions and invalid candidate
-  evidence reject; loading cannot infer authority from diagnostic prose or eligible
-  claims.
+- **Review evidence.** State holds no review evidence (ADR 0023). Source-review
+  findings, including §12's nullable `authority_gap` and ADR 0023's source-only
+  readiness evidence, are execution-local, and readback restores none of them.
 - **Text wire.** Model-facing prose/composition conversion is never applied to
   persisted authority to guess a missing fragment, separator or source occurrence.
 
 It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
 
-Execution-local review data is not part of persisted specification state and is not
-restored by state readback. Every fresh invocation starts at `start`.
+Every fresh invocation starts at `start`.
 
 ### 24.2 Stage transition state machine
 
 [View the Stage transition state machine sample](../code.md#stage-transition-state-machine).
-
 
 - Each in-progress execution can terminate as `blocked`, `failed`, or `cancelled`.
 - `spec_incomplete`, with a closed cause (`failed` or `blocked`), records a Specify run

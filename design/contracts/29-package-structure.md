@@ -23,15 +23,16 @@ The logical dependency boundaries map to this Zig source/build layout:
 - The workflow compiler alone constructs immutable executable project-workflow graph descriptors
   from validated definitions and registered contracts.
 - The [ADR 0019](../decisions/0019-single-request-debugger.md) request debugger is a native
-  diagnostic entry point, not a workflow operation or registry entry. Its core modules and
-  browser UI live in `src/debugger/`, its HTTP server, record store and replay transport in
-  `src/adapters/`, and its assembly in `composition/request_debugger.zig`. The executable
-  embeds its browser UI, so debugger startup needs no source tree, and it adds no production
-  dependency.
+  diagnostic entry point, not a workflow operation or registry entry. Its browser UI lives
+  in `src/debugger/`, its domain, port and application modules in the ordinary layers, its
+  HTTP server, record store and replay transport in `src/adapters/`, and its assembly in
+  `composition/request_debugger.zig`. The executable embeds its browser UI, so debugger
+  startup needs no source tree, and it adds no production dependency.
 
-- Zig unit tests may remain beside the owning declarations.
-- Cross-module architecture, fixture, failpoint, packaged-executable, and end-to-end tests live
-  under the top-level test tree shown in the sample.
+- Zig unit tests may remain beside the owning declarations; `src/architecture_test.zig`
+  enforces the layer boundaries.
+- Cross-module integration and failpoint scenarios, build-graph checks, packaged-executable
+  smoke tests and end-to-end tests live under the top-level test tree shown in the sample.
 - Runtime workflow definitions, toolchain presets, the project `toolchain.yaml` layer, and
   semantic principles load only from their validated configured roots; the initial SDD workflows
   do not load templates, and the executable never falls back to design examples or the source

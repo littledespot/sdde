@@ -38,7 +38,6 @@
       "verdicts": [],
       "expected": "",
       "source_path": "stories.md",
-      "target": null,
       "candidate_file": null,
       "signal_text": null
     },
@@ -130,7 +129,6 @@
       "verdicts": [],
       "expected": "",
       "source_path": null,
-      "target": null,
       "candidate_file": null,
       "signal_text": null
     },
@@ -222,7 +220,6 @@
       "verdicts": [],
       "expected": "",
       "source_path": null,
-      "target": null,
       "candidate_file": null,
       "signal_text": null
     },

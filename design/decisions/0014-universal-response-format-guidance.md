@@ -6,8 +6,7 @@
   guidance without local fixes, duplicate authority or verbose workflow templates
 - **Amends:** Design Section 12.2; ADRs 0006 and 0012's prompt-ownership wording
 - **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (amended 23 October
-  2026), whose removal of provider token counting was implemented on 24 October 2026, so
-  the input-token-counting statements below no longer apply.
+  2026), whose removal of provider token counting was implemented on 24 October 2026.
 
 ## Decision
 
@@ -19,7 +18,6 @@ Every model request states the engine's existing JSON response framing:
 - Provider serializers emit it once as system-level guidance for initial calls, semantic
   review, repair and protocol retries in any workflow, in both `prompt-only` and
   supported `native-schema` modes.
-- Explicit input-token counting uses the same model-visible projection as inference.
 - Test evaluators reuse the same constant.
 
 - The instruction is serialized beside the existing response schema; it is not appended
@@ -46,7 +44,6 @@ Every model request states the engine's existing JSON response framing:
   both response modes and both evaluator providers.
 - Unrelated result schemas retain their complete schema guidance and input bytes; native
   generation constraints follow ADR 0006's registered projection.
-- Inference and explicit counting project the same model-visible content.
 - Malformed JSON still rejects except for the user-approved, logged
   [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
   added on 21 September 2026. Schema violations still reject.

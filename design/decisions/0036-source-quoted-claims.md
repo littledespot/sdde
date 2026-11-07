@@ -23,7 +23,10 @@
   - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
     its span, although every development-case value then stays doubled (Decision 6);
   - 3 November 2026, FIX06 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
-    which would have extended it to entity meaning and relationships, is withdrawn.
+    which would have extended it to entity meaning and relationships, is withdrawn;
+  - 7 November 2026, FIX06 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
+    claim of the same category and cited lines as an earlier claim of its chunk is the same
+    claim (Decisions 3 and 4).
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -43,19 +46,14 @@
 
 ## Context
 
-A model claim carried its own wording and a set of line ranges. In at least five
-loan-renewal runs from 17 to 24 October, extraction turned the source's "must be able to
-renew" into "may renew". Every later call received both the source and the weakened
-claim, followed the claim, and published a specification that contradicted itself. Review
-judged the weakened text supported each time.
+A model claim carried its own wording and a set of line ranges. In loan-renewal runs,
+extraction turned the source's "must be able to renew" into "may renew". Every later call
+received both the source and the weakened claim, followed the claim, and published a
+specification that contradicted itself. The claim's wording added nothing the source
+lacked; it only added a second wording that could disagree with the source.
 
 Extraction also returned one claim for each whole Markdown list, so every record cited the
-same claim and native checks couldn't tell distinct duties apart. Per-item chunking
-(ADR 0027) was reverted on 21 October because it added extraction calls without better
-output.
-
-The claim's wording added nothing the source lacked. It only added a second wording that
-could disagree with the source.
+same claim and native checks couldn't tell distinct duties apart.
 
 ## Decision
 
@@ -109,19 +107,25 @@ could disagree with the source.
      CommonMark itself: for example, `3)` after `1.` and `2.` stays inside item 2.
    - A claim within one item, with or without a heading or prose, stays whole. So do
      prose-only claims and a cited line holding two facts.
-   - **Why it was withdrawn and reinstated.** The split was withdrawn after two live
-     pairs in which the records call authored 3, 12, 8 and 304 records, against 2 to 4
-     with one claim per list. A later run gave the records call the same five-claim
-     input and it authored 2 records, so claim count wasn't driving the inflation.
-     ADR 0038's scenario rule needs one claim per requirement, which the split supplies
-     for list sources.
+   - ADR 0038's scenario rule needs one claim per requirement, which the split supplies
+     for list sources (ADR 0038 Decision 4).
+   - **One piece of evidence is one claim** (FIX06 D8.3). A quoted claim with the same
+     category and the same cited lines as an earlier claim of its chunk is the same
+     evidence, because its wording is the quote of those lines. Extraction text validation
+     keeps the first, with its origin, after the split and before claim identities exist.
+     A different category, or different or partly overlapping lines, stays a separate
+     claim. The raw model response is unchanged, so duplicates stay countable. This applies
+     to model claims only; preserved-token claims keep ADR 0024's occurrences.
 4. **Repair routes that served model wording are deleted.**
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
      `source_selections` diagnostic and the `retain-reference-claim-rejection` operation
      are deleted. `validate-reference-claims` now ends `ok` or `failed`.
    - Classification repair and source-omission repair are unchanged. An omission repair
-     returns the same proposal shape, and every claim it quotes is inserted.
+     returns the same proposal shape, and every claim it quotes that its chunk doesn't
+     already hold is inserted (Decision 3's one-evidence rule). An insertion that adds no
+     claim is an unchanged merge, which the shared retry state ends as `unchanged_repair`
+     before any dependent rebuild (§22.4).
 5. **Exact values keep their native authority.** ADR 0024's forcing reads the quoted text
    of `business` and `scope_guard` claims. A code span or fenced block that such a claim
    cites in full is therefore preserved, whatever its kind, and becomes an exact
@@ -191,23 +195,16 @@ could disagree with the source.
     stays with the item. Both err toward not splitting; neither changes wording.
   - Reconciliation statements and signals still restate claims in model text. Whether
     they must reference claim text natively needs its own evidence.
-- **Ingestion.** The Markdown reader now rejects C1 control characters (U+0080–U+009F)
-  as malformed text, through the typed-text scalar rule. Previously a model paraphrase
-  could hide them; a quote can't, so the source fails at ingestion with a typed reason.
+- **Ingestion.** The Markdown reader rejects C1 control characters (U+0080–U+009F) as
+  malformed text, through the typed-text scalar rule. A quote can't hide them, so the
+  source fails at ingestion with a typed reason.
 - **Persistence.**
   - The extraction schema changes. Persisted specification state already records the
     compiled extraction schema bytes and rejects a mismatch as
     `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`, so no state version changes.
-  - Specification states written by this change before Decision 6 (only the uncommitted
-    live pair of 25 October) hold backtick-wrapped exact copies, and their readback now
-    fails. States from committed builds already fail on the extraction schema. Run
-    directories are evidence and are never resumed.
   - Stored readback validates claim text against the text policy but doesn't re-quote it
     from its citations. That would need the Unicode normalizer at readback; it is open
-    work (FIX05 B7).
-  - The E2E report's candidate diagnostic loses the `source_selections` variant and the
-    extraction-text claim target. No retained report contains either, so
-    `spec-e2e-report/v9` is unchanged and every retained report still decodes.
+    work ([FIX06](../../fixes/FIX06.md), B7 contract-review leftovers).
 - **Tests.**
   - Code delimiters:
     - at the recogniser: equal, double and unequal runs, a backtick shared by two values,
@@ -238,7 +235,14 @@ could disagree with the source.
   - Allocation stays proportional to the source across 128 chunks.
   - Admission: blank, unsupplied and over-count citations are rejected, for the initial
     request and for omission repair.
-  - Omission repair inserts every claim a list-spanning proposal quotes.
+  - Omission repair inserts every new claim a list-spanning proposal quotes; an inserted
+    duplicate adds nothing and is an unchanged merge; a list-spanning insertion whose first
+    item is held adds only the second, with the repair's origin; the same lines in another
+    category are inserted.
+  - One evidence, one claim: identical proposals, and duplicates per item after the split,
+    are one claim; the same lines in two categories, different lines and partly overlapping
+    lines stay separate; the raw proposals are unchanged; duplicate claims quoting an exact
+    value keep the single claim's exact-value duty.
   - Ingestion rejects C1 and DEL characters.
   - A proposal carrying wording is rejected as an unknown property.
   - Scripted models cite only citable lines. Scenarios that need a discarded token or

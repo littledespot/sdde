@@ -205,7 +205,9 @@ pub const Omission = struct {
         const replacement = try Atomic.copyReplacement(a, proposed);
         const scope = try Omission.scopeOf(auth);
         const entry = try entryAt(facts.extraction.candidate, scope);
-        const merged = try Atomic.checkMerge(a, canonical, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
+        var merged = try Atomic.checkMerge(a, canonical, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
+        // A claim insertion changes the candidate only if it adds a claim (FIX06 D8.3).
+        var inserted = false;
         const entries = try a.dupe(extraction.TextValidatedResult, facts.extraction.candidate.entries);
         for (entries) |*changed| if (changed.scope.chunk_id.eql(scope.chunk_id)) {
             if (auth.target == .classification) {
@@ -225,7 +227,10 @@ pub const Omission = struct {
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
                 // A proposal spanning several list items quotes one claim per item (ADR 0036, ADR 0038).
-                try claims.appendSlice(a, checked.valid.entries[0].outcome.claims);
+                // An inserted claim that is already present adds nothing (FIX06 D8.3).
+                for (checked.valid.entries[0].outcome.claims) |claim_value| {
+                    if (try @import("reference_extraction_text.zig").appendDistinct(a, &claims, claim_value)) inserted = true;
+                }
                 changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
                 if (entry.outcome == .no_feature_claim) {
                     // Forced irrelevant choices depended on the retired outcome.
@@ -235,6 +240,9 @@ pub const Omission = struct {
                 }
             }
         };
+        // An insertion whose every claim was already held changed nothing, so the shared
+        // retry state ends it as `unchanged_repair` before any dependent rebuild (§22.4).
+        if (auth.target != .classification and !inserted) merged.changed = false;
         var result = facts.extraction.candidate;
         result.revision = merged.revision_after;
         result.last_repair = merged;

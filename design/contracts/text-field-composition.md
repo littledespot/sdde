@@ -1,12 +1,13 @@
 # Text-field composition
 
-User-approved amendments to §§7.1, 17.3, 22 and ADR 0020 (field composition,
-16 October 2026; native exact values, 17 October 2026), as amended by
-[ADR 0036](../decisions/0036-source-quoted-claims.md) (source-quoted claims and
-exact-value code delimiters, 25 October 2026) and the
+User-approved amendments to §§7.1, 17.3, 22 and ADR 0020 (field composition; native
+exact values), as amended by [ADR 0036](../decisions/0036-source-quoted-claims.md)
+(source-quoted claims and exact-value code delimiters),
+[ADR 0047](../decisions/0047-engine-composed-primary-story.md) (the engine-composed
+primary story) and the
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
-amendment (workflow-owned purposes, 30 October 2026). ADR 0019 records the
-debug-description/replay serialization that retains their native witnesses.
+amendment (workflow-owned purposes). ADR 0019 records the debug-description/replay
+serialization that retains their native witnesses.
 
 ## Native exact values
 
@@ -38,7 +39,8 @@ wrapper and terminal policy. Terminal punctuation and negation can remain
 semantically ambiguous; matching proves no correct use or fulfillment.
 
 A prohibited field keeps matching bytes as prose without exact lineage. An
-incidental entity-name occurrence cannot satisfy behavioral coverage. An
+incidental occurrence, in an entity name or the composed story, cannot satisfy
+behavioral coverage. An
 obligation-bearing field still requires valid prose composition: recognizing a
 whole value cannot turn a reference-only value into behavioral explanation.
 Generation, response admission/correction, fixed repair, canonical no-progress
@@ -93,10 +95,9 @@ their normal lineage and semantic checks, without satisfying behavioral coverage
 
 ## Exact copies only where they can carry an obligation
 
-- **Prohibited role.** The descriptive fields of the inventory's second row (brief
-  title and goal, entity-applicability basis, entity meaning and each relationship,
-  assumption, clarification question) prohibit exact-copy insertions. Prose remains
-  required; passive and source roles are as listed.
+- **Prohibited role.** The descriptive fields of the inventory's second row prohibit
+  exact-copy insertions. Prose remains required; passive and source roles are as
+  listed.
 - **Presentation follows the role.** These fields' projected schemas, guidance and
   offered choices contain no exact-copy insertion. Passive references remain
   permitted, so the native prose-presence check still applies. Where the selected
@@ -110,8 +111,8 @@ their normal lineage and semantic checks, without satisfying behavioral coverage
   compatibility reader for stored values that contain one.
 - **Coverage.** Obligation-bearing fields keep exact-copy insertions together with
   the native prose requirement, which schemas cannot express.
-- **Entity names** keep the identity-label exception and are the only field with
-  an incidental exact-copy role.
+- **Entity names** keep the identity-label exception. They and the engine-composed
+  primary story are the only fields with an incidental exact-copy role.
 
 Native wire-type declarations bind each returned text leaf to the registry. The
 shared schema owner projects its permitted insertion alternatives for initial
@@ -154,8 +155,13 @@ readback solely because the engine rewrote its source literal.
 Rejection never converts prose into an insertion or changes its bytes. Native and
 stored-value validation enforce the same rule if a canonical value bypasses wire
 decoding. A prose-required value containing only insertions is a typed
-`reference_only` composition issue, rejected at response admission and corrected
-[as a unit](#composition-defects-are-corrected-as-a-unit) before review.
+`reference_only` composition issue, rejected and corrected
+[as a unit](#composition-defects-are-corrected-as-a-unit) at response admission.
+Recognition can make the model's own typed text one exact value, so in a field whose
+exact-copy role isn't prohibited the issue's correction names an exact source value as
+well as a supplied display reference as what can't be the whole text; other fields admit
+a bare value as prose, and their correction names only the reference (FIX06,
+7 November 2026).
 
 Stored clarification state can undergo structural loading before reference
 ingestion supplies the current original sources. Its engine-owned questions must

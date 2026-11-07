@@ -2,11 +2,6 @@
 
 **Status:** Proposed feature design
 
-[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) governs complete
-production model-exchange capture at `debug`/`trace`; its verification must cover the
-production invocation path, not only the E2E evidence wrapper. See
-[implementation status](#implementation-status).
-
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas,
 `event-columns/v2` and `prompt-columns/v3`, are the only accepted shapes; the
@@ -25,7 +20,10 @@ SDDE against a target project.
 5-6, 9, 13.2, 13.9, 14.9-14.10, 26.5, and 27-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md);
 [ADR 0003](../decisions/0003-generic-workflow-engine.md); [ADR
-0005](../decisions/0005-workflow-defined-operations.md).
+0005](../decisions/0005-workflow-defined-operations.md); and [ADR
+0018](../decisions/0018-debug-model-exchange-logging.md), which governs complete
+production model-exchange capture at `debug`/`trace`; its verification must cover the
+production invocation path, not only the E2E evidence wrapper.
 
 ---
 
@@ -123,7 +121,7 @@ The shortcode originates as closed observability metadata in the declarative
 workflow definition:
 
 ```text
-workflow definition supplies workflowShortcode: "IMPL"
+workflow definition supplies shortcode: IMPL
   -> workflow-definition schema delegates syntax to WorkflowShortcode.parse
   -> workflow registry proves shortcode uniqueness
   -> runner constructs one WorkflowLog from the typed value
@@ -143,26 +141,10 @@ workflow definition supplies workflowShortcode: "IMPL"
 - A model, stored log, node parameter, or runtime caller cannot replace it.
 - It is observability metadata, not workflow identity or operational authority.
 
-Illustrative definition values are:
-
-```text
-specify: SPEC
-plan: PLAN
-tasks: TASK
-implement: IMPL
-audit: AUDT
-drift: DRFT
-initialise: INIT
-```
-
-These values are examples, not a required workflow registry. Every admitted
-definition owns one unique validated value.
-
-The example roles above are under consideration. This is a consideration list, not an engine role registry.
-- The initial SDD suite remains `specify -> plan -> tasks -> implement`; adding `audit`,
-  `drift`, or `initialise` requires its domain graph, gates, state contract, and
-  acceptance tests, but does not expand a fixed engine workflow-name union.
-- Every definition must supply its own valid unique shortcode.
+Every admitted definition owns one unique validated value; the Specify definition, for
+example, declares `SGEN`. Shortcodes form no workflow registry, and adding a workflow
+expands no fixed engine workflow-name union
+([ADR 0003](../decisions/0003-generic-workflow-engine.md)).
 
 ### 3.3 Other authorities
 
@@ -270,10 +252,8 @@ runner-owned child bindings and no filesystem, clock, serializer, redaction,
 or sink capability.
 
 Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), these steps
-become the typed steps of a feature-logging engine routine, in its second conversion. It
-converts only once the ADR's logging preconditions hold, including baseline tests for
-cancellation under a lock and for the emergency-line count. The outcomes, failure path and
-non-recursion here are unchanged.
+become the typed steps of a feature-logging engine routine once the ADR's logging
+preconditions hold. The outcomes, failure path and non-recursion here are unchanged.
 
 Filtering occurs before event identity, sequence, segment, or lock allocation.
 Logging-internal nodes are not recursively observed.
@@ -357,7 +337,7 @@ Logging-internal nodes are not recursively observed.
 | `run.completed` | `info` | `outcome` | `duration_ms` |
 | `run.blocked` | `error` | `diagnostic_code`, `outcome` | — |
 | `run.failed` | `error` | `diagnostic_code`, `outcome` | — |
-| `run.incomplete_published` ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold since 30 October 2026; not implemented) | `warning` | `diagnostic_code` | — |
+| `run.incomplete_published` ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), on hold; not implemented) | `warning` | `diagnostic_code` | — |
 | `run.cancelled` | `info` | `outcome` | — |
 | `publication.prepared` | `info` | `outcome` | — |
 | `stage.started` | `info` | — | — |
@@ -428,7 +408,7 @@ record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_bin
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes
 ```
 
-- The first is the event heading; the second is the 37-column prompt heading.
+- The first is the event heading and the second the prompt heading; each has 37 columns.
 - Existing wire columns `model_route_id` (events) and `route_id` (prompts) carry
   the workflow model-operation identity; `model_profile_id` carries the repository
   model-slot identity. ADR 0018 does not rename columns or introduce a route registry.
@@ -490,7 +470,7 @@ segment:
 ```text
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
 segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
-event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0042|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-42|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
 
 `IMPL` is illustrative only; the selected compiled workflow's definition
@@ -501,7 +481,7 @@ When prompt capture is enabled, one sanitized fragment is one row:
 ```text
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes
 segment_header|feature-log/v2|prompt|prompt-columns/v3|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
-prompt|feature-log/v2|prompt|prompt-columns/v3|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-0043|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_SECRET]|34|false|true|\N|\N|\N|\N|\N|\N|\N
+prompt|feature-log/v2|prompt|prompt-columns/v3|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-43|43|2026-08-28T10:15:31Z|1206|debug|model.prompt_fragment|model.prompt_fragment/v1|RUN-001|F0002|implement|\N|1|REQ-001|ROUTE-001|PROFILE-001|FRAG-001|request|ordinary|Create plan with [REDACTED_CREDENTIAL]|38|false|true|\N|\N|\N|\N|\N|\N|\N
 ```
 
 The console mirror, when enabled, displays only the applicable `event|...` or
@@ -607,8 +587,8 @@ dispatcher, public queue, or fire-and-forget path. The bounded policy-transition
 buffer required by Section 14.10 is not a general logging queue.
 
 Logs are observations, never approval, completion or continuation authority.
-ADR 0009 removes transaction events and transaction-stabilization requirements;
-log-tail handling cannot resume an abandoned workflow.
+Under ADR 0009 there are no transaction events, and log-tail handling cannot resume an
+abandoned workflow.
 
 ## 8. Failure contract
 
@@ -788,39 +768,20 @@ negative cases:
 
 - each operation class reaches the one non-recursive emergency/block route, the
   emergency line is byte-exact and at most 128 ASCII bytes, a failed emergency write is
-  not retried, and the execution is abandoned without partial successful output
-- and
+  not retried, and the execution is abandoned without partial successful output; and
 
 **Packaging**
 
 - a clean native-executable run with no source-tree fallback.
-
 
 Detailed fault matrices remain owned by governing Section 28 and are referenced
 rather than copied into this feature document.
 
 ## Implementation status
 
-**Implementation**
-
-- The logging service and stream lifecycle are implemented; production Specify
-  integration remains open ([FIX06](../../fixes/FIX06.md#wider-scope-retained)).
-- The workflow-definition schema supplies `WorkflowShortcode`, the registry validates
-  uniqueness, and the runner-created `WorkflowLog` producer binding carries it.
-- The F0001 logging shape supplies every configurable user choice, and all operational
-  policy plus the two `feature-log/v2` pipe-delimited schemas are compiler-locked
-  constants.
-- ADR 0005 replaces route/profile attribution with compiled
-  workflow-operation/model-slot attribution.
-- The current event registry and fixed `feature-log/v2` headings use workflow-operation and model-slot
-  attribution; see [the format owner](../../src/domain/feature_log_format.zig).
-## 12. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Config read/decode and handoff | F0001; Design Sections 9 and 13.1 |
-| Workflow shortcode source, syntax, validation, and fact binding | Workflow definition; canonical `WorkflowShortcode` parser; workflow registry; runner-created `WorkflowLog`; `WorkflowLog.log` |
-| Action and orchestrator boundaries | Design Sections 5-6, 13.2, 13.9, and 14.9-14.10 |
-| Levels, privacy, paths, storage, and recovery | Design Section 26.5 |
-| Runner-owned observability | Design Section 27 |
-| Verification and delivery | Design Sections 28, 30-31 |
+- Implemented: the logging service and stream lifecycle, prior-run retention, production
+  Specify feature logging, workflow shortcodes from the definition through the
+  runner-created `WorkflowLog` binding, and the compiler-locked policy constants and
+  `feature-log/v2` column schemas ([format](../../src/domain/feature_log_format.zig),
+  [limits](../../src/domain/feature_log_limits.zig)).
+- Parts marked not implemented above remain open.

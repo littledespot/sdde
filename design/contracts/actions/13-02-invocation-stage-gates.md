@@ -118,8 +118,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignWorkflowArtifactRegistryStateIdAction`
 
-- **Input:** feature identity, config version, validated current feature `StateIdLedger`, and
-  matching single-use namespace capability
+- **Input:** feature identity, validated current feature `StateIdLedger`, and matching
+  single-use namespace capability
 - **Output:** workflow-artifact-registry reservation plus successor ledger
 - **Responsibility:** Reserve the immutable artifact-authority state ID before resolving paths.
 
@@ -164,9 +164,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 Under [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md), current-run
 activation uses the immutable bootstrap observation plus this fresh capability;
-it does not mutate bootstrap roots or reuse an earlier run. The production policy
-ID fingerprints the validated compiled logging policy, and a fresh run ID separates
-its binding and streams.
+it may create observed-absent paths but never changes a bootstrap observation or
+reuses an earlier run. The production policy ID fingerprints the validated compiled
+logging policy, and a fresh run ID separates its binding and streams.
 
 The historical maintenance catalogue below is deferred source material. Its saved
 bootstrap-policy-lineage and restart prerequisites were withdrawn by
@@ -246,8 +246,8 @@ requirements to activate or capture the current execution.
 
 ## `BuildFeatureLogPolicyIdAction`
 
-- **Input:** feature ID, exact bootstrap-authority-state ID, that authority's persisted
-  compiled-policy config version, and compiler-locked `feature_logging` slot
+- **Input:** feature ID, exact bootstrap-authority-state ID, and compiler-locked
+  `feature_logging` slot
 - **Output:** stable feature-log-policy identity
 - **Responsibility:** Construct the closed tuple without consulting the current root config and
   without an allocator, path, content value, clock, user/model scalar, or run-local capability.
@@ -496,12 +496,13 @@ requirements to activate or capture the current execution.
 
 ## `BuildInitialWorkflowStateAction`
 
-- **Input:** selected `specify` `WorkflowId` and compiled-graph evidence, new
+- **Input:** the selected Specify workflow's `WorkflowId` and compiled-graph evidence, new
   feature/artifact/bootstrap/principle/actor/review-decision/workflow-control-event/passive/clarification
   authorities, and empty open-clarification/active-approval projections
 - **Output:** pre-snapshot `specifying` workflow-state candidate
-- **Responsibility:** Construct the first persisted state with the selected workflow as its sole
-  bound workflow ID and no `currentReferenceStateId`; no other state may omit that pointer.
+- **Responsibility:** Construct the feature's first workflow state with the selected workflow as
+  its sole bound workflow ID and no `currentReferenceStateId`; no other state may omit that
+  pointer.
 
 ## `ValidateStageOrderAction`
 
@@ -546,7 +547,7 @@ requirements to activate or capture the current execution.
   direct resolution of every bound ID in the current bootstrap registry, exact current IDs/open
   sets/active approvals/final-rework pointers, stage-valid plan-input presence/absence, and no
   dangling authority.
-- A missing reference pointer is valid only for the newly activated `specifying` revision with
+- A missing reference pointer is valid only for the feature's initial `specifying` revision with
   empty clarification history and no feature request/specification.
 
 ## `ParseWorkflowStateAction`

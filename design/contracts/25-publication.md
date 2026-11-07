@@ -18,9 +18,8 @@ Part of the [proposed design](../design.md#25-atomic-workflow-execution-and-outp
   transaction-ID ledger, durable checkpoint, commit-marker protocol, rollback/roll-forward
   recovery, result-handoff marker or recovery directory.
 - Whole-execution validation is not a filesystem transaction or permission to introduce that
-  machinery.
-- Do not relocate or rename it or make an active feature a prerequisite solely for provider
-  storage.
+  machinery, and moving or renaming that machinery does not satisfy this rule.
+- Provider calls never need an active feature merely to obtain storage.
 
 Candidate preparation still enforces path authorization, ownership,
 write-set checks, approvals, rendering and validation. These rules do not
@@ -44,8 +43,8 @@ create intermediate publication or restart checkpoints.
   mode in which filesystem steps may run while failures are pending. Its prepared output
   must carry every pending failure subject, and its terminal is the recorded failure, so
   it still ends the workflow `failed` or `blocked` and records no successful completion.
-  A blocked clarification
-  refresh is rejected before writing. Pure progress checks also precede publication.
+  A blocked clarification refresh is rejected before writing. Pure progress checks also
+  precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.
 - This explicit failure rule does not relax protected clarification checks or authorize

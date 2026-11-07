@@ -17,19 +17,20 @@ expected outcome. Future cases may explicitly expect `clarification`; success
 then requires native `needs_user`, validated partial publication and actual
 registered open clarification handles.
 
-Raw model grades in the harness cannot authoritatively accept or reject a published
-specification. The existing cost policy is unchanged; no alternate model,
-calibration call or new workflow diagnostic is authorized by this policy.
+Raw model grades cannot authoritatively accept or reject a published specification.
+This policy changes no cost policy and authorizes no alternate model, calibration
+call or new workflow diagnostic.
 
-**Amended 19 October 2026 (user decision):** the advisory grader is removed from
-E2E. An E2E run makes no judge call. GPT-OSS-20B grading remains only in the
-standalone [supplied-spec evaluator](evaluator.md) and its qualification panels.
+An E2E run makes no judge call (user decision, 19 October 2026). GPT-OSS-20B grading
+exists only in the standalone [supplied-spec evaluator](evaluator.md) and its
+qualification panels.
 
-**Amended 3 November 2026 (user decision):** the `/evaluate-e2e` Claude Code skill,
-outside the harness and its cost policy and triggered only by the user, adjudicates a
-published run: it scores the retained report under the case rubric and the user's
-rulings in the skill, writes the record below and applies it. Its record is the only
-rubric evaluation of a published run.
+The `/evaluate-e2e` Claude Code skill, outside the harness and its cost policy,
+adjudicates a published run (user decision, 3 November 2026): it scores the retained
+report under the case rubric and the user's rulings in the skill, writes the record
+below and applies it. Its record is the only rubric evaluation of a published run.
+It starts only as [AGENTS.md](../../AGENTS.md#testing-expectations) "Testing
+expectations" allows.
 
 ## Deterministic mechanics
 
@@ -56,11 +57,10 @@ JSON and Markdown carry a separate typed acceptance decision; finalization error
 cannot produce successful commands.
 
 The E2E command returns zero only for accepted cases. A mechanically valid
-publication remains `human_adjudication_required` and exits nonzero until separately
-adjudicated; failed and unresolved remain distinct in JSON. The supplied-spec
-evaluator also retains raw calibration diagnostics and exits 2 for pending human
-acceptance. Provider/input failures still exit 1. Model scoring never changes
-production state.
+publication remains `adjudication_required` and exits nonzero until adjudicated; failed
+and unresolved remain distinct in JSON. The supplied-spec evaluator also retains raw
+calibration diagnostics and exits 2 for pending human acceptance. Provider/input
+failures exit 1. Model scoring never changes production state.
 
 ## Adjudicate a published run offline
 
@@ -95,17 +95,19 @@ record nor the decision (`spec-adjudication/v3`) carries a hash: `--report` name
 and the directory's copies of the report and the record show what was judged (user
 decisions, 3 November 2026). Unsupported evidence and substituted identities reject.
 
-The baseline useful-completion calculation reuses rubric acceptance. It retains supplied model assessments as advisory diagnostics requiring human
-adjudication, including any calibrated model. Human assessments stay explicit. Historical
-frozen experiments, including the v1 semantic-simplicity rubric, are unchanged;
-they must be refrozen against current contracts for new acquisition. There are
-no old-version compatibility readers.
+The baseline useful-completion calculation reuses rubric acceptance. It retains
+supplied model assessments as advisory diagnostics requiring human adjudication,
+including any calibrated model. Human assessments stay explicit. Historical frozen
+experiments, including the semantic-simplicity rubric (`evaluation-rubric/v1`), are
+unchanged; they must be refrozen against current contracts for new acquisition.
+There are no old-version compatibility readers.
 
 ## Review and qualify the grader
 
-The refreshed panels contain nine Hello World specimens (including UTC omission
-and wrong timezone) and fifteen loan-renewal specimens. Each includes two faithful
-paraphrases, omissions, contradictions, unsupported scope and embedded instructions.
+The calibration panels (`test/integration/fixtures/*/calibration/panel.json`) contain
+nine Hello World specimens (including UTC omission and wrong timezone) and fifteen
+loan-renewal specimens. Each includes two faithful paraphrases, omissions,
+contradictions, unsupported scope and embedded instructions.
 These are assistant-prepared diagnostic specimens, not golden workflow outputs.
 
 Each evaluation case names a `grading_qualification` panel, human-review record
@@ -141,11 +143,12 @@ and qualification. No real grader is currently qualified by these pending record
 
 - `evaluation-case/v2`: required qualification paths for the supplied-spec evaluator.
 - `evaluation-rubric/v2`: required nullable critical minima.
-- `evaluation-report/v7`: raw assessment, line-locator evidence, per-attempt purpose
-  and diagnostic, the `evaluation-config/v2` judge configuration, and explicit
-  grader/acceptance evidence with an always-unresolved decision.
+- `evaluation-report/v8`: raw assessment, line-locator evidence, per-attempt purpose
+  and diagnostic, the resolved `evaluation-config/v2` judge configuration with its
+  Bedrock family, and explicit grader/acceptance evidence with an always-unresolved
+  decision.
 - `spec-e2e-case/v3`: required expected outcome; no judge configuration.
-- `spec-e2e-report/v14`: the single total token budget and aggregate actual usage,
+- `spec-e2e-report/v15`: the single total token budget and aggregate actual usage,
   each attempt's request purpose and owner, ADR 0041's incomplete-publication marker,
   expected outcome, captured evaluation inputs, replayable admission evidence and
   separate acceptance. It embeds no model evaluation.

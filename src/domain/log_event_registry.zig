@@ -24,8 +24,8 @@ pub const Field = enum {
 pub const FieldSet = std.EnumSet(Field);
 
 /// Whether the configured threshold may drop an event. An event an ADR requires to be
-/// logged is emitted at every threshold (§26.5), so an incomplete result is never
-/// published, nor a runaway re-sent, without its record.
+/// logged is emitted at every threshold (§26.5), so a normalized response, a provider
+/// stop or a runaway re-send never goes unrecorded.
 pub const Emission = enum { threshold, always };
 
 pub const EventDefinition = struct {
@@ -96,7 +96,7 @@ pub fn validateFact(fact: telemetry.TelemetryFact) Error!EventDefinition {
     return event_definition;
 }
 
-/// Marks an event an ADR requires to be logged (ADR 0011, 0014, 0039 and 0040); the
+/// Marks an event an ADR requires to be logged (ADR 0011, 0014 and 0039); the
 /// threshold never drops it (§26.5).
 fn adrRequired(event_definition: EventDefinition) EventDefinition {
     var result = event_definition;

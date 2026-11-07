@@ -20,8 +20,8 @@ This catalogue is normative for the first engine version. A project may add vali
 | Authority reconciliation | Closed required-slot ledger, current evidence, admitted gap and candidate-defect classification under §12.8.1 | Unresolved required authority or candidate/review defect | Shared §12.8.1 precedence: authorized candidate repair, terminal rejection, admitted earliest-owner clarification, upstream rework or administrative block |
 | Publication boundary | Staged-set path and membership checks | Missing/extra/outside write | Engine/workflow |
 
-Removed 28 October 2026 by user decision: the placeholder sentinel scan, which was never
-built. Typed rendering emits no placeholder, and readback accepts only its closed grammar.
+There is no placeholder sentinel scan (user decision, 28 October 2026): typed rendering
+emits no placeholder, and readback accepts only its closed grammar.
 
 ### 21.2 Specify validators
 
@@ -41,7 +41,7 @@ built. Typed rendering emits no placeholder, and readback accepts only its close
 | Field composition | Shared field policy requires nonblank prose, permits insertion kinds and restricts exact-copy coverage; encoded insertion syntax in prose rejects unless its exact bytes occur in original captured sources | Whether admitted prose expresses the correct meaning and uses its insertions correctly |
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
 | Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
-| Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction, repair and readback bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
+| Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction and repair bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
 
 [§17.5](17-specify.md#175-deterministic-specification-validation) also lists the
 duplicate check, which [ADR 0035](../decisions/0035-cross-kind-restatement.md) extends
@@ -49,10 +49,10 @@ to covered restatements of the story
 ([F0100 §5.7](../features/F0100-SpecWorkflow.md#57-generation-coverage-and-repair)), and
 claim and scenario coverage ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).
 
-Removed 28 October 2026 by user decision: the business-only keyword lint, which was never
-built. Business/technical classification is judged by the human who reviews and edits
-the published `spec.md` ([§17.5](17-specify.md)); no native check or post-generation
-review owns it.
+There is no business-only keyword lint (user decision, 28 October 2026): lexical shape
+alone is not a semantic rejection, so business/technical classification is judged by the
+human who reviews and edits the published `spec.md`
+([§17.5](17-specify.md#175-deterministic-specification-validation)); no native check owns it.
 
 ### 21.3 Plan validators
 
@@ -108,7 +108,7 @@ review owns it.
 | Unexpected change | Overlay delta subset of authorized writes | None |
 | Command effects | Post-command delta subset of task plus declared command effects | None |
 | Evidence | All task evidence predicates satisfied | Manual observation when required |
-| Completion | Commit plus evidence plus status persistence | None |
+| Completion | Final gate passes; the validated project delta, evidence and runtime state publish only with the whole workflow output ([ADR 0009](../decisions/0009-atomic-workflow-execution.md)) | None |
 
 ### 21.6 Validators that must not be overstated
 

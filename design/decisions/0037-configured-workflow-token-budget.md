@@ -9,8 +9,9 @@
   - "make the token cap an external setting, that is stored and loaded from
     .sddtoolkit.json, to the e2e test set the token cap to 125000".
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026): a budget failure still stops all model calls and fails the run, but publishes
-  the validated content as a failed incomplete specification.
+  2026; accepted, on hold since 30 October 2026, not implemented): a budget failure still
+  stops all model calls and fails the run, but would publish the validated content as a
+  failed incomplete specification.
 - **Amends:**
   - [ADR 0011](0011-provider-owned-request-limits.md) "Workflow token accounting" and
     [ADR 0023](0023-advisory-post-generation-review.md) "Budget and incomplete advice"
@@ -20,7 +21,7 @@
     longer owns the budget;
   - §9 (configuration shape and workflow policy), §12 (model boundary accounting), the
     §13 `CheckWorkflowTokenBudgetAction`, §14 (orchestration), §17, §22, §27, §31.12,
-    F0001, F0005, F0006, F0100, diagram 17 and `design/code.md`;
+    F0001, F0005, F0006, F0100 and `design/code.md`;
   - the harness contract ([e2e.md](../harness/e2e.md)): `baseline-budget-feasibility/v2`
     and `baseline-freeze/v3`;
   - the §32 index.
@@ -32,9 +33,9 @@
 
 The single workflow token budget was compiled into every policy profile at 100,000
 tokens, nine identical copies, and copied into each compiled graph's authority. Projects
-couldn't change it. Loan-renewal ended `WorkflowTokenBudgetExceeded` in six runs from 21
-to 25 October, stopping between 100,763 and 112,532 tokens. The user set quality above
-cost and approved a larger, configurable budget.
+couldn't change it, and loan-renewal runs ended `WorkflowTokenBudgetExceeded` at 100,763
+to 112,532 tokens. The user set quality above cost and approved a larger, configurable
+budget.
 
 ## Decision
 
@@ -66,20 +67,16 @@ cost and approved a larger, configurable budget.
 - **Persistence.**
   - Specification and workflow state don't store the budget, so no state version
     changes.
-  - The E2E report's `token_accounting.total_budget` keeps its shape and records the
-    configured value, so `spec-e2e-report/v9` is unchanged.
+  - The E2E report's `token_accounting.total_budget` records the configured value.
   - The baseline harness reads the budget from the bootstrapped configuration. Its
     feasibility report's `compiled_workflow_budget` becomes `configured_workflow_budget`,
     so `baseline-budget-feasibility` advances to v2 and `baseline-freeze`, which embeds
-    it, to v3. No retained files of either exist.
-  - Retained E2E runs captured a `.sddtoolkit.json` without the member, so `e2e-call`
-    can't replay them and they can't serve as budget-feasibility evidence; a fresh run
-    is needed. Adjudication doesn't decode configuration and is unaffected.
-- **Configuration.** Every configuration document must now state the budget; the closed
+    it, to v3.
+- **Configuration.** Every configuration document must state the budget; the closed
   schema, the example and all fixtures changed together, with no compatibility reader.
 - **Not changed.** The experiment-wide stops (1,000 sends, 2,000,000 tokens) stay a
-  separate open decision (FIX05 B4). A larger budget lets runs near the limit finish;
-  it doesn't make review cheaper or runs more reliable.
+  separate open decision ([FIX06](../../fixes/FIX06.md) H4). A larger budget lets runs
+  near the limit finish; it doesn't make review cheaper or runs more reliable.
 - **Tests.**
   - Decoding accepts 1, 125,000 and 4,294,967,295, and rejects a missing value, 0, −1,
     1.5, `1e3`, `"125000"`, `null`, `[]`, 4,294,967,296 and a duplicate member.

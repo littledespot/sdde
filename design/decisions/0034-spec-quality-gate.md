@@ -4,39 +4,26 @@
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026: "The plan will not
   start until spec workflow is stable and producing high quality output, update the
-  documentation". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A6's scope question. It
-  replaces A6's proposed bar, which was "until Specify publishes on both development
-  cases".
+  documentation". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A6's scope
+  question. It replaces A6's proposed bar, which was "until Specify publishes on both
+  development cases".
 - **Amends:**
   - design.md §30: Increments 3–5 (Plan, Tasks, Implement) start only after this gate;
   - the design.md §32 index;
-  - AGENTS.md "Current project state";
-  - FIX05 A6 and §6;
-  - `.claude/known-work.md` (git `194e29a`);
-  - ADR 0033's two references to FIX05 A6.
+  - AGENTS.md "Current project state".
 
   The overall design remains **Proposed design**.
 - **Amended 3 November 2026** (user: "yes", to "should the evaluator's rubric scores decide
-  acceptance instead of your record?"): the `/evaluate-e2e` skill, which only the user
-  triggers, writes and applies each counted run's adjudication record
-  (`spec-adjudication-record/v1`). The user still declares the gate.
+  acceptance instead of your record?"): the `/evaluate-e2e` skill writes and applies each
+  counted run's adjudication record (`spec-adjudication-record/v1`). The user still
+  declares the gate.
+- **Amended 7 November 2026** (user: "you can start /evaluate-e2e if I give approval"):
+  who may start the skill is set by AGENTS.md "Testing expectations".
 
 ## Context
 
 Plan, Tasks and Implement would consume Specify's output and multiply the engine's
-per-concept costs. FIX05 A6 proposed starting them once Specify publishes on both
-development cases.
-
-The current state, on 22 October 2026:
-
-- **Adjudication.** No published run has been human-adjudicated.
-- **Hello-world.** Since the 20 October record-family change, it published in 5 of 6
-  attempted runs.
-- **Loan-renewal.** It published in 2 of 6 attempted runs. Two ran out of token budget and
-  two ran out of time.
-
-The gate below is not met. These figures are context, not gate evidence: 10 of those 12 runs
-ran on uncommitted trees across four builds.
+per-concept costs. [FIX06](../../fixes/FIX06.md) §1 records the gate's status.
 
 ## Decision
 
@@ -93,7 +80,7 @@ from the user's words, and await the user's confirmation:
 
 1. **Tasks and Implement** wait too, because they follow Plan in the ordered SDD suite.
 2. **Design work waits,** not only code: no contracts, ADRs or amendments specific to those
-   workflows (FIX05 A6's original scope).
+   workflows.
 3. **Both development cases** must meet the gate (AGENTS.md: "Decide a rule, prompt or
    contract change on both development cases").
 4. **"High quality" means R8 acceptance.** The user may want a higher bar than "accepted".
@@ -110,7 +97,7 @@ from the user's words, and await the user's confirmation:
 ## Consequences
 
 - **Plan waits** until Specify's quality is established, however long that takes.
-- **The FIX05 refactors can still land.** A1–A3 and W3 claim no quality change, so they
+- **The ADR 0030–0033 conversions can still land.** They claim no quality change, so they
   don't count toward the gate. Each one changes the build, though. If one advances a report
   or step-event format, earlier runs can no longer be read by the new build (ADR 0030,
   "Retained evidence"). Gate evidence should therefore come from the build Plan work

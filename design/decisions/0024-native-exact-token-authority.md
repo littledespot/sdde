@@ -3,8 +3,8 @@
 - **Status:** Accepted amendment
 - **Date:** 2026-10-17
 - **Decision authority:** The user's explicit instruction to implement FIX05 B5
-  and B8 together, followed by approval of native exact duties independent of
-  semantic kind and canonical-literal byte matching.
+  and B8 together (`fixes/Z_FIX05.md`, git `194e29a`), followed by approval of native
+  exact duties independent of semantic kind and canonical-literal byte matching.
 - **Amends:** Design §§16–17, their acceptance criteria, ADR 0020's record-task
   population and exact-kind gates, and ADR 0022's classification/disposition
   handoffs. The overall design remains **Proposed design**.
@@ -39,7 +39,9 @@ Adjacent literal segments form one run; passive/source insertions are opaque
 boundaries and their rendered text supplies no match. Empty values are not
 witnesses. This predicate uses stored canonical prose, after its existing NFC
 validation; it does not reconstruct or match an earlier raw response spelling.
-B3's contextual complete-value recognition rule remains a separate contract.
+ADR 0020's contextual [exact-value
+recognition](0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
+remains a separate contract.
 
 A matched candidate cannot be classified irrelevant. The model may still classify
 its semantic kind; native appearance creates a mandatory behavioral exact-value
@@ -92,4 +94,4 @@ complete coverage; it does not fill corrupt state with a reconstructed success v
 Regression evidence must include unrelated values, mixed kinds, cross-source
 duplicates and semantic conflicts, missing forced tokens, forged native entries,
 repair bounds and stored forgery. This decision authorizes no live call or budget
-change; FIX05 records the implementation evidence.
+change.

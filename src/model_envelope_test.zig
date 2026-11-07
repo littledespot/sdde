@@ -676,6 +676,12 @@ test "native exact scope classifies raw prose without granting semantic support 
             try std.testing.expectEqual(@as(usize, 1), diagnostic.?.fields.len);
             try std.testing.expectEqual(expected, diagnostic.?.fields[0].issue.reason);
             try std.testing.expectEqualStrings("/value", diagnostic.?.fields[0].path);
+            // A value typed with no prose around it is corrected by the field registry's
+            // explanation (its wording is tested at text_field_policy).
+            if (expected == .reference_only) {
+                const described = try diagnostic.?.describe(a);
+                try std.testing.expectEqualStrings(field_policy.referenceOnlyExplanation(case.field), described[0].explanation);
+            }
         } else try std.testing.expect(diagnostic == null);
         // A null composition diagnostic assesses structure only. In particular,
         // attached suffixes and opaque references supply no occurrence evidence;

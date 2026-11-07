@@ -1,6 +1,6 @@
-//! Anthropic Messages API response contract (ADR 0028, F0009 wire manifest of
-//! 21 October 2026): closed envelope, usage counters, stop mapping and error
-//! table. Shared readers and assembly own everything provider-neutral.
+//! Anthropic Messages API response contract (ADR 0028 "Anthropic contract"):
+//! closed envelope, usage counters, stop mapping and error table. Shared readers
+//! and assembly own everything provider-neutral.
 const std = @import("std");
 const operation = @import("../../domain/llm_provider_operation.zig");
 const binding = @import("../../domain/llm_provider_binding.zig");

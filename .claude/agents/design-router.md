@@ -27,8 +27,7 @@ find.
 5. Check `design/features/` for the feature contract that owns the area, including
    its implementation status and verification requirements.
 6. Check `fixes/FIX06.md` (the sole active fix record) for open items on the same
-   failure class. `fixes/Z_*` and `fixes/archive/` are historical evidence, not
-   authority.
+   failure class. `fixes/Z_*` is historical evidence, not authority.
 7. Treat `design/code.md` samples, diagrams, examples, templates and presets as
    illustrative unless a governing section makes them normative, and label them so.
    `design/intent.md` states purpose and success measures; it orients but does not

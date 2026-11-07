@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.sddtoolkit.dev/config/sddproviders.schema.json",
   "title": "SDDE provider catalogue common structure",
-  "$comment": "This schema owns only the closed common container. Each config object is subsequently validated against exactly one compiler-registered closed provider-specific variant. Runtime additionally enforces strict UTF-8 without BOM, duplicate-key rejection, integer-only numeric tokens, nesting depth 16, at most 256 models total, unique provider definitions, and unique provider/model tuples.",
+  "$comment": "This schema owns only the closed common container. Each config object is subsequently validated against exactly one compiler-registered closed provider-specific variant. Runtime additionally enforces a capture of at most 1,048,576 bytes, strict UTF-8 without BOM, duplicate-key rejection, integer-only numeric tokens, nesting depth 16, model IDs of at most 512 UTF-8 bytes, at most 256 models total, unique provider definitions, and unique provider/model tuples.",
   "type": "object",
   "additionalProperties": false,
   "required": ["providers"],
@@ -44,7 +44,7 @@
         },
         "json": {
           "type": "boolean",
-          "description": "Enable native JSON-schema output for this model; requires registered provider support."
+          "description": "Response-mode selector: true selects native JSON-schema output, which requires registered provider support; false selects prompt-only schema guidance."
         },
         "config": {
           "type": "object",

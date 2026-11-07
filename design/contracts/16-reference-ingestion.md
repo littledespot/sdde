@@ -34,8 +34,11 @@ Initial readers should cover:
 
 - Enumeration records every encountered regular file, hidden entry, and symlink before policy
   filtering.
-- In v1 `references.followSymlinks` is schema-constant `false`: a symlink receives an explicit
-  non-followed classification and its target is never traversed.
+- No configuration member enables symlink following (the closed configuration has no such
+  member, §9.1): a symlink receives an explicit non-followed, blocked classification and its
+  target is never traversed. Following reference symlinks is deliberately unsupported until
+  a separate version defines containment, loop, depth, deduplication and accounting
+  semantics.
 - For an included regular file, the engine opens one no-follow descriptor, validates its
   metadata, reserves its reported length, and captures the bytes into a write-once state blob
   through that same descriptor.
@@ -159,9 +162,12 @@ Initial readers should cover:
   admission permits only the chunk's citable (non-blank) lines
   ([ADR 0036](../decisions/0036-source-quoted-claims.md)).
 - The engine quotes each claim's cited lines as written and splits a claim that spans
-  several top-level list items into one claim per item (reinstated by
-  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). A run of cited
+  several top-level list items into one claim per item
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 4). A run of cited
   lines, including uncited blank lines inside it, becomes one canonical citation range.
+  A quoted claim with the same category and cited lines as an earlier claim of its chunk is
+  that claim (ADR 0036 Decision 3, FIX06 D8.3); the first is kept before claim IDs are
+  assigned, and the raw response is unchanged. Omission-repair insertions follow the same rule.
 - IDs are local to the immutable request's source/chunk scope.
 - Each selectable unit preserves one original line, including its line ending, or the remaining
   line fragment at a chunk boundary.
@@ -169,9 +175,9 @@ Initial readers should cover:
   neither quotations nor coordinates.
 - Exact-token citations retain their finer extractor-owned spans.
 - Canonical citation IDs are still assigned only after validation.
-- [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) changes only
-  post-ledger typed-content exact selections. These pre-ledger source ranges,
-  token candidates and reconciliation token/citation identities remain unchanged.
+- [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) governs only
+  post-ledger typed-content exact selections, not these pre-ledger source ranges,
+  token candidates or reconciliation token/citation identities.
 - This shared source-selection contract applies to every workflow using reference evidence; it
   grants no semantic approval, file permission, or execution authority.
 
@@ -223,9 +229,7 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
 
 ### 16.4 Semantic extraction flow
 
-[View the reference-ingestion diagram](../diagrams/05-reference-ingestion.md).
-
-The linked diagram and this sequence are normative; an orchestrator must require the typed evidence from every named phase before advancing:
+This sequence is normative; an orchestrator must require the typed evidence from every named phase before advancing:
 
 1. Resolve/contain the root and prove it is a readable directory. Build one noncanonical `ReferencePreactivationSession`, provisional source/decoded byte ledgers, and traversal capability; enumerate a bounded unordered inventory without following symlinks. No canonical reference, feature-request, source, block, blob, budget-reservation, or citation identity exists yet.
 2. Validate entry count/depth/time/memory telemetry; validate every raw path as UTF-8/NFC/no-follow contained; reject host/target collisions; sort the collision-free set; then assign provisional source IDs from the session.
@@ -303,8 +307,8 @@ source decisions enter clarification.
 #### False-conflict repair boundary
 
 The existing omission-repair owner may replace one native-bound conflict group: the selected conflict's claims,
-their disposition entries and associated conflict records. This amends §22.1/§22.3's
-single-record boundary. Reconciliation labels are candidate assertions, so authority
+their disposition entries and associated conflict records, the one exception to
+§22.1/§22.3's single-record boundary. Reconciliation labels are candidate assertions, so authority
 projection records them as candidate defects. Source review establishes a genuine
 gap or attributes lost meaning with `reconciliation_conflict`; a positive finding
 alone cannot clear an unresolved conflict record.

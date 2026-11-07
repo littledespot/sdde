@@ -33,7 +33,6 @@ pub const Case = struct {
     source_group_ids: []const u32,
     verdicts: []const comparison.Verdict,
     expected: []const u8,
-    target: ?enum { description, primary_user_story } = null,
     candidate_file: ?[]const u8 = null,
     source_path: ?[]const u8 = null,
     signal_text: ?[]const u8 = null,
@@ -449,7 +448,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     const sources = provenance_context.inputs;
     const ledger = try authority.build(a, inputs);
     const index = for (ledger.requirements, 0..) |required, at| {
-        if (if (example.mode == .signal) required.seed.id.unit == .signal else required.seed.id.unit == .feature and required.seed.id.slot == (if (example.target == .primary_user_story) authority.Slot.primary_user_story else .description)) break at;
+        if (if (example.mode == .signal) required.seed.id.unit == .signal else required.seed.id.unit == .feature and required.seed.id.slot == .description) break at;
     } else return error.MissingCalibrationTarget;
     // A fixed admitted omission is the experimental premise, not a model judge.
     const findings = try a.alloc(support.Finding, index + 1);
@@ -730,7 +729,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
     }), admission_rejections.items);
     try std.testing.expectEqual(@as(usize, 1), pre_generation_cases);
-    try std.testing.expectEqual(@as(usize, 11), unavailable.items.len);
+    try std.testing.expectEqual(@as(usize, 10), unavailable.items.len);
     try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len + unavailable.items.len);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/native-admission.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .input_cases = cases.len,

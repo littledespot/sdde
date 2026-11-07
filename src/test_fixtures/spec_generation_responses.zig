@@ -538,7 +538,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .display_name => "What should users call this feature? Supply its display name.",
                     .description => "What behavior should this feature provide? Describe the expected result.",
                     .primary_goal => "Which user outcome takes priority? Name the primary goal.",
-                    .primary_user_story => "Who uses this feature and why? Name the user and intended benefit.",
                     .acceptance_criteria => "Which observable outcome counts as success? State the pass/fail condition.",
                     .functional_requirements => "What should happen when renewal is requested? State the required behavior.",
                     .scenario_coverage => "What should happen when renewal is refused? Describe that scenario outcome.",

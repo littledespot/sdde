@@ -5,13 +5,13 @@
   single-step granularity carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
-  documentation with the recommendations for option B". It decides
-  FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A2 after a comparison of two forms. The user ranked the
-  criteria: "this is a proof of concept and refactoring to best possible outcomes is the
-  most important". The approved recommendation included three rules: single
-  responsibility and narrow ports per function, function-local intermediate values, and
-  model calls and every real branch kept in YAML. The choices under "Derived under
-  existing rules" follow from existing authority and await the user's confirmation.
+  documentation with the recommendations for option B". It decides FIX05
+  (`fixes/Z_FIX05.md` §21, git `194e29a`) A2 after a comparison of two forms. The user
+  ranked the criteria: "this is a proof of concept and refactoring to best possible
+  outcomes is the most important". The approved recommendation included three rules:
+  single responsibility and narrow ports per function, function-local intermediate
+  values, and model calls and every real branch kept in YAML. The choices under "Derived
+  under existing rules" follow from existing authority and await the user's confirmation.
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (one responsibility and narrow ports)
     and "Testing expectations" (action tests);
@@ -55,14 +55,12 @@ six coordinated pieces:
 - an action file;
 - an application binding;
 - a registry entry in the composition root;
-- entries in the 195-member `DataKey` enum, so it can hand data to the next step;
+- entries in the `DataKey` enum, so it can hand data to the next step;
 - a YAML node;
 - usually an architecture test.
 
-The Specify definition uses 186 distinct operations, backed by 265 action files. 152 of
-its 283 steps only pass `ok` to the next step and `failed` to the end. FIX05 found
-`composition/root.zig` changed in 86 of 199 commits. Plan, Tasks and Implement would
-multiply this cost.
+More than half of the Specify definition's steps only pass `ok` to the next step and
+`failed` to the end. Plan, Tasks and Implement would multiply this cost.
 
 A first option would have kept every small action and only hidden runs of them behind a
 fixed coordinator, as [ADR 0030](0030-engine-owned-model-request.md) does for model
@@ -171,8 +169,8 @@ own.
 ### Scope
 
 Stage actions apply to registered workflow operations. This ADR does not cover the fixed
-engine-startup graph, the feature-logging pipeline or the invocation operation; those
-are FIX05 A3's scope. [ADR 0032](0032-engine-routines.md) (22 October 2026) decides A3:
+engine-startup graph, the feature-logging pipeline or the invocation operation.
+[ADR 0032](0032-engine-routines.md) (22 October 2026) decides them:
 - startup and feature logging become typed engine routines;
 - the specify invocation operation, a registered parse-then-validate operation, becomes a
   stage action under this ADR, with side effect `none`.
@@ -200,7 +198,7 @@ are FIX05 A3's scope. [ADR 0032](0032-engine-routines.md) (22 October 2026) deci
     stage-owned diagnostic slot before returning the error, and its binding reads that
     slot before propagating the unchanged error.
   - The runner's stage event records the step either way, so a report can still say where
-    inside the stage a run stopped. This is the shape FIX05 A4 asks for.
+    inside the stage a run stopped.
 - **Cancellation** is checked between internal steps. Unlike other actions today, a stage
   action's `execute` also takes the capability-free `NodeRuntime` (from
   `domain/pipeline.zig`) and checks its status between steps. A cancelled stage stops
@@ -249,9 +247,9 @@ change, so its evidence is offline:
 - the measures under Acceptance.
 
 Each conversion reports AGENTS.md's statements separately: implementation complete,
-mechanical checks passed, brittleness reduced (the A2 measure), and semantic benefit
-demonstrated, which is "none claimed". Live E2E runs and the replayed two-case semantic
-rule apply only if a conversion claims a semantic or reliability effect.
+mechanical checks passed, brittleness reduced (the measures under Acceptance), and
+semantic benefit demonstrated, which is "none claimed". Live E2E runs and the replayed
+two-case semantic rule apply only if a conversion claims a semantic or reliability effect.
 
 ### Unchanged
 
@@ -278,19 +276,12 @@ from the user's words, and await the user's confirmation:
    and interpreting the model, and between the model and authorization capabilities, must
    be checked by the runner per binding. A stage action can't give that.
 4. **Scope.** The fixed startup graph, the logging pipeline and the invocation operation
-   are left to FIX05 A3. ADR 0032 has since decided it: routines for startup and logging,
-   and a stage action for the invocation operation.
-5. **FIX05 W3 needs restating.** As written, W3 puts a model request inside one repair
-   operation, which both ADR 0030 and this ADR forbid. A repair would instead be:
-   - an authorize action as its own YAML step, because it has a repair role and routes
-     `more`, `invalid` and `blocked`;
-   - optionally, a stage action that builds the repair input;
-   - a `request-model` step;
-   - separate parse and merge actions.
-
-   [ADR 0033](0033-generic-repair-operations.md) has since decided W3: four generic
-   repair operations with owner-supplied rules, in this same step order. The authorize,
-   input, parse and merge steps are those generic operations, not stage actions.
+   are left to a separate decision, since made by ADR 0032: routines for startup and
+   logging, and a stage action for the invocation operation.
+5. **Repairs.** A repair operation can't contain a model request, which both ADR 0030 and
+   this ADR forbid. Superseded by [ADR 0033](0033-generic-repair-operations.md): a repair
+   is the generic operations authorize, build input, parse and merge around a
+   `request-model` step, not stage actions.
 6. **`prepare-toolchain` goes first** and is measured before the next conversion.
 7. **Evidence:** a structural conversion is accepted on offline evidence, as stated
    above.
@@ -300,16 +291,16 @@ from the user's words, and await the user's confirmation:
 
 ## Consequences
 
-Expected benefits, pending the A2 measure:
+Expected benefits, pending the measures:
 
 - **Lower cost per concept.** A concept inside a stage should cost functions and tests,
   not a binding, a registry entry and `DataKey`s, so the composition root and `DataKey`
   enum should change less often.
 - **Fewer runtime wiring failures.** Wiring between internal steps becomes typed
   function calls, so registry and binding mismatches that today surface as runtime
-  rejections disappear inside a stage. That relates to FIX05 A1 and A4. Workflow
-  compilation already catches dataflow misordering (§6.3). Zig catches internal
-  misordering only where adjacent steps have different types.
+  rejections disappear inside a stage. Workflow compilation already catches dataflow
+  misordering (§6.3). Zig catches internal misordering only where adjacent steps have
+  different types.
 - **Shorter YAML** by the pass-through runs each stage absorbs. The implementation
   measures by how much.
 
@@ -362,10 +353,9 @@ All offline, for each converted stage:
     fixture.
 - **Build checks:** `zig build verify` and the clean packaged-executable smoke test pass.
 - **Measures**, recorded before and after: YAML lines and steps, registry entries, `DataKey`
-  members, and the files a representative concept change touches. This is FIX05 A2's
-  measure, and it decides whether the next stage converts.
+  members, and the files a representative concept change touches. This measure decides
+  whether the next stage converts.
 
 ## Not decided here
 
 - Which stages convert after `prepare-toolchain`, and in what order.
-- The restated W3 (derived choice 5), since decided by ADR 0033.

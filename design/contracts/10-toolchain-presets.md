@@ -7,60 +7,16 @@ Part of the [proposed design](../design.md#10-development-environment-presets), 
   from the root `.sddtoolkit.json`.
 - It is the sole validated package registry from which the exact
   `<paths.principles>/toolchain.yaml` project layer may inherit.
-- `design/toolchainPresets/` and `design/toolchainPresets/_structure.yaml` are design/source
-  material only; runtime bootstrap never loads those source locations and has no
-  packaged-example fallback.
-
+- [§10.9](#109-legacy-preset-source-material) owns the status of the
+  `design/toolchainPresets/` source material; runtime bootstrap never loads it.
 
 **Current authoring boundary:** [F0003 §3](../features/F0003-ToolChainService.md#3-closed-loading-and-publication-contract)
 documents the implemented
 closed package/project shapes and stable union of registered policy IDs. The richer
 policy concepts below are proposed design, not additional currently accepted YAML
-fields. The legacy examples remain useful source material; their format is not a
-runtime contract.
+fields.
 
-- `design/toolchainPresets/_structure.yaml` inventories framework identity, package, build,
-  test, path, quality, and AST concerns.
-- It is a seed, not a v1 schema.
-- Its “mandatory” rules exist only in comments, unresolved `<!-- IMPLEMENT -->` values are valid
-  YAML strings, commands are raw strings, and AST resources are incompletely identified.
-- A v1 preset and the project `toolchain.yaml` layer must instead pass their respective closed,
-  versioned contracts; unresolved placeholders and missing mandatory values are rejected in both
-  mechanical lanes.
-- This placeholder rule does **not** apply to semantic Markdown principle bodies.
-
-- None of the supplied `design/toolchainPresets/*.yaml` examples is directly executable engine
-  policy.
-- They lack the current `schema`, `package`, `layer`, `extends` and `policies`
-  contract. The richer `apiVersion`/`metadata` illustration in sample 15 is also
-  proposed policy notation, not an alternative accepted YAML shape.
-- Several contain shell redirection, glob expansion, or nested quoting.
-- Bootstrap therefore rejects these legacy shapes with `PRESET_LEGACY_SCHEMA_UNSUPPORTED`; it
-  never silently upgrades them.
-- Runtime packages must be authored and validated explicitly against F0003. Runtime
-  bootstrap has no migration reader, automatic conversion or fallback. F0003 §5 retains
-  the separate offline migration proposal; it is not an implemented runtime path.
-
-The complete source-material treatment is:
-
-| Legacy example | Useful seed layers | Mandatory migration findings |
-| --- | --- | --- |
-| `react-vite.yaml` | JavaScript/TypeScript language + Node runtime/package manager + React framework + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; define package-manager ownership, exact parser/query packages, brace-glob semantics, effects, E2E command availability, and role-specific filenames. |
-| `vue-vite.yaml` | Vue framework + JavaScript/TypeScript language + Node/npm + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; fully identify the Vue SFC parser and import-query coverage; define effects, package-manager ownership, E2E command availability, and role-specific filenames. |
-| `node-jest.yaml` | JavaScript/TypeScript + Node + npm + Jest | Split package manager/test layers; replace raw `npx`, placeholders, redirects, and detached `flags`; type lockfile ownership, scripts, command effects, parser/query versions, and content-reference coverage. |
-| `node-pnpm-jest.yaml` | JavaScript/TypeScript + Node + pnpm + Jest | Same as Node/Jest; retain exclusive pnpm command/lockfile ownership and validate every command capability explicitly. |
-| `node-vitest.yaml` | JavaScript/TypeScript + Node + npm + Vitest | Same as Node/Jest; bind build/lint/test IDs to proven project scripts or exact executables. |
-| `node-express.yaml` | Express framework identity overlay | Migrate the legacy `framework` marker to an exact v1 framework identity and dependency detector; declare language/runtime/build/test dependencies separately without selecting a test runner. |
-| `java-maven.yaml` | Java/JVM + Maven | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; replace redirects/raw Maven text, fully identify the Java parser, and validate integration-goal semantics and module roots. |
-| `java-gradle.yaml` | Java/JVM + Gradle | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; type wrapper execution/tasks/effects and fully identify Java parser/source-root coverage. |
-| `dotnet.yaml` | C# + .NET + MSBuild/dotnet test | Resolve each `*.csproj` to a project adapter rather than a raw manifest glob; type project-scoped package addition and dependency scope; replace redirects; declare missing E2E command as disabled; fully identify the C# parser. |
-| `python-poetry.yaml` | Python + Poetry + pytest | Replace shell glob compilation and redirects; type Poetry-environment commands, manifest/lock mutation, scopes, executable capabilities, parser identity, and generated/cache roots. |
-| `python-pytest.yaml` | Python + pip/requirements + pytest | `pip install` does not by itself update `requirements.txt`; migration must select a manifest mutation adapter or disable add/addDev. Replace shell glob/redirection and type every command/effect. |
-| `php.yaml` | PHP + Composer + PHPUnit | Replace redirects/raw commands; type Composer plugin/script/network policy, manifest/lock effects, installed tool capabilities, and PHP parser identity. |
-| `wordpress.yaml` | PHP/Composer base + WordPress framework + CSS | Split framework from PHP/Composer/CSS; replace the example `wp-content/` source root with discovered roots/file kinds; account separately for PHP/CSS parsers and vendor outputs; type lint arguments. |
-
-- `.DS_Store` and any other non-preset file in the source example are not policy.
-- Runtime bootstrap performs a bounded, completely accounted inventory of the derived root, but
+- Runtime bootstrap performs a bounded, completely accounted inventory of the configured root, but
   resolves environments only by exact configured preset ID/version after each candidate has been
   classified and validated.
 - A YAML/JSON candidate that is not a closed v1 preset produces a stable inventory diagnostic;
@@ -73,8 +29,10 @@ React, Node, Java, and .NET should not be four flat, monolithic alternatives. Re
 
 [View the Preset identity and composition sample](../code.md#preset-identity-and-composition).
 
-- Every preset package is validated with a JSON Schema (YAML 1.2 parsing for YAML form), closed
-  objects, explicit required fields, enums, anchored patterns, and semantic-version validation.
+- Every preset package parses as YAML 1.2 and is validated against its closed versioned
+  contract, which [toolchain-preset-v1.schema.json](../schemas/toolchain-preset-v1.schema.json)
+  documents (runtime code does not load the schema file): closed objects, explicit required
+  fields, enums, anchored patterns, and exact `MAJOR.MINOR.PATCH` version validation.
 - The project `toolchain.yaml` layer uses its own closed schema and pins exact preset package
   identities/versions; ranges and implicit `latest` are invalid.
 - Preset `layer` is one of `language`, `runtime`, `framework`, `build`, `test`, or
@@ -157,13 +115,12 @@ Every policy-bearing path expression uses the closed `PathPattern` type; bare st
 
 Every pattern matches its complete declared target; partial matching is not configurable. Planning-intent and runtime-capability applicability belongs to the containing file-kind, discovery, command-effect, generated, or forbidden rule and cannot be overridden by an individual pattern.
 
-- The versioned `path-pattern/v1` glob grammar defines `*` as zero or more non-separator
-  characters, `**` as zero or more complete path segments, and a terminal `/**` as the named
-  directory itself plus every descendant.
-- Thus `dist/**`, `coverage/**`, and `.cache/**` explicitly match their root directory as well
-  as their contents; adapters may not substitute host-library glob semantics.
-- Regex uses the pinned RE2 dialect and exact patterns are scalar-equal after the declared
-  normalization/case policy.
+- Exact, regex and glob matching follow the versioned `path-pattern/v1` grammar in
+  [§10.8](#108-normative-matching-and-platform-semantics); adapters may not substitute
+  host-library glob semantics.
+- A terminal `/**` matches the named directory itself plus every descendant, so `dist/**`,
+  `coverage/**`, and `.cache/**` explicitly match their root directory as well as their
+  contents.
 
 - `base: source_root` is a post-discovery compiled form and requires an exact `sourceRootId`
   from the discovered project registry; it forbids an implicit nearest root.
@@ -369,9 +326,43 @@ Preset compilation uses one portable matching contract:
 
 ### 10.9 Legacy preset source material
 
-- The files in `design/toolchainPresets/` are historical source examples reviewed by F0003.
-- They do not satisfy the current package contract merely by being present.
-- Runtime bootstrap accepts only the closed current project/preset schemas and performs no
-  conversion, aliasing, migration or fallback.
-- Author and validate complete current-format packages explicitly before installing them; source
-  examples are not automatic runtime policy.
+- `design/toolchainPresets/` and its `_structure.yaml` are historical design/source material
+  reviewed by [F0003 §5](../features/F0003-ToolChainService.md#5-detailed-_structureyaml-review);
+  runtime bootstrap never loads those source locations and has no packaged-example fallback.
+- `_structure.yaml` inventories framework identity, package, build, test, path, quality, and
+  AST concerns. It is a seed, not a v1 schema: its “mandatory” rules exist only in comments,
+  unresolved `<!-- IMPLEMENT -->` values are valid YAML strings, commands are raw strings, and
+  AST resources are incompletely identified.
+- A v1 preset and the project `toolchain.yaml` layer must instead pass their respective closed,
+  versioned contracts; unresolved placeholders and missing mandatory values are rejected in both
+  mechanical lanes. This placeholder rule does **not** apply to semantic Markdown principle
+  bodies.
+- None of the supplied `design/toolchainPresets/*.yaml` examples is directly executable engine
+  policy, and none satisfies the current package contract merely by being present. They lack the
+  current `schema`, `package`, `layer`, `extends` and `policies` contract; the richer
+  `apiVersion`/`metadata` illustration in sample 15 is also proposed policy notation, not an
+  alternative accepted YAML shape. Several contain shell redirection, glob expansion, or nested
+  quoting.
+- Bootstrap therefore rejects these legacy shapes with `PRESET_LEGACY_SCHEMA_UNSUPPORTED` and
+  never silently upgrades them: it has no migration reader, conversion, aliasing or fallback.
+  Runtime packages must be authored and validated explicitly against F0003 before
+  installation. F0003 §5 retains the separate offline migration proposal; it is not an
+  implemented runtime path.
+
+The complete source-material treatment is:
+
+| Legacy example | Useful seed layers | Mandatory migration findings |
+| --- | --- | --- |
+| `react-vite.yaml` | JavaScript/TypeScript language + Node runtime/package manager + React framework + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; define package-manager ownership, exact parser/query packages, brace-glob semantics, effects, E2E command availability, and role-specific filenames. |
+| `vue-vite.yaml` | Vue framework + JavaScript/TypeScript language + Node/npm + Vite build + Vitest test | Split monolith; replace `npx`/raw commands and redirects; fully identify the Vue SFC parser and import-query coverage; define effects, package-manager ownership, E2E command availability, and role-specific filenames. |
+| `node-jest.yaml` | JavaScript/TypeScript + Node + npm + Jest | Split package manager/test layers; replace raw `npx`, placeholders, redirects, and detached `flags`; type lockfile ownership, scripts, command effects, parser/query versions, and content-reference coverage. |
+| `node-pnpm-jest.yaml` | JavaScript/TypeScript + Node + pnpm + Jest | Same as Node/Jest; retain exclusive pnpm command/lockfile ownership and validate every command capability explicitly. |
+| `node-vitest.yaml` | JavaScript/TypeScript + Node + npm + Vitest | Same as Node/Jest; bind build/lint/test IDs to proven project scripts or exact executables. |
+| `node-express.yaml` | Express framework identity overlay | Migrate the legacy `framework` marker to an exact v1 framework identity and dependency detector; declare language/runtime/build/test dependencies separately without selecting a test runner. |
+| `java-maven.yaml` | Java/JVM + Maven | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; replace redirects/raw Maven text, fully identify the Java parser, and validate integration-goal semantics and module roots. |
+| `java-gradle.yaml` | Java/JVM + Gradle | Keep dependency addition explicitly unsupported until a manifest mutation adapter is selected; type wrapper execution/tasks/effects and fully identify Java parser/source-root coverage. |
+| `dotnet.yaml` | C# + .NET + MSBuild/dotnet test | Resolve each `*.csproj` to a project adapter rather than a raw manifest glob; type project-scoped package addition and dependency scope; replace redirects; declare missing E2E command as disabled; fully identify the C# parser. |
+| `python-poetry.yaml` | Python + Poetry + pytest | Replace shell glob compilation and redirects; type Poetry-environment commands, manifest/lock mutation, scopes, executable capabilities, parser identity, and generated/cache roots. |
+| `python-pytest.yaml` | Python + pip/requirements + pytest | `pip install` does not by itself update `requirements.txt`; migration must select a manifest mutation adapter or disable add/addDev. Replace shell glob/redirection and type every command/effect. |
+| `php.yaml` | PHP + Composer + PHPUnit | Replace redirects/raw commands; type Composer plugin/script/network policy, manifest/lock effects, installed tool capabilities, and PHP parser identity. |
+| `wordpress.yaml` | PHP/Composer base + WordPress framework + CSS | Split framework from PHP/Composer/CSS; replace the example `wp-content/` source root with discovered roots/file kinds; account separately for PHP/CSS parsers and vendor outputs; type lint arguments. |

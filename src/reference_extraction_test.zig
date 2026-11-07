@@ -412,6 +412,74 @@ test "claims quote their cited source lines and split only across top-level list
     const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "A borrower must be able to renew a loan.\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, parse.execute(a, .{ .entries = &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[1],\"content\":{\"business\":{\"segments\":\"A borrower may renew a loan.\"}}}],\"token_classifications\":[]}")} }));
 }
+test "same-category claims citing the same lines are one claim, before identities (FIX06 D8.3)" {
+    const Selection = @import("domain/source_selections.zig").Selection;
+    const Expected = struct { category: []const u8, citations: []const Selection };
+    const one = struct {
+        fn of(comptime first: u32, comptime last: u32) []const Selection {
+            return &.{.{ .first = .{ .ordinal = first }, .last = .{ .ordinal = last } }};
+        }
+    }.of;
+    for ([_]struct { source: []const u8, claims: []const u8, expected: []const Expected }{
+        // Accepted: identical proposals are one claim.
+        .{ .source = "Renew a loan once.\nShow the new due date.\n", .claims = "{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"business\",\"citations\":[2,1]}", .expected = &.{
+            .{ .category = "business", .citations = one(1, 2) },
+        } },
+        // Accepted: duplicates collapse per quoted item after the list split, keeping source order.
+        .{ .source = "- Renew a loan once.\n- Refuse overdue loans.\n", .claims = "{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"business\",\"citations\":[2]}", .expected = &.{
+            .{ .category = "business", .citations = one(1, 1) },
+            .{ .category = "business", .citations = one(2, 2) },
+        } },
+        // Rejected: the same lines in different categories stay two claims.
+        .{ .source = "Renew a loan once.\nShow the new due date.\n", .claims = "{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"validation\",\"citations\":[1,2]}", .expected = &.{
+            .{ .category = "business", .citations = one(1, 2) },
+            .{ .category = "validation", .citations = one(1, 2) },
+        } },
+        // Rejected: different and partly overlapping lines stay separate claims.
+        .{ .source = "Renew a loan once.\nShow the new due date.\nKeep the old date on refusal.\n", .claims = "{\"category\":\"business\",\"citations\":[1,2]},{\"category\":\"business\",\"citations\":[2,3]},{\"category\":\"business\",\"citations\":[2]}", .expected = &.{
+            .{ .category = "business", .citations = one(1, 2) },
+            .{ .category = "business", .citations = one(2, 3) },
+            .{ .category = "business", .citations = one(2, 2) },
+        } },
+    }) |case| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", case.source));
+        const bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"claims\",\"claims\":[{s}],\"token_classifications\":[]}}", .{case.claims});
+        const parsed = try parse.execute(a, .{ .entries = &.{raw(inputs, 0, bytes)} });
+        const checked = try text_fixture.check(a, inputs, parsed);
+        const claims = checked.entries[0].outcome.claims;
+        try std.testing.expectEqual(case.expected.len, claims.len);
+        for (claims, case.expected) |claim, expected| {
+            try std.testing.expectEqualStrings(expected.category, @tagName(claim.content));
+            try std.testing.expectEqualDeep(expected.citations, claim.citations);
+        }
+        // The raw model proposals are unchanged, so duplicates stay countable.
+        try std.testing.expectEqual(std.mem.count(u8, case.claims, "category"), parsed.entries[0].outcome.claims.len);
+    }
+    // Duplicate business claims quoting an exact value keep exactly one claim and the
+    // same exact-value duty as a single claim (ADR 0024 is unchanged).
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var ids: fixture.IdSource = .{};
+    const exact = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "Display `Loan renewed!` after renewal.\n"));
+    const available = try token_fixture.candidates(a, exact);
+    try std.testing.expectEqual(@as(usize, 1), available.entries.len);
+    var duties: [2][]const extraction.tokens.CandidateId = undefined;
+    for ([_][]const u8{ "{\"category\":\"business\",\"citations\":[1]}", "{\"category\":\"business\",\"citations\":[1]},{\"category\":\"business\",\"citations\":[1]}" }, &duties) |claims, *duty| {
+        const body = try std.fmt.allocPrint(a, "{{\"kind\":\"claims\",\"claims\":[{s}],\"token_classifications\":[]}}", .{claims});
+        const wire = try token_fixture.wire(a, body, &.{.{ .irrelevant = available.entries[0].id }});
+        const quoted = try text_fixture.check(a, exact, try parse.execute(a, .{ .entries = &.{raw(exact, 0, wire)} }));
+        try std.testing.expectEqual(@as(usize, 1), quoted.entries[0].outcome.claims.len);
+        duty.* = (try @import("domain/token_classification_validation.zig").validate(a, exact, available, quoted)).invalid.choices.required_preserve;
+    }
+    try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{available.entries[0].id}, duties[1]);
+    try std.testing.expectEqualDeep(duties[0], duties[1]);
+}
+
 fn quotedText(content: extraction.Content) []const u8 {
     return switch (content) {
         inline .business, .scope_guard => |value| value.value.segments[0].literal.value,

@@ -320,7 +320,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignFileStateTransitionIdAction`
 
-- **Input:** operation record and exact current `TaskExecutionIdLedger` revision
+- **Input:** operation record and the exact current revision of the runner-owned task identity
+  chain ([§13.7](13-07-tasks-implementation.md))
 - **Output:** file-state-transition identity plus allocation delta
 - **Responsibility:** Select one engine-owned transition ordinal before construction.
 

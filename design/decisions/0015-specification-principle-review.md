@@ -1,4 +1,4 @@
-# ADR 0015: Review project principles during Specify
+# ADR 0015: Capture and select project principles during Specify
 
 - **Status:** Accepted design amendment
 - **Date:** 2026-09-18
@@ -12,7 +12,8 @@
   capture and the §9.4 Spec selection row stay: FIX06 D17.1 will give the records
   call the captured principles as context. Principles are context and constraints,
   never a requirement's origin (D13.4), and the workflow never modifies principle
-  files.
+  files. Retitled 7 November 2026 from "Review project principles during Specify" to
+  match.
 
 ## Decision
 
@@ -33,8 +34,8 @@ a policy obligation never reclassifies or bypasses an unresolved business questi
 The shared [clarification contract](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
 requires actionable questions prepared through existing builders and fields.
 Identical wording does not authorize one answer to resolve different subjects.
-Multi-subject answer authority and answer authentication (FIX05 R2) remain
-separate decisions.
+Multi-subject answer authority and answer authentication
+([ADR 0025](0025-clarification-answer-authentication.md)) are separate decisions.
 
 ## Selection-policy input amendment — 18 September 2026
 

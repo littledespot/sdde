@@ -11,7 +11,11 @@
   finite compiler step limit (now 1,024; §3).
 - **Does not approve:** an unbounded graph, hidden request dispatcher, new semantic
   repair authority, production dependency or live run.
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
+- **Amended by:** [ADR 0022](0022-native-reference-phase-handoffs.md) (6 October 2026):
+  reconciliation phases hand off native typed facts rather than JSON prerequisites, so
+  global reconciliation requests each phase separately, and native code constructs
+  forced token classifications without a model call.
+  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not
   yet implemented). Each part's request becomes one `request-model` step with its
   `composition-part`. The lifecycle stages behind it are no longer visible detailed
   operations; distinct request identities and `retain-json-part` stay visible.
@@ -129,17 +133,17 @@ this mechanism for summary, disposition, signal and conflict assignments, not a
 call-number-specific path. Atomic repairs keep their existing authorized scope and
 projection owner.
 
-**Packet-guidance amendment (user-approved, 30 October 2026; FIX06 D3.1 option (a)):**
-workflow resources own the semantic guidance that native packet builders present.
-One closed `packet-guidance/v1` resource holds exactly one text for each registered
-key: feature and record purposes, source-review scopes, the reconciliation summary
-purpose, support-evidence guidance and the semantic tails of native repair
-requirements. Since 1 November 2026 (FIX06 D13.1) the resource is `packet-guidance/v2`:
-the review scopes of the removed post-generation review (`candidate_field.in_record`,
-`candidate_field.standalone`, `collection`, `entity_applicability`) are gone, and v1
-rejects. The keys are closed native enums, derived from the native registries
-where one exists, so the compiler rejects a missing, extra, duplicate, mistyped or
-empty entry and an unsupported version. One `capture-packet-guidance` step publishes
+**Packet-guidance amendment (user-approved, 30 October 2026, FIX06 D3.1, record in
+`fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
+FIX06 D13.1 and 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
+Decision 5):** workflow resources own the semantic guidance that native packet builders
+present. One closed `packet-guidance/v3` resource holds exactly one text for each
+registered key: feature and record purposes, source-review scopes, the reconciliation
+summary purpose, support-evidence guidance and the semantic tails of native repair
+requirements. The removed post-generation review's scopes and the engine-composed
+story's purpose have no key. The keys are closed native enums, derived from the native
+registries where one exists, so the compiler rejects a missing, extra, duplicate,
+mistyped or empty entry and an unsupported version. One `capture-packet-guidance` step publishes
 the compiled guidance as run data; consuming operations declare `.packet_guidance`
 and receive it explicitly, never the resource. Native builders place each text at its
 existing packet position, so moving an instruction to the resource changes no request
@@ -149,7 +153,7 @@ requirement. Native code keeps rule ownership, mechanical diagnostics, identity,
 requirements, composition frames and the user-facing clarification question
 frames; a question about a record or reference subject embeds that subject's task
 from the guidance. Mechanical sentences inside a moved entry move with it until
-FIX06 Q4 removes them. FIX06 Q3 moved every native copy to the resource.
+FIX06 Q4 removes them.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through
@@ -237,15 +241,14 @@ required. New part revisions or schema selections cannot replenish retry attempt
 
 ### Graph capacity
 
-Global reconciliation uses three whole-array parts selected from the existing
-`global` definition. Summaries use one part selected from `summary`, sharing
-assembled-candidate collection. All requests reuse the lifecycle body; retention
-and complete assembly/validation use shared subgraphs with independent compiled
-call sites.
+Global reconciliation requests each phase separately (ADR 0022). Summaries use one
+part selected from `summary`, sharing assembled-candidate collection. All requests
+reuse the lifecycle body; retention and complete assembly/validation use shared
+subgraphs with independent compiled call sites.
 
 The step bound is **1,024**, defined once by `workflow_definition.max_steps`; schema validation,
 expansion, compiled validation and runner storage use that same constant. The runner's
-fixed `u64` retry array increases from 4,096 to 8,192 bytes. Graph tables and validation
+fixed `u64` retry array is 8,192 bytes. Graph tables and validation
 working sets remain allocator-backed. Boundary coverage compiles and executes a full
 1,024-operation graph, rejects one extra operation, detects an unguarded cycle of that
 length and checks execution-limit arithmetic overflow. Qualified step identities
@@ -328,11 +331,10 @@ A successful part is not regenerated merely because another part's JSON is inval
 Configured `requires` applies while staging parts. A dependent value bound to a
 different prerequisite placement rejects; conflicting placement is not a repair. After
 handoff, the existing native domain owners alone determine impacted validation and
-authorized rebuilding: a citation-only repair must not acquire a new classification
-call merely because both belonged to dependent generation parts. The current
-`no_feature_claim` → claim insertion likewise preserves classifications and reruns
-native validation. An unlocalizable composition or cross-part rejection fails/blocks
-through the existing typed boundary; it cannot
+authorized rebuilding: the `no_feature_claim` → claim insertion preserves
+classifications, acquires no new classification call merely because both belonged to
+dependent generation parts, and reruns native validation. An unlocalizable composition
+or cross-part rejection fails/blocks through the existing typed boundary; it cannot
 invent a semantic retry, field move, clarification or success rule.
 
 All calls, including successful parts and corrections, charge the same global
@@ -373,9 +375,8 @@ tokens, claims, the ledger and downstream evidence; it does not repeat extractio
 generation. Retain that path. Typed-text normalization and deterministic token-claim
 construction remain there, never in generic JSON assembly.
 
-Native provenance retains each classification item's producer and distinguishes
-claim-content attribution from citation-collection diagnostic association. Updating one
-classification or a claim's citations cannot relabel unaffected values. Collection
+Native provenance retains each classification item's producer and each claim's content
+attribution. Updating one classification cannot relabel unaffected values. Collection
 diagnostics derive attribution from current values; no parallel mutable origin map
 or invented producer for an absent entry is introduced.
 
@@ -430,14 +431,14 @@ safe boundaries require their own dependency/coverage analysis using this contra
   owners without claiming semantic review detects every lost requirement.
 - Provenance names each real producer after assembly, native repair and reporting.
   A repaired candidate cannot be overwritten from historical parts. Test claim
-  insertion, citation repair, classification replacement and native rebuilding together:
-  shifted indices retain current values/origins, with no stale origin map. Ordinary
-  citation repair and `no_feature_claim` → claim insertion preserve classifications
-  and trigger no automatic part-generation call; independently authorized repairs
-  and existing dependent model operations remain available.
-  Include normalized adjacent literals, missing-citation repair and one classification
-  replacement: sibling producers remain unchanged and each rebuilt candidate contains
-  exactly one deterministic claim per preserved token.
+  insertion, classification replacement and native rebuilding together: shifted
+  indices retain current values/origins, with no stale origin map.
+  `no_feature_claim` → claim insertion preserves classifications and triggers no
+  automatic part-generation call; independently authorized repairs and existing
+  dependent model operations remain available.
+  Include normalized adjacent literals and one classification replacement: sibling
+  producers remain unchanged and each rebuilt candidate contains exactly one
+  deterministic claim per preserved token.
 - Independent assignments, alternating failures, native-defect recurrence, global
   token exhaustion and usage retention obey the existing runner contract.
   The same unresolved defect retains its allowance across assembly and part/native

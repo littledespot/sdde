@@ -207,8 +207,9 @@ starts empty, including after `needs_user` (ADR 0009).
 generic JSON composition within this same envelope. Configured JSON
 schemas do not define native pipeline keys: sealed registered values retain the
 compiled parts, current dependencies and real producer origins. Assembly proposes
-one candidate delta; the runner alone applies it. Staging is retired in the candidate-installation delta; its immutable owners
-remain retained only as candidate evidence and cannot overwrite later native repairs.
+one candidate delta; the runner alone applies it. Staging is retired in the
+candidate-installation delta; its immutable owners remain retained only as candidate
+evidence and cannot overwrite later native repairs.
 
 Every action must:
 
@@ -231,14 +232,14 @@ Every action must:
 
 [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented) adds the **stage action**:
 one registered action whose verb-object responsibility is a deterministic sequence of internal
-steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or `filesystem_read`,
-repair role and runner accounting `none`, outcome association `independent`, no retry
-authority and no model binding.
+steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or
+`filesystem_read`, repair role and runner accounting `none`, outcome association
+`independent`, no retry authority and no model binding.
 
 - Its internal steps are typed functions. Each has one responsibility and takes at most one
   port parameter. `execute` takes the capability-free `NodeRuntime`, only calls them in order
-  with a cancellation check between them, and calls no port itself. No internal function takes the `Action` value or a multi-port
-  struct.
+  with a cancellation check between them, and calls no port itself. No internal function
+  takes the `Action` value or a multi-port struct.
 - Read versus parse applies to those functions: a function that reads does not parse.
 - The other three splits above are unaffected, because a stage action never invokes a model,
   writes or publishes.
@@ -260,7 +261,7 @@ Every orchestrator must:
 - be testable with spy/fake child nodes;
 - allow child orchestrators, while preventing cycles in the orchestration graph.
 
-- Every orchestrator that represents workflow behavior must be bound to a unversioned operation
+- Every orchestrator that represents workflow behavior must be bound to an unversioned operation
   ID in the single registry and callable through YAML.
 - An unregistered orchestrator is permitted only for an engine-kernel responsibility explicitly
   named by ADR 0005.

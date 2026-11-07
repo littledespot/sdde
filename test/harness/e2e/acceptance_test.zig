@@ -33,7 +33,7 @@ pub fn completed(a: std.mem.Allocator) !c.Report {
     };
     input.case_bytes = try std.json.Stringify.valueAlloc(a, input.case, .{});
     return .{
-        .schema = .@"spec-e2e-report/v14",
+        .schema = .@"spec-e2e-report/v15",
         .started_at_utc = "2026-10-17T00:00:00Z",
         .execution_id = "MOCK-run",
         .case_id = "MOCK-workflow-case",
@@ -82,12 +82,12 @@ test "E2E publication awaits adjudication and status or stored pass never accept
     const a = arena.allocator();
     var complete = try completed(a);
     try std.testing.expect(!try gate.commandSucceeded(a, complete));
-    try std.testing.expectEqual(.human_adjudication_required, (try gate.evaluate(a, complete)).unresolved);
+    try std.testing.expectEqual(.adjudication_required, (try gate.evaluate(a, complete)).unresolved);
     try std.testing.expectEqual(.passed, try gate.evaluateJudgment(a, complete, try passingJudgment(a, complete)));
     try gate.apply(a, &complete);
-    try std.testing.expectEqual(.human_adjudication_required, complete.acceptance.unresolved);
+    try std.testing.expectEqual(.adjudication_required, complete.acceptance.unresolved);
     for (std.meta.tags(c.Status)) |status| {
-        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
+        const asserted: c.Report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = status, .expected_outcome = .publication, .acceptance = .passed };
         try std.testing.expect(!try gate.commandSucceeded(a, asserted));
     }
     complete.expected_outcome = null;
@@ -195,7 +195,7 @@ test "E2E publication requires the generated status and an unconfigured threshol
         report.status = status;
         const native = try gate.evaluate(a, report);
         if (status == .generated) {
-            try std.testing.expectEqual(.human_adjudication_required, native.unresolved);
+            try std.testing.expectEqual(.adjudication_required, native.unresolved);
             try std.testing.expectEqual(.passed, try gate.evaluateJudgment(a, report, reviewed));
         } else {
             try std.testing.expect(native != .passed);
@@ -203,7 +203,7 @@ test "E2E publication requires the generated status and an unconfigured threshol
         }
     }
     // The threshold precondition stops before any workflow outcome exists.
-    report = .{ .schema = .@"spec-e2e-report/v14", .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
+    report = .{ .schema = .@"spec-e2e-report/v15", .started_at_utc = "", .status = .threshold_unconfigured, .expected_outcome = .publication, .diagnostic = "ACCEPTANCE_THRESHOLD_UNCONFIGURED" };
     try std.testing.expectEqual(.grading_unresolved, (try gate.evaluate(a, report)).unresolved);
 }
 
@@ -258,7 +258,7 @@ test "E2E rendering separates publication from unresolved acceptance and names n
     const report = try completed(a);
     const rendered = try @import("report.zig").terminal(a, report, "MOCK-runs", "MOCK-run");
     try std.testing.expect(std.mem.indexOf(u8, rendered, "E2E result: generated") != null);
-    try std.testing.expect(std.mem.indexOf(u8, rendered, "development acceptance: unresolved (human_adjudication_required)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "development acceptance: unresolved (adjudication_required)") != null);
     try std.testing.expect(std.mem.indexOf(u8, rendered, "grading") == null);
     const view = try @import("report.zig").renderMarkdown(a, report);
     try std.testing.expect(std.mem.indexOf(u8, view, "The harness makes no judge call.") != null);

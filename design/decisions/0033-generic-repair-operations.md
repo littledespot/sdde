@@ -5,8 +5,8 @@
   per-owner repair operations carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
-  documentation on the yes, ass suggested". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) W3
-  as restated after [ADR 0030](0030-engine-owned-model-request.md) and
+  documentation on the yes, ass suggested". It decides FIX05 (`fixes/Z_FIX05.md` §21,
+  git `194e29a`) W3 as restated after [ADR 0030](0030-engine-owned-model-request.md) and
   [ADR 0031](0031-stage-actions.md). The suggestion was:
   - generic repair operations, with each owner supplying only its own rules;
   - sequenced after ADR 0030 is implemented and ADR 0031's first conversion is measured.
@@ -51,12 +51,11 @@ The Specify definition repairs invalid model output through 29 per-owner operati
 - 6 parse;
 - 7 merge.
 
-The two native advisory repair stops that sat alongside them were removed with
-post-generation review on 1 November 2026 (FIX06 D13.1). Seven of the routes make a model call
-with the `repair` slot: reference text, reference extraction, reference reconciliation,
-specification support, specification unit, and source-omission extraction and
-reconciliation. Several authorizers can also send a native repair straight to merge
-without a model call. Coverage only authorizes, and ends `blocked` or `failed`.
+Seven of the routes make a model call with the `repair` slot: reference text, reference
+extraction, reference reconciliation, specification support, specification unit, and
+source-omission extraction and reconciliation. Several authorizers can also send a
+native repair straight to merge without a model call. Coverage only authorizes, and ends
+`blocked` or `failed`.
 
 Each operation costs a binding, a registry entry, data keys, a YAML step and tests. The
 same four jobs repeat per owner with different rules.
@@ -64,11 +63,9 @@ same four jobs repeat per owner with different rules.
 FIX05 W3 first proposed one repair operation per owner that also made the model call.
 ADR 0030 (every model call is its own `request-model` step) and ADR 0031 (a stage action
 never calls a model, and has repair role `none`) both forbid that. AGENTS.md prefers
-the alternative: "Domain-specific components may contribute typed facts, candidates, or
-evidence to a shared mechanism." So do invariant 23 and the §13.10 precedent of
-specializing one contract "by native review purpose". The code already specializes the
-reconciliation authorizers by kind (`reconciliation_repair.Authorize(.summary)` and its
-siblings).
+the alternative: "Domain components contribute typed facts or evidence to shared
+mechanisms". So does invariant 23. The code already specializes the reconciliation
+authorizers by kind (`reconciliation_repair.Authorize(.summary)` and its siblings).
 
 ## Decision
 
@@ -282,8 +279,8 @@ confirmed on 23 October 2026:
    not distinct operation IDs.
 6. **Advisory repair stops stay native stop steps** outside the four operations. Moot
    since 1 November 2026: the stops were removed with post-generation review.
-7. **All Specify owners convert in one change,** after A1 and the first A2 conversion, and
-   the enum is Specify-only for now.
+7. **All Specify owners convert in one change,** after ADR 0030 and ADR 0031's first
+   conversion, and the enum is Specify-only for now.
 8. **Evidence:** structural conversion on offline evidence (as ADR 0031's derived
    choice 7, also awaiting confirmation).
 
@@ -350,5 +347,5 @@ All offline:
 - Owner enums for Plan, Tasks and Implement, which wait for the
   [ADR 0034](0034-spec-quality-gate.md) Specify quality gate.
 - Engine-owned release, which ADR 0030 leaves open.
-- FIX05 R6's exact-reference repair eligibility. That stays open, and this ADR doesn't
+- FIX06 R6's exact-reference repair eligibility. That stays open, and this ADR doesn't
   foreclose it.

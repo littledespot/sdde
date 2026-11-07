@@ -3,10 +3,9 @@
 Detailed contracts for the explicit YAML model-request operations governed by
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md).
 
-> **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
-> except the token-counting removal and the catalogue deadline, both implemented
-> 24 October 2026 and reflected in the sections below).** Under
-> [ADR 0030](../decisions/0030-engine-owned-model-request.md) these operations stop
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) (the `request-model`
+> step is not yet implemented; its token-counting removal and catalogue deadline are,
+> and the sections below reflect them).** Under ADR 0030 these operations stop
 > being YAML-selectable. Each request-lifecycle operation becomes a fixed stage of one
 > `request-model` step. A capability-free kernel orchestrator runs the stages in the order
 > ADR 0030 lists, through runner-owned child bindings. That list also includes the
@@ -26,19 +25,22 @@ Detailed contracts for the explicit YAML model-request operations governed by
   request and declares `retry-limit` (`0` permits only its initial execution and ADR
   0039's runaway re-send, which accounting reserves with its own count, one per attempt,
   outside `retry-limit`).
-- The compiler retains its accounting permission.
+- The compiler retains its accounting permission from the registered contract; YAML
+  never authors it.
 - The runner supplies read-only ledger snapshots and initial/retry classification,
-  validates the proposed transition, and publishes sealed evidence from the applied
-  record.
+  validates the proposed transition, and publishes sealed `accounted_model_attempt`
+  evidence from the applied record together with the envelope delta.
 - The runner owns retry counts: operation/immutable-assignment counts for ordinary
   requests, also bound to a pending native parent for dependent requests, and
   operation/native-defect counts for atomic repairs under
-  [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
-  never become a second retry counter.
+  [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Other retry-capable
+  operations retain invocation-wide counts. Request ordinals never become a second
+  retry counter or reset history.
 - Retry authority names the accounting step, not the request origin.
 - Consumers retain that original request and must invalidate consumed attempt evidence
   before a YAML retry revisits the accounting step.
-- A second initial attempt cannot reset an existing request.
+- Foreign or stale evidence and a second initial attempt cannot reset an existing
+  request's accounting.
 
 - That accounting step is the sole attempt limit on the model-request correction path.
 - The protocol-retry builder only prepares a corrected request from retained original
@@ -46,8 +48,8 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Runner exhaustion retains the compiled owner, limit and consumed execution count as a
   terminal rejection.
 
-- The attempt and provider-operation ledgers share the request execution identity and
-  have one cleanup owner.
+- The attempt and provider-operation ledgers share the request's fresh execution
+  identity and have one cleanup owner; they are destroyed with the execution.
 - Rejected deltas publish neither accounting changes nor attempt evidence.
 - No provider call, lifecycle advancement, lease preparation or token charge is hidden
   in this integration.
@@ -57,8 +59,10 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Parameter-free `assign-provider-operation` consumes the same prepared request and
   applied attempt.
 - The existing lifecycle action proposes one inference assignment.
-- The runner validates the exact retained association and publishes sealed evidence from
-  the applied canonical record with the envelope delta.
+- The runner validates the exact retained request/attempt/binding/input association and
+  current revisions, then publishes the immutable ledger successor and sealed
+  `assigned_provider_operation` evidence from the applied canonical record with the
+  envelope delta.
 - The evidence retains the operation and request owners.
 - Rejected deltas publish neither; consuming evidence does not remove an open operation.
 - No authorization preparation, API call, retry, token charge or persistence is
@@ -74,6 +78,8 @@ Detailed contracts for the explicit YAML model-request operations governed by
   ([§9](09-configuration.md)); the runner binds it to the exact retained request,
   attempt, assignment, model and input, and to every provider operation of that
   request, including protocol corrections.
+- The runner derives one absolute monotonic deadline, allocates the existing private
+  lease slot and validates exact result correlation before publication.
 - The separately policy-permitted `provider-authorization` port can prepare only from
   preloaded state, without I/O, refresh or a model call.
 - Its sealed result retains only an opaque lease reference or closed
@@ -111,8 +117,8 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Failed, expired, cancelled, foreign, stale, duplicate or deadline-altered inputs
   reject without publication.
 - The lease is not consumed here; `invoke-model` performs the separate call.
-- Observed inference completion is now explicit below; pre-call termination uses its
-  separate explicit operation below.
+- Observed inference completion and pre-call termination use their separate explicit
+  operations below.
 - No additional capability, timeout, retry, token charge, persistence or recovery
   mechanism is introduced.
 
@@ -151,8 +157,10 @@ Detailed contracts for the explicit YAML model-request operations governed by
 - Native `decode-model-envelope` is also integrated as a parameter-free pure step.
 - It consumes the same prepared request and sealed observation, parses only its complete
   branch through the existing decoder, and retains the source value with the owned tree.
-- Syntax rejection returns typed `InvalidModelEnvelope` as `invalid`; the inference
-  profile now permits `end.invalid`, preserving the compiler's matching-terminal rule.
+- Syntax rejection, after the sole
+  [§22.6](22-repair.md#226-unparseable-output) prefix normalization, returns typed
+  `InvalidModelEnvelope` as `invalid`; the inference profile permits `end.invalid`,
+  preserving the compiler's matching-terminal rule.
 - Stops, failures, observation rejection and cancellation are forwarded unchanged
   without parsing; response admission, not the decoder, applies ADR 0039's runaway
   mapping (below).
@@ -261,6 +269,10 @@ Detailed contracts for the explicit YAML model-request operations governed by
   `check-model-runaway` and `build-model-runaway-resend`
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)); only a
   runaway on the re-send closes as `failed`.
+- The approved missing-final-answer case also admits as `invalid`, with no candidate:
+  sealed observation evidence must establish `missing_final_text`, valid association
+  and known usage. It may enter the same explicit protocol correction and attempt
+  retirement path, or close as failed.
 - The original detailed evidence is retained.
 - Explicitly closing invalid content does not assert retry exhaustion; YAML may instead
   select permitted retry work before closure.

@@ -17,85 +17,43 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
   `ENGINE_CONFIG_PARSE_ERROR`.
 - Either terminates with a nonzero exit before any workflow node, model call, feature log, or
   project write.
-- These are the only public engine-configuration reader codes.
-
-They are the only codes owned by F0001's engine-config reader. The separately
-accepted provider-catalogue boundary owns
-`LLM_PROVIDER_CONFIG_READ_ERROR`, `LLM_PROVIDER_CONFIG_PARSE_ERROR`,
-`LLM_PROVIDER_REGISTRY_INVALID`, and
-`LLM_PROVIDER_MODEL_BINDING_INVALID`; those codes cannot be substituted for an
-F0001 failure or vice versa.
+- These are the only public engine-configuration reader codes. The separate
+  provider-catalogue boundary owns `LLM_PROVIDER_CONFIG_READ_ERROR`,
+  `LLM_PROVIDER_CONFIG_PARSE_ERROR`, `LLM_PROVIDER_REGISTRY_INVALID` and
+  `LLM_PROVIDER_MODEL_BINDING_INVALID`; neither set substitutes for the other.
 
 - F0001 owns one read and closed structural decoding into an immutable `SDDToolKitConfig`.
 - It does not turn decoded strings into operational policy.
 - Each section-owning compiler queries only its applicable typed field and owns that section's
   semantic validation.
 - The `logs` object follows F0001's closed structure; F0002 owns its semantics.
-- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), `debug` and
-  `trace` select complete request/response capture, including reference and code
-  bodies. Higher thresholds emit metadata only. The removed `promptCapture` field
-  is rejected; `logs` contains only `level` and `console`. Credentials remain redacted.
 - The companion samples define no alternate accepted members.
+- [F0001 §4](../features/F0001-SDDToolKitConfigService.md#4-query-and-ownership-contract)
+  owns the one immutable `SDDToolKitConfigService` and its typed-field queries; there is no
+  configuration key lookup, copied projection, cache or second configuration authority.
 
-The runner owns the complete immutable value and returns one
-`SDDToolKitConfigService` through the typed bootstrap result. A consumer queries
-the applicable typed field directly. No configuration key, section key, copied
-projection, generic string lookup, cache, or second configuration authority
-exists.
-
-- The two model configuration sources have distinct authority.
-- The `.sddproviders.json` document at `paths.providers` is the bounded catalogue of configured
-  provider/model instances. Every model requires `json: boolean` alongside `model`
-  and `config`: `true` selects native JSON-schema output; `false` selects prompt-only
-  schema guidance. This is a selection, not a capability claim; unsupported native
-  output rejects the whole catalogue before provider I/O. Missing/non-boolean values
-  reject. Both maintained catalogues enable it. The captured setting is immutable
-  for the invocation; corrections and repairs retain it.
-- Every model's closed `config` requires an integer `requestTimeoutMs` beside
-  `maxOutputTokens`
-  ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)): the
-  provider-operation deadline, in milliseconds, for every provider operation of every
-  request to that model, including protocol corrections. The value must lie between 1 and
-  4,294,967,295, so a monotonic deadline can always be formed from it; a missing, zero,
-  negative, fractional, string or larger value rejects the whole catalogue before
-  provider I/O. Workflow YAML declares no deadline, and a `timeout-ms` parameter rejects
-  at compilation.
-- Bedrock and the Anthropic Messages API are peer providers
-  ([ADR 0028](../decisions/0028-anthropic-messages-provider.md#peer-providers-selected-by-configuration)).
-  Each provider ID closes `config` through its one compiler-registered variant:
-  `aws-bedrock` accepts exactly `region`, `family`, `maxOutputTokens` and
-  `requestTimeoutMs` ([ADR 0029](../decisions/0029-bedrock-model-families.md#compiled-families-configured-models));
-  `anthropic` accepts exactly `maxOutputTokens` and `requestTimeoutMs`.
-- Neither configuration document carries a credential. Each provider reads one exact
-  environment variable, once, after binding validation and only for providers bound to
-  the selected workflow's model slots; a missing key fails that provider's first
-  authorization, with no startup check
+- The provider catalogue at `paths.providers` (`.sddproviders.json`) is the second,
+  separately owned model-configuration source.
+  [F0006 §3](../features/F0006-LLMProviderInterface.md#3-exact-sddprovidersjson-contract)
+  owns its closed shape, including each model's required `json` output selection and its
+  closed per-provider `config` with `maxOutputTokens` and the required `requestTimeoutMs`
+  deadline; [F0006 §5](../features/F0006-LLMProviderInterface.md#5-conditional-bootstrap-and-change-handling)
+  owns its single immutable capture per model-capable invocation. Neither configuration
+  document carries a credential
   ([ADR 0028](../decisions/0028-anthropic-messages-provider.md#anthropic-contract)).
-- The `models.slots` map in `.sddtoolkit.json` selects the models allowed for this repository:
-  every slot's exact case-sensitive `(provider, model)` tuple must resolve to exactly one entry
-  in the completely validated provider catalogue.
-- The selected tuple set may be equal to or a subset of the catalogue tuple set, never a
-  superset.
-- Catalogue entries not referenced by any slot are valid but are not repository-authorized or
-  callable merely because they exist.
-- Neither source supplies an implicit default, nearest match, or fallback.
-- The validated repository model allowlist is the sole join authority: it stores slot identity,
-  the exact referenced catalogue-entry identity, and validated slot options, but does not copy
-  provider configuration or model-contract facts from the catalogue.
-- The subset invariant compares distinct `(provider, model)` tuples, not slot count; multiple
-  named slots may reference the same catalogue entry.
-- A model-capable engine invocation captures the provider document exactly once.
-- The validated registry/allowlist derived from that capture are immutable until the invocation
-  ends; the untrusted bytes may be destroyed after preparation.
-- The engine does not stat, reopen, reread, refresh, hot-reload, monitor, retain a last-known
-  registry, or use a cross-invocation registry cache.
-- A filesystem change can affect only a new invocation.
+- `models.slots` selects the models this repository may use.
+  [F0006 §6](../features/F0006-LLMProviderInterface.md#6-providermodel-binding-and-workflow-token-accounting)
+  owns the join: every slot's exact `(provider, model)` tuple resolves exactly once in the
+  validated catalogue, the slot tuples equal or are a subset of the catalogue's, and an
+  unreferenced catalogue entry gains no repository authority. Neither source supplies a
+  default, nearest match or fallback.
 
 ### 9.1 Required configuration shape
 
 - For the bounded F0001 reader increment, the current closed shape is the formal [JSON
   Schema](../schemas/sddtoolkit-config.schema.json), the repository example, and the typed contract
-  in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
+  in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md), which
+  also owns each member's decode rejections.
 - The root requires `logs`, `models`, `workflowTokenBudget`, `temperature`,
   `temperatureRunawayRetry` and `paths` and permits
   optional `principles` ([ADR 0015](../decisions/0015-specification-principle-review.md))
@@ -103,20 +61,21 @@ exists.
   fixed records reject missing required, duplicate and unknown members.
 - `workflowTokenBudget` is the total model tokens one workflow execution may use, an
   integer from 1 to 4,294,967,295 with no default
-  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). A missing, zero,
-  negative, fractional, exponent, quoted or out-of-range value is a decode failure.
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
 - `temperature` is the temperature every inference request sends, and
   `temperatureRunawayRetry` the one a runaway re-send sends
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Each
-  is a JSON number, zero or greater, with no default; a missing, negative, quoted or
-  null value is a decode failure. Models whose registered contract takes no temperature
-  omit it. The provider owns its accepted range.
+  is a JSON number, zero or greater, with no default. Models whose registered contract
+  takes no temperature omit it. The provider owns its accepted range.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The `logs` object contains exactly the F0002 threshold and the required `console` boolean,
   which enables the optional console mirror.
-  The threshold alone selects prompt capture under ADR 0018.
+- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), the threshold alone
+  selects prompt capture: `debug` and `trace` capture complete request/response bodies,
+  including reference and code bodies, and higher thresholds emit metadata only.
+  Credentials remain redacted.
 - File logging is mandatory and has no configuration switch.
 - `validation.sourcePreservationCheck` is an optional boolean, disabled when
   omitted. It controls only the additional source-preservation review before
@@ -126,8 +85,6 @@ exists.
   configured even when the optional review is disabled; no slot fallback exists.
 - The delimiter, timestamp, size, retention, flush, redaction, failure, prompt-size, emergency,
   and lock policy is compiler-owned.
-- Configuration has no version discriminator or compatibility reader; contract changes update
-  this single closed schema and all consumers together.
 
 [View the current engine configuration shape](../code.md#engine-configuration).
 
@@ -140,11 +97,11 @@ bootstrap:
 | `specs` | Feature-facing specification views, controlled clarification forms, generated plan/task views, and feature event/prompt logs. Feature directories remain `<paths.specs>/<featureId>/`. |
 | `references` | The sole configured base beneath which mandatory reference selectors resolve. |
 | `specsArchive` | Archived specification material. It is excluded from active feature discovery and is the one configurable root allowed to nest beneath another configured root, specifically beneath `paths.specs`. Archive mutation remains outside v1. |
-| `workflows` | Project workflow authority. It contains an arbitrary bounded number of closed declarative workflow definitions plus the reserved engine-owned `features/` child. The initial definitions are Specify (supplied as `spec-generation`), Plan, Tasks and Implement; future definitions use the same generic contract. |
+| `workflows` | Project workflow authority. It contains an arbitrary bounded number of closed declarative workflow definitions, their declared resources and the reserved engine-owned `features/` child. |
 | `toolchainPreset` | The direct root/registry of closed, validated preset packages from which the project toolchain layer may inherit. |
 | `principles` | Project principles: the exact mechanical `<paths.principles>/toolchain.yaml` layer and semantic Markdown principle files. |
 | `templates` | Inert `*.template.md` principle templates. The initial SDD workflows never import or copy them; only an explicit `sdde init` operation may copy them into `paths.principles`. |
-| `providers` | Engine-read-only provider catalogue document. It is a normalized project-relative file path whose basename is exactly `.sddproviders.json`; bootstrap reserves it without reading it, and F0008 captures it exactly once only when the selected compiled workflow requires model binding or provider calls. That owned snapshot and its derived registry/allowlist remain immutable for the complete invocation; there is no active-run reread/refresh or retained fallback. Catalogue membership configures an instance but does not add it to the repository's allowed `models.slots` set. |
+| `providers` | Engine-read-only provider catalogue document: a normalized project-relative file path whose basename is exactly `.sddproviders.json`. Bootstrap reserves it without reading it; F0008 captures it once, only when the selected compiled workflow requires model binding or provider calls. |
 
 - Every configured location is taken solely from the decoded `PathsConfig` in the exact
   current-working-directory project-root `.sddtoolkit.json`, then separately normalized and
@@ -152,70 +109,28 @@ bootstrap:
 - The engine never substitutes an ancestor, descendant, fixed provider filename, `.specify/`,
   source-example, or packaged-example fallback.
 - Fixed descendants include `<paths.specs>/<featureId>/clarify/`,
-  `<paths.specs>/<featureId>/logs/`, `<paths.workflows>/features/`, each feature's
-  `<paths.workflows>/features/<featureId>/execution/final-validation-overlays/`.
+  `<paths.specs>/<featureId>/logs/`, `<paths.workflows>/features/` and, for proposed
+  Implement execution, each feature's
+  `<paths.workflows>/features/<featureId>/execution/final-validation-overlays/` (§20); the
+  engine derives these paths, which are not configuration fields.
 
-- The workflow root is both declarative project authority and the owner of the `features/` state
-  subtree.
-- Bootstrap performs a bounded, fully accounted inventory: it validates the complete
-  path-collision set, orders in-scope entries by normalized Unicode-scalar path, binds
-  contiguous inventory-local ordinals, and records exactly one terminal account for every
-  encountered entry.
-- An encountered `features/` root entry is accounted for as reserved while its complete
-  descendant subtree is excluded from definition traversal.
-
-- Every definition retains its source inventory ordinal and supplies one validated
-  project-authored `WorkflowId` plus one validated workflow logging shortcode.
-- Both are unique in the registry.
-- The registry has one generic bootstrap component ID and a bounded variable-size definition
-  set; bootstrap does not require a fixed workflow name or count.
-- An invocation must resolve its requested `WorkflowId` exactly once before workflow input
-  parsing or execution.
-
-- A definition contains only its version, registered capability-free invocation operation,
-  registered generic operation references, compact closed parameters, declared workflow-owned
-  resources, typed outcome transitions, and selected workflow policy profile.
-- The workflow compiler validates graph structure, operation compatibility, transitions, gates,
-  and the effective capability ceiling before producing an immutable executable graph.
-- It rejects unknown operation contracts, invalid or duplicate identities, unhandled outcomes,
-  forbidden transitions, or any attempted capability or gate weakening.
-- The composition root binds registered operation implementations and adapters; the generic
-  workflow-engine orchestrator selects the compiled graph and follows its typed transitions only
-  through runner-owned child bindings, while the runner alone invokes the compiled operation
-  nodes.
-- Project workflow files are never executable scripts, infrastructure selectors, raw
-  path/command sources, or operational capabilities.
-
-- The sole workflow-global execution limit is the configuration's `workflowTokenBudget`
-  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)): a positive total model-token budget initialized afresh for each
-  execution. Workflow policy and compiled graphs don't carry it.
-- It is not an attempt, retry, repair, or per-action count.
-- Every registered action or function that exposes a retry path instead requires an explicit
-  bounded `retry-limit` parameter on that YAML operation instance.
-- The compiler rejects a missing limit, a retry edge without registered monotonic accounting, or
-  a cycle that can avoid the declared counter.
-- No configuration file, provider, adapter, or runner supplies a retry default. The one
-  engine-owned re-send is ADR 0039's: a provider `output_limit` stop re-sends the
-  identical request once, outside `retry-limit`, and its own monotonic count bounds it
-  at one per attempt. The compiler requires a response admission whose `invalid`
-  continues to route through `check-model-runaway` to `build-model-runaway-resend`.
-
-- The v1 definition media contract is fixed by [F0005 —
-  WorkflowDefinitionRegistryService](../features/F0005-WorkflowDefinitionRegistryService.md) and
-  the formal [workflow-definition v1 schema](../schemas/workflow-definition-v1.schema.json).
-- Definitions are strict UTF-8 YAML 1.2 regular files discovered recursively by the exact
-  case-sensitive `*.workflow.yaml` suffix outside the reserved root `features/` subtree.
-- Each file contains one closed `schema: workflow/v1` mapping document; filenames never
-  determine workflow identity.
-- Only bounded regular resources explicitly declared by a definition are captured alongside it.
-- Other encodings, YAML aliases or custom tags, executable includes, and compatibility readers
-  are not supported in v1.
-- [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 (accepted,
-  on hold since 30 October 2026; not implemented) advances the contract to
-  `schema: workflow/v2`, adding an optional `failure-output` member that names one
-  model-free definition-local subgraph. Every
-  definition, the formal schema and every fixture move together, and `workflow/v1` then
-  rejects without a compatibility reader.
+- [F0005 — WorkflowDefinitionRegistryService](../features/F0005-WorkflowDefinitionRegistryService.md)
+  owns the workflow root: its bounded, totally accounted inventory and reserved `features/`
+  child, the closed v1 definition media and
+  [schema](../schemas/workflow-definition-v1.schema.json) (including ADR 0041's on-hold
+  `workflow/v2`), unique `WorkflowId`s and logging shortcodes, and compilation from registered
+  operation contracts. Project workflow files are never executable scripts, infrastructure
+  selectors, raw path/command sources, or operational capabilities.
+- The sole workflow-global execution limit is the configuration's `workflowTokenBudget`,
+  initialized afresh for each execution
+  ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Workflow policy and
+  compiled graphs don't carry it, and it is not an attempt, retry, repair, or per-action count.
+- Every retry path instead requires an explicit bounded `retry-limit` on its YAML operation
+  instance ([F0005 §3.3](../features/F0005-WorkflowDefinitionRegistryService.md#33-steps-parameters-resources-and-transitions));
+  no configuration file, provider, adapter, or runner supplies a retry default. The one
+  engine-owned re-send is
+  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)'s single
+  re-send after a provider `output_limit` stop, outside `retry-limit`.
 
 The Specify, Plan, Tasks and Implement definitions are the initial SDD suite; the
 supplied Specify definition's `WorkflowId` is `spec-generation`. Their registered
@@ -312,12 +227,10 @@ when:
   to use an undeclared packaged/default resource; a consumer lacks the typed
   retained-request dependency or attempts to reselect its binding/resources;
 - an engine-owned numeric limit is negative, zero where prohibited, or above its engine safety maximum;
-- `references.followSymlinks` is anything other than the required v1 constant `false`; followed reference symlinks are deliberately unsupported until a separate version defines containment, loop, depth, deduplication, and accounting semantics;
-- a reference traversal/decoder limit (`maxEntries`, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
+- a reference traversal/decoder limit (entry count, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
 - a repository-discovery file/depth/time/memory limit is absent or exceeds the engine hard maximum;
 - the removed `promptCapture` field is supplied, or logging input attempts to
   override fixed redaction, retention, or size policy;
-- `useFingerprints` is set to true in this design version;
 - a hardened workflow disables required plan or task approval without an explicitly selected non-interactive policy profile;
 - the post-composition effective merged preset policy conflicts with or weakens a compiler-locked path, command, capability, sandbox, network, resource, effect, or validator rule.
 
@@ -455,11 +368,11 @@ Resolution is explicit:
 - Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`,
   and compared by direct typed metadata/raw-byte equality at every consuming Spec capture,
   plan, tasks, implement and fresh clarification-rerun gate.
-- [ADR 0015](../decisions/0015-specification-principle-review.md): Spec captures and
-  selects principles and runs no assessment. Capturing principle files is not
-  performing an assessment; state and evidence distinguish captured inputs from any
-  executed assessment. Extraction, source-preservation review and business-content generation retain their
-  reference/answer authority; principle prose cannot invent, erase or override business intent.
+- Capturing principle files is not performing an assessment
+  ([ADR 0015](../decisions/0015-specification-principle-review.md)); state and evidence
+  distinguish captured inputs from any executed assessment. Extraction, source-preservation
+  review and business-content generation retain their reference/answer authority; principle
+  prose cannot invent, erase or override business intent.
 - An updated principle can resolve `PNN` or `TNN` only through cited, current authority
   resolution; it cannot supply a missing business answer or resolve an `SNN` by itself.
 - A changed registry invalidates the current plan/downstream task approvals through

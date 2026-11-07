@@ -4,7 +4,7 @@
 - **Date:** 2026-10-21
 - **Decision authority:** The user's instruction "implement a claude connector" on
   21 October 2026, referring to the proposal in
-  `fixes/claude_connector.md` (git `194e29a`). The user also
+  `fixes/claude_connector.md` (git `9719dc7`). The user also
   required that "the implementation must strive to reusability", with one common
   layer that both connectors use. The user then chose:
   - "All three" models: Claude Haiku 5.5, Sonnet 5.5 and Opus 5.5;
@@ -24,30 +24,20 @@
   - ADR 0011 "Model maximum output", which now applies to every provider's catalogue
     entry, not only Bedrock's;
   - design invariant 32 and acceptance criterion 31.12, in the same way;
-  - ADR 0004, whose single Bedrock credential becomes one exact variable per
-    selected provider;
   - ADR 0019, whose request description admits Anthropic provider configuration;
   - §9 configuration, §12.3 (a new §12.3.2 beside §12.3.1 Bedrock Converse), and
-    F0006–F0008 where they describe a single provider.
+    F0006–F0008 where they describe a single provider, including its one credential
+    variable (now one exact variable per selected provider family).
 
   The overall design remains **Proposed design**. The connector proposal stays an
-  unaccepted source document. Its normative content moves here and into
-  [F0009](../features/F0009-AnthropicProvider.md).
-- **Amended by:** [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026;
-  these changes were implemented on 24 October 2026). It changes:
-  - "Configuration" (`{"maxOutputTokens": N}` "with no other field"): `config` also
-    requires a positive `requestTimeoutMs`, the provider-operation deadline, so it
-    accepts exactly these two fields;
-  - "One token budget, deadline …": the budget stays shared, but each catalogue entry
-    now carries its own deadline;
-  - the shared-owners row for `domain/llm_provider_config_schema.zig`, which gains the
-    required `requestTimeoutMs`;
-  - "Deadline" under "Not decided here", now settled per model. Claude's entries start at
-    the shared 180,000 ms until a measured maximum-output time replaces it;
-  - "Token counting": provider token counting is removed for every provider;
-  - "Versions": recording the deadline advanced the harness call evidence to
-    `model-call-evidence/v3`; v2 and v1 captures stay readable as historical
-    evidence.
+  unaccepted source document; its normative content moves here.
+- **Amended by:** [ADR 0029](0029-bedrock-model-families.md) (22 October 2026):
+  Bedrock contracts join by compiled family, Claude through Bedrock is its `claude`
+  family, and the live-test cost policy names Claude Haiku 5.5 through Bedrock.
+  [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, implemented
+  24 October 2026): each catalogue entry also requires its own `requestTimeoutMs`
+  deadline, and provider token counting is removed for every provider. The text below
+  includes both.
 
 ## Context
 
@@ -66,8 +56,9 @@ the shared behaviour implemented once.
 - Each call keeps its slot's binding, including its retries and protocol
   corrections. There is no cross-provider fallback, no model-name branching and no
   engine choice between providers.
-- One token budget, deadline, capture path and set of validation and publication
-  rules apply to both providers.
+- One token budget, capture path and set of validation and publication rules apply
+  to both providers. Each catalogue entry carries its own deadline
+  ([ADR 0030](0030-engine-owned-model-request.md#request-deadline)).
 
 ### Shared owners
 
@@ -76,8 +67,8 @@ projections and never import a sibling provider.
 
 | Owner | Responsibility |
 | --- | --- |
-| `domain/llm_provider_contracts.zig` | `ProviderFacts`, a union tagged by provider family that replaces the Bedrock-only contract fields. Bedrock facts carry regions and request profile; Anthropic carries none. The tag also names the configuration schema. |
-| `domain/llm_provider_config_schema.zig` | Closed catalogue configuration for each family, with the shared required `maxOutputTokens`. |
+| `domain/llm_provider_contracts.zig` | `ProviderFacts`, a union tagged by provider family that replaces the Bedrock-only contract fields. Bedrock facts carry the compiled family (ADR 0029); Anthropic carries none. The tag also names the configuration schema. |
+| `domain/llm_provider_config_schema.zig` | Closed catalogue configuration for each family, with the shared required `maxOutputTokens` and `requestTimeoutMs`. |
 | `domain/model_capabilities.zig`, `domain/model_schema_projection.zig` | One native JSON-schema capability and one native grammar projection for both providers. |
 | `domain/provider_failure.zig` | One retry classifier from neutral facts: pre-send failures never retry; otherwise the cause decides. |
 | `adapters/provider/provider_api_key.zig`, `adapters/system/provider_api_key_source.zig` | One key snapshot with validation and secure zeroing. One exact environment variable per family. |
@@ -92,14 +83,16 @@ projections and never import a sibling provider.
 ### Anthropic contract
 
 These facts were checked against the Anthropic documentation on
-21 October 2026. F0009 records the wire manifest.
+21 October 2026. The response decoder, `adapters/provider/anthropic_response.zig`,
+implements the dated wire manifest, including the error table.
 
 - **Provider and models:** provider ID `anthropic`; models `claude-haiku-5-5`,
   `claude-sonnet-5-5` and `claude-opus-5-5`. Each needs its own approved
   compatibility probe before live use.
-- **Configuration:** `{"maxOutputTokens": N}`, required and positive, with no other
-  field. The documented maximum is 128,000 for each model. It is sent unchanged as
-  `max_tokens`.
+- **Configuration:** `{"maxOutputTokens": N, "requestTimeoutMs": M}`, both required
+  positive integers, with no other field. The documented maximum output is 128,000
+  for each model and is sent unchanged as `max_tokens`. `requestTimeoutMs` is the
+  provider-operation deadline (ADR 0030).
 - **Endpoint:** `POST https://api.anthropic.com/v1/messages` with headers `x-api-key`,
   `anthropic-version: 2023-06-01` and `content-type: application/json`.
   - No beta header is sent. The endpoint and version are compiled constants.
@@ -121,8 +114,6 @@ These facts were checked against the Anthropic documentation on
   - **Fields never sent:** `temperature`, `top_p`, `top_k`, `thinking`, `stop_sequences`,
     tools, caching, `inference_geo` and `speed`. The registry declares
     `temperature: false`.
-- **Token counting:** the counting endpoint returns an estimate, so no Anthropic
-  model registers token counting.
 - **Response:** decoding is closed against the dated manifest.
   - **Envelope:** `type` must be `message`, `role` must be `assistant`, and `model`
     must equal the selected model.
@@ -148,7 +139,8 @@ These facts were checked against the Anthropic documentation on
     not added.
   - Usage survives a rejected or stopped candidate once the envelope is valid.
 - **Errors:** a failure is classified only when both the HTTP status and
-  `error.type` match the table in F0009. Everything else is `response_invalid`.
+  `error.type` match the decoder's error table. Everything else is
+  `response_invalid`.
   - `402 billing_error` and a `429` whose `error.details.error_code` is
     `enforced_spend_limit_reached` are `authorization_denied` and never retry.
   - Message text never classifies.
@@ -165,26 +157,28 @@ binding, correction or replay can narrow it.
 
 ### Versions
 
-- `model-request-debug/v9` is unchanged. Its closed provider-configuration union
-  gains the Anthropic variant, and every existing description keeps its bytes and
-  meaning, so no captured description changes version. Readback validates the
-  configuration through the same typed rules as the catalogue.
-- The harness call evidence advances to `model-call-evidence/v2`, which carries the
-  provider and its configuration instead of a Bedrock-only region.
+- The request description's (`model-request-debug`) closed provider-configuration
+  union has an Anthropic variant. Readback validates the configuration through the
+  same typed rules as the catalogue.
+- The harness call evidence (`model-call-evidence`) carries the provider and its
+  configuration instead of a Bedrock-only region. ADR 0030 records its current version
+  and historical readers.
 
 ## Not decided here
 
-- **Live use.** The live cost policy still permits only Bedrock GPT-OSS-20B. A live
-  Anthropic probe or E2E run needs a policy change that names the model, and its own
-  approval.
+- **Live use.** [ADR 0029](0029-bedrock-model-families.md#live-test-cost-policy) lists
+  two Bedrock tuples. `test/harness/model_cost_policy.zig` also permits `anthropic` /
+  `claude-haiku-5-5` for generation, citing a user direction of 22 October 2026 ("update
+  the providers to connect to claude") that no ADR records; whether that is an accepted
+  live-test policy is a pending decision (FIX06). Until it is decided, a live Anthropic
+  Messages API probe or E2E run needs a policy change that names the model (ADR 0029's
+  list governs), and every live run needs its own approval.
 - **Response mode.** Whether Claude entries use native schema or prompt-only waits for
   measured compatibility. Both are implemented, and the catalogue's `json` flag
   selects one.
-- **Deadline.** The shared 180-second request deadline applies unchanged. Whether
-  Claude needs a different one waits for latency measurements.
 - **Out of scope:**
-  - streaming, prompt caching, tools, batches and Claude through Bedrock or other
-    clouds;
+  - streaming, prompt caching, tools, batches and Claude through clouds other than
+    Bedrock (ADR 0029's `claude` family);
   - an explicit inference-geography control and an Anthropic grader;
   - the separate complete-receipt race correction (proposal R11), an existing shared
     accounting gap that this ADR does not change.

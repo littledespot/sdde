@@ -308,8 +308,8 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** closed stage prefix/limit policy
 - **Output:** empty clarification ID ledger
 - **Responsibility:** Initialize `S/P/T` ordinals and response/resolution ordinals at one.
-- V1 has no clarification tombstone set because these owner-local IDs never cross a
-  execution-private boundary before the complete owning commit.
+- The ledger has no clarification tombstone set because these owner-local IDs never cross
+  an execution-private boundary before the complete owning commit.
 
 ## `BuildInitialClarificationRegistryAction`
 
@@ -441,7 +441,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** authenticated submission binding and current persisted response-ID allocator
 - **Output:** execution-private response identity plus prospective next ledger
 - **Responsibility:** Select one monotonic engine-owned response ID only inside the complete
-  complete response/actor/view/workflow output candidate.
+  response/actor/view/workflow output candidate.
 - A failed precommit candidate exposes no ID and discards the prospective ledger; a committed
   ordinal is never reused.
 
@@ -542,7 +542,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Input:** validated resolution and current persisted resolution-ID allocator
 - **Output:** execution-private resolution identity plus prospective next ledger
 - **Responsibility:** Select one monotonic authority-resolution ID only inside the complete
-  complete resolution/view/workflow output candidate.
+  resolution/view/workflow output candidate.
 - A failed precommit candidate exposes no ID and discards the prospective ledger; a committed
   ordinal is never reused.
 

@@ -28,13 +28,10 @@ token-counting removal and the catalogue deadline):**
 the engine-kernel list below. A workflow makes each request with one `request-model` step
 and still declares its slot, resources, retry limit and outcome transitions. The stage
 order and the request's own protocol correction are no longer YAML steps. ADR 0030's
-23 October 2026 amendment removed provider token counting (so the optional-count rule
-below no longer applies) and took the request deadline from the model's catalogue entry
-instead of YAML, both implemented 24 October 2026. It also lets one operation's single
-current contract consist of closed variants selected at compile time (see "Unversioned
-operation IDs" below), a mechanism ADR 0033 uses. Its advisory variant and
-`advisory: allowed` marking were withdrawn on 1 November 2026 with post-generation review
-(FIX06 D13.1).
+23 October 2026 amendment removed provider token counting and took the request deadline
+from the model's catalogue entry instead of YAML, both implemented 24 October 2026. It
+also lets one operation's single current contract consist of closed variants selected at
+compile time (see "Unversioned operation IDs" below), a mechanism ADR 0033 uses.
 
 **Stage-action amendment (22 October 2026, not yet implemented):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
@@ -43,7 +40,8 @@ transition. The internal steps are functions, not workflow operations or a secon
 workflow graph, so they are no longer addressable or composable from YAML. Composing
 them differently needs a new stage action and an engine rebuild.
 
-**Failure-output amendment (27 October 2026, not yet implemented):**
+**Failure-output amendment (27 October 2026; on hold since 30 October 2026, not
+implemented):**
 [ADR 0041](0041-failed-run-incomplete-publication.md) lets a definition declare one
 model-free `failure-output` subgraph. After an eligible failure, the engine kernel runs
 it through the runner and then returns the original failure. The member is declared in
@@ -123,9 +121,8 @@ workflow behavior without duplicating large resources at every node.
 The exact compact schema is owned by [F0005](../features/F0005-WorkflowDefinitionRegistryService.md#32-root-shape)
 and its formal schema. The [provider-request test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml)
 shows the implemented explicit request operations; the [Specify definition](../workflows/spec.workflow.yaml)
-shows reusable subgraphs. These sources replace the early `model.generate` sketch,
-which was not a registered compound operation. Both show the explicit request steps that
-ADR 0030 replaces; they change when it is implemented.
+shows reusable subgraphs. Both show the explicit request steps that ADR 0030 replaces;
+they change when it is implemented.
 
 Each operation step has one registered reference, optional compact parameters and
 an explicit outcome map. ADR 0013 permits `call` steps expanded by the same compiler.
@@ -155,7 +152,6 @@ An originating generic model-request step declares in YAML:
   API-reported usage retained on overshoot, and no further calls at or above budget.
 - It prohibits local size gates, reservations and budget-derived output allowances;
   providers report their own limit errors/stops.
-- Optional counts are observations only.
 - The runner enforces accounting without a YAML bypass or hidden model route.
 
 - The token budget supplies no retry count.

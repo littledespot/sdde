@@ -13,13 +13,14 @@
   October 2026): a provider `output_limit` stop is re-sent once, outside any
   `retry-limit`. It is the one engine-owned retry besides protocol correction.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
-  2026): a Specify run that fails because model work couldn't be completed, or ends
-  `blocked`, publishes its validated content as an incomplete specification, marked and
-  logged, with a `spec_incomplete` state. The execution stays atomic, ends `failed` or
-  `blocked`, never
-  reports success and is never resumed. Its 27 October 2026 mechanism runs the
-  definition's declared failure output through the runner, the one mode in which
-  publication may run while failures are pending.
+  2026; on hold since 30 October 2026, not implemented): a Specify run that fails
+  because model work couldn't be completed, or ends `blocked`, publishes its validated
+  content as an incomplete specification, marked and logged, with a `spec_incomplete`
+  state. The execution stays atomic, ends with its own terminal (`failed`, `blocked` or
+  `invalid`, ADR 0041 Decisions 5 and 7.1), never reports success
+  and is never resumed. Its 27 October 2026 mechanism runs the definition's declared
+  failure output through the runner, the one mode in which publication may run while
+  failures are pending.
 
 ## Decision
 

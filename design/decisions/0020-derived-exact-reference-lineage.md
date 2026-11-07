@@ -3,12 +3,12 @@
 - **Status:** Accepted
 - **Date:** 2026-09-26
 - **Decision authority:** Explicit user approval, with user-approved amendments:
-  provenance-free source-bound per-unit assignments (27 September 2026); R6/R7
-  loss evidence and authoring-input projection (9 October); authored
+  provenance-free source-bound per-unit assignments (27 September 2026); loss
+  evidence and authoring-input projection (9 October); authored
   associations, replacing the presentation-role classifier and prebinding gate
   (11 October); shared composition admission, field-specific exact-copy coverage,
   source-aware wire syntax and no exact copies in descriptive fields (16 October);
-  native-bound preservation-comparison attribution (FIX01-01 Phase 2) and the shared
+  native-bound preservation-comparison attribution and the shared
   invalid-content diagnosis (14 October); and native exact-value recognition,
   replacing model-authored exact-copy selection (17 October).
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1.
@@ -186,8 +186,8 @@ There is no role classifier, independent role request, `generation_roles` field,
 role-coverage gate, legacy reader or dual binding registry.
 
 Initial attributed values use `{signal_ids:[...],value:BusinessValue}`. Brief
-requires title, description and goal; story requires its selected value; entities
-retain disposition and a selected, explained basis. Initial clarification questions
+requires title, description and goal; entities retain disposition and a selected,
+explained basis; the story is engine-composed (ADR 0047). Initial clarification questions
 use the same selected-group value with the existing reason and optional record
 kind. Their native scope resolves only selected question-eligible groups, never the
 whole available catalogue. Missing/duplicate/foreign/inactive group handles reject.
@@ -272,7 +272,7 @@ and readback reconstruct the same bindings, keep finding and comparison origins
 distinct and reject mismatched derived locations. Invalid-content evidence keeps
 its nullable source authority gap under §12. Fixed repair cannot derive support
 from dispatch order or expand an association to remedy an aggregate gap. Native
-request diagnostics (`model-request-debug/v6`) retain the immutable
+request descriptions (ADR 0019) retain the immutable
 exact-occurrence scope; they are evidence, never readback or continuation
 authority. No new retry mechanism, schema registry, evidence store, provider mode
 or reassembly prompt is authorized.

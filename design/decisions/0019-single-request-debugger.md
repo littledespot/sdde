@@ -4,39 +4,21 @@
 - **Date:** 2026-09-20
 - **Decision authority:** Explicit user direction for a local browser debugger served by the native executable, with exact and modified replay at a single prompt level.
 - **Amends:** ADR 0018 and design §§12, 26–28, 29 and 31.
-- **Amended by:** [ADR 0020](0020-derived-exact-reference-lineage.md): debug
-  descriptions advance to `model-request-debug/v6` and retain the exact-occurrence scope.
-  [ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
-  (18 October 2026): descriptions advance to `model-request-debug/v7` without an
-  output allowance.
+- **Amended by:** [ADR 0020](0020-derived-exact-reference-lineage.md),
+  [ADR 0011](0011-provider-owned-request-limits.md) (18 October 2026),
   [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
-  (18 October 2026): descriptions advance to `model-request-debug/v8` and record
-  applied assignment membership.
-  [ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)
-  (18 October 2026): descriptions advance to `model-request-debug/v9`, whose Bedrock
-  provider configuration records the model's maximum output.
-  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, not yet
-  implemented): `node_id` and `route_id` both name the originating `request-model`
-  step, and the action ID records the stage. The implementation advances the
-  description version if its shape changes. Two parts of its 23 October 2026 amendment
-  were implemented on 24 October 2026: provider token counting is removed, so no
-  token-count observation remains to correlate; and the catalogue deadline advanced
-  descriptions to `model-request-debug/v11`, whose provider configuration records the
-  entry's deadline (`request_timeout`), so replay uses the captured description's
-  deadline. [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October 2026)
-  advanced them to `model-request-debug/v12`, which records native coverage so replay
-  enforces the same admission. [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
-  (26 October 2026) advanced them to `model-request-debug/v13`, whose controls record
-  the temperature value each attempt sent, so replay of a runaway re-send sends its
-  own temperature. The same v13 also recorded
-  [ADR 0042](0042-principle-verdict-citations-at-admission.md)'s required-items
-  constraint and carries [ADR 0043](0043-model-facing-exact-text-names.md)'s
-  model-facing names. FIX06 D13.1 (1 November 2026) deleted that constraint with
-  principle review and advanced descriptions to `model-request-debug/v14`, without
-  the `required_items` member. ADR 0038 Decision 5 (2 November 2026) advanced them to
-  `model-request-debug/v15`, whose recorded coverage carries the exclusive kinds, and its
-  amendment the same day to `model-request-debug/v16`, which also carries the owning
-  kinds.
+  (18 October 2026), [ADR 0028](0028-anthropic-messages-provider.md) (21 October 2026,
+  Anthropic provider configuration), [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October
+  and 2 November 2026) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+  (26 October 2026), which change what the request description records ("Capture and
+  lineage" and "Replay" below; current version `model-request-debug/v16`, which also carries
+  [ADR 0043](0043-model-facing-exact-text-names.md)'s model-facing names).
+  [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, amended 23 October
+  2026; partly implemented): provider token counting is removed, and the description's
+  provider configuration records the catalogue entry's deadline (both implemented
+  24 October 2026). Not yet implemented: `node_id` and `route_id` both name the
+  originating `request-model` step, the action ID records the stage, and the
+  description version advances if its shape changes.
 
 ## Diagnostic execution boundary
 
@@ -69,33 +51,34 @@ it retains `repair` kind, its own original call and no parent. The native packet
 repair permit distinguishes that case from missing required response provenance;
 it does not fabricate an origin or change repair authority. No correlation is guessed
 from adjacent log rows, workflow names or prompt text.
-Model and correlated validator events use that complete call ID in `correlation_id`,
-including operation kind and attempt, so token-count observations cannot attach to
-an inference call. Native semantic rejections use their recorded producing origin;
-unattributed evidence remains explicitly uncorrelated.
+Model and correlated validator events use that complete call ID, including operation
+kind and attempt, in `correlation_id`. Native semantic rejections use their recorded
+producing origin; unattributed evidence remains explicitly uncorrelated.
 
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
-region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v9`
-captures the selected schema's complete expanded projection, including named
-selections, composition parts and narrowed repair shapes; the native original-source witness and plain-prose selectors
-used by the source-aware model-text wire validator; native wire-field bindings to
-the composition registry, so the selected schema and diagnostic replay enforce the
-same permitted insertions; the immutable exact-occurrence scope (ADR 0020); and
-each applied exact-membership selection (ADR 0023), whose uniqueness the schema
-bytes cannot express, so replay reapplies it through the same schema restriction
-owner. This metadata is
-diagnostic input, not provider-visible authority. Older descriptions remain
-unchanged and reject readback; replay requires a new capture, with no compatibility
-reader. The shared schema
+region/config (including the model's documented maximum output and the catalogue
+entry's request deadline), selected slot, workflow/request entry, typed content, fixed
+protocol prompt, exact validation schema and inference settings, including which
+configured temperature the attempt sent (ADR 0039). The description also captures the
+selected schema's complete expanded projection, including named selections,
+composition parts and narrowed repair shapes; the native original-source witness and
+plain-prose selectors used by the source-aware model-text wire validator; native
+wire-field bindings to the composition registry, so the selected schema and diagnostic
+replay enforce the same permitted insertions; the immutable exact-occurrence scope
+(ADR 0020); and each applied exact-membership selection (ADR 0023) and native coverage
+rule, with its covered, covering, exclusive and owning kinds (ADR 0038), which the
+schema bytes cannot express, so replay reapplies them through the same schema
+restriction owner. This metadata is diagnostic input, not provider-visible authority.
+Older descriptions remain unchanged and reject readback; replay requires a new capture,
+with no compatibility reader. The shared schema
 compiler reconstructs selected object/tagged-union roots for diagnostic use;
 constant-tagged selected roots are permitted without relaxing the external
 workflow-resource profile. Shared node/depth bounds apply; the source-file byte
 limit is not reapplied to expanded projections. Inspection and replay use this
 same reconstruction.
-Complete authored resources remain separate source evidence. Older descriptions
-are rejected; current files never supply missing historical schema authority.
+Complete authored resources remain separate source evidence; current files never
+supply missing historical schema authority.
 This description is credential-redacted, chunked and persisted through the same mandatory logging
 pipeline. It is a diagnostic projection, never request or workflow authority.
 Per-body byte lengths and contiguous chunk offsets prove complete reconstruction.
@@ -141,11 +124,12 @@ remain those of the selected call and must still be permitted by the current
 provider registry and repository model allowlist. Credentials are obtained afresh
 from the existing authorization source, never from logs or the browser.
 Settings carry no output-token allowance under
-[ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance)
-(amended 18 October 2026); `model-request-debug/v9` has no such field. Its Bedrock
-provider configuration records the model's documented maximum output, which replay
-sends unchanged
-([ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)).
+[ADR 0011](0011-provider-owned-request-limits.md#no-output-token-allowance), and the
+description has no such field. Replay sends the provider configuration's recorded
+maximum output unchanged
+([ADR 0011](0011-provider-owned-request-limits.md#model-maximum-output)) under its
+recorded deadline, and sends the temperature the captured attempt sent, so replaying a
+runaway re-send uses its own temperature (ADR 0039).
 
 **Converse amendment (user-directed, 15 October 2026):** Bedrock request construction,
 capture, extraction and replay use the same canonical Converse codec as production

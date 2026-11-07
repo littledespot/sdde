@@ -27,11 +27,10 @@ live case from the repository root:
 
 4. Inspect the retained generation and publication results under
    [Retained results](#retained-results). The harness makes no judge call. In Claude
-   Code, `/evaluate-e2e <run>`, which only the user triggers, scores the published
-   specification against the case
-   rubric, [adjudicates](acceptance.md#adjudicate-a-published-run-offline) the run, and
-   traces defects to the generation calls and prompts that produced them
-   ([Rubric assessment](#rubric-assessment)).
+   Code, `/evaluate-e2e <run>` [adjudicates](acceptance.md#adjudicate-a-published-run-offline)
+   the published specification against the case rubric
+   ([Rubric assessment](#rubric-assessment)); it starts only as
+   [AGENTS.md](../../AGENTS.md#testing-expectations) "Testing expectations" allows.
 
 ### Launcher behavior
 
@@ -110,29 +109,24 @@ zig build e2e-call -- \
 
 The selected model must resolve through the selected run's retained provider
 catalogue and the current registered model-binding contracts. The diagnostic
-creates an ephemeral in-memory binding:
-it inherits the captured provider and takes the selected model's region from the
-catalogue. Captured response mode and other inference controls are preserved. Unsupported combinations reject before
+creates an ephemeral in-memory binding: it inherits the captured provider and takes
+the selected model's Bedrock configuration (Region, family, maximum output and
+deadline) from the catalogue. Captured response mode and other inference controls are
+preserved. Unsupported combinations reject before
 dispatch; no model, response mode or control silently falls back. The effective
-binding must also pass the live cost policy before the credential is read.
-A current GPT-OSS-20B capture with compatible temperature/reasoning controls is
-eligible. Retained catalogues must already authorize the requested GPT-OSS-20B
-tuple. A catalogue captured before the 24 October 2026 deadline move has no
-`requestTimeoutMs` and rejects
+binding must also pass the live cost policy before the credential is read. A retained
+catalogue must satisfy the current catalogue contract, including `requestTimeoutMs`
 ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
-Historical captures with incompatible response modes or temperature controls reject; the
+Captures with incompatible response modes or temperature controls reject; the
 command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
 
-The launcher reuses the canonical Bedrock Converse encoder and decoder. The
-registered `BedrockRequestProfile` selects provider-specific fields through
-`additionalModelRequestFields`, while supported common controls use
-`inferenceConfig`. GPT-OSS-20B uses its registered reasoning-effort field and the
-configured temperature. The separate registered Luna profile retains its required
-`text.format.strict: true` field and omits temperature and explicit reasoning.
-Complete engine validation still applies. No model-name prefix selects a
-serializer or grants a capability.
+The launcher reuses the canonical Bedrock Converse encoder and decoder. The catalogue
+entry's compiled family ([ADR 0029](../decisions/0029-bedrock-model-families.md)) fixes
+the provider-specific `additionalModelRequestFields`; supported common controls use
+`inferenceConfig`. Complete engine validation still applies. No model-name prefix
+selects a serializer or grants a capability.
 
 Each dispatched repeat makes exactly one provider request. There are no automatic
 retries, repairs, upstream nodes, workflow continuation, publication or evaluator
@@ -266,9 +260,8 @@ Offline tests of this command do not authorize a run.
    zig build e2e-spec -- --help
    ```
 
-- The launcher sources the file itself; direct commands do not.
-- Sourcing replaces values for exported names. Already-running processes retain
-  their original environment; CI may inject the variables directly.
+- Already-running processes retain their original environment; CI may inject the
+  variables directly.
 - Help and offline verification make no API calls.
 - The production executable neither loads the file nor consumes `TEST_` variables.
 - Each agent-initiated E2E run requires explicit approval under
@@ -290,12 +283,8 @@ credentials. No model answer means no evidence yet about schema conformance.
   provider catalogue validation, request preparation, authorization, HTTPS transport, YAML
   transitions, deterministic validators and publication.
 - Generation uses the model slots explicitly selected by that test's
-  `.sddtoolkit.json`; all configured slots must pass the current small-model cost
-  preflight. The provider catalogue must declare `openai.gpt-oss-20b-1:0`
-  with `json: true` in `ap-southeast-2`; Spec generation and repair select
-  `reasoningEffort: "low"`. The configuration sets temperature `0.1` and runaway
-  re-send temperature `1`.
-- The current production provider is Bedrock; its internal test credential is
+  `.sddtoolkit.json` (step 1); all configured slots must pass the cost preflight.
+- The shipped cases' slots select Bedrock; its internal test credential is
   `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 - The harness supplies a validated credential snapshot to the shared runtime. The CLI
   supplies its environment, read only after model-binding validation. The runtime owns
@@ -306,9 +295,7 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 - After successful generation, the harness reads the specification actually published by
   that invocation and retains those exact bytes, with the captured sources and rubric,
-  as `evaluation_inputs` in `report.json`. The harness makes no judge call (user
-  decision, 19 October 2026); `/evaluate-e2e`'s adjudication of the retained report is
-  its rubric evaluation (user decision, 3 November 2026).
+  as `evaluation_inputs` in `report.json` for adjudication ([R8](acceptance.md)).
 - The case rubric must declare an acceptance threshold. A rubric without one could
   never be accepted, so the run stops before generation with `threshold_unconfigured`
   and `ACCEPTANCE_THRESHOLD_UNCONFIGURED`.
@@ -320,15 +307,13 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The engine accounts every inference, including correction, once against one
   execution budget.
 - Provider-owned response limits still apply and are reported as provider stops.
-- Bedrock generation, diagnostics and the standalone evaluator share the Converse codec. GPT-OSS-20B's
-  registered profile supplies native JSON Schema, the selected reasoning effort
-  and the configured temperature, and sends `inferenceConfig.maxTokens` 16,384. Provider
-  reasoning counts toward output usage;
+- Bedrock generation, diagnostics and the standalone evaluator share the Converse
+  codec. The catalogue's `json: true` selects native JSON Schema; GPT-OSS-20B's
+  `gpt-oss` family ([ADR 0029](../decisions/0029-bedrock-model-families.md)) sends the
+  selected reasoning effort and the configured temperature, with
+  `inferenceConfig.maxTokens` 16,384. Provider reasoning counts toward output usage;
   the engine accounts actual reported tokens separately from provider quotas.
-  The separate registered Luna profile retains its strict JSON flag and omitted
-  temperature/reasoning overrides. Its production capability contract remains
-  available, but the live-test policy rejects it. Registration does not establish
-  live compatibility or semantic quality for either model.
+  Registration does not establish live compatibility or semantic quality.
 
 - Every generation call, and both providers of the standalone evaluator, use the engine's short [universal
   JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
@@ -341,8 +326,7 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The selected case supplies the workflow, feature and reference selectors.
 - A Spec case exercises Specify; Plan, Tasks and Implement need their own workflow cases.
 - The copied resources are declared test inputs, not production source-tree fallbacks.
-- Changes to the reference, including its UTC date/time requirement, are captured
-  directly for both the engine and adjudication.
+- The engine and adjudication read the same captured reference.
 
 ## Case and publication contract
 
@@ -368,7 +352,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v14`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v15`; it stays null until ADR 0041 is
   implemented (FIX06 E0).
 
 ### Rubric assessment
@@ -378,9 +362,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 - A readable poor specification is retained unchanged after the engine's own gates
   accept it. There is no harness semantic prefilter or retry-until-good loop.
 - Scores do not alter workflow state, resolve clarifications or authorize publication.
-- The Hello World rubric, now revision 3 (revision 2 added the user's UTC date/time
-  requirement), remains an uncalibrated draft; mechanical validation of a judgment is not proof that its semantic
-  assessment is correct.
+- The Hello World rubric is an uncalibrated draft; mechanical validation of a judgment
+  is not proof that its semantic assessment is correct.
 - The [`/evaluate-e2e`](../../.claude/skills/evaluate-e2e/SKILL.md) Claude Code skill
   reads a retained run, scores the captured specification against its rubric with line
   citations, and traces each defect to the generation call, prompt and engine stage
@@ -468,15 +451,10 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
 
 - Lifecycle status and development acceptance are separate. `generated` records
   publication; it cannot by itself return command success.
-- Cases declare `expected_outcome`. Both current source-complete cases require
-  `publication`, so an unexpected native `needs_user` does not pass acceptance.
-  An explicitly clarification-expected case still requires valid native partial
-  publication, registered clarification handles and measured zero admission escape.
-- Exit 0 requires passed acceptance and finalized reports. Missing thresholds,
-  critical score failures, uncertainty, missing adjudication and
-  unexpected terminal outcomes cannot pass. Native workflow state remains unchanged.
-- See [R8 acceptance](acceptance.md) for approved numeric authority, refreshed calibration panels and the offline
-  adjudication command.
+- Cases declare `expected_outcome`; [R8](acceptance.md) owns development acceptance,
+  its numeric authority, calibration panels and the offline adjudication command.
+- Exit 0 requires passed acceptance and finalized reports. Native workflow state
+  remains unchanged.
 
 The terminal prints the development acceptance result explicitly.
 
@@ -535,17 +513,17 @@ separately reports the finalization error and potentially incomplete files, and 
 unsuccessfully even if generation succeeded. It does not retry writes or rerun the
 workflow to repair reporting.
 
-`token_accounting` (the single total budget and actual usage), `retry_settings` and `attempts` project the executed graph
+`token_accounting` (the single total budget and aggregate actual usage, overshoots
+included), `retry_settings` and `attempts` project the executed graph
 and native accounting. Each attempt records `resends`, the attempt number it re-sends,
 when it is a runaway re-send
 ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)), so
 runaways and re-sends are counted separately. Each attempt's request
 `purpose` and `owner_kind` are read from its native request identity, so stage costs
-can be measured ([Format history](#format-history) records the versions these members
-advanced). A composed request's
+can be measured. A composed request's
 identity carries its base packet's purpose and owner, so these match the baseline
 trace's receipts, and baseline acquisition rejects a report whose attempt and receipt
-differ. Reports of earlier versions stay readable only by the build that made them. `model_calls` counts reconciled inference operations,
+differ. `model_calls` counts reconciled inference operations,
 including proven non-delivery; `not_sent_operations` identifies that subset.
 Captured exchanges separately count physical sends. Missing receipts are permitted
 only for explicit non-delivery or captured-evidence failure, never to invent paid
@@ -608,57 +586,14 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v14`,
-`baseline-freeze/v3`, `baseline-acquisition/v11`, `baseline-score/v4` and
-`baseline-budget-feasibility/v2`. Step events remain
-`e2e-step-event/v2` (under [ADR 0030](../decisions/0030-engine-owned-model-request.md),
-not yet implemented, model-request stages become events of one `request-model` step,
-and this version advances if the event shape changes; retained runs and captures made
-before then stay readable only by the build that made them); evaluator packets remain
-`baseline-assessment-inputs/v2` and
-assessor documents use numeric schema `3`. These versions advanced with
-`rubric-judgment/v2` because they embed its judgments or the E2E report.
-The compatibility report's outer
-format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
-historical evidence; current readers reject superseded report versions and fields.
-Feasibility evidence retains the single total budget and aggregate actual usage.
-
-### Format history
-
-`spec-e2e-report/v7` and `baseline-acquisition/v5` advanced again with
-`evaluation-report/v5`, which records per-attempt purpose and diagnostics, and
-`spec-e2e-report/v8`, `baseline-acquisition/v6` and `evaluation-report/v6` with the
-`evaluation-config/v2` judge maximum. Removing the advisory grader from E2E advanced
-`spec-e2e-case/v3`, `spec-e2e-report/v9`, `baseline-freeze/v2` and
-`baseline-acquisition/v7`. Retained runs captured before that change can no longer be
-adjudicated by `adjudicate-spec`, replayed by `e2e-call` (their `case.json` is
-`spec-e2e-case/v2` or older) or used as budget-feasibility evidence; a fresh run is
-needed for each. `evaluation-report/v7` then removed the standalone evaluator's
-judge-independence field and its never-produced passed or failed model decision.
-The runaway re-send and incomplete-review members
-([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
-[ADR 0040](../decisions/0040-incomplete-review-published-marked-logged.md)) advanced
-`spec-e2e-report` to v10. Each attempt's request `purpose` and `owner_kind` and the
-`incomplete_publication` member advanced it to v11 (user decision of 29 October 2026);
-ADR 0041 adds no later version.
-`baseline-acquisition/v8` advanced with `spec-e2e-report/v11`, which it embeds.
-Removing post-generation review ([ADR 0023](../decisions/0023-advisory-post-generation-review.md),
-1 November 2026, FIX06 D13.1) dropped the `advisory_completion` and `incomplete_reviews`
-members, advancing `spec-e2e-report` to v12 and `baseline-acquisition` to v9. Runs
-retained before that change stay adjudicable only by the build that made them.
-ADR 0038 Decision 5's `shared_member` diagnostic reason (2 November 2026, FIX06 D16.1)
-advanced `spec-e2e-report` to v13 and `baseline-acquisition` to v10; v12 runs, the
-D12.1 set included, likewise stay adjudicable only by the build that made them. Its
-amendment the same day (FIX06 D16.2) added the `repeated_statement` repair rule, which
-reports carry in their validation diagnostics, advancing `spec-e2e-report` to v14 and
-`baseline-acquisition` to v11; v13 runs, the D16.1 set included, stay adjudicable only by
-the build that made them.
-`baseline-budget-feasibility/v2` and `baseline-freeze/v3` advanced when the workflow
-budget became the configured `workflowTokenBudget`
-([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)). Every configuration
-now requires that member, so a retained run's captured `.sddtoolkit.json` without it can
-no longer be replayed by `e2e-call` or used as budget-feasibility evidence; adjudication
-doesn't decode configuration and is unaffected.
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v15`,
+`e2e-step-event/v2`, `baseline-freeze/v3`, `baseline-acquisition/v12`,
+`baseline-score/v4`, `baseline-budget-feasibility/v2`, the evaluator packets'
+`baseline-assessment-inputs/v2` and `provider-compatibility-report/v1`; assessor
+documents use numeric schema `3`. Current readers reject superseded versions and
+fields: retained runs and captures of an earlier version stay immutable evidence,
+readable only by the build that made them. Feasibility evidence retains the single
+total budget and aggregate actual usage.
 
 ### Reliability assessment
 
@@ -702,10 +637,12 @@ a stop leaves no partial output.
   runaway re-sends); re-sends; the admission escape; repair merges; and each stage's
   sends, input, output and total tokens and shares, from each sent attempt's request
   purpose and owner through the baseline scorer's stage classification and
-  accumulation. Only the `schema` member is read first. A missing report, or one of a
-  known older version (v1 to v10), is recorded as `unavailable`, and the run still
-  counts as attempted. A current-version report that doesn't decode, or any other
-  version, makes the run unmeasurable.
+  accumulation. Repair merges are the report's `repairs`: the last merge of each
+  candidate still retained when the run ends, not every repair, so earlier merges in a
+  unit and every merge of an earlier unit are missed (FIX06 T8). Only the `schema` member is read
+  first. A missing report, or one of an earlier `spec-e2e-report` version, is recorded
+  as `unavailable`, and the run still counts as attempted. A current-version report
+  that doesn't decode, or any other version, makes the run unmeasurable.
 - From the retained project's `.sddtoolkit.json`: the configured `logs.level`, read by
   the engine's configuration decoder, as `log_threshold`.
 - From call evidence: each call's response structure, read by the production envelope
@@ -850,11 +787,6 @@ request-projection freezes, not by a live run.
 
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
-
-The report records the one configured total budget for all model work, with
-aggregate actual usage including full overshoots. Global-budget rejection is a
-workflow failure. R8's rubric thresholds, expected publication and adjudication
-remain independent of every native outcome.
 
 Human calibration and broader rerun/failure acceptance are tracked in
 [FIX06](../../fixes/FIX06.md).

@@ -5,9 +5,8 @@
 - **Decision authority:** The user's configuration and repair-slot request
 - **Amends:** The draft-first sequencing in [§17.3](../contracts/17-specify.md) and
   the closed configuration contract in [§9](../contracts/09-configuration.md)
-- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): no review of
-  the generated specification runs (removed 1 November 2026, FIX06 D13.1); required
-  pre-generation review is unchanged
+- **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
+  amendment (FIX06 D13.1, 1 November 2026)
 
 The optional `.sddtoolkit.json` setting
 `validation.sourcePreservationCheck` is a boolean, disabled when omitted.

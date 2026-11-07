@@ -34,7 +34,7 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
 ## `BuildInitialModelRequestIdentityLedgerAction`
 
 - **Input:** closed request-purpose registry
-- **Output:** empty run-local `model.request_identity_ledger/v1` DataKey
+- **Output:** empty run-local `.model_request_identity_ledger` DataKey (schema version 1)
 - **Responsibility:** Create a fresh process-local execution epoch and initialize its
   ordinal/accounting state without assigning a request; it is the sole producer of this
   compiler-owned key.
@@ -106,13 +106,10 @@ follows "an explicit YAML retry transition", read the step's own bounded protoco
 
 ## Configured JSON composition responsibilities
 
-[ADR 0016 §3](../../decisions/0016-configured-json-response-composition.md#3-responsibilities-and-execution)
-owns the generic part-selection, retention and assembly contracts. Reuse
-the existing compiler, preparation, admission and validation implementations;
-keep these responsibilities as discrete callable operations. Assembly receives
-sealed admitted values and compiled destinations, returns a candidate and provenance,
-and has no prompt, provider, retry, parsing or successor-selection capability.
-The registered operations are those in ADR 0016's table:
+[ADR 0016](../../decisions/0016-configured-json-response-composition.md) owns these
+operations: its §2 table registers them and
+[§3](../../decisions/0016-configured-json-response-composition.md#3-responsibilities-and-execution)
+assigns their part-selection, retention and assembly responsibilities.
 
 - `initialize-json-composition` binds the `composition` resource to the current packet
   and execution epoch.
@@ -144,7 +141,7 @@ The registered operations are those in ADR 0016's table:
   The shared production capture runner additionally supplies ADR 0018 `complete_body`
   candidates from complete model-facing serialized bytes, including malformed returned
   content, without parsing them into business authority or adding credential material.
-  Capture follows `logs.level` alone; no direction/class selectors remain.
+  Capture follows `logs.level` alone; there is no direction or class selector.
 
 ## `BuildPromptLogCandidateAction`
 
@@ -164,14 +161,11 @@ The registered operations are those in ADR 0016's table:
 - **Responsibility:** Remove secrets before chunking and never retain an original
   value/length in the replacement.
 
-For production `complete_body` capture, the shared capture boundary redacts exact
-authorized credential values and their JSON-escaped forms. It splits the resulting
-valid UTF-8 only at scalar boundaries into at most 5,000-byte fragments; invalid
-UTF-8 uses encoding-tagged base64. Operation kind, direction, body provenance, encoding and padded
-byte offsets determine stable fragment identities and complete reconstruction.
-This replaces the superseded truncation responsibility without assigning a new
-workflow operation. Existing prompt validation and logging actions receive each
-bounded fragment; no tail truncation is permitted.
+Production `complete_body` capture follows
+[ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#content-and-storage):
+credential redaction before splitting, 5,000-byte scalar-boundary fragments, base64 for
+invalid UTF-8, stable fragment identities and no truncation. It adds no workflow
+operation; existing prompt validation and logging actions receive each bounded fragment.
 
 ## `ValidatePromptLogContentAction`
 

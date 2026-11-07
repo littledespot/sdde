@@ -1,7 +1,7 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
 - **Status:** Accepted amendment. Not yet implemented
-  ([FIX05 R2, now FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
+  ([FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
   asked for the proposal to be rewritten around this flow: run 1 generates
@@ -12,14 +12,13 @@
   engine records your computer account name ... next to each answer and carries
   on." Finally the user answered "yes to all" to the other three decisions below.
   The approval covers clarification answers. It does not choose the provider for
-  plan or task review approvals. The 20 October draft recommended a confirmation
-  argument, which needed a third run. It is listed under rejected options.
+  plan or task review approvals.
 - **Amends:**
   - §17.4, by defining the authenticated actor and the act of acceptance;
   - the §13 catalogue, by giving `AuthenticateActorAction`'s `AuthenticationPort`
     its first provider, and by making `ValidateClarificationUserSubmissionAction`
     report a typed reason for each rejected form;
-  - F0100 §3.2, which records that no authentication mechanism has been selected.
+  - F0100 §3.2, by selecting its authentication mechanism.
 
   It leaves §23.2's protection of user-closed forms, ADR 0017's incomplete
   publication and ADR 0009's fresh-invocation rule unchanged. The overall design
@@ -34,19 +33,8 @@ would record it, from `ValidateClarificationUserSubmissionAction` through
 `AuthenticateActorAction`, the actor-evidence registry actions,
 `BindAuthenticatedClarificationSubmissionAction` and
 `BuildClarificationResponseAction`. It names no provider behind
-`AuthenticationPort`, and none of the chain is implemented. Fresh answers therefore
-cannot complete the registered recovery path:
-
-- refresh rejects every new nonempty submission with `AuthenticationRequired`
-  (`src/domain/clarification_refresh.zig`);
-- specification provenance rejects nonempty clarification-response IDs
-  (`src/domain/specification_provenance.zig`);
-- workflow preparation validates forms but never authenticates answers, and every
-  invalid form collapses into one `InvalidClarificationInput` error with no
-  per-form reason (`src/actions/clarification/validate_clarification_forms.zig`);
-- the resolved-needs action constructs empty needs;
-- generation never consumes accepted answers;
-- passive literal origins are source-only (`src/domain/passive_literals.zig`).
+`AuthenticationPort`, and none of the chain is implemented, so fresh answers cannot
+complete the registered recovery path. FIX06 E7 lists where each one stops.
 
 The clarification state already persists each response with its clarification ID,
 input state and record revisions, exact submitted form bytes, typed answer,
@@ -67,7 +55,8 @@ input state and record revisions, exact submitted form bytes, typed answer,
    - parse against the last committed clarification and reference binding;
    - name the current state and record revisions;
    - change nothing outside `requestedStatus` and the answer region;
-   - carry a nonempty answer that matches its select-one or bounded-text schema.
+   - carry a nonempty answer that matches its select-one, select-many or bounded-text
+     schema.
 4. **If any closed form fails**, run 2 accepts none of the answers. It stops
    `blocked`, makes no model call, writes nothing and leaves every form as the user
    left it (§23.2). Its report lists each failing form with its clarification ID,
@@ -112,8 +101,7 @@ input state and record revisions, exact submitted form bytes, typed answer,
   clarifications. Each response's `authentication_evidence_id` references its
   registry entry. The registry validator already expects clarification-response
   joins, and specification edits (§18), user review (§14.5) and reference feedback
-  use the same registry. This replaces the 20 October draft's "no second ledger",
-  which would have duplicated the catalogue's evidence store.
+  use the same registry.
 - After acceptance, the closed form is protected byte-for-byte. A later edit to it,
   or its removal, blocks (§23.2).
 - Upstream changes invalidate dependent responses through the ordinary rework
@@ -129,18 +117,18 @@ input state and record revisions, exact submitted form bytes, typed answer,
 - It does not show that the invoker wrote the answers. A valid edit by another
   process, or one merged from another branch, is accepted. The report of accepted
   answers is the check, and it comes after acceptance.
-- The checks are strict: a select-one answer must be an offered option, and a text
-  answer must fit its bound. A misread answer is therefore unlikely. But no option
-  defines how to withdraw or revise an accepted response, so an answer the user
-  regrets cannot be changed. That stays out of scope here.
+- The checks are strict: a selected option must be offered, and a text answer must
+  fit its bound. A misread answer is therefore unlikely. But no option defines how to
+  withdraw or revise an accepted response, so an answer the user regrets cannot be
+  changed. That stays out of scope here.
 
 ## Options considered and rejected
 
-- **Confirmation argument** (the 20 October recommendation). Run 2 shows each
-  parsed answer and a digest, then stops, and a third run passes the digest. It
-  costs an extra run every round and protects little more: anyone who can edit the
-  forms can also run the engine as that account and pass the printed digest. The
-  digest would also be a second fingerprint of bytes the response already owns.
+- **Confirmation argument.** Run 2 shows each parsed answer and a digest, then stops,
+  and a third run passes the digest. It costs an extra run every round and protects
+  little more: anyone who can edit the forms can also run the engine as that account
+  and pass the printed digest. The digest would also be a second fingerprint of bytes
+  the response already owns.
 - **Interactive prompt in run 2.** It keeps one run, but needs a terminal-input
   adapter, and runs without a terminal (launchers, CI, agents) would fall back to an
   extra run. It still identifies the account, not a person.

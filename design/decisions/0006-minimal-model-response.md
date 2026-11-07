@@ -252,7 +252,7 @@ For example, a single-target replacement response is simply:
   its exact captured bytes, typed tree and deterministic compact expanded JSON
   projection.
 - `bytes()` retains source authority; `modelBytes()` supplies model transport for
-  inference and counting.
+  inference.
 - Providers perform no separate rewriting.
 - Named definitions that satisfy the root rules are selectable views of this same owner;
   helper leaves cannot become response schemas.

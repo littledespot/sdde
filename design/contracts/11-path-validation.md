@@ -91,7 +91,7 @@ No model-authored filename or path is written to `spec.md`, `plan.md`, `tasks.md
 
 | Stage | Model representation | Deterministic authority before rendering/writing |
 | --- | --- | --- |
-| Specify | Inert prose with permitted passive references; native code recognizes scoped exact values; no operational project path | Registry/token evidence validation and semantic business-boundary review |
+| Specify | Inert prose with permitted passive references; native code recognizes scoped exact values; no operational project path | Registry/token evidence validation; no post-generation semantic review ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)) |
 | Plan | Existing `fileId`; an allowed `pathIntentOptionId` plus semantic `nameSourceId`, followed by an engine-generated `pathCandidateId` for a new file; raw create-path only under explicit disabled-by-default fallback | Exact option membership/capability subset, versioned name transform, full preset kind/root/name/extension/placement rules, active-host-plus-target portability, collision/containment, path-candidate registry, and plan-file grant |
 | Tasks | Approved read/write `fileId`s and capabilities only | Exact `PlanState.fileGrants`, sole file registry, task-unit scope, and graph/coverage validation |
 | Implement | Approved `fileId`/copy `sourceId`/operation-intent ID only | Plan grant ∩ task scope ∩ current preset/global capability, descriptor/no-follow target state, and content reference validation |
