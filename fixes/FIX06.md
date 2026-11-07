@@ -182,10 +182,9 @@ research. "Gap" means between measurement sets.
 
 **Next:**
 
-1. **Entity restatement has no working lever** (§3 open problems). Q20 and the one-owner
-   hygiene change were both reverted on 7 November 2026 (user: "revert source code changes"):
-   neither achieved the desired outcome, an entity that stops restating and losing part of a
-   requirement. Find a structural lever with an owner, or record it as a model limitation.
+1. **E10** (§5): the `needs_user` alias, dead code and stale comments; no decision, no
+   request change. Q8 D8.3 is implemented ([Z_FIX06](Z_FIX06.md)); entity restatement is
+   recorded as a model limitation (§3 open problems).
 2. **Decision pending:** whether skill `1d66d882…` counts as the same evaluator as
    `af394020…` and `0b552067…`. Its two 7 November edits (retired-ID citations; the agent may
    start it when the user explicitly approves it for named runs) changed no scoring rule
@@ -266,9 +265,15 @@ or the user records it as a model limitation.
   outcome "Loan renewed!", link to the change speculative). Hello-world stopped publishing an
   unneeded entity (0 of 3, against 3 of 3 in the D12.3 set). So neither Q20 nor the one-owner
   hygiene change achieved the desired outcome: the model restates the requirement in whichever
-  entity field is open. Still open: entity fields, edge-case outcomes (purpose
-  `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a recorded
-  model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
+  entity field is open. **Recorded as a model limitation** (user, 7 November 2026: "record as
+  a model limitation"; AGENTS.md "Model output, prompts and evidence"): entity fields that
+  restate a requirement and lose or weaken part of it, observed with Bedrock
+  `openai.gpt-oss-20b-1:0` (`ap-southeast-2`, the only model used in every live run, §7 H5).
+  Runs that show it still fail their criterion; nothing is weakened, and no further prompt
+  change targets it. Reopen only for a structural lever with an owner, such as a contract
+  change to what an entity field may contain (a **Decision**). Still open: edge-case outcomes
+  (purpose `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a
+  recorded model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
   source lines, since the result restates the Given and reads as requirements, not observed
   outcomes.
@@ -424,12 +429,13 @@ reverted build loan-renewal repeated `[5,6,7,8,9]` and failed three times). ADR 
 - **D8.2** Whether "cites in full" (ADR 0036:116-120) covers a fenced block whose first or last
   interior line is blank (`markdown_code_spans.zig:53`, `:59`;
   `exact_token_obligation.zig:40-45`; `source_selections.zig:57-60`). No fixture covers it.
-- **D8.3** Whether same-category claims on the same cited lines are one claim (precedent
-  16-reference-ingestion.md:255-266, §16.4 "Summary coverage"), including claims inserted by
-  source-omission repair; a same-lines pair with different categories needs its own answer.
+- **D8.3** decided and implemented 7 November 2026 ([Z_FIX06](Z_FIX06.md); ADR 0036
+  Decisions 3 and 4 amended). Every offline request is byte-identical, so no regression is
+  shown offline; semantic benefit is not demonstrated: none of the eight live runs of
+  7 November (`2026-11-07T07-3*`) duplicated an extraction claim.
 
-D8.2 and D8.3 are decided offline with fixtures at their owners and §2.10 projections, in any
-gap, or recorded.
+D8.2 is decided offline with fixtures at its owners and §2.10 projections, in any gap, or
+recorded.
 
 ### Q13. Inline source lines
 

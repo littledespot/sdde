@@ -567,8 +567,8 @@ test "the composed story skips heading and technical claims and blocks without a
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // A business claim and a technical claim cite the same lines; each quotes the
-    // heading and every list item as separate claims (ADR 0038).
+    // A business claim and a technical claim cite the same lines, so both stay claims
+    // (FIX06 D8.3); each quotes the heading and every list item as separate claims (ADR 0038).
     {
         var fixture = try Fixture.initContentKinds(a, "# Kiosk Greeting\n\n- The kiosk must greet each visitor.\n- The kiosk must show the time.\n", null, true, 2, true);
         defer fixture.deinit();
@@ -2842,7 +2842,9 @@ const Fixture = struct {
     fn initExtraction(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool) !Fixture {
         return initContent(a, bytes, kind, has_claims, 1);
     }
-    /// Each model claim quotes every line of its chunk (ADR 0036).
+    /// The first model claim quotes every line of `bytes` (ADR 0036). Each further claim
+    /// quotes its own appended line, so several claims are distinct evidence: identical
+    /// claims are one (FIX06 D8.3).
     fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize) !Fixture {
         return initContentKinds(a, bytes, kind, has_claims, model_claim_count, false);
     }
@@ -2861,7 +2863,26 @@ const Fixture = struct {
     /// their own groups.
     fn initClaimsGrouped(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, supplied: Claims, groups: []const []const usize) !Fixture {
         var ids: evidence.IdSource = .{};
-        const inputs = try evidence.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "stories.md", bytes));
+        const copies: usize = switch (supplied) {
+            .repeated => |options| if (options.has_claims) @max(options.count, 1) else 1,
+            .selected => 1,
+        };
+        // A technical claim needs no line of its own: another category on the same lines is
+        // already distinct evidence (FIX06 D8.3).
+        const appended: usize = switch (supplied) {
+            .repeated => |options| copies - 1 - @intFromBool(options.technical and copies > 1),
+            .selected => 0,
+        };
+        const source = if (appended == 0) bytes else extended: {
+            var all: std.ArrayList(u8) = .empty;
+            try all.appendSlice(a, bytes);
+            if (!std.mem.endsWith(u8, bytes, "\n")) try all.append(a, '\n');
+            // A blank line keeps the appended lines out of the source's last list item.
+            try all.append(a, '\n');
+            for (0..appended) |index| try all.print(a, "MOCK Further requirement {d}.\n", .{index + 2});
+            break :extended all.items;
+        };
+        const inputs = try evidence.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "stories.md", source));
         const passive = try text.prepare(a, inputs);
         errdefer passive.deinit();
         const candidates = try tokens.candidates(a, inputs);
@@ -2881,8 +2902,18 @@ const Fixture = struct {
                     if (!options.has_claims or options.count == 1) break :repeated initial;
                     var response = try json.decode(Response, a, initial);
                     const claims = try a.alloc(@import("domain/reference_extraction.zig").Proposal, options.count);
-                    @memset(claims, response.claims.claims[0]);
-                    if (options.technical) claims[1].category = .technical;
+                    // The reply cites every citable line: the first claim cites the supplied
+                    // lines, a technical claim the same lines, and each further claim its own
+                    // appended line.
+                    const every = response.claims.claims[0].citations;
+                    if (inputs.chunks.entries.len != 1 or every.len <= appended) return error.InvalidFixture;
+                    const supplied_lines = every.len - appended;
+                    var next_line = supplied_lines;
+                    for (claims, 0..) |*claim, index| {
+                        const technical = options.technical and index == 1;
+                        claim.* = .{ .category = if (technical) .technical else response.claims.claims[0].category, .citations = if (index == 0 or technical) every[0..supplied_lines] else every[next_line..][0..1] };
+                        if (index != 0 and !technical) next_line += 1;
+                    }
                     response.claims.claims = claims;
                     break :repeated try json.encode(Response, a, response);
                 },
@@ -4636,7 +4667,7 @@ fn checkNativeGenerationStart(view: @import("domain/pipeline_data.zig").View, ac
     }
 }
 
-test "source omission repair inserts every claim a list-spanning proposal quotes" {
+test "source omission repair inserts every new claim a list-spanning proposal quotes" {
     const repair = @import("domain/reference_extraction_repair.zig").Omission;
     const packets = @import("domain/model_input_packet.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -4667,6 +4698,44 @@ test "source omission repair inserts every claim a list-spanning proposal quotes
             try std.testing.expectEqualStrings(quote, claim.content.business.value.segments[0].literal.value);
         }
         try std.testing.expectEqual(@as(usize, 3), (try extraction.finishText(a, inputs, merged)).ledger.claims.len);
+        try std.testing.expect(merged.last_repair.?.changed);
+        // FIX06 D8.3: an inserted claim already present adds nothing. An insertion that adds
+        // no claim is an unchanged merge, which the shared retry state ends as
+        // `unchanged_repair` (§22.4); the same lines in another category are new evidence.
+        const existing = fixture.extracted_text.entries[0].outcome.claims;
+        const duplicate: @import("domain/reference_extraction.zig").Proposal = .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} };
+        const unchanged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, .{ .claim = duplicate }, null);
+        try std.testing.expectEqualDeep(existing, unchanged.entries[0].outcome.claims);
+        try std.testing.expect(!unchanged.last_repair.?.changed);
+        const other: @import("domain/reference_extraction.zig").Proposal = .{ .category = .validation, .citations = &.{.{ .ordinal = 1 }} };
+        const added = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, .{ .claim = other }, null);
+        try std.testing.expectEqual(existing.len + 1, added.entries[0].outcome.claims.len);
+        try std.testing.expectEqual(.validation, std.meta.activeTag(added.entries[0].outcome.claims[existing.len].content));
+        try std.testing.expect(added.last_repair.?.changed);
+    }
+    // A list-spanning insertion whose first item is already held adds only its new item; the
+    // held claim keeps its own origin and the new one takes the repair's.
+    for ([_]struct { source: []const u8, items: [2]u32 }{
+        .{ .source = "Renewal rules:\n\n- Renew a loan.\n- Refuse overdue loans.\n", .items = .{ 3, 4 } },
+        .{ .source = "Startup:\n1. Show the greeting.\n2. Show the UTC time.\n", .items = .{ 2, 3 } },
+    }) |case| {
+        var fixture = try Fixture.initClaims(a, case.source, null, .{ .selected = &.{.{ .category = .business, .citations = &.{.{ .ordinal = case.items[0] }} }} });
+        defer fixture.deinit();
+        const inputs = fixture.context.inputs;
+        const chunk = inputs.chunks.entries[0];
+        const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = try tokens.candidates(a, inputs), .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, .{ .extraction_claim = chunk.id }, case.source) };
+        const auth = try repair.authorize(a, facts);
+        const proposal: @import("domain/reference_extraction.zig").Proposal = .{ .category = .business, .citations = &.{ .{ .ordinal = case.items[0] }, .{ .ordinal = case.items[1] } } };
+        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 21 }, .attempt = .{ .value = 1 } };
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, inputs), text.validator, fixture.context.registry, fixture.context.current, facts, auth, .{ .claim = proposal }, origin);
+        const held = fixture.extracted_text.entries[0].outcome.claims[0];
+        const claims = merged.entries[0].outcome.claims;
+        try std.testing.expectEqual(@as(usize, 2), claims.len);
+        try std.testing.expectEqualDeep(held, claims[0]);
+        try std.testing.expect(!std.meta.eql(held.origin, @as(?@import("domain/model_candidate_origin.zig").Origin, origin)));
+        try std.testing.expectEqualDeep(&[_]@import("domain/source_selections.zig").Selection{.{ .first = .{ .ordinal = case.items[1] }, .last = .{ .ordinal = case.items[1] } }}, claims[1].citations);
+        try std.testing.expectEqualDeep(origin, claims[1].origin.?);
+        try std.testing.expect(merged.last_repair.?.changed);
     }
 }
 
@@ -4701,7 +4770,9 @@ test "source omission repair preserves sibling claims and rebuilds canonical ide
         var unpresentable = auth.rule;
         unpresentable.preservation = unregistered;
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/model_presentation.zig").present(@TypeOf(auth.rule), a, &packet_guidance.marked, unpresentable));
-        const proposal: e.Proposal = .{ .category = .business, .citations = try extraction.citableLines(a, inputs, chunk) };
+        // The chunk already holds a business claim on these lines, so the inserted claim
+        // is new evidence only in another category (FIX06 D8.3).
+        const proposal: e.Proposal = .{ .category = .validation, .citations = try extraction.citableLines(a, inputs, chunk) };
         const wire = try @import("domain/model_candidate_json.zig").encode(e.Proposal, a, proposal);
         try checkPreparedExtractionOmission(a, packet, wire);
         const replacement = try repair.parse(a, auth, packet, wire);

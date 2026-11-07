@@ -34,13 +34,32 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
                         .valid => |accepted| accepted,
                         .invalid => return error.InvalidReferenceExtraction,
                     };
-                    try checked.append(allocator, .{ .content = content, .citations = quoted.citations, .origin = origin });
+                    _ = try appendDistinct(allocator, &checked, .{ .content = content, .citations = quoted.citations, .origin = origin });
                 };
                 break :claims .{ .claims = try checked.toOwnedSlice(allocator) };
             },
         };
     }
     return .{ .valid = .{ .revision = parsed.revision, .last_repair = parsed.last_repair, .entries = entries } };
+}
+
+/// One piece of source evidence is one claim (FIX06 D8.3). A claim's text is the
+/// engine's quote of its cited lines (ADR 0036), so a later claim of the same
+/// category citing the same lines of the same chunk is the same evidence and adds
+/// nothing: the first is kept, with its origin, before any claim identity exists.
+/// The raw model response is unchanged. Returns whether `claim` was appended.
+pub fn appendDistinct(a: std.mem.Allocator, claims: *std.ArrayList(extraction.TextValidatedProposal), claim: extraction.TextValidatedProposal) std.mem.Allocator.Error!bool {
+    for (claims.items) |existing| {
+        if (std.meta.activeTag(existing.content) == std.meta.activeTag(claim.content) and sameCitations(existing.citations, claim.citations)) return false;
+    }
+    try claims.append(a, claim);
+    return true;
+}
+
+fn sameCitations(left: []const @import("source_selections.zig").Selection, right: []const @import("source_selections.zig").Selection) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |l, r| if (!std.meta.eql(l, r)) return false;
+    return true;
 }
 
 fn checkContent(validator: text.Validator, a: std.mem.Allocator, context: text.ScopeSetContext, content: extraction.ProposalContent) extraction.Error!text.Result(extraction.Content) {

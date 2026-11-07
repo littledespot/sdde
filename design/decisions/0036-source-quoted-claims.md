@@ -23,7 +23,10 @@
   - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
     its span, although every development-case value then stays doubled (Decision 6);
   - 3 November 2026, FIX06 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
-    which would have extended it to entity meaning and relationships, is withdrawn.
+    which would have extended it to entity meaning and relationships, is withdrawn;
+  - 7 November 2026, FIX06 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
+    claim of the same category and cited lines as an earlier claim of its chunk is the same
+    claim (Decisions 3 and 4).
 - **Amends:**
   - §12.7, the reference-claim proposal;
   - §16.3 and §16.4 step 6, extraction citations and repair;
@@ -106,13 +109,23 @@ same claim and native checks couldn't tell distinct duties apart.
      prose-only claims and a cited line holding two facts.
    - ADR 0038's scenario rule needs one claim per requirement, which the split supplies
      for list sources (ADR 0038 Decision 4).
+   - **One piece of evidence is one claim** (FIX06 D8.3). A quoted claim with the same
+     category and the same cited lines as an earlier claim of its chunk is the same
+     evidence, because its wording is the quote of those lines. Extraction text validation
+     keeps the first, with its origin, after the split and before claim identities exist.
+     A different category, or different or partly overlapping lines, stays a separate
+     claim. The raw model response is unchanged, so duplicates stay countable. This applies
+     to model claims only; preserved-token claims keep ADR 0024's occurrences.
 4. **Repair routes that served model wording are deleted.**
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
      `source_selections` diagnostic and the `retain-reference-claim-rejection` operation
      are deleted. `validate-reference-claims` now ends `ok` or `failed`.
    - Classification repair and source-omission repair are unchanged. An omission repair
-     returns the same proposal shape, and every claim it quotes is inserted.
+     returns the same proposal shape, and every claim it quotes that its chunk doesn't
+     already hold is inserted (Decision 3's one-evidence rule). An insertion that adds no
+     claim is an unchanged merge, which the shared retry state ends as `unchanged_repair`
+     before any dependent rebuild (§22.4).
 5. **Exact values keep their native authority.** ADR 0024's forcing reads the quoted text
    of `business` and `scope_guard` claims. A code span or fenced block that such a claim
    cites in full is therefore preserved, whatever its kind, and becomes an exact
@@ -222,7 +235,14 @@ same claim and native checks couldn't tell distinct duties apart.
   - Allocation stays proportional to the source across 128 chunks.
   - Admission: blank, unsupplied and over-count citations are rejected, for the initial
     request and for omission repair.
-  - Omission repair inserts every claim a list-spanning proposal quotes.
+  - Omission repair inserts every new claim a list-spanning proposal quotes; an inserted
+    duplicate adds nothing and is an unchanged merge; a list-spanning insertion whose first
+    item is held adds only the second, with the repair's origin; the same lines in another
+    category are inserted.
+  - One evidence, one claim: identical proposals, and duplicates per item after the split,
+    are one claim; the same lines in two categories, different lines and partly overlapping
+    lines stay separate; the raw proposals are unchanged; duplicate claims quoting an exact
+    value keep the single claim's exact-value duty.
   - Ingestion rejects C1 and DEL characters.
   - A proposal carrying wording is rejected as an unknown property.
   - Scripted models cite only citable lines. Scenarios that need a discarded token or

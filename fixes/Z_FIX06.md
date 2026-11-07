@@ -188,6 +188,30 @@ live: none of the 12 runs since ADR 0047 reached source review.
   forbids a duplicate modality field; making it matter needs a word check or engine-rendered
   modal text).
 
+## Q8 D8.3. One piece of evidence is one claim
+
+**Decided and implemented 7 November 2026** (user: "i accept recommendation", then "implement
+D8.3", accepting the preflight's resolutions a–f; then "fix the issues", making an insertion
+that adds no claim an unchanged merge).
+- **Defect:** `2026-11-07T06-11-33Z-6897…`'s extraction returned five identical
+  `{"category":"business","citations":[5,6,7,8,9]}` claims; the list-item split made 25, the
+  story repeated every sentence five times (organization 2), and reconciliation made five
+  summary calls and two `missing_member` corrections (about 26k tokens).
+- **Change:** the rule is ADR 0036 Decisions 3 and 4 (16-reference-ingestion.md §16.3; the
+  13-03 action text). Owner: `reference_extraction_text.appendDistinct`, used by extraction
+  text validation and `reference_extraction_repair.Omission.merge`; the merge reports
+  `changed = false` when its insertion adds no claim.
+- **Tests:** accepted (identical proposals; duplicates per item after the split; a
+  repair-inserted duplicate as an unchanged merge; a list-spanning insertion adding only its
+  new item, with the repair's origin; duplicate claims keeping one exact-value duty) and
+  rejected (same lines in two categories; different and partly overlapping lines; a repair
+  insertion in another category). The generation fixture that built several claims by
+  copying one now gives each claim its own line after a blank line, and a technical claim
+  the first claim's lines.
+- **Proof:** `zig build test`, `lint`, `test-architecture` and `test-integration` pass; the
+  request projection is byte-identical to `entity-meaning-before`, since no offline scenario
+  duplicates a claim.
+
 ## H1. Adjudication and `spec-e2e-report/v15`
 
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…ec790`): the

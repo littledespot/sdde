@@ -165,6 +165,9 @@ Initial readers should cover:
   several top-level list items into one claim per item
   ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 4). A run of cited
   lines, including uncited blank lines inside it, becomes one canonical citation range.
+  A quoted claim with the same category and cited lines as an earlier claim of its chunk is
+  that claim (ADR 0036 Decision 3, FIX06 D8.3); the first is kept before claim IDs are
+  assigned, and the raw response is unchanged. Omission-repair insertions follow the same rule.
 - IDs are local to the immutable request's source/chunk scope.
 - Each selectable unit preserves one original line, including its line ending, or the remaining
   line fragment at a chunk boundary.
