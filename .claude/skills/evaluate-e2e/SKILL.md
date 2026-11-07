@@ -1,7 +1,6 @@
 ---
 name: evaluate-e2e
-description: Assess one retained Spec E2E run against its case rubric, trace each defect to the generation call, prompt or engine stage that produced it, and rank generalizable fixes for the engine or its prompts. Only the user can invoke it. With --panel, checks this skill's discrimination on a calibration panel. Offline; it makes no model calls. Its rubric scores adjudicate the run: it writes the adjudication record and applies it with `zig build adjudicate-spec`.
-disable-model-invocation: true
+description: Assess one retained Spec E2E run against its case rubric, trace each defect to the generation call, prompt or engine stage that produced it, and rank generalizable fixes for the engine or its prompts. Start it only when the user invokes it or explicitly approves it for named runs. With --panel, checks this skill's discrimination on a calibration panel. Offline; it makes no model calls. Its rubric scores adjudicate the run: it writes the adjudication record and applies it with `zig build adjudicate-spec`.
 argument-hint: <run directory | latest | case id | --panel <spec.case.json>>
 ---
 
@@ -56,8 +55,7 @@ the engine, its prompts or its deterministic code.
    - **Citations:** cite source and specification lines for every claim. When content
      is missing, cite the source lines it should cover.
    - **Defects:** list every defect the criterion covers, each with exactly one class
-     from this closed vocabulary (FIX06 T5(b); your advisory label, never computed by
-     code):
+     from this closed vocabulary (your advisory label, never computed by code):
 
      | Class | Meaning |
      | --- | --- |
@@ -66,7 +64,7 @@ the engine, its prompts or its deterministic code.
      | `contradiction` | Two parts of the specification, or the specification and the source, conflict |
      | `unsupported_addition` | Content the source doesn't support, including an assumption, non-goal, prohibition, invented condition, error case or format |
      | `invented_or_restating_entity` | An entity the source doesn't need, or one whose meaning or relationships restate requirements |
-     | `restatement` | A requirement stated again in another record or section; a primary story that restates its source's requirements in one paragraph, adding nothing, is not one (FIX06 D19.1) |
+     | `restatement` | A requirement stated again in another record or section; a primary story that restates its source's requirements in one paragraph, adding nothing, is not one (ADR 0047) |
      | `ambiguity` | Wording with materially different readings, or that can't be tested |
      | `placeholder` | Template filler or unresolved placeholder text |
      | `rendering_artefact` | Escaping, joining, punctuation or formatting the engine introduced |
@@ -113,7 +111,7 @@ the engine, its prompts or its deterministic code.
        only, unless they change an exact value.
      - Text published identically in two runs gets the same defects and scores in both.
 
-     Readings applied in the D12.2 re-score, made rules by the user (3 November 2026, FIX06
+     Readings applied in the D12.2 re-score, made rules by the user (3 November 2026, Z_FIX06
      T7; the link rule is in section 3 step 7):
      - A repeat states a requirement when it gives the requirement's value or wording
        ("extends the due date by fourteen days"), so dropping part of it ("calendar") scores

@@ -194,8 +194,8 @@ Approved 1 November 2026 as the first model-input change.
 
 **Implemented 2 November 2026 on the `b38628c` tree; committed in `388438e`; approved 1
 November 2026. Kept 3 November 2026 (user: "apply recommendations") under AGENTS.md's one owner
-per instruction, although its Keep if wasn't met as written; its watch items are in FIX06
-Q12.**
+per instruction, although its Keep if wasn't met as written; its watch items closed with Q12
+(Q12 D12.3 below).**
 - **Change:**
   - `generation.context.json` `business_value`, bound to every generation and
     specification-unit repair request, ends "preserve source-backed conditions, obligations
@@ -416,8 +416,12 @@ replaces it" (ADR 0035's in-batch deletion); "Yes, list every location".
 
 ## Q19 D19.2. The engine composes the story (ADR 0047)
 
-**Implemented 3 November 2026; committed in `f6ef0f6`.** Open parts and the keep decision stay
-in FIX06 Q19.
+**Implemented 3 November 2026; committed in `f6ef0f6`. Kept 7 November 2026 with D12.3** (user:
+"approved", on the 12 adjudicated runs since ADR 0047: no story defect against 7 in the D12.2
+reference's 9 publications, loan-renewal unsupported additions 2.2 → 0.5 per run, 12 of 12
+published, lost and weakened requirements not significantly changed (loan-renewal per run, lost
+0.8 → 0.83, weakened 0.2 → 0.33); runs on uncommitted trees, a recorded exception to FIX06 §2
+rule 3).
 - **Change:** `compose-specification-story` (`src/domain/specification_story.zig`) quotes the
   catalogue's business claims in source order, one paragraph each; no story model call. The
   story's exact role is incidental, ADR 0035's comparison keeps the only record naming a claim,
@@ -442,8 +446,9 @@ in FIX06 Q19.
 
 ## Q12 D12.3. The story leaves pre-generation source review
 
-**Implemented 7 November 2026** (user: "apply recommendations", then "yes, advance both").
-Its live effect joins Q19's measurement set (FIX06 §3).
+**Implemented 7 November 2026** (user: "apply recommendations", then "yes, advance both"); kept
+with ADR 0047 (Q19 D19.2 below). Not yet exercised live: none of the 12 runs since ADR 0047
+reached source review.
 - **Defect:** `09-15-31Z` ended `workflow_invalid` after 34 calls: the second readiness pass
   filed the story purpose itself as a `candidate_omission`, which loss comparison couldn't
   localize. The engine composes the story (ADR 0047), so a model review of it can only raise
@@ -484,22 +489,25 @@ Its live effect joins Q19's measurement set (FIX06 §3).
 
 ## T7. One evaluator version per comparison
 
-Open part (whether skills `af394020…` and `0b552067…` count as one evaluator) stays in FIX06 T7.
+**Closed 7 November 2026:** skills `af394020…` and `0b552067…` count as one evaluator (user:
+"approved"; the edit between them changed no scoring rule), so the reference needs no re-score.
 - **Skill edit, 3 November 2026** (user: "yes start item 2"): `e2e-assistant-evaluation/v4`
   records `skill_sha256` and gives each defect a `basis` (`link` or `content`), and the
   `restatement` class excludes a faithful one-paragraph story (D19.1), with the user's rulings
   (FIX06 §7 H1). Skill `5690d0f0…a8865`.
-- **Re-score, 3 November 2026:** the D12.2 set's nine publications under that skill; identical
-  text scored identically. The five readings the rulings left open became the skill's rules
-  (user: "YES"): a link defect costs nothing beyond its content defect; a repeat that gives a
-  requirement's value states it, one that gives none is a summary; a weaker restatement in a
-  checkable outcome also costs `clarity-testability`; several minor additions stay minor;
-  repeating the source's own wording, or an outcome without its verb, isn't weakening. Seven of
-  the nine stored evidence as `"spec:7"` strings, which the adjudication record rejects, so H1's
-  adjudication under `af394020…` superseded the re-score.
+- **Readings made rules, 3 November 2026** (user: "YES"; now in SKILL.md §2): a link defect
+  costs nothing beyond its content defect; a repeat that gives a requirement's value states it,
+  one that gives none is a summary; a weaker restatement in a checkable outcome also costs
+  `clarity-testability`; several minor additions stay minor; repeating the source's own
+  wording, or an outcome without its verb, isn't weakening. The re-score they came from was
+  superseded by H1's adjudication under `af394020…`.
 - **Skill edit, 7 November 2026** (user: "update the out of date items"): the measures note no
-  longer names a report version (SKILL.md:270-271); no scoring rule changed. Skill
+  longer names a report version (SKILL.md:269-270); no scoring rule changed. Skill
   `0b552067…0ca43`.
+- **Skill edit, 7 November 2026** (user: "yes"): citations of retired FIX06 IDs now point to
+  ADR 0047 and Z_FIX06 T7, and the T5(b) citation is dropped; then (user: "you can start
+  /evaluate-e2e if I give approval") the agent may start it on the user's approval for named
+  runs. No scoring rule changed. Skill `1d66d882…fa3c3`.
 
 ## T5. Brittleness counts
 

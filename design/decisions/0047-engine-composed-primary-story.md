@@ -4,7 +4,7 @@
 - **Date:** 2026-11-03
 - **Decision authority:** The user's decisions on 3 November 2026:
   - D19.1, "Yes, may restate (Recommended)": the primary story may restate its source's
-    requirements in one paragraph, adding nothing ([FIX06](../../fixes/FIX06.md) Q19);
+    requirements in one paragraph, adding nothing ([Z_FIX06](../../fixes/Z_FIX06.md) Q19 D19.2);
   - "yes" to the Q19 preflight's question, "Should the engine write the story itself, from the
     source's requirement sentences, using these rules?", with the six rules in the Decision.
   - Amended 7 November 2026 (user: "apply recommendations", then "yes, advance both"): Decision
@@ -34,7 +34,7 @@ Since 29 October, 26 of 30 weakened obligations and 15 of 59 unsupported additio
 published specifications were in the model-written story ("A borrower may renew…", "logs into
 the library system and selects…"). Under the user's severity rulings (FIX06 H1) the story fails
 3 of the D12.2 set's 5 loan-renewal publications. Prompt wording moved the story between
-modes without removing them (FIX06 §1, Q12 D12.2).
+modes without removing them ([Z_FIX06](../../fixes/Z_FIX06.md) Q12 D12.2).
 
 ADR 0036 already makes each claim's wording the engine's quote of its cited source lines, so
 obligation strength, conditions and negation are the source's own words by construction.

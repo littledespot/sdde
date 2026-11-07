@@ -316,10 +316,10 @@ Beyond the rules above, do not introduce:
 - The E2E harness makes no judge call. Acceptance comes only from a
   `spec-adjudication-record/v1` applied with `zig build adjudicate-spec`; the
   `/evaluate-e2e` skill writes and applies it, scoring under the case rubric and the
-  user's rulings in that skill (user decision, 3 November 2026). Only the user triggers
-  that skill; never start it yourself, and never write or apply that record outside a
-  user-triggered `/evaluate-e2e`. Run directories under `zig-out/` are immutable
-  evidence.
+  user's rulings in that skill (user decision, 3 November 2026). Start that skill only
+  when the user triggers it or explicitly approves it for named runs (user decision, 7
+  November 2026), and never write or apply that record outside it. Run directories under
+  `zig-out/` are immutable evidence.
 
 ## Validation
 

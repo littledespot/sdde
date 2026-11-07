@@ -5,8 +5,8 @@ to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, a
 writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
 The [live E2E harness](e2e.md) does not call this evaluator: a published E2E run is
-adjudicated by the user-triggered `/evaluate-e2e` skill ([R8](acceptance.md); user
-decisions, 19 October and 3 November 2026).
+adjudicated by the `/evaluate-e2e` skill, started or approved by the user
+([R8](acceptance.md); user decisions, 19 October, 3 November and 7 November 2026).
 
 ## Run
 
