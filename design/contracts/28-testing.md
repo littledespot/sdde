@@ -127,9 +127,8 @@ Required cases include:
 - patch scope, patch failure, unexpected file changes, and evidence predicates;
 - create/update/replace/copy/delete expected-state rules and copy-source authorization;
 - **Semantic Markdown principle capture:**
-  - Use filename-only category hints and deterministic applicable-category selection.
   - Require complete chunk accounting and exact mechanical `toolchain.yaml` exclusion.
-  - Spec captures and selects principles and runs no assessment (ADR 0015); keep
+  - Spec captures principles and runs no assessment (ADR 0015); keep
     extraction, source-preservation and business generation authority separate.
     Changed principles invalidate Plan input and approvals without rewriting business
     intent. Empty/unrelated principles invent neither requirements nor questions.

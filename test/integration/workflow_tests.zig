@@ -109,7 +109,6 @@ const valid_config =
     \\  "temperature": 0.1,
     \\  "temperatureRunawayRetry": 1,
     \\  "models": { "slots": {} },
-    \\  "principles": { "filenameHints": {}, "selections": [{ "stage": "spec", "environment": null, "fileKind": null, "categories": ["core", "custom"] }] },
     \\  "paths": {
     \\    "specs": "specs", "references": "references",
     \\    "specsArchive": "specs/archive", "workflows": ".sdd/workflows",
@@ -1120,7 +1119,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../../src/adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.bindConfiguration(boot.ready.config.config());
-        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
+        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = testBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
         const expected: workflow.OutcomeTag = if (mode) |selected| switch (selected) {
@@ -1529,7 +1528,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../../src/adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.bindConfiguration(boot.ready.config.config());
-        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
+        native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var services = try @import("../../src/model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
@@ -2506,7 +2505,7 @@ fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflo
 
 /// Spec publishes from generation and native checks alone (D13.1): spec.md has no
 /// review status, reference-context has no review or principle section, and the
-/// canonical v21 state carries the principle registry this run captured.
+/// canonical v22 state carries the principle registry this run captured.
 fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, driver: *@import("../../src/test_fixtures/spec_generation_driver.zig").Driver, contracts: @import("../../src/ports/workflow_contract_source.zig").Source) !void {
     var check: []const u8 = "native operation counts";
     errdefer std.debug.print("publication check failed: {s}\n", .{check});
@@ -2529,7 +2528,10 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v21", persisted.schema);
+    try std.testing.expectEqualStrings("specification-state/v22", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v22", "specification-state/v21");
+    try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
+    try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");
     const live_registry = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/principle_workflow.zig").registry_schema, principles.Registry);
     try std.testing.expect(try principles.equal(a, live_registry.*, persisted.principle_registry));
@@ -3800,13 +3802,9 @@ test "principle capture uses one no-follow root and the detailed and consolidate
     try std.testing.expectEqualDeep(low, combined);
     try std.testing.expectEqual(@as(usize, 1), combined.sources.len);
     try std.testing.expectEqualStrings("Free-form policy.\nNo required heading or front matter.", combined.sources[0].bytes);
-    const configured = @import("../../src/domain/principle_policy.zig").Input.fromConfig(boot.ready.config.config().principles.?);
-    const registry = try r.buildConfigured(a, combined, configured, normalization, folding, null);
-    const action: @import("../../src/actions/principle/capture_principle_registry.zig").Action = .{ .source = reader, .config = configured, .normalizer = normalization, .case_folder = folding };
+    const registry = try r.build(a, combined, null);
+    const action: @import("../../src/actions/principle/capture_principle_registry.zig").Action = .{ .source = reader };
     try std.testing.expect(try r.equal(a, registry, try action.execute(a, null)));
-    var absent_policy = action;
-    absent_policy.config = null;
-    try std.testing.expectError(error.InvalidPrinciplePolicy, absent_policy.execute(a, null));
     try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = "Changed policy." });
     try std.testing.expectError(error.PrincipleSourceUnavailable, capturer.capture(a, inventory));
     const refreshed = try action.execute(a, registry);

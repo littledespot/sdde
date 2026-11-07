@@ -67,7 +67,7 @@ pub const Structure = struct {
         entities: Entities,
         claims: Claims,
         no_feature_claim,
-        /// Any other discriminator, such as a story or reconciliation response.
+        /// Any other discriminator, such as a reconciliation response.
         other,
     };
     pub const Records = struct {

@@ -113,7 +113,7 @@ pub const Runtime = struct {
             self.native.bindRoots(self.boot.ready.roots.registry());
             self.native.bindWorkflows(self.boot.ready.workflows.registry());
             self.native.bindConfiguration(self.boot.ready.config.config());
-            self.native.bindPrinciples(self.boot.ready.roots.registry().projectPrinciples(), self.boot.ready.config.config(), self.principle_source.reader(), self.principle_source.enumerator(), self.principle_source.capturer());
+            self.native.bindPrinciples(self.boot.ready.roots.registry().projectPrinciples(), self.principle_source.reader(), self.principle_source.enumerator(), self.principle_source.capturer());
         }
         self.provider_runtime = .{
             .environment = null,

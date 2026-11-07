@@ -1303,8 +1303,8 @@ design; they do not extend the current YAML schema or claim implemented capabili
 The native registry exposes detailed `inventory-principle-sources`,
 `validate-principle-inventory`, `capture-principle-sources` and
 `build-principle-registry` operations. `capture-principle-registry` consolidates
-capture through the same narrow source port and canonical inventory, policy and
-registry functions. It reads no alternate root and does not invoke another action.
+capture through the same narrow source port and canonical inventory and registry
+functions. It reads no alternate root and does not invoke another action.
 The shipped Spec workflow uses the consolidated operation.
 
 Reference and principle capture share physical traversal, normalization/collision
@@ -1314,8 +1314,8 @@ Capture is bounded to 1,024 entries, depth 16, five seconds, 1 MiB per semantic
 source and 8 MiB total semantic bytes. Deterministic UTF-8 chunks cover every byte;
 these source-capture bounds are not model-request ceilings.
 
-[§9.4](../09-configuration.md#94-project-principle-resolution) owns the `principles`
-selection policy and the guidance rules for selected principle text.
+[§9.4](../09-configuration.md#94-project-principle-resolution) owns principle capture
+and the guidance rules for principle text.
 
 ## `BuildPrincipleIdLedgerAction`
 

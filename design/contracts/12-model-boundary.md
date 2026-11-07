@@ -160,7 +160,7 @@ Each generation request contains only what the current unit needs:
 - It receives no install command and cannot introduce a registry endpoint.
 - The same authority and typed rules are used by proposal validation and atomic repair.
 
-Raw whole-repository listings, principle categories not selected by the configured stage/file-kind mapping, and earlier model prose are not sent. Stable identifiers replace repeated text wherever possible.
+Raw whole-repository listings and earlier model prose are not sent. Stable identifiers replace repeated text wherever possible.
 
 ### 12.3 Provider-neutral response envelope
 

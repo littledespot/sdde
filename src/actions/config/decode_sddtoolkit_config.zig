@@ -70,6 +70,40 @@ test "slots configure no output-token allowance or request deadline" {
     };
 }
 
+test "a slot's reasoning effort is a string when present and never null" {
+    // sddtoolkit-config.schema.json: `reasoningEffort` is optional and a string.
+    const a = std.testing.allocator;
+    const model = "\"model\": \"gpt-5.4-mini\"";
+    var omitted = try (Action{}).execute(a, valid_config);
+    defer omitted.deinit();
+    try std.testing.expectEqual(@as(?[]const u8, null), omitted.value().models.slots.map.get("implementation").?.reasoningEffort);
+    const low = try std.mem.replaceOwned(u8, a, valid_config, model, model ++ ", \"reasoningEffort\": \"low\"");
+    defer a.free(low);
+    var decoded = try (Action{}).execute(a, low);
+    defer decoded.deinit();
+    try std.testing.expectEqualStrings("low", decoded.value().models.slots.map.get("implementation").?.reasoningEffort.?);
+    for ([_][]const u8{ "null", "1", "true", "[]", "[108,111,119]", "{}", "\"low\", \"reasoningEffort\": \"high\"" }) |raw| {
+        const replacement = try std.fmt.allocPrint(a, "{s}, \"reasoningEffort\": {s}", .{ model, raw });
+        defer a.free(replacement);
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, model, replacement);
+        defer a.free(bytes);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
+}
+
+test "the removed principles section is an unknown member" {
+    // Nothing read the principle category policy once its selection was removed (FIX06 E10).
+    const a = std.testing.allocator;
+    for ([_][]const u8{ "null", "{}", "{\"filenameHints\":{},\"selections\":[]}" }) |section| {
+        const replacement = try std.fmt.allocPrint(a, "{{\"principles\":{s},\n  \"logs\"", .{section});
+        defer a.free(replacement);
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, "{\n  \"logs\"", replacement);
+        defer a.free(bytes);
+        try std.testing.expect(std.mem.indexOf(u8, bytes, "{\"principles\":") != null);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
+}
+
 test "the workflow token budget is a required positive integer within the u32 range" {
     // ADR 0037: the project configuration is the budget's one source; no default exists.
     const a = std.testing.allocator;

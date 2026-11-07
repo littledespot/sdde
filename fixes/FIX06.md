@@ -43,6 +43,7 @@ addition / contradiction:
 | ADR 0047 + D12.3, 3 runs per case (7 November, `f6ef0f6` modified, skill `0b552067…`; direction only) | 3 of 3 pass; 0 / 0 / 1 / 0 | 0 of 3 pass; 2 / 1 / 1 / 0 |
 | Q20, reverted (entity-meaning purpose; 3 runs per case, 7 November, `63fb521` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 1 of 3 pass; 6 / 0 / 0 / 0 |
 | One-owner hygiene, reverted (role-routed field instructions; 3 runs per case, 7 November, `014fd15` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 0 of 2 published pass, 2 of 3 published; 2 / 0 / 1 / 0 |
+| E10 and principles removal (3 runs per case, 8 November, `496d754` modified, skill `1d66d882…`; no model-input change; direction only) | 2 of 2 published pass, 2 of 3 published; 0 / 0 / 1 / 0 | 1 of 2 published pass, 2 of 3 published; 0 / 1 / 1 / 0 |
 
 Pooled over the 12 kept-state runs since ADR 0047, against D12.2: 12 of 12 published (9 of 10);
 hello-world 5 of 6 pass (4 of 5 runs); loan-renewal 1 of 6 pass (1 of 5); loan-renewal per run,
@@ -61,6 +62,7 @@ only, since keep decisions use accuracy defect counts, §2 rule 6):
 | ADR 0047 + D12.3 (6 runs, `f6ef0f6` modified) | 91.7 (89.3–92.9) | 85.7 (82.1–89.3) | 0 |
 | Q20, reverted (6 runs, `63fb521` modified) | 97.6 (92.9–100) | 85.7 (78.6–92.9) | 1 |
 | One-owner hygiene, reverted (6 runs, 5 published, `014fd15` modified) | 96.4 (96.4–96.4) | 83.9 (78.6–89.3) | 1 |
+| E10 and principles removal (6 runs, 4 published, `496d754` modified) | 92.9 (89.3–96.4) | 89.3 (82.1–96.4) | 0 |
 
 ## 2. Rules for measured phases
 
@@ -182,12 +184,13 @@ research. "Gap" means between measurement sets.
 
 **Next:**
 
-1. **E10** (§5): the `needs_user` alias, dead code and stale comments; no decision, no
-   request change. Q8 D8.3 and the bare-value correction are implemented
-   ([Z_FIX06](Z_FIX06.md)); entity restatement is recorded as a model limitation (§3 open
-   problems). The bare-value correction is kept or reverted on a repeated set of both cases
-   on one committed build, scored on published output and publication rate; sets where the
-   correction never fires are not enough evidence (as for D2.3 and D4.1).
+1. Q8 D8.3 and the bare-value correction are implemented ([Z_FIX06](Z_FIX06.md)); entity
+   restatement is recorded as a model limitation (§3 open problems). The bare-value
+   correction is kept or reverted on a repeated set of both cases on one committed build,
+   scored on published output and publication rate; sets where the correction never fires
+   are not enough evidence (as for D2.3 and D4.1). It first fired live on 8 November
+   (`2026-11-07T20-44-15Z-9273…`, uncommitted tree): all three records attempts returned the
+   same bare `"Loan renewed!"` and `"Renewal refused."`, and the run exhausted its retries.
 2. **Decision pending:** whether skill `1d66d882…` counts as the same evaluator as
    `af394020…` and `0b552067…`. Its two 7 November edits (retired-ID citations; the agent may
    start it when the user explicitly approves it for named runs) changed no scoring rule
@@ -202,8 +205,10 @@ research. "Gap" means between measurement sets.
    settling it adds the ruling to the evaluate-e2e skill.
 4. **Decision pending:** D14.1's condition is met under both readings (§4 Q14); proceed with
    b3 as decided, or re-decide, given that b3 doesn't close the first-attempt route `fa03…`
-   took and a three-run set may show only "benefit not demonstrated".
+   took and a three-run set may show only "benefit not demonstrated". §4 Q14 adds option b4.
 5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes and titles.
+6. **Decision pending:** whether the proposed entity lever (§3 open problems) reopens entity
+   restatement.
 
 **Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
 Q17 after D12.2, and D14.1 holds Q14 b3 (§3 Next item 4); each change set is measured on its
@@ -215,15 +220,25 @@ own committed build, §2.1 and §2.3; completed change sets are in [Z_FIX06](Z_F
 | 2 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
 | 3 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
 | 4 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
+| 5 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 open |
 
 **Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
 location. D13.1 removed the review calls where every runaway and SyntaxError of 31 October
 occurred and where the budget ran short. Since then the measured runs show 0 runaways and 0
 re-sends; the highest used 67,448 of the 125,000-token workflow budget
-(`2026-11-02T02-28-14Z`, which reached source review). Of the 24 runs since ADR 0047, only
-`2026-11-07T06-12-34Z-f549…` (one-owner hygiene, reverted) failed: records retry exhaustion,
-not budget. They used 13,363–45,309 tokens; the highest, `06-11-33Z-6897…`, spent about 26k on
-five identical extraction claims (§4 Q8 D8.3).
+(`2026-11-02T02-28-14Z`, which reached source review). Runs since ADR 0047 have failed only by
+retry exhaustion, never budget:
+- records, on the bare outcomes `"Loan renewed!"` and `"Renewal refused."`
+  (`2026-11-07T06-12-34Z-f549…`, `07-38-56Z-2627…`, and on 8 November `2026-11-07T20-44-15Z-9273…`,
+  where the bare-value correction was sent and changed nothing);
+- reconcile dispositions (`2026-11-07T20-44-02Z-9d7f…`, hello-world): the model answered with
+  its reasoning prose and no JSON, so `/claim_dispositions` was missing on all three attempts.
+  `20-41-06Z-6197…` recovered from the same omission on its correction. The request is
+  byte-identical to the pre-change `08-22-52Z` call, which succeeded: the model's variance
+  under a coherent contract, reported with no lever.
+
+The runs through 7 November used 13,363–45,309 tokens; the highest, `06-11-33Z-6897…`, spent
+about 26k on five identical extraction claims (§4 Q8 D8.3).
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
 startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6, E8 and
@@ -274,9 +289,17 @@ or the user records it as a model limitation.
   `openai.gpt-oss-20b-1:0` (`ap-southeast-2`, the only model used in every live run, §7 H5).
   Runs that show it still fail their criterion; nothing is weakened, and no further prompt
   change targets it. Reopen only for a structural lever with an owner, such as a contract
-  change to what an entity field may contain (a **Decision**). Still open: edge-case outcomes
-  (purpose `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a
-  recorded model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
+  change to what an entity field may contain (a **Decision**, §3 Next item 6). **Proposed
+  lever** (8 November 2026): an entity holds its name and typed links to the statements that
+  govern it, rendered by the engine, in place of the free-text `business_meaning` and
+  relationship meaning (`packet-guidance.json:28-29`). It works only if no free-text field
+  but the name remains, since the model restates in whichever field stays open. Entities are
+  written before records and select whole groups (ADR 0038:63), so the links need an entity
+  claim selection or a step after records. Owner: the entity fields' contract
+  (`text-field-composition.md:67`) and rendering (F0100:1201-1203); amends ADR 0038
+  Decision 1. A screen, then a set. Still open: edge-case outcomes (purpose
+  `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a recorded
+  model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
   source lines, since the result restates the Given and reads as requirements, not observed
   outcomes.
@@ -444,7 +467,16 @@ recorded.
 
 D13.1 (post-generation reviews removed) and the inline source lines are in
 [Z_FIX06](Z_FIX06.md). Reopen link checks, in shadow mode, only if adjudication shows semantic
-defects that the generation-side items (Q14, ADR 0047) leave. **D13.4** (decided 1
+defects that the generation-side items (Q14, ADR 0047) leave; ADR 0047's part is met (lossy
+repeats remain, §1), and Q14 hasn't landed. Reopening is a **Decision**: it amends ADR
+0023's Decision (:46, :60-62) and its removal amendment (:25-42), and the harness makes no
+judge call (AGENTS.md). **Proposed shape** (8 November 2026): each check asks one question of
+one generated value against its fixed claims, returns a structured finding with evidence,
+edits and decides nothing, and is labelled under H2's scheme (SKILL.md §7). Against it: the
+26 October source review, on the same model, caught 1 of 28 defects by the assistant's
+unconfirmed labels (`evaluations/b2-review-accuracy/2026-10-26/summary.md`), and a reliable
+finding drives no repair unless ADR 0023:51-53 is also amended.
+**D13.4** (decided 1
 November 2026): principles are context and constraints only, never origins, and never modified
 (Q17). Nothing checks what a shown source line means beyond the advisory evaluate-e2e link
 check. Open:
@@ -530,6 +562,12 @@ over-citation, so `728d…`'s AC-001, which names refusal claims it doesn't test
     22-repair.md:268-272, :563-568 and :809-811; 12-model-boundary.md:105 and :870-872;
     17-specify.md:200-203; F0100:1224-1227 and :1402-1407.
   - An inserted scenario still links without checking meaning.
+- **b4** (proposed 8 November 2026; not decided): claim-bound scenarios at first generation
+  too: the engine fixes each scenario's `claim_ids` before the model writes it, closing
+  `fa03…`'s first-attempt route that b3 leaves. Slots can come only from IDs, so a slot per
+  claim needs the statements first (a second records call per group) or D21.1's unit (§4
+  Q21). Risk: each added scenario is another restatement that can lose part of its claim, the
+  cause of every failure since ADR 0047 (§1). Amends ADR 0038 Decisions 1–3 beyond b3's.
 - **b2** (not chosen): the scenarios naming a claim must together contain every exact value
   its quoted text requires; it misses claim 4 and business-rule-only cases.
 
@@ -552,7 +590,7 @@ principles "should be used for context when executing the spec workflow".
   (`src/adapters/filesystem/principle_source.zig`), the only principle capability is
   `principle_read` (`workflow_capability.zig:18`), and path validation rejects every project
   operation against the semantic-principles root (11-path-validation.md:20). Every future step
-  (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:27-28); design.md §3.3
+  (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:36); design.md §3.3
   doesn't (adding it is a design edit awaiting approval).
 - **Context:** today no generation call receives principles; only `capture-principle-registry`
   reads them (`spec.workflow.yaml:42-44`). Adding them changes generation requests, so it is a
@@ -566,13 +604,42 @@ principles "should be used for context when executing the spec workflow".
   2026, user: "Yes, watch items").
 - **Target and risk:** no current rubric criterion scores principle consistency, so a set can
   show only guards (unsupported addition and invented entity from principle text,
-  publication) unless the case rubrics gain a criterion. Amends ADR 0015 (0015:12-13 already
+  publication) unless the case rubrics gain a criterion. Amends ADR 0015 (0015:10-14 already
   names D17.1), ADR 0023 "Principles" (0023:149-159), 17-specify.md's generation inputs
   (:257-299) and F0100.
 - **Sequence (recommended, not decided; D17.1 places it after D12.2):** a records screen
   first: the loan-renewal rubric's
   proportionate-scope criterion penalises principle-derived prescriptions, so its guards need
   a settled reference.
+
+### Q21. Behaviour claims need statements
+
+**Defect:** lost source requirement: a behaviour claim that no statement or scenario names
+passes coverage, because the brief fields, entity basis and composed story select whole
+groups and a claim maps through any field holding it (`specification_coverage.zig:52-61`,
+`:74`). In a one-group feature, as both development cases are, ADR 0038 Decision 2's scenario
+rule never reaches an unnamed claim (ADR 0038:130-132; pinned at
+`specification_generation_test.zig:8961-8964`). No failure since ADR 0047 is of this kind
+(§1), so a set may show only "benefit not demonstrated".
+
+**Proposed 8 November 2026** (not decided): a narrative selection gives traceability only;
+every obligation-bearing claim must be named by a behaviour statement (FR, BR, UO or PB),
+whose claims then need a scenario. A coverage gap blocks with no repair today
+(`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission
+(ADR 0038 Decision 3) or a claim-bound insert (b3, §4 Q14), or silent passes become blocked
+runs. Owner: `Coverage` (`model_result_schema.zig:56`) and `specification_coverage.zig`;
+amends ADR 0038 Decision 2 and :125-132, 17-specify.md §17.5 and F0100.
+
+**D21.1 (Decision):** which claims bear obligations: (a) every `business` claim, which
+includes feature identity and purpose (`extraction.context.json:6`); (b) a new obligation
+category in extraction (`:5-13`), changing extraction requests; (c) a bounded model
+decomposition into source-span elements, the only option that separates a compound claim such
+as loan-renewal's four-part refusal item (`stories.md:9`, ADR 0038:117-118), at the cost of a
+model step whose losses nothing native detects. Treating shared source evidence as no
+redundancy is not adopted: it would reverse ADR 0038 Decision 5 (user, 2 November 2026).
+
+**Next:** D21.1; fixtures at the owner (an unnamed claim, or one named only by an assumption,
+non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6).
 
 ## 5. Engine track (E)
 
@@ -584,8 +651,8 @@ per case (DE2–DE4 ask whether offline evidence replaces it), landing between s
 
 On hold since 30 October 2026 (ADR 0041:3-4). Nothing under `src/` names `failure-output`,
 `spec_incomplete` or `run.incomplete_published`. To resume: implement ADR 0041 Decisions 1–8,
-taking `specification-state/v22` (v21 is current, `specification_state.zig:8`; ADR 0041:5-6,
-:39); align the measures (`test/harness/e2e/measures.zig:207`, test `:739-742`;
+taking `specification-state/v23` (v22 is current, `specification_state.zig:8`; ADR 0041:5-8,
+:40); align the measures (`test/harness/e2e/measures.zig:207`, test `:739-742`;
 e2e.md:681-684), design.md:208, 24-workflow-state.md:74, 25-publication.md:41-45, F0100:1171
 and `test/harness/e2e/contracts.zig:209-212` with Decision 7.1 (an `invalid` run stays
 `invalid` and may publish), and F0100:1165 with Decision 7.8 (the title precedes the status
@@ -726,27 +793,23 @@ a model-authored exact handle that models can't author since `dfae959` (ADR 0020
 
 ### E10. Code defects found by the 7 November review
 
-**Defect:** none in published output: contract violations, dead code and stale engine
-text. **Next:** fix each at its owner, with rejected fixtures where behaviour changes. No
-request or report changes, so no live run and no §2.12 landing.
+**Defect:** none in published output: a contract violation in the closed decoders. The rest
+of E10 is implemented ([Z_FIX06](Z_FIX06.md)). Open, with no request or report change and no
+live run:
 
-- **Alias:** `parseOutcome` falls back to `std.meta.stringToEnum`
-  (`validate_workflow_definition_schema.zig:217-220`), so `needs_user` and `end.needs_user`
-  load, though the schema allows only `needs-user` (`workflow-definition-v1.schema.json:124`,
-  `:144`) and AGENTS.md forbids aliases.
-- **Explicit null:** the configuration decoder accepts `reasoningEffort: null` (`config.zig:15`,
-  an optional `std.json` field); the closed schema allows only a string
-  (`sddtoolkit-config.schema.json:68`). Reject it, with accepted and rejected fixtures.
-- **Dead code:** `validateCitation` (`principle_registry.zig:224`) and `CitationDiagnostic`
-  (`:43`) have had only test callers since D13.1; their removal follows §8's semantic-review
-  decision (22-repair.md:418-421 still describes them).
-- **Stale comments:** `specification_coverage.zig:1` ("semantic relevance remains
-  reviewed"); `specification_support_evidence.zig:1` and `specification_support.zig:87`, `:91`
-  ("readback", though state persists no review evidence, ADR 0023:137-138);
-  `test/harness/e2e/measures.zig:70` ("such as a story": no story response since ADR 0047).
-- **Start rule:** `test/harness/e2e/cli.zig:26`, `report.zig:228`, `:260` and
-  `acceptance.zig:2` say only the user triggers `/evaluate-e2e`; AGENTS.md "Testing
-  expectations" also allows it on the user's explicit approval for named runs.
+- **Strings accept number arrays** (found 8 November 2026): `std.json` reads a `[]const u8`
+  from an array of byte values, and accepts quoted numbers and numeric enum tags
+  (`strict_json.zig:95-96`), so `"provider": [112]` decodes though the schema allows only a
+  string. **Decided 8 November 2026** (user: "apply best recommendation"): the owner is
+  `strict_json`'s kind rule (`:126-127`), and the fix is its own change after a `/preflight`.
+  Until then `reasoningEffort` keeps its local check (`config.zig`, `Effort.jsonParse`),
+  which that change deletes. Proposed for that change: the configuration decoder can't adopt
+  `wireTypes` as it stands (its types have defaults, and `wireTypes` needs every field
+  present, `:113`, and accepts null for any optional, `:133`), so `wireTypes` would gain a
+  kind check that tolerates absent defaulted fields. The provider-document decoder
+  (`src/actions/provider/decode_llm_provider_config.zig:26`) also calls `std.json` directly,
+  but its raw types have no optional or defaulted fields (`llm_provider_document.zig:9-22`),
+  so it may adopt `wireTypes` as is. Other closed-document decoders are not yet inspected.
 
 ## 6. Test track (T)
 
@@ -818,7 +881,9 @@ the evaluation miss earlier merges in a unit and every merge of an earlier unit.
 seven (revisions 1→2 to 7→8), one listed; `2026-11-06T22-45-22Z-c845…` two, one listed;
 `2026-11-06T22-45-46Z-d392…` two (its records call ran in two units), none listed. §2 rule 5
 grades every repair, and the harmful repair watch item depends on it. **Next:** the report
-lists every merge (a report version, §2 rule 12); until then e2e.md states the limit.
+lists every merge in merge order (a report version, §2 rule 12); until then e2e.md states the
+limit. Each `Merge` already carries its `operation` and `origin` (`atomic_repair.zig:35`,
+`:39`).
 
 ## 7. Human and decision track (H)
 
@@ -976,6 +1041,13 @@ edits); code defects are E10. **Status:** each verified against the tree on 7 No
   14-orchestration.md:158-164 and :172, 22-repair.md:207-209 and :418-421 (principle citation
   diagnostics), invariant 18 (design.md:950-953), ADR 0033:138-139 and code.md samples 3, 4,
   13 and 28 keep them.
+- **Principle selection in Plan-stage design** (8 November 2026): the category and selection
+  policy is removed from code, ADR 0015, §9.4, F0001, the schema, §24, F0100 and design.md.
+  Unimplemented Plan-stage text still names it: the §13.1 catalogue's principle entries
+  (`13-01-bootstrap-configuration.md:1461-1662`, among the actions no code registers),
+  18-plan.md:32 and :92, 20-implement.md:70, design.md:730 and
+  code.md:1849. ADR 0034 gates it; a stage that filters principles needs its own mechanism
+  and decision.
 - **Orchestrator invoking an action:** 13-05:1897 has "the orchestrator statically invokes
   `AppendWorkflowControlEventAction` twice"; AGENTS.md lets an orchestrator coordinate only
   runner-owned child bindings.

@@ -214,9 +214,25 @@ fn scalarValue(raw: *definition.RawNode) Error!workflow.ParameterValue {
     };
 }
 
+/// An outcome's authored spelling, as the workflow-definition schema names it.
+/// A Zig tag name is not a spelling, so `needs_user` is not accepted.
+fn spelling(tag: workflow.OutcomeTag) []const u8 {
+    return switch (tag) {
+        .ok => "ok",
+        .more => "more",
+        .needs_user => "needs-user",
+        .invalid => "invalid",
+        .blocked => "blocked",
+        .failed => "failed",
+        .cancelled => "cancelled",
+    };
+}
+
 fn parseOutcome(value: []const u8) ?workflow.OutcomeTag {
-    if (std.mem.eql(u8, value, "needs-user")) return .needs_user;
-    return std.meta.stringToEnum(workflow.OutcomeTag, value);
+    for (std.enums.values(workflow.OutcomeTag)) |tag| {
+        if (std.mem.eql(u8, value, spelling(tag))) return tag;
+    }
+    return null;
 }
 
 fn parseTarget(value: []const u8) ?workflow.TransitionTarget {
@@ -319,18 +335,23 @@ const RawBuilder = struct {
 };
 
 fn conciseRaw(builder: RawBuilder, legacy: bool) !*definition.RawNode {
-    const outcomes = try builder.mapping(&.{try builder.pair("ok", try builder.scalar("end.ok"))});
-    const step = try builder.mapping(&.{
-        try builder.pair("use", try builder.scalar("core.noop")),
-        try builder.pair("on", outcomes),
-    });
-    const steps = try builder.mapping(&.{try builder.pair("run", step)});
     if (legacy) {
         return builder.mapping(&.{
             try builder.pair("schemaVersion", try builder.scalar("1.0")),
             try builder.pair("workflowId", try builder.scalar("legacy")),
         });
     }
+    return outcomeRaw(builder, "ok", "end.ok");
+}
+
+/// The concise workflow whose one step declares a single outcome transition.
+fn outcomeRaw(builder: RawBuilder, outcome: []const u8, target: []const u8) !*definition.RawNode {
+    const outcomes = try builder.mapping(&.{try builder.pair(outcome, try builder.scalar(target))});
+    const step = try builder.mapping(&.{
+        try builder.pair("use", try builder.scalar("core.noop")),
+        try builder.pair("on", outcomes),
+    });
+    const steps = try builder.mapping(&.{try builder.pair("run", step)});
     return builder.mapping(&.{
         try builder.pair("schema", try builder.scalar("workflow/v1")),
         try builder.pair("id", try builder.scalar("arbitrary-flow")),
@@ -382,6 +403,43 @@ test "rejects unknown outcome and unsafe resource name" {
         error.WorkflowDefinitionSchemaInvalid,
         (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}),
     );
+}
+
+test "outcome keys and terminal targets use the schema spelling, never a Zig tag name" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const builder: RawBuilder = .{ .allocator = arena.allocator() };
+    // workflow-definition-v1.schema.json names these outcome keys and these terminals.
+    for ([_]struct { key: []const u8, target: []const u8, outcome: workflow.OutcomeTag }{
+        .{ .key = "ok", .target = "end.ok", .outcome = .ok },
+        .{ .key = "needs-user", .target = "end.needs-user", .outcome = .needs_user },
+        .{ .key = "invalid", .target = "end.invalid", .outcome = .invalid },
+        .{ .key = "blocked", .target = "end.blocked", .outcome = .blocked },
+        .{ .key = "failed", .target = "end.failed", .outcome = .failed },
+        .{ .key = "cancelled", .target = "end.cancelled", .outcome = .cancelled },
+    }) |case| {
+        const values = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }});
+        const transition = values[0].steps[0].outcomes[0];
+        try std.testing.expectEqual(case.outcome, transition.outcome);
+        try std.testing.expectEqual(case.outcome, transition.target.terminal);
+    }
+    // `more` is a declared outcome key whose successor is a step, never a terminal.
+    const progress = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, "more", "run") }});
+    try std.testing.expectEqual(workflow.OutcomeTag.more, progress[0].steps[0].outcomes[0].outcome);
+    try std.testing.expect(progress[0].steps[0].outcomes[0].target == .step);
+    for ([_]struct { key: []const u8, target: []const u8 }{
+        .{ .key = "needs_user", .target = "end.ok" },
+        .{ .key = "ok", .target = "end.needs_user" },
+        .{ .key = "needs_user", .target = "end.needs_user" },
+        .{ .key = "Needs-User", .target = "end.ok" },
+        .{ .key = "Ok", .target = "end.ok" },
+        .{ .key = "ok", .target = "end.Ok" },
+    }) |case| {
+        try std.testing.expectError(
+            error.WorkflowDefinitionSchemaInvalid,
+            (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}),
+        );
+    }
 }
 
 fn sourceEntry(a: std.mem.Allocator, subgraph: ?[]const u8, id: []const u8, kind: @FieldType(@import("../../domain/workflow_source.zig").Entry, "kind"), target: []const u8, node: *definition.RawNode) Error!@import("../../domain/workflow_source.zig").Entry {

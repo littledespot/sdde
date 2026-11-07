@@ -1,10 +1,9 @@
-//! Immutable captured policy prose and exact transport selections. No semantic inference.
+//! Immutable captured principle prose, chunked for transport. No semantic inference.
 const std = @import("std");
 const inventory = @import("source_inventory.zig");
-const policy = @import("principle_policy.zig");
 const identity = @import("filesystem_identity.zig");
 const coordinates = @import("source_coordinates.zig");
-pub const Error = std.mem.Allocator.Error || policy.Error || @import("canonical_json.zig").Error || error{InvalidPrincipleRegistry};
+pub const Error = std.mem.Allocator.Error || @import("canonical_json.zig").Error || error{InvalidPrincipleRegistry};
 pub const limits: inventory.Limits = .{ .entries = 1024, .depth = 16, .duration_ms = 5000 };
 pub const max_source_bytes: usize = 1024 * 1024;
 pub const max_total_bytes: usize = 8 * 1024 * 1024;
@@ -25,31 +24,16 @@ pub const Raw = struct { root: Root, entries: []const inventory.Descriptor };
 pub const Inventory = struct { root: Root, entries: []const Entry, source_bytes: usize };
 pub const Capture = struct { entry: u32, bytes: []const u8 };
 pub const Captured = struct { inventory: Inventory, sources: []const Capture };
-pub const Source = struct { id: SourceId, entry: u32, category: policy.Category, bytes: []const u8 };
+pub const Source = struct { id: SourceId, entry: u32, bytes: []const u8 };
 pub const Chunk = struct { id: ChunkId, source: SourceId, span: coordinates.Span };
 pub const Registry = struct {
     id: Id,
     inventory: Inventory,
-    policy: policy.Policy,
     sources: []const Source,
     chunks: []const Chunk,
     next_source: u32,
     next_chunk: u32,
 };
-pub const Selection = struct { registry: Id, scope: policy.Scope, chunks: []const ChunkId };
-pub const Citation = struct { chunk: ChunkId, first_line: u32, last_line: u32 };
-pub const Guidance = struct { id: ChunkId, category: policy.Category, first_line: u32, last_line: u32, text: []const u8 };
-pub const LineBounds = struct { minimum: u32, maximum: u32 };
-pub const CitationDiagnostic = struct {
-    field: enum { chunk, first_line, last_line },
-    rejected: u32,
-    // Chunk membership uses the existing selection's permitted IDs.
-    bounds: ?LineBounds = null,
-};
-
-fn lineBounds(chunk: Chunk) LineBounds {
-    return .{ .minimum = chunk.span.start.line, .maximum = chunk.span.end.line - @as(u32, if (chunk.span.end.column == 1) 1 else 0) };
-}
 
 pub fn classify(a: std.mem.Allocator, raw: Raw, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer, folder: @import("../ports/unicode_normalizer.zig").CaseFolder) Error!Inventory {
     @import("relative_directory_path.zig").validate(raw.root.path) catch return error.InvalidPrincipleRegistry;
@@ -105,19 +89,13 @@ pub fn validateInventory(value: Inventory) Error!void {
     if (mechanical != 1 or total != value.source_bytes) return error.InvalidPrincipleRegistry;
 }
 
-pub fn buildConfigured(a: std.mem.Allocator, captured: Captured, configured: policy.Input, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer, folder: @import("../ports/unicode_normalizer.zig").CaseFolder, prior: ?Registry) Error!Registry {
-    return build(a, captured, try policy.compile(a, configured, normalizer, folder), prior);
-}
-
-pub fn build(a: std.mem.Allocator, captured: Captured, selected_policy: policy.Policy, prior: ?Registry) Error!Registry {
+pub fn build(a: std.mem.Allocator, captured: Captured, prior: ?Registry) Error!Registry {
     try validateInventory(captured.inventory);
-    try policy.validate(selected_policy);
     if (prior) |old| try validate(old);
     const same_root = if (prior) |old| old.id.root.eql(captured.inventory.root.identity) and std.mem.eql(u8, old.inventory.root.path, captured.inventory.root.path) else false;
     var result: Registry = .{
         .id = .{ .root = captured.inventory.root.identity, .ordinal = if (same_root) prior.?.id.ordinal else 1, .revision = if (same_root) std.math.add(u64, prior.?.id.revision, 1) catch return error.InvalidPrincipleRegistry else 1 },
         .inventory = captured.inventory,
-        .policy = selected_policy,
         .sources = &.{},
         .chunks = &.{},
         .next_source = if (same_root) prior.?.next_source else 1,
@@ -132,16 +110,15 @@ pub fn build(a: std.mem.Allocator, captured: Captured, selected_policy: policy.P
         const source = captured.sources[cursor];
         cursor += 1;
         if (source.entry != index + 1 or source.bytes.len != entry.descriptor.observation.file.size or !std.unicode.utf8ValidateSlice(source.bytes)) return error.InvalidPrincipleRegistry;
-        const category_hint = policy.category(selected_policy, entry.descriptor.path);
         const retained: ?Source = found: {
             if (same_root) for (prior.?.sources) |old| {
                 const old_entry = prior.?.inventory.entries[old.entry - 1];
-                if (old.category == category_hint and std.mem.eql(u8, old_entry.descriptor.path, entry.descriptor.path) and std.meta.eql(old_entry.descriptor.observation, entry.descriptor.observation) and std.mem.eql(u8, old.bytes, source.bytes)) break :found old;
+                if (std.mem.eql(u8, old_entry.descriptor.path, entry.descriptor.path) and std.meta.eql(old_entry.descriptor.observation, entry.descriptor.observation) and std.mem.eql(u8, old.bytes, source.bytes)) break :found old;
             };
             break :found null;
         };
         const id: SourceId = if (retained) |old| old.id else .{ .ordinal = try allocate(&result.next_source) };
-        try sources.append(a, .{ .id = id, .entry = @intCast(index + 1), .category = category_hint, .bytes = source.bytes });
+        try sources.append(a, .{ .id = id, .entry = @intCast(index + 1), .bytes = source.bytes });
         var start: coordinates.Position = .{ .byte = 0, .line = 1, .column = 1 };
         while (start.byte < source.bytes.len) {
             var end = start;
@@ -170,7 +147,6 @@ pub fn build(a: std.mem.Allocator, captured: Captured, selected_policy: policy.P
 }
 pub fn validate(value: Registry) Error!void {
     try validateInventory(value.inventory);
-    try policy.validate(value.policy);
     if (value.id.ordinal == 0 or value.id.revision == 0 or !value.id.root.eql(value.inventory.root.identity) or value.next_source == 0 or value.next_chunk == 0) return error.InvalidPrincipleRegistry;
     var source_cursor: usize = 0;
     var chunk_cursor: usize = 0;
@@ -178,7 +154,7 @@ pub fn validate(value: Registry) Error!void {
         if (entry.kind != .semantic_markdown) continue;
         if (source_cursor >= value.sources.len) return error.InvalidPrincipleRegistry;
         const source = value.sources[source_cursor];
-        if (source.entry != entry_index + 1 or source.id.ordinal == 0 or source.id.ordinal >= value.next_source or source.category != policy.category(value.policy, entry.descriptor.path) or source.bytes.len != entry.descriptor.observation.file.size or !std.unicode.utf8ValidateSlice(source.bytes)) return error.InvalidPrincipleRegistry;
+        if (source.entry != entry_index + 1 or source.id.ordinal == 0 or source.id.ordinal >= value.next_source or source.bytes.len != entry.descriptor.observation.file.size or !std.unicode.utf8ValidateSlice(source.bytes)) return error.InvalidPrincipleRegistry;
         for (value.sources[0..source_cursor]) |other| if (std.meta.eql(other.id, source.id)) return error.InvalidPrincipleRegistry;
         source_cursor += 1;
         var position: coordinates.Position = .{ .byte = 0, .line = 1, .column = 1 };
@@ -194,51 +170,6 @@ pub fn validate(value: Registry) Error!void {
         }
     }
     if (source_cursor != value.sources.len or chunk_cursor != value.chunks.len) return error.InvalidPrincipleRegistry;
-}
-pub fn select(a: std.mem.Allocator, registry: Registry, scope: policy.Scope) Error!Selection {
-    try validate(registry);
-    const categories = try policy.select(registry.policy, scope);
-    var ids: std.ArrayList(ChunkId) = .empty;
-    for (registry.chunks) |chunk| if (categories.contains((try sourceFor(registry, chunk.source)).category)) try ids.append(a, chunk.id);
-    return .{ .registry = registry.id, .scope = scope, .chunks = try ids.toOwnedSlice(a) };
-}
-pub fn validateSelection(a: std.mem.Allocator, registry: Registry, selection: Selection) Error!void {
-    if (!std.meta.eql(registry.id, selection.registry)) return error.InvalidPrincipleRegistry;
-    const expected = try select(a, registry, selection.scope);
-    if (expected.chunks.len != selection.chunks.len) return error.InvalidPrincipleRegistry;
-    for (expected.chunks, selection.chunks) |left, right| if (!std.meta.eql(left, right)) return error.InvalidPrincipleRegistry;
-}
-pub fn guidance(a: std.mem.Allocator, registry: Registry, selection: Selection) Error![]const Guidance {
-    try validateSelection(a, registry, selection);
-    const result = try a.alloc(Guidance, selection.chunks.len);
-    for (selection.chunks, result) |id, *entry| {
-        const chunk = try chunkFor(registry, id);
-        const source = try sourceFor(registry, chunk.source);
-        const bounds = lineBounds(chunk);
-        entry.* = .{ .id = id, .category = source.category, .first_line = bounds.minimum, .last_line = bounds.maximum, .text = source.bytes[chunk.span.start.byte..chunk.span.end.byte] };
-    }
-    return result;
-}
-/// The caller validates the captured selection before admitting candidate citations.
-/// Candidate defects are data; stale or unavailable registry authority remains an error.
-pub fn validateCitation(registry: Registry, selection: Selection, citation: Citation) Error!?CitationDiagnostic {
-    if (!std.meta.eql(registry.id, selection.registry)) return error.InvalidPrincipleRegistry;
-    for (selection.chunks) |id| {
-        if (std.meta.eql(id, citation.chunk)) break;
-    } else return .{ .field = .chunk, .rejected = citation.chunk.ordinal };
-    const chunk = try chunkFor(registry, citation.chunk);
-    const bounds = lineBounds(chunk);
-    if (citation.first_line < bounds.minimum or citation.first_line > bounds.maximum) return .{ .field = .first_line, .rejected = citation.first_line, .bounds = bounds };
-    if (citation.last_line < citation.first_line or citation.last_line > bounds.maximum) return .{ .field = .last_line, .rejected = citation.last_line, .bounds = .{ .minimum = citation.first_line, .maximum = bounds.maximum } };
-    return null;
-}
-pub fn sourceFor(registry: Registry, id: SourceId) Error!Source {
-    for (registry.sources) |source| if (std.meta.eql(source.id, id)) return source;
-    return error.InvalidPrincipleRegistry;
-}
-pub fn chunkFor(registry: Registry, id: ChunkId) Error!Chunk {
-    for (registry.chunks) |chunk| if (std.meta.eql(chunk.id, id)) return chunk;
-    return error.InvalidPrincipleRegistry;
 }
 fn allocate(next: *u32) Error!u32 {
     const value = next.*;

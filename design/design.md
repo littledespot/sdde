@@ -702,7 +702,7 @@ and import only domain and port modules.
   with no workflow-name branches.
 - Implement direct preset-registry loading, exact project
   `toolchain.yaml` parsing/inheritance compilation, semantic Markdown principle
-  inventory/capture/category-hint indexing with mechanical-file exclusion,
+  inventory/capture indexing with mechanical-file exclusion,
   inert template-root reservation, and path validation.
 - Implement editable-spec render/parse round trips, generated-view equality and the atomic whole-workflow output/abandonment boundary in Section 25.
 - Implement the common feature-event logging pipeline, canonical level/alias handling, fixed per-feature sinks, redaction, rotation, and crash recovery before any feature-producing stage is enabled.
@@ -715,7 +715,7 @@ and import only domain and port modules.
 - Implement the structured reference/spec operations declared by their workflow YAML definitions.
 - Add specification/reference-context validators, no-invention routing, atomic repair, rendering, and commit.
 - Integrate the shared reconciliation boundary for every specification-owned field, reference-meaning decision, and preserved obligation; specification-local rules may contribute requirements/candidates only.
-- Capture and select principles canonically (ADR 0015); Spec runs no principle
+- Capture principles canonically (ADR 0015); Spec runs no principle
   assessment. Native required policy and actionable missing decisions retain their
   owning gates.
 - Implement the complete `S01..S99` clarification lifecycle, exact subject deduplication, controlled forms, authority/user resolution, rerun regeneration, and the blocking plan gate.
@@ -982,9 +982,9 @@ The new engine is ready for production evaluation when all of the following are 
     criterion, requirement and entity.
 
 22. **Project principle authority.**
-    - Semantic Markdown principle filenames are category hints only; their complete bounded
-      bodies remain free text.
-    - The exact current principle registry is loaded and selected at Spec capture, and
+    - Semantic Markdown principles are free text: the engine assigns no category from a
+      filename or body, and their complete bounded bodies are captured.
+    - The exact current principle registry is loaded at Spec capture, and
       cited at plan, tasks, implement and fresh clarification-rerun gates. It never
       invents or erases specification requirements. Spec runs no principle
       assessment (ADR 0015); Plan rechecks current principles and resolves its native
@@ -1122,7 +1122,7 @@ gives its title and status.
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one workflow-owned model request across YAML steps | Accepted |
 | [0013](decisions/0013-workflow-input-reuse.md) | Reuse workflow structure and compact model inputs | Accepted |
 | [0014](decisions/0014-universal-response-format-guidance.md) | Universal response-format guidance | Accepted |
-| [0015](decisions/0015-specification-principle-review.md) | Capture and select project principles during Specify | Accepted design amendment; amended 1 November 2026: Spec runs no principle assessment |
+| [0015](decisions/0015-specification-principle-review.md) | Capture project principles during Specify | Accepted design amendment; amended 1 November 2026: Spec runs no principle assessment; amended 8 November 2026: no category or selection policy |
 | [0016](decisions/0016-configured-json-response-composition.md) | Configure smaller JSON responses and assemble them deterministically | Accepted |
 | [0017](decisions/0017-incomplete-specification-publication.md) | Publish an incomplete specification with clarification gaps | Accepted |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Capture complete model exchanges at debug level | Accepted |

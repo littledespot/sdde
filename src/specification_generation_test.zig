@@ -6253,7 +6253,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expectEqual(@as(u32, 42), next.id_ledger.next[0]);
         try std.testing.expectEqual(@as(u64, 2), next.revision);
         try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, state.parse(a, bytes, value.feature, null));
-        for (0..9) |mode| {
+        for (0..10) |mode| {
             var bad = value;
             switch (mode) {
                 0 => bad.open_clarifications = &.{},
@@ -6265,6 +6265,7 @@ test "incomplete specifications publish supported business evidence and bound qu
                 6 => bad.schema = "specification-state/v15",
                 7 => bad.id_ledger.next[0] = 0,
                 8 => bad.schema = "specification-state/v16",
+                9 => bad.schema = "specification-state/v21",
                 else => unreachable,
             }
             try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try json.encode(draft.State, a, bad), value.feature, contracts.port()));

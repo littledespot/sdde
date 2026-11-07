@@ -13,6 +13,40 @@ pub const ModelSlotConfig = struct {
     provider: []const u8,
     model: []const u8,
     reasoningEffort: ?[]const u8 = null,
+
+    /// The configuration schema makes `reasoningEffort` a string when present, so
+    /// an explicit null is rejected, not read as absent.
+    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!ModelSlotConfig {
+        const wire = try std.json.innerParse(Wire, a, source, options);
+        return .{
+            .provider = wire.provider,
+            .model = wire.model,
+            .reasoningEffort = switch (wire.reasoningEffort) {
+                .absent => null,
+                .present => |effort| effort,
+            },
+        };
+    }
+
+    /// The same fields with the effort's presence explicit; decoding only.
+    const Wire = struct {
+        provider: []const u8,
+        model: []const u8,
+        reasoningEffort: Effort = .absent,
+    };
+    const Effort = union(enum) {
+        absent,
+        present: []const u8,
+
+        pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!Effort {
+            // std.json also reads a byte slice from an array of numbers; the schema allows only a string.
+            if (try source.peekNextTokenType() != .string) return error.UnexpectedToken;
+            return .{ .present = try std.json.innerParse([]const u8, a, source, options) };
+        }
+    };
+    comptime {
+        std.debug.assert(std.meta.fields(Wire).len == std.meta.fields(ModelSlotConfig).len);
+    }
 };
 
 pub const ModelsConfig = struct {
@@ -50,7 +84,6 @@ pub const SDDToolKitConfig = struct {
     temperature: model_controls.Temperature,
     temperatureRunawayRetry: model_controls.Temperature,
     paths: PathsConfig,
-    principles: ?@import("principle_policy.zig").Config = null,
     validation: ValidationConfig = .{},
 
     pub fn temperatures(self: *const SDDToolKitConfig) model_controls.Temperatures {

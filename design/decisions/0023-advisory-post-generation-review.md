@@ -148,19 +148,19 @@ bounded protocol correction and deterministic coverage validation.
 
 ## Principles
 
-Spec captures the exact current principle registry and selection and runs no
-principle assessment ([ADR 0015](0015-specification-principle-review.md)). No
-model-reported conflict or uncertainty creates a Plan obligation or a Spec
-clarification. Plan validates current project policy and all native required
-decisions at its own gate. Missing or invalid principle capture or selection
-remains a native failure.
+Spec captures the exact current principle registry and runs no principle assessment
+([ADR 0015](0015-specification-principle-review.md)). No model-reported conflict or
+uncertainty creates a Plan obligation or a Spec clarification. Plan validates current
+project policy and all native required decisions at its own gate. Missing or invalid
+principle capture remains a native failure.
 
 This supersedes the semantic-finding-to-Plan-obligation handoff in ADR 0015,
 without adding an assessment model, configuration option or principle loader.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v21`: it holds
+Completed and clarification-pending state use `specification-state/v22` (v21 until
+the principle category policy was removed, [ADR 0015](0015-specification-principle-review.md)): it holds
 no post-generation review, principle assessment or incomplete-advice evidence, and
 keeps the captured principle registry identity as its own `principle_registry`
 field, which the next run's capture reads as its prior registry. Earlier contracts
