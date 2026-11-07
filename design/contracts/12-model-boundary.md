@@ -29,20 +29,14 @@ provider observation contract, including missing final text. Only complete conte
 reaches decoding. The envelope retains declared observation history for reporting;
 storage does not change retry eligibility or the execution-wide token ledger.
 
-- Native YAML `validate-provider-invocation-observation` implements step 5 through the existing
-  validator.
-- Its parameter-free binding retains the exact request and response owners and publishes sealed
-  evidence or typed rejection/cancellation.
-- Only complete evidence exposes decoder input.
-- It performs no provider call, token accounting, decoding or lifecycle transition; YAML selects
-  those steps.
+Step 5 is the YAML operation `validate-provider-invocation-observation`; step 6 is
+`decode-model-envelope` and `validate-model-payload-schema`, or the consolidated
+`admit-model-response` that combines them. The
+[operation catalogue](model-request-operations.md) owns their inputs, outcomes and
+ownership rules.
 
-- Native `decode-model-envelope` separately parses only complete validated content, retaining
-  its evidence with the owned tree. The sole approved prefix-normalization exception
-  and its logging are defined in [§22.6](22-repair.md#226-unparseable-output).
-- JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
-  `end.invalid`; non-complete observations keep their failure/cancellation outcome without
-  parsing. Response admission, not the decoder, applies ADR 0039's runaway mapping (§12.7).
+- The sole approved prefix-normalization exception to strict decoding and its logging
+  are defined in [§22.6](22-repair.md#226-unparseable-output).
 - The [composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit)
   also checks each native-bound text field at this shared admission boundary.
   A rejection retains every violating field's concrete pointer and typed reason
@@ -50,21 +44,6 @@ storage does not change retry eligibility or the execution-wide token ledger.
   for diagnostic inspection. These checks prove syntax and mechanical field
   composition; they perform no semantic assessment, provider call, accounting or
   payload-schema check.
-
-Native `validate-model-payload-schema` checks only decoded candidates against
-their retained compiled schema and retains the original tree/evidence owner.
-Its parameter-free result separates schema rejection from unchanged protocol,
-provider and cancellation outcomes. No parsing, accounting or semantic/commit
-authority is implicit.
-
-`admit-model-response` is the pure consolidated alternative: reuse both owners
-and publish the existing envelope and payload results in one runner-validated
-delta. It accepts only the decoder's existing inputs, preserves syntax/schema
-diagnostics and non-complete outcomes, and retains the exact observation/tree
-association. The one exception is a provider `output_limit` stop: a first runaway
-admits as `invalid` with no candidate, and a runaway on a re-send as `failed` with
-`RunawayRepeated` ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Detailed operations remain available. This grants no semantic,
-provider, retry, lifecycle or accounting authority (ADR 0012).
 
 ### 12.2 Initial guidance packet
 
@@ -214,13 +193,29 @@ Raw whole-repository listings, principle categories not selected by the configur
 
 - ADR 0006 permits nested alternatives proven disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
   repeated primitive types and overlapping alternatives reject before invocation.
-- The shared candidate codec maps declared ordinal wrappers to integers, ordinary
-  prose to strings and explicit typed composition to closed `fragments` objects. Explicit
-  passive/source references remain typed candidates. Exact-copy occurrences are
-  derived natively under ADR 0020, never accepted as model-authored selections.
-  A selected scalar/array repair stays inside a closed `value` object envelope.
-  This lossless representation is shared by initial output, evidence and repairs;
-  canonical segment storage remains separate from the model-facing codec.
+- The shared candidate codec implements the §7.1 typed-text wire contract: declared
+  ordinal wrappers become integers, ordinary prose is a string, and explicit typed
+  composition is a closed `{"fragments":[text, typed-reference, ...]}` object. Explicit
+  passive/source references remain typed candidates. Native conversion preserves
+  declared fragments, whitespace and exact occurrence identity. A selected
+  scalar/array repair stays inside a closed `value` object envelope. This one lossless
+  conversion is shared by initial input/output, evidence, protocol correction and
+  authorized repairs; canonical arrays and segment storage remain native data,
+  separate from the model-facing codec, and bare model arrays reject.
+- Exact-copy occurrences are derived natively under ADR 0020, never accepted as
+  model-authored selections. The same model-wire conversion applies to generation,
+  clarification and repair, and `exact_copy` is absent from both codec directions and
+  every selected response schema. Explicit native-evidence encoding may retain sealed
+  identities as read-only facts, never response alternatives. Current native
+  `exact_scope` metadata binds the reference snapshot and eligible occurrence bytes,
+  while field bindings retain their canonical roles. Protocol correction retains these
+  exact facts and its original schema; it cannot acquire a fresh occurrence scope from
+  its rejected body. Admission recognizes raw prose before NFC and validates the
+  derived composition through the shared owner. Ambiguous eligible spans reject the
+  complete field through existing bounded correction, not a new retry route.
+  `model-request-debug/v16` retains native scope for diagnostic replay; request logs
+  never become workflow or persistence authority. Missing historical native scope
+  stays unavailable rather than reconstructed from a visible token catalogue.
 
 - Allowed variants come from the workflow-declared result schema and selected generic operation.
 - A generation operation cannot return a patch; a repair operation cannot return a whole
@@ -265,17 +260,12 @@ noncandidate stops preserve their typed outcomes and independently valid usage.
 Normalize cached token usage under
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
 
-The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
-`ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
-repair and grading, the configured temperature (`0.1` in the shipped E2E configuration,
-`1` for a runaway re-send; ADR 0039), and its documented maximum of
-16,384 output tokens sent on every inference request
-([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-The `luna` family retains its strict-output field and omitted
-temperature/reasoning controls.
-This is mechanical support, not a live compatibility or semantic-quality claim.
-The test cost policy is development-only; it cannot change production authority.
-Historical captures follow the immutable inspection/replay boundary in
+Live tests use the user-selected `openai.gpt-oss-20b-1:0` binding in `ap-southeast-2`
+under the development-only
+[cost policy](../decisions/0029-bedrock-model-families.md#live-test-cost-policy). That
+is mechanical support, not a live compatibility or semantic-quality claim, and it
+cannot change production authority. Historical captures follow the immutable
+inspection/replay boundary in
 [ADR 0019](../decisions/0019-single-request-debugger.md#replay).
 
 #### 12.3.2 Anthropic Messages
@@ -284,34 +274,20 @@ Historical captures follow the immutable inspection/replay boundary in
 Messages API a peer of Bedrock on shared provider owners: one native JSON-schema
 capability and projection, transport, credential snapshot, retry classifier and
 provider port. Only the endpoint, request encoder and response decoder are
-Anthropic-specific. ADR 0028 owns the dated wire contract.
+Anthropic-specific. ADR 0028 owns the dated wire contract: the models, endpoint and
+headers, request and response mapping, stop reasons, usage and error classification.
 
-- Provider `anthropic` joins its models `claude-haiku-5-5`, `claude-sonnet-5-5` and
-  `claude-opus-5-5` by exact model. Each needs its own approved compatibility probe
-  before live use.
-- `config` is exactly `maxOutputTokens`, the documented maximum (128,000 for each
-  model) sent unchanged as `max_tokens`, and `requestTimeoutMs`
+- Provider `anthropic` joins its models by exact model. Each needs its own approved
+  compatibility probe before live use.
+- `config` is exactly `maxOutputTokens`, the documented maximum sent unchanged as
+  `max_tokens`, and `requestTimeoutMs`
   ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
-- Requests `POST https://api.anthropic.com/v1/messages` with the compiled
-  `anthropic-version: 2023-06-01` header and no beta header. Production reads exactly
-  `ANTHROPIC_API_KEY`, once after binding validation and only for a family bound to
-  the selected workflow's slots; a missing key fails that family's authorization as
-  `authentication_failed`.
-- System, guidance, response-format and schema guidance become `system` text blocks;
-  user and evidence parts become one `user` message. `reasoningEffort` maps to
-  `output_config.effort`. Native mode sends `output_config.format = {type:
-  "json_schema", schema}` from the shared projection; prompt-only mode keeps the full
-  schema in system guidance. `temperature` and the other fields ADR 0028 lists are
-  never sent, so the configured temperatures (§12.5) are omitted.
-- Only `end_turn` yields a candidate. `max_tokens` is `output_limit` (ADR 0039's one
-  re-send applies), `model_context_window_exceeded` is `context_limit`, `refusal` is
-  `content_filtered`, `tool_use` and `pause_turn` are `unsupported_tool_request`, and
-  `stop_sequence` is `malformed_output`. Thinking blocks are provider reasoning, never
-  candidate text.
-- Inclusive input is `input_tokens` plus both cache counters; total is inclusive input
-  plus `output_tokens`. An error is classified only when its HTTP status and
-  `error.type` both match; `402 billing_error` and a spend-limit `429` are
-  `authorization_denied` and never retried.
+- Production reads exactly `ANTHROPIC_API_KEY`, once after binding validation and only
+  for a family bound to the selected workflow's slots; a missing key fails that
+  family's authorization as `authentication_failed`.
+- `temperature` is never sent, so the configured temperatures (§12.5) are omitted.
+- Only `end_turn` yields a candidate; `max_tokens` is `output_limit`, so ADR 0039's
+  one re-send applies. Thinking blocks are provider reasoning, never candidate text.
 - Each call keeps its slot's binding through retries and protocol corrections; there
   is no cross-provider fallback or model-name branching.
 
@@ -371,18 +347,15 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 ### 12.7 Workflow-defined model operations
 
-> **ADR 0030 amendment (22 October 2026, amended 23 October 2026; not yet implemented
-> except the token-counting removal and the catalogue deadline, both implemented
-> 24 October 2026).**
-> One [`request-model`](../decisions/0030-engine-owned-model-request.md) step replaces the
-> preparation step and every explicit lifecycle step below. A fixed kernel orchestrator runs
-> them as the stages ADR 0030 lists, through runner-owned child bindings. Where a bullet below
-> says a step is "explicit", "separate YAML work" or "YAML-selected", read it as that stage of
-> the one step. Each stage's rules are otherwise unchanged. `retry-limit` moves to the
-> `request-model` step. Retry counting keeps its scopes, with the compiled operation now
-> being that step. ADR 0030's "What stays in YAML" list names the steps that remain.
-> Its 23 October amendment (token counting removed and the catalogue deadline) is
-> stated once in ADR 0030.
+> **[ADR 0030](../decisions/0030-engine-owned-model-request.md) (the `request-model`
+> step is not yet implemented).** One `request-model` step replaces the preparation step
+> and every explicit request-lifecycle step of this section and the
+> [operation catalogue](model-request-operations.md). A fixed kernel orchestrator runs
+> them as the stages ADR 0030 lists, through runner-owned child bindings. Where a rule
+> says a step is "explicit", "separate YAML work" or "YAML-selected", read it as that
+> stage of the one step. Each stage's rules are otherwise unchanged. `retry-limit` moves
+> to the `request-model` step, and retry counting keeps its scopes with that step as the
+> compiled operation. ADR 0030's "What stays in YAML" list names the steps that remain.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
@@ -397,22 +370,19 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   current sources and repair evidence remain dynamic user content. Both initial
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
-- Semantic guidance that native packet builders present is workflow-owned (FIX06
-  D3.1; ADR 0016 packet-guidance amendment). A workflow declares one closed
-  `packet-guidance/v3` resource with exactly one text for each registered key; the
-  compiler rejects a missing, extra, duplicate, mistyped or empty entry and an
-  unsupported version. One `capture-packet-guidance` step publishes it as run data,
-  and each consuming operation declares `.packet_guidance` and receives it
-  explicitly, never the resource. The builder places each text at its fixed packet
-  position. Native code keeps rules, mechanical diagnostics and composition frames,
-  including clarification question frames that embed a subject's task. A moved
-  entry still restates some native rules, which FIX06 Q4 removes there. Stored
-  evidence holds no guidance text: a stored type whose request form shows guidance,
-  such as a source-omission comparison, requires presentation, and model input
-  encodes only its presented form. A native repair authorizer composes its
-  requirement frame with the run's repair tail when it authorizes, and the run-local
-  authorization carries the composed requirement. No native copy of an entry remains,
-  so editing the resource entry changes the request.
+- Semantic guidance that native packet builders present is workflow-owned: one closed
+  `packet-guidance/v3` resource, published as run data by one `capture-packet-guidance`
+  step and received explicitly by each consuming operation that declares
+  `.packet_guidance`, never as the resource. The
+  [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance
+  amendment owns its keys, validation, placement and repair-tail composition. Native
+  code keeps rules, mechanical diagnostics and composition frames, including
+  clarification question frames that embed a subject's task. A moved entry still
+  restates some native rules, which FIX06 Q4 removes there. Retained evidence holds no
+  guidance text: a retained evidence type whose request form shows guidance, such as a
+  source-omission comparison, requires presentation, and model input encodes only its
+  presented form. No native copy of an entry remains, so editing the resource entry
+  changes the request.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
@@ -489,133 +459,12 @@ findings. Only complete native collection validation permits authority advanceme
   all inference calls (ADR 0011). Global exhaustion, overshoot or unavailable usage
   prohibits later model calls, and a global budget rejection is fatal.
 
-- Native `advance-model-attempt-accounting` consumes the retained prepared request through an
-  explicit YAML step and requires `retry-limit` (`0` permits only the initial attempt and
-  its ADR 0039 runaway re-send).
-- Its accounting permission is compiled from the registered contract, never authored in YAML.
-- The runner binds the attempt and provider-operation ledgers to the request's fresh execution
-  identity, applies the proposed accounting transition, and publishes sealed
-  `accounted_model_attempt` evidence from that canonical record together with the envelope
-  delta.
-- Rejection publishes neither.
-- Later visits use the accounting step's compiled authority and runner-owned counts.
-  Atomic repairs use native defect keys; ordinary requests use immutable assignment
-  keys, and required dependent requests additionally bind their native repair parent
-  under [§22.7](22-repair.md#227-repair-retry-limit-and-escalation). Request ordinals
-  never reset history. Other retry-capable operations retain invocation-wide counts.
-- A consumer must invalidate used attempt evidence before retry; foreign/stale evidence and
-  another initial attempt cannot reset accounting.
-- This operation prepares no lease, advances no provider operation, performs no provider call
-  and charges no tokens.
-- All its owners are destroyed with execution.
-
-- Native parameter-free `assign-provider-operation` consumes that prepared request and
-  applied attempt and assigns one inference provider operation.
-- The existing provider-operation lifecycle action proposes assignment; the runner validates its
-  exact request/attempt/binding/input association and current revisions, then publishes the
-  immutable ledger successor and sealed `assigned_provider_operation` view together.
-- Consuming evidence cannot erase an unfinished operation or permit a retry.
-- This step neither invokes a provider nor prepares authorization, charges tokens or
-  persists records.
-- Those operations remain explicit separate YAML work.
-
-- Native parameter-free `prepare-provider-operation-authorization` consumes that same
-  request, attempt and assignment through a separate YAML step. The provider-operation
-  deadline is the bound catalogue entry's required `requestTimeoutMs` (§9;
-  [ADR 0030](../decisions/0030-engine-owned-model-request.md) "Request deadline"), which
-  the runner binds to every provider operation of the request, including protocol
-  corrections. Compilation rejects a YAML `timeout-ms`.
-- The runner derives one absolute monotonic deadline, allocates the existing private lease slot
-  and validates exact result correlation before publication.
-- The action holds only the policy-permitted preloaded `provider-authorization` port: no I/O,
-  refresh or provider call is allowed.
-- Its sealed result contains a lease reference or closed failure/cancellation facts, never a
-  backing capability.
-- Rejected/expired preparation and execution cleanup release unused leases.
-- Invocation and observed completion are separately selected YAML operations; no token charge or
-  persistent record is added here.
-
-- Native `advance-model-request-lifecycle` with `transition: invoked` exposes the existing
-  logical-request `assigned -> invoked` action.
-- The runner requires the exact prepared authorization and validates one direct immutable
-  successor before replacing the request ledger.
-- It retains that published snapshot and rejects stale, foreign, duplicate, skipped or
-  assignment-disguised updates.
-- Authorization is rechecked before publication; rejection preserves the prior ledger.
-- The prepared request, attempt and lease are unchanged and the provider operation remains
-  assigned.
-- This step performs no API call or token accounting; actual API calls and request closure use
-  separate YAML operations.
-
-- Native `advance-provider-operation-lifecycle` with `transition: invoked` advances the assigned
-  operation under that invoked request.
-- The runner binds the existing prepared lease's original deadline and validates the lifecycle
-  proposal before publishing canonical invoked-operation evidence and invalidating assignment
-  evidence together.
-- Stale/foreign/duplicate evidence, altered deadlines, cancellation and rejected deltas cannot
-  publish a successor.
-- The lease remains unconsumed; no API call, token charge, new timeout or persistence occurs.
-
-- Observed inference completion is exposed by `complete-provider-operation`.
-- It consumes the validated observation and exact invoked-operation association; the existing
-  lifecycle action and runner publish a sealed terminal-record view while removing invocation
-  evidence.
-- Provider facts, response ownership and actual-token usage stay unchanged.
-- Stops/failures and cancellation retain their outcomes; a completed provider response proves no
-  payload or workflow success.
-- There are no parameters, API calls, renewed deadlines or hidden completion steps on
-  abandonment.
-
-- Pre-call `terminate-provider-operation` consumes the exact assigned operation and retained
-  authorization result.
-- The same lifecycle action and runner terminal publication path apply `assigned -> terminal`,
-  publishing terminal evidence and removing assignment evidence together.
-- Authorization failure becomes `preparation_failed`; cancellation becomes
-  `cancelled(not_sent)`, preserving `failed`/`cancelled` outcomes.
-- Prepared, missing, foreign, stale or duplicate evidence cannot authorize termination.
-- Authorization-result consumers require exactly one current assigned/invoked/terminal
-  association; non-prepared facts need no clock, while prepared leases retain their deadline
-  checks.
-- Existing lease cleanup remains the sole backing owner.
-- No provider call, token charge, retry, persistence or logical-request transition is added by
-  this operation.
-- Runtime abandonment never inserts this YAML step.
-
-- Pre-call logical-request closure is the explicit parameter-free `terminate-model-request`
-  step.
-- It consumes the current request ledger, prepared request, applied attempt, terminal operation
-  and retained authorization result.
-- The shared authorization validator requires exactly matching identity and terminal
-  failure/cancellation facts.
-- Authorization failure closes an assigned request as `not_invoked_authorization_failure` or an
-  invoked request as `failed`; cancellation closes either as `cancelled`.
-- Outcomes remain `failed`/`cancelled`.
-- The existing request lifecycle action and runner replacement validator require every
-  associated operation to be terminal and publish one direct ledger successor.
-- Prepared, missing, foreign, stale, duplicate, inconsistent or forged evidence rejects.
-- Original evidence ownership, lease cleanup and token usage remain unchanged; no
-  response-validation evidence, live lease, clock, provider call, retry, persistence or hidden
-  closure is introduced.
-
-- Logical-request closure is an explicit parameter-free `complete-model-request` step using the
-  same lifecycle action and request ledger.
-- It requires the retained payload-validation result, exact current attempt and terminal
-  provider-operation evidence; every operation associated with the request must be terminal.
-- Schema-valid candidate evidence permits request `accepted`/`ok` only, granting no semantic,
-  approval, commit or workflow-success authority.
-- Protocol/schema rejection closes as request `failed` while retaining the `invalid` outcome.
-  The approved missing-final-answer case also admits as `invalid`, with no candidate:
-  sealed observation evidence must establish `missing_final_text`, valid association
-  and known usage. It may enter the same explicit protocol correction and attempt
-  retirement path, or close as failed. An `output_limit` stop takes ADR 0039's one
-  re-send instead, and a runaway on the re-send closes as `failed`. Other provider
-  stops/failures remain `failed` and cancellation remains `cancelled`.
-- No retry exhaustion or user approval is inferred.
-- The runner validates the evidence-derived reason/outcome and one direct ledger successor
-  before publication; missing, foreign, stale, duplicate or unfinished operation evidence
-  rejects.
-- Response ownership and token usage are unchanged; no call, renewed lease, deadline,
-  persistence or hidden completion is added.
+- The [operation catalogue](model-request-operations.md) owns the rules of each
+  request-lifecycle operation: attempt accounting and `retry-limit`, provider-operation
+  assignment, authorization preparation and its `requestTimeoutMs` deadline, request and
+  provider-operation invocation state, inference, observation validation, decoding,
+  payload-schema validation, response admission, operation completion and pre-call
+  termination, and request closure.
 
 - Each workflow-declared result schema defines the entire compact response; there is no generic
   open payload or repeated engine metadata.
@@ -623,10 +472,10 @@ findings. Only complete native collection validation permits authority advanceme
   only the YAML-declared bounded protocol-retry transition, while a schema-valid but invalid
   repair consumes the existing authorization attempt.
 
-- In particular, `result.reference-claims/v1` contains a bounded ordered collection of
-  `ReferenceClaimProposal` values, exactly one `PreservedTokenClassificationProposal` for every
-  engine-supplied structured-token candidate, and a closed claims/positive-`no_feature_claim`
-  outcome.
+- The reference-extraction result schema selected by the workflow contains a bounded
+  ordered collection of `ReferenceClaimProposal` values, exactly one
+  `PreservedTokenClassificationProposal` for every engine-supplied structured-token
+  candidate, and a closed claims/positive-`no_feature_claim` outcome.
 - [ADR 0016](../decisions/0016-configured-json-response-composition.md) permits this
   complete candidate to be assembled from separately admitted configured responses;
   it is no longer required to originate in one model call. Initial extraction uses
@@ -725,9 +574,8 @@ actual user decision is identified. Formatting must not perform a second semanti
 review. Source-review findings and canonical review evidence carry an optional
 `question`. It is required for genuine negative source
 findings and absent for supported/applicability/candidate-defect findings. Existing
-`detail` carries the facts/reason. Initial admission, insertion, selected detail
-correction and persisted validation share this contract; detail correction retains
-the verdict/provenance. Its selected schema requires both `detail` and `question`
+`detail` carries the facts/reason. Initial admission, insertion and selected detail
+correction share this contract; detail correction retains the verdict/provenance. Its selected schema requires both `detail` and `question`
 for a retained negative finding, and permits only `detail` otherwise. Diagnostics
 identify missing, invalid or forbidden questions separately from invalid detail;
 they retain one repair unit and retry family. Initial reviews and insertion use
@@ -738,7 +586,8 @@ closed `kind`-discriminated source findings:
 decision field.
 The existing codec decodes source candidates with `kind`; native candidates retain
 optional question data for diagnostics and the same decision-dependent checks.
-Persisted evidence retains its existing finding/resolution representation.
+Native review evidence retains its existing finding/resolution representation;
+state persists no review evidence ([§24.1](24-workflow-state.md#241-workflow-state)).
 Missing/forbidden questions reject at schema admission, before native collection.
 So do missing, repeated or foreign preservation comparisons: the packet's
 `exact_members` ordinal choice fixes the item count and rejects a repeat as
@@ -747,8 +596,8 @@ So do missing, repeated or foreign preservation comparisons: the packet's
 Existing protocol correction resubmits the whole review response under its original
 allowance; insertion still corrects only its selected finding. No partial-response merge, new counter or verdict
 reassessment is introduced. Selected native text repairs retain their narrow scope.
-There is no source `decision` wire format or compatibility reader. Generation uses its existing question shape. Presence and association checks are structural,
-not deterministic proof of actionability.
+Generation uses its existing question shape. Presence and association checks are
+structural, not deterministic proof of actionability.
 
 **User-facing output:** reuse the current controlled form and fields:
 
@@ -782,8 +631,8 @@ native evidence minimum; schemas do not create a separate evidence policy.
 The same evidence owner places concise guidance in initial review, insertion
 and repair; its text is the workflow's packet guidance, which a repair rule names
 and model input presents. `not_applicable` still needs supporting claims. Native
-validation and persisted readback retain eligibility, exact-set and current-provenance checks;
-schema cardinality never establishes semantic support or selects citations.
+validation retains eligibility, exact-set and current-provenance checks; schema
+cardinality never establishes semantic support or selects citations.
 Review insertion and replacement reuse the initial guidance for the **same
 assessment purpose**, returning only the authorized replacement and retaining
 any existing verdict. A
@@ -900,8 +749,8 @@ authenticated answer acceptance and protected history (§23.2).
 This contract is deliberately domain-neutral. Adding a new requirement kind requires its schema, ownership entry, reconciliation policy, accepted and rejected fixtures, and stage-gate tests. It never authorizes a caller-specific workaround or a special continuation for one example.
 
 - The shared authority owner is `src/domain/required_authority.zig`, with Specify's
-  schema/reference projection in `specification_authority.zig` and five generic YAML bindings
-  documented in [F0100
+  schema/reference projection in `specification_authority.zig` and the generic YAML
+  bindings documented in [F0100
   §3.10](../features/F0100-SpecWorkflow.md#310-shared-required-authority-boundary).
 - The runner checks both direct authority generations and their source lineage; replacing a
   source requires rebuilding its affected projection and gate.
@@ -965,7 +814,7 @@ follow §12.7; verdict reassessment is not approved.
 **Pre-generation diagnostic evidence:** the existing evidence owner must admit source-backed loss
 against the selected producer even when its claims are ineligible for positive
 content. The loss owner validates the exact producer/claim/source combination;
-packet guidance, selected schemas, collection and readback project those same rules.
+packet guidance, selected schemas and collection project those same rules.
 Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. A `candidate` attribution means the fixed omission
@@ -977,9 +826,10 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission findings carry no
 comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current specification-state contract in [§24.1](24-workflow-state.md#241-workflow-state)
-retains authorized pre-generation comparisons and authored associations. Earlier snapshot contracts
-reject without supplying missing bindings. ADR 0020 governs exact lineage.
+Pre-generation comparisons are execution-local: the current specification-state
+contract in [§24.1](24-workflow-state.md#241-workflow-state) retains authored
+associations but no review evidence. Earlier snapshot contracts reject without
+supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract:** the model chooses a semantic finding, detail,
@@ -999,8 +849,8 @@ loss uses the named producer's exact set. Source-only negative findings may
 carry empty canonical support where the rule permits it. An eligible catalogue,
 including a singleton, cannot establish positive support. Source IDs remain
 model-selected where the rule permits them; invariant empty clarification IDs
-and an unlocalized default loss are constructed by code. Readback validates
-stored evidence against its bound authority before accepting any projection.
+and an unlocalized default loss are constructed by code. Native collection validates
+retained evidence against its bound authority before any projection accepts it.
 
 **Readiness evidence:** under
 [ADR 0023](../decisions/0023-advisory-post-generation-review.md), a positive finding
@@ -1008,7 +858,7 @@ for a native `source_readiness` source-purpose subject before any authored candi
 exists requires explicitly selected, nonempty current original source IDs. Native
 code constructs an empty canonical claim, citation and clarification-response
 selection, independently of the eligible catalogue's cardinality. The packet,
-wire decoder, admission and stored validation use the same role. The method remains
+wire decoder, admission and collection validation use the same role. The method remains
 model-assisted and existing authority/applicability rules apply; this creates no
 supported-candidate resolution or authored `S`/`E`/`L`. Empty, duplicate, foreign or
 stale source selections and forged nonempty canonical provenance reject. Model
@@ -1038,15 +888,18 @@ exact subject/purpose/dependency bindings, never similar wording or shared citat
 Changed source or a different decision still requires its own current assessment.
 
 The shared authority owner combines the complete findings using this precedence;
-the source-loss owner selects targets and the runner executes declared operations:
+the source-loss owner selects targets and the runner executes declared operations.
+Rows marked "ADR 0041" state what
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
+since 30 October 2026; not implemented) would add:
 
 | Current state | Required continuation |
 | --- | --- |
-| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published. Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented), a failure of model work would publish its failed incomplete specification of the validated content, marked and logged |
-| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published. Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold since 30 October 2026; not implemented), the blocked run would publish its validated content as an incomplete specification, marked and logged |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; nothing is published. ADR 0041: a failure of model work would publish its failed incomplete specification of the validated content, marked and logged |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass, and nothing is published. ADR 0041: the blocked run would publish its validated content as an incomplete specification, marked and logged |
 | Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
 | One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
-| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published. Under ADR 0041 (accepted, on hold since 30 October 2026; not implemented), its failed incomplete specification would publish the validated content without the unresolved unit |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or clarification pause, and nothing is published. ADR 0041: its failed incomplete specification would publish the validated content without the unresolved unit |
 | No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
 | All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
 
@@ -1065,7 +918,7 @@ repairs and rerun/output validation. No special Spec YAML exception owns the pol
 
 For an admitted Spec pause, publish the validated incomplete `spec.md` and linked
 forms under ADR 0017; report `awaiting_clarification`, IDs/paths and actual publication
-status, with completed-spec grading `not_run`. Errors grant no new publication;
+status; the pending view is not scored. Errors grant no new publication;
 preserve prior artifacts/protected forms and retain diagnostics/logs. Pending forms
 remain questions/answers, not semantic proof: readback checks current bindings and
 fresh invocations rebuild the review/gate rather than trusting stored question prose.
@@ -1103,7 +956,6 @@ that exact origin. Absent fields contribute none; an empty structural container 
 subtree with mixed origins has no single producer. Finer required-object selectors
 therefore preserve native consumer provenance without assigning a synthetic origin.
 
-
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) adds native part
 placement through a registered producer's `native-composition-part` parameter.
 The compiler verifies its configured part and prerequisites; YAML still chooses
@@ -1136,23 +988,3 @@ kinds. It cannot erase the defect, invent an omission or reassess the finding.
 It grants no new semantic repair or verdict-reassessment permission.
 The finding, explanation, original evidence and native repair denial together
 describe an actionable failure; structural admission is not semantic proof.
-
-The typed-text wire contract in §7.1 applies: ordinary prose is a string, and explicit composition is
-`{"fragments":[text, typed-reference, ...]}`. Native conversion preserves declared
-fragments, whitespace and exact occurrence identity. Initial input/output,
-protocol correction and authorized content repair use that one conversion.
-Canonical arrays remain native data; bare model arrays reject.
-
-Under ADR 0020 the same model-wire conversion applies to generation,
-clarification and repair, and `exact_copy` is absent from both shared
-response-codec directions and every selected response schema. Explicit native-evidence
-encoding may retain sealed identities as read-only facts, never response alternatives. Current native `exact_scope`
-metadata binds the reference snapshot and eligible occurrence bytes, while field
-bindings retain their canonical roles. Protocol correction retains these exact
-facts and its original schema; it cannot acquire a fresh occurrence scope from
-its rejected body. Admission recognizes raw prose before NFC and validates the
-derived composition through the shared owner. Ambiguous eligible spans reject the
-complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v16` retains native scope for diagnostic replay; request logs
-never become workflow or persistence authority. Missing historical native scope
-stays unavailable rather than reconstructed from a visible token catalogue.

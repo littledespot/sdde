@@ -17,8 +17,7 @@
   - [ADR 0033](0033-generic-repair-operations.md): the dispositions authorizer loses its
     insert and delete paths, and E4 takes its freeze after this change.
   - Also amended: §12.2, §16.4 (step 10 and the false-conflict repair), §22.4, §22.6,
-    F0100, diagram 05 and the §32 index. Diagram 21 is unchanged: invalid global
-    candidates still route to reconciliation repair.
+    F0100 and the §32 index.
 
   The overall design remains **Proposed design**.
 
@@ -31,21 +30,19 @@ as `cardinality`, and repair inserted each missing disposition with its own call
 
 - **Repair harm.** In the 40 runs before Q4 that reached dispositions, five first answers
   listed only claim 1. They produced all 12 insert repairs, and 2 of those inserts
-  answered `duplicate` of claim 1 for hello-world's UTC claim
-  (`2026-10-27` 09:40 and `2026-10-29T20-47-23Z`). They are the only hello-world specs
-  out of 20 that lost a requirement.
-- **No loss from complete answers.** Every complete hello-world first answer kept that
-  claim.
+  answered `duplicate` of claim 1 for hello-world's UTC claim: the only hello-world
+  specifications out of 20 that lost a requirement. Every complete hello-world first
+  answer kept that claim.
 - **What the insert lacks.** The insert request carries every claim and the current
   dispositions. It lacks the dispositions task, and it offers `duplicate` and
   `superseded` targets as valid choices.
 - **Adding definitions didn't help.** Binding definitions into repair requests (FIX06
-  Q2) left harm at 1 in 40 replays.
+  Q2, `fixes/Z_FIX06.md` at git `194e29a`) left harm at 1 in 40 replays.
 - **Cost and completion.** On a reverted build, one run spent 104,288 tokens on 24
   inserts and then exceeded its token budget.
-- **Precedents.** ADR 0023 (review assignments and preservation comparisons) and ADR
-  0038 (records coverage) already put "one entry per assigned member" at response
-  admission, corrected as the whole response.
+- **Precedents.** ADR 0023 (preservation comparisons) and ADR 0038 (records coverage)
+  already put "one entry per assigned member" at response admission, corrected as the
+  whole response.
 
 ## Decision
 
@@ -73,8 +70,8 @@ as `cardinality`, and repair inserted each missing disposition with its own call
    - Kept: replacing one disposition for a record, relationship or cycle defect.
 5. **Recording.** Request descriptions record the binding in the existing `members`
    list. Replay reapplies every recorded member set natively, over the bounds the
-   recorded schema bytes already carry. The description shape therefore doesn't change:
-   `model-request-debug/v13` and its retained captures still decode (ADR 0019).
+   recorded schema bytes already carry. The description shape therefore doesn't change,
+   and `model-request-debug` takes no new version (ADR 0019).
 6. **Scope.** Two members of the omission class are left out:
    - **Statement, signal and conflict coverage inserts:** these are at-least-one
      coverage contracts, not exact membership, and no harm has been observed.
@@ -84,9 +81,9 @@ as `cardinality`, and repair inserted each missing disposition with its own call
 
 ## Consequences
 
-- **Model input.** Every initial request is byte-identical. In the request projection,
-  206 dispositions requests differ only in the recorded `members`. A correction carries
-  the new `member` value; no other correction changes.
+- **Model input.** Every initial request is byte-identical; dispositions request
+  descriptions differ only in the recorded `members`. A correction carries the new
+  `member` value; no other correction changes.
 - **Report contract.** It gains one schema reason value, `missing_member`. The
   `competing` member of reconciliation `Relations` is no longer set. It stays in the
   report contract until FIX06 §2.12 allows its removal. The dispositions occurrence set

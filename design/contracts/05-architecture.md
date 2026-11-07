@@ -3,7 +3,6 @@
 Part of the [proposed design](../design.md#5-logical-architecture), as amended by the
 [accepted ADRs](../design.md#32-accepted-and-deferred-implementation-choices).
 
-
 ### 5.1 Layers
 
 1. **Interface adapters** parse CLI/API input and present final reports. They contain no workflow decisions.
@@ -23,7 +22,7 @@ Part of the [proposed design](../design.md#5-logical-architecture), as amended b
 
 ### 5.2 Dependency direction
 
-Application and domain code depend on interfaces, never provider implementations. The LLM SDK, OS filesystem, shell/process API, YAML parser, Markdown parser, AST parser, and logger are adapters behind ports. This permits action unit tests without network access, repository mutation, or a real compiler.
+Application and domain code depend on interfaces, never provider implementations. Model-provider clients, the OS filesystem, shell/process API, YAML parser, Markdown parser, AST parser, and logger are adapters behind ports. This permits action unit tests without network access, repository mutation, or a real compiler.
 
 - In Zig, this dependency direction is enforced through module imports, build configuration, and
   an independent architecture test.

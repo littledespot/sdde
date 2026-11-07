@@ -126,8 +126,8 @@ design; they do not extend the current YAML schema or claim implemented capabili
 
 - **Input:** exact open provider-config file capability
 - **Output:** complete owned untrusted bytes
-- **Responsibility:** Capture that already-opened file once under `maxLLMProviderConfigBytes =
-  1,048,576`; do not parse JSON or construct provider authority.
+- **Responsibility:** Capture that already-opened file once under F0008's 1,048,576-byte
+  `llm_provider_config.max_bytes` limit; do not parse JSON or construct provider authority.
 
 ## `DecodeLLMProviderConfigAction`
 
@@ -169,7 +169,7 @@ design; they do not extend the current YAML schema or claim implemented capabili
 - **Output:** workflow-authority-layout candidate
 - **Responsibility:** Derive the exact definition-inventory scope and fixed `features/` child
   descriptor without reading the directory, assigning an identity, or accepting another path;
-  include each reserved root entry for ownership accounting while excluding all of its
+  include that reserved root entry for ownership accounting while excluding all of its
   descendants.
 
 ## `ValidateWorkflowAuthorityLayoutAction`
@@ -381,8 +381,7 @@ design; they do not extend the current YAML schema or claim implemented capabili
 
 - **Input:** new feature identity and compiler-locked feature namespace registry
 - **Output:** empty in-memory feature ledger revision zero
-- **Responsibility:** Initialize every feature namespace at ordinal one; persistence occurs only
-  inside activation.
+- **Responsibility:** Initialize every feature namespace at ordinal one.
 
 ## `ValidateStateIdLedgerAction`
 
@@ -487,7 +486,7 @@ design; they do not extend the current YAML schema or claim implemented capabili
 
 ## `ValidateRendererContractVersionAction`
 
-- **Input:** configured renderer version and renderer registry
+- **Input:** renderer contract version and renderer registry
 - **Output:** renderer evidence
 - **Responsibility:** Select one exact supported renderer contract.
 
@@ -1241,12 +1240,13 @@ design; they do not extend the current YAML schema or claim implemented capabili
 - **Responsibility:** Resolve only `<paths.principles>/toolchain.yaml`, rejecting absence,
   alias/case ambiguity, links, special nodes, or any independently supplied path.
 
-> **ADR 0031 (not yet implemented).** The toolchain-preparation actions are the first planned
+> **ADR 0031 (not yet implemented).** Toolchain preparation is the first planned
 > [stage-action](../../decisions/0031-stage-actions.md) conversion: one `prepare-toolchain`
-> stage action replaces the nine workflow steps that F0003 lists. When it lands, those nine
-> F0003 operations become its internal steps; the entries below are the broader proposed
-> decomposition. Each step keeps its input, output, responsibility and rejection rules, and read
-> versus parse still holds between functions.
+> stage action replaces the first nine operations that F0003 lists, which become its internal
+> steps; `compile-naming-policy` stays separate. This catalogue's preset-registry, composition
+> and project-layer entries are the broader proposed decomposition. Each step keeps its input,
+> output, responsibility and rejection rules, and read versus parse still holds between
+> functions.
 
 ## `CaptureProjectToolchainLayerAction`
 
@@ -1298,7 +1298,7 @@ design; they do not extend the current YAML schema or claim implemented capabili
   schema-compatible operand; perform no composition and make no claim that the eventual merged
   result preserves locked safety rules.
 
-### Native principle capture bindings
+## Native principle capture bindings
 
 The native registry exposes detailed `inventory-principle-sources`,
 `validate-principle-inventory`, `capture-principle-sources` and
@@ -1314,10 +1314,8 @@ Capture is bounded to 1,024 entries, depth 16, five seconds, 1 MiB per semantic
 source and 8 MiB total semantic bytes. Deterministic UTF-8 chunks cover every byte;
 these source-capture bounds are not model-request ceilings.
 
-The optional `.sddtoolkit.json` `principles` section supplies filename hints and
-selection rows. One compiler validates that policy, and one registry selector
-supplies the complete applicable chunks. Model guidance contains exact selected
-prose and line coordinates; no summary, truncation or model-selected membership.
+[§9.4](../09-configuration.md#94-project-principle-resolution) owns the `principles`
+selection policy and the guidance rules for selected principle text.
 
 ## `BuildPrincipleIdLedgerAction`
 
@@ -1872,12 +1870,13 @@ prose and line coordinates; no summary, truncation or model-selected membership.
 - **Input:** exactly one comparison branch—either `BootstrapCandidateDirectEqualityEvidence`, or
   its exact `BootstrapCandidateChangeEvidence` plus validated change plan—together with current
   workflow stage/authority IDs, open clarification projection, descendant state/approval set,
-  and implementation watermark
+  and published runtime/evidence
+  ([§24.5](../24-workflow-state.md#245-upstream-rework-and-invalidation))
 - **Output:** closed bootstrap-authority change route plan
 - **Responsibility:** Select equality reuse only from the equality branch; otherwise select
   explicit planning deferral, administrative block, compatible refresh, reference ingestion,
   owning Spec/Plan output, or rework/reconciliation from the validated change plan and locked
-  `(earliestOwner,currentStage,open-stage,watermark)` table.
+  `(earliestOwner, currentStage, open stage, published runtime/evidence)` table.
 - Perform no mutation and never fabricate an empty plan for equality.
 
 ## `ValidateBootstrapAuthorityChangeRouteAction`
@@ -1886,8 +1885,8 @@ prose and line coordinates; no summary, truncation or model-selected membership.
   workflow/clarification/descendant/runtime authorities, and locked route table
 - **Output:** bootstrap-route evidence
 - **Responsibility:** Prove equality-coordinate coverage or preserve every changed-plan
-  obligation, choose the earliest legal owner, include committed-runtime reconciliation when
-  required, and never bypass an open clarification gate.
+  obligation, choose the earliest legal owner, include published runtime/evidence
+  reconciliation when required, and never bypass an open clarification gate.
 - Require `NoBootstrapAuthorityChangeRoute` only with complete direct-equality evidence; require
   `DeferredPlanningBootstrapRoute` only with a planning-owned change in `specifying |
   spec_clarification_pending`, no adoption, and a complete fresh PlanInput-gate recheck before

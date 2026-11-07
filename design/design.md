@@ -10,7 +10,7 @@ scope and do not accept the remainder. Requirements here are not claims that the
 engine already meets them; [FIX06](../fixes/FIX06.md) tracks implementation gaps.
 [Engine intent](intent.md) orients judgment but is not contract authority.
 
-Sections 1–4 and 30–33 are stated here. §13 links to its action catalogues in
+Sections 1–4 and 30–32 are stated here. §13 links to its action catalogues in
 [contracts/actions/](contracts/actions/); every other section links to its detailed
 contract in [contracts/](contracts/). Both carry the same proposed authority.
 
@@ -20,8 +20,8 @@ suite.
 
 **Source material:** [configuration examples](examples/),
 [legacy preset examples](toolchainPresets/) and [principle templates](templates/)
-are not runtime configuration or fallback data. [Paths](paths.md) and
-[schemas](schemas/) document contracts but are never loaded as runtime fallback.
+are not runtime configuration or fallback data. [Schemas](schemas/) document
+contracts but are never loaded as runtime fallback.
 
 ---
 
@@ -195,12 +195,12 @@ engine fixes them:
     sequence that competes with the compiled YAML graph.
     [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented)
     adds the fixed stage sequence of one model request to those kernel
-    responsibilities; its removal of provider token counting was implemented on
-    24 October 2026. The stage sequence is not a domain sequence; YAML still selects
-    each request step and every outcome. Under
+    responsibilities. The stage sequence is not a domain sequence; YAML still
+    selects each request step and every outcome. Under
     [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage
-    action's absorbed steps become functions, not source-only operations. Its fixed internal sequence routes no outcome, so it does
-    not compete with the compiled YAML graph.
+    action's absorbed steps become functions, not source-only operations. Its fixed
+    internal sequence routes no outcome, so it does not compete with the compiled
+    YAML graph.
 29. Workflow YAML uses compact mappings, native scalar parameters, and reusable
     workflow-owned resource aliases. Large prompts and schemas are declared
     once and referenced; they are never hidden packaged defaults or repeatedly
@@ -378,7 +378,7 @@ operation. Planning selects validated identities; later stages consume approved 
 
 Model assignments contain typed data, evidence, guidance, and a closed result schema. Explicit
 workflow operations own preparation, invocation, decoding, review, and repair under the shared
-authority boundary. Under [ADR 0030](decisions/0030-engine-owned-model-request.md) (partly
+authority boundary. Under [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet
 implemented), one model request's lifecycle stages run inside one `request-model` step.
 
 [Complete §12 contract](contracts/12-model-boundary.md).
@@ -643,13 +643,9 @@ logging boundaries.
 ## 27. Observability
 
 The runner supplies workflow attribution. Registered logging actions transform typed telemetry
-into safe records without making logs workflow authority.
-At `debug` and `trace`, [ADR 0018](decisions/0018-debug-model-exchange-logging.md)
-requires complete credential-redacted production model requests and available raw
-responses, including failed attempts, in the registered prompt stream.
-[ADR 0019](decisions/0019-single-request-debugger.md) adds the embedded browser
-debugger, explicit retry/repair lineage, and exact or modified replay of one selected
-request without workflow execution.
+into safe records without making logs workflow authority. `debug` and `trace` capture complete
+model exchanges ([ADR 0018](decisions/0018-debug-model-exchange-logging.md)), which the
+single-request debugger inspects and replays ([ADR 0019](decisions/0019-single-request-debugger.md)).
 
 [Complete §27 contract](contracts/27-observability.md).
 
@@ -863,8 +859,6 @@ The new engine is ready for production evaluation when all of the following are 
       -> warning` aliases.
     - Logging survives prior-run tail recovery and fails closed without becoming workflow
       authority.
-    - Debug/trace captures complete credential-redacted model exchanges in bounded chunks;
-      higher thresholds emit metadata only. `logs.level` is the sole capture control.
     - The native debugger exposes prompt, structured/raw context, schema, exact request,
       response stages and caller/YAML-entry attribution. Retries and repairs link to
       their producing calls. Explicit exact/modified replay sends one selected request
@@ -1054,8 +1048,9 @@ The new engine is ready for production evaluation when all of the following are 
 
 34. `debug` and `trace` capture every production model attempt's complete assembled request
     and available raw response, with credential redaction before lossless bounded chunking.
-    Higher thresholds emit metadata only; the removed `promptCapture` field rejects.
-    Retention, sink protections and fail-closed capture failures remain mandatory.
+    Higher thresholds emit metadata only; `logs.level` is the sole capture control, and the
+    removed `promptCapture` field rejects. Retention, sink protections and fail-closed
+    capture failures remain mandatory.
 
 35. **Offline integration and fault injection.**
     - Fake-model tests cover valid flow, exact CLI/config roots, variable-size workflow
@@ -1106,90 +1101,70 @@ The new engine is ready for production evaluation when all of the following are 
     toolchain, build cache, Node.js, or development-only assets.
 
 ---
+
 ## 32. Accepted and deferred implementation choices
 
-Accepted ADRs amend only their stated scope. ADR 0008 (reference-derived feature
-naming) was superseded by 0010 and removed.
+Accepted ADRs amend only their stated scope. Each record states its decision; this index
+gives its title and status.
 
-| Record | Current decision |
-| --- | --- |
-| [0001](decisions/0001-zig-engine.md) | Zig engine and native executable; Node/JavaScript remain target-project technologies. |
-| [0002](decisions/0002-zig-version.md) | Exact Zig 0.16.0 pin and explicit upgrade policy. |
-| [0003](decisions/0003-generic-workflow-engine.md) | Generic discovered workflows, compiled registered operations and a capability-free engine. |
-| [0004](decisions/0004-model-provider-bootstrap.md) | Conditional provider bootstrap and one immutable provider capture per invocation. |
-| [0005](decisions/0005-workflow-defined-operations.md) | Workflow-owned operation topology/resources and unversioned operation IDs. ADR 0030 adds the stages of one model request to the engine-kernel responsibilities (not yet implemented) and removed provider token counting (implemented 24 October 2026). |
-| [0006](decisions/0006-minimal-model-response.md) | Compact closed responses with runner-owned correlation and canonical schema validation. |
-| [0007](decisions/0007-unicode-normalization.md) | Pinned utf8proc NFC, statically packaged Unicode data and license notices. |
-| [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
-| [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, the model's documented maximum output sent explicitly, logged provider stops and actual execution-token accounting; ADR 0037 moves the budget to configuration. |
-| [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. ADR 0030 replaces those operations with one `request-model` step; identity, consumers and release are unchanged (not yet implemented). |
-| [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
-| [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
-| [0015](decisions/0015-specification-principle-review.md) | Spec captures and selects principles and runs no principle assessment (amended 1 November 2026, FIX06 D13.1); shared actionable-question preparation. |
-| [0016](decisions/0016-configured-json-response-composition.md) | Configured JSON response decomposition, prompt-free native assembly and a 1,024-step workflow ceiling. Its 30 October amendment moves native packets' semantic guidance into one workflow packet-guidance resource (`packet-guidance/v2` since post-generation review scopes were removed on 1 November 2026, `v3` since the story purpose was removed on 7 November 2026), published by `capture-packet-guidance`. |
-| [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
-| [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
-| [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
-| [0020](decisions/0020-derived-exact-reference-lineage.md) | Native raw-byte recognition within current request eligibility derives exact occurrence handles and lineage using contextual delimiters; model-authored exact selections are removed. Selected support remains fixed, canonical field roles and repair bounds remain, and lexical evidence proves no semantic use. |
-| [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
-| [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
-| [0023](decisions/0023-advisory-post-generation-review.md) | Spec runs semantic review only before generation (source readiness and the optional preservation comparison); its 1 November 2026 amendment (FIX06 D13.1) removed post-generation source and principle review, their advice, budget and incomplete-advice rules and the advisory request protocol (`specification-state/v21`). Upstream source repair requires a current pre-generation witness, and member sets are checked at response admission (§12.2, ADR 0019). Judgments of generated content rest on the human who reviews and edits `spec.md`. |
-| [0024](decisions/0024-native-exact-token-authority.md) | Token-only groups receive no record batch; native canonical-byte evidence forces exact duties independently of semantic kind, and code owns byte-only token dispositions while retaining all original occurrences and obligations. |
-| [0025](decisions/0025-clarification-answer-authentication.md) | The run that reads valid closed Specify clarification forms accepts their answers, with the invoking operating-system account as the actor. One invalid form stops the run, accepts no answers and reports a reason for each failing form. Evidence goes in the shared actor-evidence registry. Not yet implemented. |
-| [0026](decisions/0026-header-identity-log-retention.md) | Fresh runs prune prior-run log segments that are closed and past retention, using each segment header's identity. Invalid prior history blocks, and a run with an active tail is kept whole. Its 21 October amendment leaves a regular file whose name is not a segment name, such as `.DS_Store`, alone in every listing of `logs/events` and `logs/prompts`. |
-| [0028](decisions/0028-anthropic-messages-provider.md) | The Anthropic Messages API is a peer provider on shared provider owners: one native JSON-schema capability and projection, transport, credential snapshot, retry classifier and provider port, with only wire projections per family. Each slot binds one catalogue entry, with no cross-provider fallback. Every catalogue entry declares its documented `maxOutputTokens`, sent unchanged; ADR 0030 adds its required `requestTimeoutMs` (implemented 24 October 2026). Each family reads one exact credential variable, and a missing key fails at that family's first authorization. |
-| [0029](decisions/0029-bedrock-model-families.md) | A Bedrock catalogue entry names any model ID with its Region, a compiled family (`converse`, `gpt-oss`, `luna` or `claude`) and `maxOutputTokens`. The family, never the model name, fixes effort, whether temperature is sent (its value is configured, ADR 0039) and request fields. The Claude 3.5 Haiku CountTokens registration is retired, `model-request-debug` advances to v10, and billed live tests still allow only named model tuples. ADR 0030's required `requestTimeoutMs` makes four `config` fields and advanced `model-request-debug` to v11 (implemented 24 October 2026). |
-| [0030](decisions/0030-engine-owned-model-request.md) | One `request-model` step per model request. YAML declares the slot, resources, retry limit and outcomes; a fixed, capability-free kernel orchestrator runs the lifecycle stages, including protocol correction, through runner-owned child bindings. Its 23 October amendment removed provider token counting (the global token count, from actual inference usage, is unchanged), moved the request deadline to each catalogue entry as a required `requestTimeoutMs`, and lets only steps marked It also builds the shared contract-variant mechanism: one contract of complete closed variants, selected per step at compile time by one closed parameter (`owner` in ADR 0033). The advisory variant and `advisory: allowed` were withdrawn on 1 November 2026 with post-generation review (FIX06 D13.1). Consumers, release, JSON-part retention and ledger initialization stay in YAML. Partly implemented: provider token counting removed and the request deadline moved to the catalogue (24 October 2026); the rest is not yet implemented. |
-| [0031](decisions/0031-stage-actions.md) | One registered stage action may own a deterministic sequence of internal steps that routes no outcome, within the side-effect limits the ADR lists. Its internal steps are typed functions, each with one responsibility and only the port it uses, passing function-local values; only stage-edge data is pipeline data. Model requests and their collect actions, writes, publication, commands, clarification persistence, feature-log activation, gate issuers, repairs and every routed outcome stay in YAML. Converted one at a time, starting with `prepare-toolchain`. Not yet implemented. |
-| [0032](decisions/0032-engine-routines.md) | Fixed engine sequences become typed engine routines in `src/application/*_routine.zig`. Each step is a function with only the port it uses, values pass as distinct typed arguments (validated wrappers replace candidate/validated keys), and there are no erased child bindings or shared optional state. The composition root runs startup; a runner-owned binding runs provider bootstrap; the logging lifecycle owners run logging routines. Failure mappings and public codes are unchanged. Startup converts first; feature logging follows under preconditions (lock release, one emergency line, finalization, retention order). Specify invocation becomes an ADR 0031 stage action; ADR 0030's request coordinator keeps its form. Not yet implemented. |
-| [0033](decisions/0033-generic-repair-operations.md) | Four generic repair operations (`authorize-repair`, `build-repair-input`, `parse-repair`, `merge-repair`) replace the 29 per-owner ones. Each takes a closed `owner`, which is checked against native facts and selects no policy. Owner rules stay in owner modules. Each operation's contract consists of complete per-owner variants (13 owners, 29 variants), each validated independently, through the contract-variant mechanism ADR 0030 builds; a mismatched `owner` is a terminal rejection. Retry identity is the compiled step instance. Converted after ADR 0030 and ADR 0031's first conversion. Not yet implemented. |
-| [0034](decisions/0034-spec-quality-gate.md) | No Plan, Tasks or Implement contracts, workflow definitions or code until the Spec workflow is stable and producing high-quality output on both development cases. Quality means R8 adjudication by the `/evaluate-e2e` skill (amended 3 November 2026); stability means repeated runs, counting every attempt, with no fixed threshold. The user judges the evidence and decides when Plan is actioned. |
-| [0035](decisions/0035-cross-kind-restatement.md) | The native duplicate rule compares single-statement records (functional requirement, business rule, assumption, non-goal, prohibited behavior, user-visible outcome) by typed statement against the primary user story (the in-batch comparison was replaced by ADR 0038 Decision 5 on 2 November 2026). A restatement is deleted natively only when the story covers its groups, claims, citations and responses. A functional requirement and the story are always kept. An uncovered restatement is not flagged. Same-kind duplicate checks run first, so a competing pair still blocks, and a restatement has its own `restatement` repair rule. Acceptance criteria, edge cases and entities keep same-kind comparison. |
-| [0036](decisions/0036-source-quoted-claims.md) | A model extraction claim is a category and a set of supplied, nonblank source-line IDs, bounded at admission; it carries no wording. The engine quotes each claim's cited lines as written, Markdown included, trimming each run only at its ends (never inside fenced code) and joining separate runs with an ellipsis line. A claim spanning several top-level list items splits into one claim per item, with the same category (withdrawn on 25 October and reinstated by ADR 0038). Claim-text repair, citation repair and their diagnostics are deleted; only the `no_feature_claim` reason remains model text. Generated text loses the Markdown code delimiters directly around a recognised exact value. |
-| [0037](decisions/0037-configured-workflow-token-budget.md) | The single workflow token budget is the project configuration's required `workflowTokenBudget` (1 to 4,294,967,295, no default), decoded at bootstrap and passed to the runner's per-execution ledger. Policy profiles and compiled graphs no longer carry it. The E2E configuration and the example set 125,000. |
-| [0038](decisions/0038-record-claims-and-scenario-coverage.md) | Each non-entity record names the claims it supports, a nonempty subset of its one group kept in group order; the group stays its association. Requirements own their claims: in one records batch a business rule, outcome, assumption, non-goal or prohibition whose every claim a requirement or an earlier such record names is deleted natively unless it holds an exact copy no other record holds (`repeated_statement`), one naming such claims and others is rejected (`shared_member`), and requirements are never deleted or rejected by this rule. Every claim a behaviour statement (requirement, rule, outcome or prohibition) names must also be named by an acceptance criterion or edge case (`uncovered_member`). Admission rejects either defect for the request's existing protocol correction, recorded for replay in request descriptions. ADR 0036's list-item split is reinstated. |
-| [0039](decisions/0039-configured-temperatures-and-runaway-resend.md) | `.sddtoolkit.json` requires `temperature` and `temperatureRunawayRetry` (numbers, zero or greater, no default); models whose contract takes a temperature send them, others omit it. A provider `output_limit` stop re-sends the identical request once at `temperatureRunawayRetry`, outside `retry-limit`, logged as `model.runaway_resent`; every retry response passes exactly the checks a first response does. A runaway on the re-send fails the work with `RunawayRepeated`. Request descriptions record each attempt's temperature (from `model-request-debug/v13`), and the E2E report marks re-sends (from `spec-e2e-report/v10`; current versions in the [harness](harness/e2e.md)). Recorded as the user's exception to the evidence rule against sampling changes and extra retries. |
-| [0040](decisions/0040-incomplete-review-published-marked-logged.md) | Moot since 1 November 2026 (FIX06 D13.1): no post-generation review remains to end incomplete, so there is no review-status line, `## Review Status`, `review.incomplete` or report member. History only. |
-| [0041](decisions/0041-failed-run-incomplete-publication.md) | On hold since 30 October 2026 (E0 stopped by user decision); nothing is implemented. A Specify run that fails because model work couldn't be completed (a failed request, exhausted correction or repair, or the token budget), or ends `blocked`, after its reference snapshot validated, publishes only its validated content as an incomplete specification: `spec.md` starts `**Status: Incomplete — the run failed.**` or `… was blocked.**`, `reference-context.md` gains a "Run status" section, `run.incomplete_published` is logged, and the `spec_incomplete` state blocks Plan (it takes `specification-state/v22` when it resumes; v20 and v21 were taken by ADR 0023's amendments). The run still ends `failed` or `blocked` and is never resumed. Mechanism (27 October): eligible failures (a YAML `failed`, `blocked` or `invalid` terminal, or a `retry_limit` or `token_budget` runner rejection) run the definition's declared model-free `failure-output` subgraph through the runner, which publishes validated units without final requirement IDs and returns the original failure; definitions move to `workflow/v2`. |
-| [0042](decisions/0042-principle-verdict-citations-at-admission.md) | Moot since 1 November 2026 (FIX06 D13.1): principle review is removed, and its generic required-items admission constraint is deleted with it (`model-request-debug/v14`, without `required_items`). History only. |
-| [0043](decisions/0043-model-facing-exact-text-names.md) | Model-visible `preserved_token` and `preserved_tokens` become `exact_text` and `exact_texts`; internal names and stored state are unchanged. |
-| [0046](decisions/0046-complete-dispositions-at-admission.md) | Response admission binds one reconciliation disposition to every assigned semantic claim (and each conflict-group repair claim) as `exact_members` with a native count, so the request is unchanged; an omitted claim is `missing_member`, a repeat `duplicate_member`, corrected with the whole assignment under its retry-limit, exhaustion failing the run. The per-claim insert and redundant-record repairs are deleted; amends ADRs 0022, 0023 and 0033. |
-| [0047](decisions/0047-engine-composed-primary-story.md) | The engine composes the primary story from the story catalogue's business claims, quoted in source order, each quote one paragraph (heading lines dropped, indentation and list markers removed, line breaks and joins one space), with native exact-value recognition; no story model call, clarification or inconclusive outcome; a catalogue with no business claim blocks with `no_story_requirements`, and a story that fails unit validation blocks with `story_not_admissible`, never repaired. The story discharges no exact-copy duty, ADR 0035 keeps the only record naming a claim, and the story is no source-readiness subject and has no packet-guidance purpose (amended 7 November 2026; `packet-guidance/v3`, required-authority contract 2). Amends design.md §§1 and 4, §17.3, F0100, text-field composition, ADR 0016's packet-guidance amendment and ADRs 0020, 0024 and 0035. |
+| ADR | Title | Status |
+| --- | --- | --- |
+| [0001](decisions/0001-zig-engine.md) | Implement SDDE in Zig | Accepted |
+| [0002](decisions/0002-zig-version.md) | Pin Zig 0.16.0 | Accepted |
+| [0003](decisions/0003-generic-workflow-engine.md) | Load and execute declarative workflows generically | Accepted |
+| [0004](decisions/0004-model-provider-bootstrap.md) | Derive and conditionally prepare model-provider authority | Accepted |
+| [0005](decisions/0005-workflow-defined-operations.md) | Configure workflow behavior in workflow definitions | Accepted |
+| [0006](decisions/0006-minimal-model-response.md) | Minimal model responses with runner-owned correlation | Accepted design amendment |
+| [0007](decisions/0007-unicode-normalization.md) | Pin shared Unicode NFC normalization | Accepted |
+| [0009](decisions/0009-atomic-workflow-execution.md) | One atomic workflow execution, no recovery transactions | Accepted |
+| [0010](decisions/0010-explicit-feature-directory.md) | The supplied directory identifies the feature | Accepted |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned request limits; actual workflow token accounting | Accepted |
+| [0012](decisions/0012-workflow-owned-model-request.md) | Retain one workflow-owned model request across YAML steps | Accepted |
+| [0013](decisions/0013-workflow-input-reuse.md) | Reuse workflow structure and compact model inputs | Accepted |
+| [0014](decisions/0014-universal-response-format-guidance.md) | Universal response-format guidance | Accepted |
+| [0015](decisions/0015-specification-principle-review.md) | Capture and select project principles during Specify | Accepted design amendment; amended 1 November 2026: Spec runs no principle assessment |
+| [0016](decisions/0016-configured-json-response-composition.md) | Configure smaller JSON responses and assemble them deterministically | Accepted |
+| [0017](decisions/0017-incomplete-specification-publication.md) | Publish an incomplete specification with clarification gaps | Accepted |
+| [0018](decisions/0018-debug-model-exchange-logging.md) | Capture complete model exchanges at debug level | Accepted |
+| [0019](decisions/0019-single-request-debugger.md) | Inspect and replay one captured LLM request | Accepted |
+| [0020](decisions/0020-derived-exact-reference-lineage.md) | Derive exact-reference lineage from one selected claim | Accepted |
+| [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review and shared repair model slot | Accepted |
+| [0022](decisions/0022-native-reference-phase-handoffs.md) | Native reference phase handoffs | Accepted |
+| [0023](decisions/0023-advisory-post-generation-review.md) | Required source review only; post-generation review removed | Accepted amendment |
+| [0024](decisions/0024-native-exact-token-authority.md) | Own exact-token authority and record scheduling natively | Accepted amendment |
+| [0025](decisions/0025-clarification-answer-authentication.md) | Accept valid clarification answers in the run that reads them | Accepted amendment; not yet implemented |
+| [0026](decisions/0026-header-identity-log-retention.md) | Prune prior-run log segments by header identity | Accepted amendment |
+| [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
+| [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |
+| [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; partly implemented: provider token counting is removed and each catalogue entry requires `requestTimeoutMs`; the `request-model` step is not yet implemented |
+| [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; not yet implemented |
+| [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; not yet implemented |
+| [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; not yet implemented |
+| [0034](decisions/0034-spec-quality-gate.md) | Specify quality gate before Plan | Accepted |
+| [0035](decisions/0035-cross-kind-restatement.md) | Cross-kind and story restatement in the duplicate rule | Accepted |
+| [0036](decisions/0036-source-quoted-claims.md) | Source-quoted extraction claims | Accepted |
+| [0037](decisions/0037-configured-workflow-token-budget.md) | Configured workflow token budget | Accepted |
+| [0038](decisions/0038-record-claims-and-scenario-coverage.md) | Records name their claims; requirements own their claims; behaviour statements need scenarios | Accepted |
+| [0039](decisions/0039-configured-temperatures-and-runaway-resend.md) | Configured temperatures; one re-send after a runaway | Accepted |
+| [0041](decisions/0041-failed-run-incomplete-publication.md) | A failed or blocked run publishes its validated results, marked incomplete | Accepted; on hold since 30 October 2026; not implemented |
+| [0043](decisions/0043-model-facing-exact-text-names.md) | Model-facing exact-text names | Accepted |
+| [0046](decisions/0046-complete-dispositions-at-admission.md) | Reconciliation dispositions are complete at response admission | Accepted |
+| [0047](decisions/0047-engine-composed-primary-story.md) | Engine-composed primary user story | Accepted |
 
 Additional accepted feature boundaries:
 
-- [F0005](features/F0005-WorkflowDefinitionRegistryService.md): v1 workflow
-  definitions are strict UTF-8 YAML 1.2 in recursively discovered,
-  case-sensitive `*.workflow.yaml` regular files and conform to the closed
-  [workflow-definition v1 schema](schemas/workflow-definition-v1.schema.json).
-  Identity comes only from validated content, and v1 has no alternate encoding,
-  YAML alias or custom tag, include, compatibility reader, or runtime
-  schema-file fallback. ADR 0041 (accepted, on hold since 30 October 2026; not
-  implemented) would replace v1 with `workflow/v2`,
-  adding an optional model-free `failure-output` subgraph, with no v1 reader;
+- [F0005 §3.1](features/F0005-WorkflowDefinitionRegistryService.md#31-file-and-yaml-contract)
+  owns the accepted v1 workflow-definition format contract; ADR 0041 (on hold) would
+  replace v1 with `workflow/v2`;
 - [F0008](features/F0008-LLMProviderConfigService.md): the required
   `.sddtoolkit.json` `paths.providers` value is the sole provider-document path
   authority. F0004 reserves its distinct opaque `.sddproviders.json` file
   capability, and F0008 alone performs its bounded read-only capture without
   parsing, provider-registry construction, fixed-location fallback, or
   unconditional loading;
-- [F0006](features/F0006-LLMProviderInterface.md): provider and request authority.
-  - `.sddproviders.json` uses the strict bounded common schema in
-    `schemas/sddproviders.schema.json`. Provider-specific config closes through compiler-owned
-    contracts; `LLMProviderRegistryService` owns the completely validated catalogue.
-  - `.sddtoolkit.json` `models.slots` is validated into a separate immutable repository
-    allowlist. Every slot tuple must appear exactly once in the catalogue. Slots may reference
-    some or all catalogue models, never an additional model; unreferenced entries lack
-    repository authority.
-  - Each YAML model step selects one typed repository slot. Before invocation, the runner
-    resolves that slot to one immutable provider/model binding. `LLMProviderInterface` is the
-    sole provider-neutral port.
-  - One ordinal covers the complete inference attempt. External-operation lifecycle
-    remains execution-local, and compiled YAML explicitly selects retries.
-  - Authorization preparation is restricted to a preloaded, non-refreshing, no-I/O lease.
-  - Production Bedrock contracts, closed configuration, native-schema projection, and concrete
-    adapters are included in F0006 completion.
+- [F0006](features/F0006-LLMProviderInterface.md) (accepted feature design): provider
+  and request authority, including the production Bedrock contracts, closed
+  configuration, native-schema projection and concrete adapters;
 - [F0007](features/F0007-AWSBedrockProvider.md) implements the accepted production
   integration and environment-only credential choice: a narrow infrastructure source
   reads only `AWS_BEARER_TOKEN_BEDROCK` into an invocation-owned snapshot before
@@ -1206,31 +1181,8 @@ explicit decision/approval rules before dependent implementation:
 - the UI/API used to record manual verification evidence;
 - which binary reference readers ship in the first release versus plugins;
 - when concurrency above one becomes enabled by default;
-- whether model-assisted semantic warnings block by default in development versus CI.
+- whether model-assisted semantic warnings block by default in development versus CI;
+- template selection, destination naming, collision handling and publication for `sdde init`,
+  in a separate init design (§3.2 fixes the only reserved init contract).
 
 They must not weaken the invariants, path policy, command safety, repair scoping, evidence requirements, or action/orchestrator separation defined above.
-
-- Template selection, destination naming, collision handling and publication for `sdde init`
-  remain deferred to a separate init design.
-- The initial SDD suite fixes only that inputs come from `paths.templates`, materialized
-  principles go to `paths.principles`, copying requires an explicit accepted init operation, and
-  no ordinary bootstrap or feature workflow performs it.
-
----
-
-## 33. Final design position
-
-The predecessor toolkit supplied the high-level workflow shape but delegated operational authority to model instructions. The new engine should preserve the semantic progression and artifact intent while reversing that authority:
-
-- The engine supplies facts and constraints before generation.
-- The engine proves every required authority is exactly reconciled or returns to its earliest owner; no stage repairs an authority gap locally.
-- The LLM returns one small typed semantic or code unit.
-- The engine validates every mechanically decidable property.
-- The engine gives precise preset-derived guidance for exactly one failed unit.
-- The LLM repairs only that unit.
-- The engine renders, writes, runs, verifies, and advances state.
-- Zig supplies the native executable, explicit ownership/error model, and
-  compile-time structure for these boundaries; it does not move workflow
-  authority out of the deterministic contracts.
-
-This is the appropriate deterministic layer for lower-capability models: it does not ask a nano model to behave like a reliable workflow engine, and it does not attempt to replace the model where interpretation and synthesis are genuinely required.

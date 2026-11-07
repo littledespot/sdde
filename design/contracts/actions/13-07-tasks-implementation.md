@@ -192,7 +192,7 @@ Within one workflow execution, the runner owns one revision-validated task ident
 ## `ValidateTaskDependencyProposalAction`
 
 - **Input:** one operation-result-valid `TaskDependencyProposal`, current partition allowlist,
-  and semantic-text validators
+  and `SemanticText` validators
 - **Output:** edge-proposal evidence
 - **Responsibility:** Validate both internal keys and bounded reason without accepting a
   canonical basis or task ID.
@@ -380,7 +380,7 @@ and 26 before being registered:
 
 A task result is not independently published or resumable. Current-execution
 savepoints, resource exclusion, revision checks and executable evidence remain
-required. The former durable task-adapter records, promotion receipts,
-checkpoint/replay plans, recovery inventories and per-task transaction actions
-are withdrawn by ADR 0009; no renamed equivalent is permitted. Section 25 owns
-the sole successful output boundary.
+required. [ADR 0009](../../decisions/0009-atomic-workflow-execution.md) permits no
+durable task-adapter records, promotion receipts, checkpoint/replay plans, recovery
+inventories or per-task transaction actions, under any name. Section 25 owns the
+sole successful output boundary.

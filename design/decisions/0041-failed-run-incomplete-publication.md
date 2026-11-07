@@ -1,12 +1,11 @@
 # ADR 0041: A failed or blocked run publishes its validated results, marked incomplete
 
 - **Status:** Accepted, on hold (30 October 2026): E0 stopped by user decision ("stop E0")
-  during implementation; nothing is implemented. It named `specification-state/v20`
-  for its state; [ADR 0023](0023-advisory-post-generation-review.md)'s amendments took
-  v20 (D10.2, 31 October 2026) and v21 (post-generation review removal, FIX06 D13.1,
-  1 November 2026), so when this ADR resumes it takes v22. Since that removal no review
-  runs after generation, so "review" leaves the checks a failed view lists as not
-  completed, and ADR 0040's review line no longer exists.
+  during implementation; nothing is implemented.
+  [ADR 0023](0023-advisory-post-generation-review.md)'s amendments took
+  `specification-state` v20 and v21, so when this ADR resumes it takes v22. Since
+  post-generation review was removed (FIX06 D13.1, 1 November 2026), "review" leaves the
+  checks a failed view lists as not completed.
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decision on 26 October 2026. Asked whether a
   required step that fails should also publish what it has, marked incomplete (for
@@ -14,8 +13,8 @@
   and user story with an incomplete status"), the user answered "yes, publish and log,
   and mark as incompelete", then "update docs". It extends the same day's "incomplete
   results must be published, but it must be indicated that the results are incompelete,
-  and it must also be logged" ([ADR 0040](0040-incomplete-review-published-marked-logged.md))
-  from review to required work. On the same day the user approved extending it to
+  and it must also be logged" (then ADR 0040, last at git `8aa7fb5`) from review to
+  required work. On the same day the user approved extending it to
   blocked runs ("3 yes", then "update with recommendations and implement"). On
   27 October 2026 the user accepted the four mechanism decisions of a read-only design
   pass (Decision 6), with "update the docs with the above recommendations" after the
@@ -32,17 +31,13 @@
     publication";
   - [ADR 0039](0039-configured-temperatures-and-runaway-resend.md): a required runaway
     on its re-send publishes this projection instead of nothing;
-  - [ADR 0040](0040-incomplete-review-published-marked-logged.md) Decision 5: a failed
-    run publishes this projection;
-  - [ADR 0011](0011-provider-owned-request-limits.md),
-    [ADR 0023](0023-advisory-post-generation-review.md) and
+  - [ADR 0011](0011-provider-owned-request-limits.md) and
     [ADR 0037](0037-configured-workflow-token-budget.md): a token-budget failure stays
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v22`; v20 and v21 were taken by ADR 0023's amendments), §27 and F0002 (the `run.incomplete_published`
-    event), §31.15, F0100 §5.5, diagram 09, the [E2E harness](../harness/e2e.md) and
-    the §32 index;
+    §24 (`specification-state/v22`), §27 and F0002 (the `run.incomplete_published`
+    event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
   - for the mechanism (Decision 6):
@@ -108,7 +103,8 @@ incomplete specification when a run pauses for clarification.
    - Checks over the whole specification (coverage, cross-record rules) didn't
      run. The output says so and claims no result for them.
 3. **It is marked incomplete.** Rendering is deterministic from stored state.
-   - `spec.md` starts with `**Status: Incomplete — the run failed.**` or
+   - `spec.md` carries, under its title (Decision 7.8),
+     `**Status: Incomplete — the run failed.**` or
      `**Status: Incomplete — the run was blocked.**`, then one sentence naming the step
      and its diagnostic. Each section the run didn't produce
      shows that it wasn't generated.
@@ -118,10 +114,12 @@ incomplete specification when a run pauses for clarification.
    `run.incomplete_published`, with the diagnostic code, before the publication writes.
    Its logging rejection prevents publication.
 5. **It stays a failure or a block.**
-   - The workflow outcome stays `failed` or `blocked`, and the executable exits nonzero.
-   - A new `spec_incomplete` workflow-state variant, with a closed cause (`failed` or
-     `blocked`), is written last by the shared writer. Like ADR 0017's pending state, it
-     replaces any earlier completion authority, so Plan and later stages stay blocked.
+   - The workflow outcome stays `failed`, `blocked` or `invalid` (Decision 7.1), and the
+     executable exits nonzero.
+   - A new `spec_incomplete` workflow-state variant, with a closed cause (`failed`,
+     `blocked` or `invalid`, Decision 7.1), is written last by the shared writer. Like
+     ADR 0017's pending state, it replaces any earlier completion authority, so Plan and
+     later stages stay blocked.
    - It is never resumed. The next run starts again from `start` and revalidates
      current inputs.
    - Publication-write failures keep ADR 0009's failure rule.
@@ -143,11 +141,12 @@ incomplete specification when a run pauses for clarification.
      run while failures are pending only in this mode; and one typed outcome-ledger policy
      lets an `incomplete` prepared output publish while failures are pending only when it
      carries every pending failure subject and its terminal is the recorded failure.
-   - **Terminals and logging.** The publication terminal outcomes gain `failed` and
-     `blocked`. At the logging barrier the finalizer logs the failure or block event with
-     the original diagnostic, then `run.incomplete_published` (Decision 4), then
-     finalizes, all before any write. The run report keeps the original rejection and
-     adds an incomplete-publication marker for the CLI and the E2E report.
+   - **Terminals and logging.** The publication terminal outcomes gain `failed`,
+     `blocked` and `invalid` (Decision 7.1). At the logging barrier the finalizer logs
+     the failure or block event with the original diagnostic, then
+     `run.incomplete_published` (Decision 4), then finalizes, all before any write. The
+     run report keeps the original rejection and adds an incomplete-publication marker
+     for the CLI and the E2E report.
    - **`workflow/v2`.** The new member advances the closed definition contract from
      `workflow/v1` to `workflow/v2`. Every definition, the formal schema and every fixture
      move together, and `workflow/v1` rejects without a compatibility reader.
@@ -236,8 +235,8 @@ incomplete specification when a run pauses for clarification.
   clarification pause already does.
 - **Tests.**
   - Each publishing failure class, and a blocked run, publishes the incomplete set with
-    its status, step and diagnostic, and the run still ends `failed` or `blocked` with a
-    nonzero exit: one integration scenario each for a provider failure,
+    its status, step and diagnostic, and the run still ends `failed`, `blocked` or
+    `invalid` with a nonzero exit: one integration scenario each for a provider failure,
     `RunawayRepeated`, protocol exhaustion, `RepairNoProgress`, the token budget, a
     coverage block, an authority block, and a unit invalid with no repair left.
   - Each excluded class publishes nothing: cancellation, logging, authority, gate,

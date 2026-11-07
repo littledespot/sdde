@@ -2,15 +2,10 @@
 
 **Status:** Proposed feature design
 
-[ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
-requires one current unversioned contract per operation; tests reject version
-suffixes and separate operation-version fields, with no aliases. See
-[implementation status](#implementation-status).
-
 **Compatibility:** None. This pre-release increment accepts only the exact
 concise v1 YAML contract; [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md)
-(accepted, on hold since 30 October 2026; not implemented) replaces it with `workflow/v2`
-when implemented ([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
+(on hold, not implemented) replaces it with `workflow/v2` when implemented
+([§3.2](#32-root-shape)). It has no verbose tagged-parameter form, JSON or
 `.yml` reader, migration, YAML alias, legacy filename, dual reader, implicit
 default, source example, or packaged fallback.
 
@@ -26,8 +21,8 @@ mutating project or engine state.
 workflow-defined operations](../decisions/0005-workflow-defined-operations.md);
 [F0002 —
 LogService](F0002-LogService.md); [F0004 —
-BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md); the [path
-contract](../paths.md); and the formal [workflow-definition v1 structural
+BootstrapRootRegistryService](F0004-BootstrapRootRegistryService.md); the [configuration
+paths](../contracts/09-configuration.md#91-required-configuration-shape); and the formal [workflow-definition v1 structural
 schema](../schemas/workflow-definition-v1.schema.json), expressed as JSON
 Schema documentation of the decoded YAML shape.
 
@@ -46,11 +41,12 @@ the configured workflow-authority root.
   the candidate plus its exact validation evidence, with no `BootstrapComponentId`.
 - Only then does the runner construct one service with one concrete borrowed
   `registry()` accessor.
-- The ordinary later bootstrap materialization owner may consume this same validated
+- A bootstrap materialization owner (not implemented) may consume this same validated
   value to assign an ID and construct `WorkflowDefinitionRegistryState`; F0005 does not
   allocate that identity.
-- The later generic workflow execution slice owns exact selection through
-  `ResolveSelectedWorkflowAction`; the service performs no selection itself.
+- Generic workflow execution owns exact selection through
+  `ResolveSelectedWorkflowAction` (not implemented; the engine currently selects through
+  `select-compiled-workflow`); the service performs no selection itself.
 
 The one feature outcome is built by separate owners:
 
@@ -97,9 +93,9 @@ The workflow-authority media boundary:
 - uses the YAML contract for workflow fixtures, parser tests, runtime tests,
   and clean-package smoke inputs.
 
-The loader/compiler/registry responsibility split and fixed startup
-coordination remain unchanged. Their transport, registered input, and runner
-bindings use the concise definition and single operation registry exclusively.
+The loader/compiler/registry split and fixed startup coordination use the
+concise definition and single operation registry exclusively for transport,
+registered input, and runner bindings.
 
 It begins with:
 
@@ -177,14 +173,6 @@ V1 acceptance is the conjunction of three non-overlapping contracts:
 
 ### 3.2 Root shape
 
-[ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
-typed JSON-composition resource through the existing `resources` and operation
-parameter boundary. It references one complete result schema and owns only the
-part partition/dependencies. YAML continues to own calls, resources and transitions;
-no new repository configuration owner or executable resource is added. The existing schema compiler port parses its closed encoding, resolves the canonical
-schema alias and derives the part schemas; compiled dataflow proves explicit calls
-satisfy prerequisites before inference.
-
 Every definition contains these exact concise fields:
 
 | Field | Exact v1 meaning |
@@ -200,7 +188,7 @@ Every definition contains these exact concise fields:
 | `steps` | Local step IDs mapped to closed operation declarations or local subgraph calls and outcome maps. Authored and expanded graphs obey the compiler-owned bounds in §4. |
 | `subgraphs` | Optional map of 1–32 local reusable operation sequences, each with `start` and `steps`. |
 
-**`workflow/v2` (ADR 0041 Decision 6, accepted 27 October 2026; on hold since 30 October 2026; not implemented).**
+**`workflow/v2` (ADR 0041 Decision 6; on hold, not implemented).**
 `schema` becomes the constant `workflow/v2`, and the root gains one optional member:
 
 | Field | Meaning |
@@ -252,14 +240,14 @@ An operation step contains one registered generic operation, an optional compact
 map, and one outcome map:
 
 ```yaml
-capture:
+capture-project:
   use: capture-project-toolchain
-  on: { ok: parse, failed: end.failed }
+  on: { ok: inventory-presets, failed: end.failed }
 ```
 
-This excerpt uses a registered operation; a complete graph must supply its
-required inputs and define the `parse` successor, as in the
-[toolchain workflow fixture](../../src/test_fixtures/toolchain.workflow.yaml).
+This step of the [toolchain workflow fixture](../../src/test_fixtures/toolchain.workflow.yaml)
+uses a registered operation; a complete graph must supply its required inputs and
+define the `inventory-presets` successor, as the fixture does.
 
 - The step's mapping key is its unique `WorkflowStepId`.
 - `use` identifies a registered operation contract, not a concrete implementation or
@@ -277,7 +265,8 @@ required inputs and define the `parse` successor, as in the
 - `retry-limit` has no global or implicit meaning.
 - A registered retry-capable operation contract must declare it as a required
   nonnegative integer parameter with a finite operation-local maximum.
-- The compiler binds it to that exact step instance and its monotonic retry transition.
+- The compiler binds it to that exact step instance and its monotonic retry transition;
+  the initial execution does not count against it.
 - A retry edge without the required parameter, or a `retry-limit` supplied to a contract
   that does not declare it, is invalid.
 
@@ -289,6 +278,12 @@ required inputs and define the `parse` successor, as in the
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
   `packet-guidance/v3` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
+- A JSON-composition resource references one complete result schema and owns only the
+  part partition and dependencies; it adds no configuration owner or executable
+  resource, and YAML still owns calls, resources and transitions. The schema compiler
+  port parses its closed encoding, resolves the canonical schema alias and derives the
+  part schemas; compiled dataflow proves explicit calls satisfy prerequisites before
+  inference.
 - Two workflows may bind the same captured resource, but one workflow cannot declare two
   aliases for the same source.
 - There is no engine-packaged resource fallback or undeclared file lookup.
@@ -311,9 +306,8 @@ required inputs and define the `parse` successor, as in the
     cover every variant. This rule, the rules below, compiled-graph validation, registry
     publication and the runner all check the step's own variant, never a union.
   - Its user: the four generic repair operations of
-    [ADR 0033](../decisions/0033-generic-repair-operations.md), one variant per `owner`.
-    `request-model` has one contract; its advisory variant was withdrawn on 1 November
-    2026 with post-generation review (FIX06 D13.1).
+    [ADR 0033](../decisions/0033-generic-repair-operations.md), one variant per `owner`;
+    `request-model` has one contract.
 - The exact YAML keys are `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   and `cancelled`; the compiler converts them to the corresponding internal tagged-union
   variants.
@@ -438,7 +432,7 @@ timeout or cancellation never turns an incomplete inventory into success.
 - The root inventory includes an encountered direct child named exactly `features` to
   validate its reserved state-root role, but enumeration never enters its descendant
   subtree.
-- That child must be a no-follow directory and receives one `reserved_child_accounted`
+- That child must be a no-follow directory and receives one `reserved_child`
   disposition.
 - Absence is legal; authorized canonical state publication may create it under Design
   Section 25.1.
@@ -506,7 +500,7 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-> **ADR 0030 amendment (22 October 2026, amended 23 October 2026, not yet implemented).**
+> **ADR 0030 amendment (not yet implemented).**
 > Under [ADR 0030](../decisions/0030-engine-owned-model-request.md), the compiler accepts one
 > `request-model` step per model request instead of the request-lifecycle bindings described
 > below. A `request-model` step declares the slot, resources and `retry-limit`, and maps
@@ -551,8 +545,7 @@ service is published.
 - Its next visit requires the previous evidence to have been consumed/invalidated
   through declared data effects.
 - The native provider-assignment binding additionally requires applied attempt evidence;
-  it takes no parameters and assigns inference (ADR 0030 removed provider token counting
-  and the `kind` selection on 24 October 2026).
+  it takes no parameters and assigns inference (ADR 0030).
 - Only runner application creates its sealed assigned-operation value.
 - Missing dependencies, hidden accounting permissions, any assignment parameter and
   forged/stale handoffs reject; no new YAML fields, resource overrides or provider
@@ -626,7 +619,7 @@ service is published.
   profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
-  immutable schema and exact captured bytes. JSON-composition resources (§3.2) and
+  immutable schema and exact captured bytes. JSON-composition resources (§3.3) and
   `packet-guidance/v3` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
@@ -1052,28 +1045,8 @@ Implementation tests must cover the owning boundaries:
 
 ## Implementation status
 
-**Implementation**
-
-- Complete for the generic workflow-definition increment.
-- F0005 accepts only the concise closed schema, captures declared workflow resources,
-  compiles through the single generic operation registry, and publishes an immutable
-  graph registry.
-- ADR 0003's generic runner executes only those compiled transitions.
-- Each retry-capable operation instance's explicit `retry-limit` is compiled into that
-  immutable authority; initial execution is separate from the declared retry count.
-  The total-token budget comes from the project configuration at execution ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
-- No legacy reader, generic loop budget, or split invocation/step registry remains.
-- Concrete domain operations and workflow definitions have their own feature contracts
-  (for example [F0100](F0100-SpecWorkflow.md)).
-## 13. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Generic loader/compiler/registry split | ADR 0003; Design Sections 5.2 and 15 |
-| Shared path capability and reserved ownership | F0004; Design Section 9.1; `design/paths.md` |
-| Closed v1 YAML transport and structural projection | F0005 Section 3; `design/schemas/workflow-definition-v1.schema.json`; Design Section 32 |
-| Action, runner, orchestrator, and composition-root boundaries | Design Sections 5-6 and 13.1 |
-| Registered-operation graph and common outcomes | Design Sections 6-7; `design/code.md` Sections 1-6 and 24 |
-| Workflow shortcode | F0002 Sections 3.2 and 6.1 |
-| Variable registry and stable semantic authority | ADR 0003; Design Sections 9.1, 15, and 24 |
-| Verification and clean native packaging | Design Sections 28 and 30-31 |
+- Implemented for the generic workflow-definition increment: F0005 accepts only the
+  concise closed schema, captures declared workflow resources, compiles through the
+  single generic operation registry, and publishes an immutable graph registry; ADR
+  0003's generic runner executes only those compiled transitions.
+- Parts marked not implemented above remain open.

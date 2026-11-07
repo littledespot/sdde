@@ -10,10 +10,9 @@
   YAML cannot name. Request identity, retained inputs, consumers and release are
   unchanged; the step that owns identity and retries becomes the `request-model` step.
   Implemented on 24 October 2026: the 23 October amendment removed the
-  input-token-count operation kind, so the "both operation kinds" cases below cover
-  inference only, and took the deadline from the bound catalogue entry's
-  `requestTimeoutMs`, so the "missing/invalid deadlines" cases moved to catalogue
-  validation.
+  input-token-count operation kind, leaving inference the only operation kind, and took
+  the deadline from the bound catalogue entry's `requestTimeoutMs`, which catalogue
+  validation checks.
 - **Amended by:** [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (26
   October 2026): the temperature comes from the project configuration's required
   `temperature`, not a fixed `0.1`, and a runaway re-send uses its
@@ -138,11 +137,11 @@ or child-node execution is added, and the compiled step ceiling (ADR 0016) is un
 - Prove exact identity/resource retention across different steps, missing-input and
   rebinding rejection, malformed SDD owners, cancellation, allocation cleanup and
   isolation between executions.
-- Test-only assignment cases also cover duplicate/open operations, both kinds,
-  stale/foreign evidence, forged transitions and compiler-permission tampering.
-- Authorization cases cover both operation kinds, missing/invalid deadlines, denied
-  capability, failed preparation, forged/mismatched deposits and results, duplicate use,
-  expiration, cancellation and allocation-failure cleanup.
+- Test-only assignment cases also cover duplicate/open operations, stale/foreign
+  evidence, forged transitions and compiler-permission tampering.
+- Authorization cases cover denied capability, failed preparation, forged/mismatched
+  deposits and results, duplicate use, expiration, cancellation and allocation-failure
+  cleanup.
 - Test-only provider contracts do not enter production composition.
 - Invocation-state cases also prove exact canonical evidence, the unchanged lease
   deadline, one-use consumption through the existing adapter port, rejected-delta
@@ -164,7 +163,7 @@ or child-node execution is added, and the compiled step ceiling (ADR 0016) is un
 - Detailed/consolidated response admission must preserve selected requests,
   diagnostics, current-authority dependencies, response ownership and actual usage.
   Test exact output-pair contracts, rejected/cancelled atomic publication and
-  allocation cleanup, plus independent source/principle correction and repair
+  allocation cleanup, plus independent source-review correction and repair
   origins through the production runner. The consolidated pair shares one
   publication generation; it does not require identical intermediate generations.
 - Completion cases cover exact terminal facts, malformed/schema-invalid content
@@ -177,7 +176,7 @@ or child-node execution is added, and the compiled step ceiling (ADR 0016) is un
 - Production Bedrock uses the same retained-request bindings; shared fake/adapter
   and YAML tests must prove the production handoff.
 
-- Pre-call termination cases cover both operation kinds, failure/cancellation,
+- Pre-call termination cases cover failure/cancellation,
   prepared/missing/foreign/stale/duplicate rejection, forged deltas, no-clock terminal
   fact consumption, prepared-lease checks, allocation and deposited-lease cleanup,
   retained owners, and runtime abandonment without hidden termination.

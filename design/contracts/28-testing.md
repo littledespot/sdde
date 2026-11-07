@@ -203,9 +203,8 @@ Required cases include:
   - Validate output before publication.
   - Unrepaired JSON/schema rejection with existing open forms ends in error with no
     publication calls ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md),
-    accepted, on hold since 30 October 2026; not implemented, would publish a failed
-    incomplete specification instead). A successful correction may reach a valid
-    clarification pause.
+    on hold and not implemented, would publish a failed incomplete specification
+    instead). A successful correction may reach a valid clarification pause.
   - Source, generation and residual open-registry pauses all publish
     the validated incomplete specification through the same path, remain ungraded,
     and keep Plan/Tasks gates closed. Rejected response bytes never enter that view.
@@ -217,10 +216,7 @@ Required cases include:
 Configured JSON composition must satisfy the shared
 [ADR 0016 acceptance matrix](../decisions/0016-configured-json-response-composition.md#6-implementation-acceptance).
 Test extraction and unrelated nested-object/tagged-variant/whole-array contracts
-through the same owners. The matrix includes final-review counterexamples for
-schema ownership after registry cloning, prerequisite placements, request closure,
-atomic handoff and native repair/provenance. These are required regression cases, not evidence supplied
-by the design review. Compiler-bound increases require at/beyond-limit, overflow
+through the same owners. Compiler-bound increases require at/beyond-limit, overflow
 and storage/runtime checks, not removal of the expansion guard.
 
 Generate large path/task/requirement spaces to prove invariants:
@@ -330,9 +326,8 @@ Architecture tests also:
 - require orchestrators to receive only child bindings and the capability-free `NodeRuntime`;
 - once [ADR 0030](../decisions/0030-engine-owned-model-request.md) is implemented, reject any
   YAML-addressable model-request stage, keep each stage's narrow ports and keep its kernel
-  orchestrator capability-free. The ADR's acceptance list covers the spy-binding,
-  equivalence, compiler, contract-variant and failure-location tests;
-  its catalogue-deadline tests landed with the deadline move on 24 October 2026;
+  orchestrator capability-free, with the spy-binding, equivalence, compiler,
+  contract-variant and failure-location tests of the ADR's acceptance list;
 - once [ADR 0031](../decisions/0031-stage-actions.md) is implemented for a stage action, run its
   architecture and registry checks, each with rejected fixtures. These cover:
   - its contract fields;
@@ -431,11 +426,12 @@ Tests verify schema validity, detection ambiguity, roots, extensions, naming, pl
 ### 28.7 End-to-end tests
 
 - Live E2E runs execute the complete production path with the real LLM and external services
-  selected by the test configuration, then evaluate the actual published output against the
-  required rubric.
+  selected by the test configuration. The harness makes no judge call; only
+  [adjudication](../harness/acceptance.md) scores the actual published output against the
+  case rubric.
 - Each run requires explicit user approval.
 - Fakes, prewritten output and golden-document comparison cannot substitute for live execution
-  or semantic evaluation.
+  or rubric adjudication.
 - Report incomplete live acceptance separately from offline checks; see [the
   harness](../harness/e2e.md).
 

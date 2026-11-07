@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash",
       "Bash(zig)",
       "Bash(zig *)",
       "Bash(sed *)",
@@ -17,6 +18,15 @@
       "Bash(git rev-parse *)",
       "Bash(git grep *)",
       "Bash(git blame *)",
+      "Bash(git -C * status *)",
+      "Bash(git -C * diff *)",
+      "Bash(git -C * log *)",
+      "Bash(git -C * show *)",
+      "Bash(git -C * ls-files *)",
+      "Bash(git -C * rev-parse *)",
+      "Bash(git -C * grep *)",
+      "Bash(git -C * blame *)",
+      "Edit(/design/schemas/**)",
       "Bash(ls *)",
       "Bash(cat *)",
       "Bash(find)",
@@ -29,6 +39,8 @@
       "Bash(cut *)",
       "Bash(diff *)",
       "Bash(jq *)",
+      "Bash(python3)",
+      "Bash(python3 *)",
       "Bash(echo *)",
       "Bash(shasum *)",
       "Bash(mkdir -p evaluations/*)"

@@ -4,9 +4,9 @@ The evaluator sends captured requirements, a supplied specification and its rubr
 to the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and
 writes JSON/Markdown reports. The retained OpenAI adapter is tested offline only.
 It does **not** run Specify or require a deterministic definition of good prose.
-The [live E2E harness](e2e.md) does not call this evaluator: a published E2E run is
-adjudicated by the `/evaluate-e2e` skill, started or approved by the user
-([R8](acceptance.md); user decisions, 19 October, 3 November and 7 November 2026).
+The [live E2E harness](e2e.md) does not call this evaluator: the `/evaluate-e2e`
+skill adjudicates a published E2E run ([R8](acceptance.md)), starting only as
+[AGENTS.md](../../AGENTS.md#testing-expectations) "Testing expectations" allows.
 
 ## Run
 
@@ -52,6 +52,7 @@ The internal test environment supplies the evaluation selection:
 | `TEST_EVALUATION_PROVIDER` | Explicit `bedrock` for the permitted live cohort. The parser recognizes the retained OpenAI adapter, but the live policy rejects its selection. Unknown or missing providers reject. |
 | `TEST_EVALUATION_MODEL` | Explicit `openai.gpt-oss-20b-1:0`. Missing, expensive, Luna and other IDs reject before credentials or network use. |
 | `TEST_EVALUATION_REGION` | Explicit `ap-southeast-2` (Sydney) for the registered GPT-OSS-20B binding. |
+| `TEST_EVALUATION_FAMILY` | Explicit `gpt-oss`, the compiled Bedrock family of that binding ([ADR 0029](../decisions/0029-bedrock-model-families.md)). Missing or unknown families reject; a nonempty value with the OpenAI provider rejects. |
 | `TEST_OPENAI_API_KEY` | Retained OpenAI credential port, exercised offline; direct OpenAI live selection is disallowed. No fallback to `OPENAI_API_KEY`. |
 | `TEST_AWS_BEARER_TOKEN_BEDROCK` | Credential when evaluating through Bedrock; no fallback to production AWS credentials or the OpenAI test key. |
 
@@ -74,14 +75,14 @@ The internal test environment supplies the evaluation selection:
 ### Judge configuration
 
 - The closed `evaluation-config/v2` JSON object requires every field below.
-- Provider/model selection now belongs exclusively to the test environment: JSON `api`,
-  `provider`, `model`, `region` and credential fields reject as unknown fields.
+- Provider/model selection belongs exclusively to the test environment: JSON `api`,
+  `provider`, `model`, `region`, `family` and credential fields reject as unknown fields.
 
 | Field | Value / responsibility |
 | --- | --- |
 | `schema` | `"evaluation-config/v2"` |
 | `reasoning_effort` | The selected GPT-OSS-20B judge uses explicit `"low"`. The closed parser retains other registered effort values for adapter conformance; reports retain the independently configured judge setting. |
-| `temperature` | The selected GPT-OSS-20B judge uses `0.1`. The evaluator owns this value; it no longer derives from an engine constant ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A Bedrock judge whose model takes a temperature requires a number from 0 through 2; one that takes none requires `null`. The retained OpenAI parser supports `null` or a number from 0 through 2. |
+| `temperature` | The selected GPT-OSS-20B judge uses `0.1`, a value the evaluator owns ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A Bedrock judge whose model takes a temperature requires a number from 0 through 2; one that takes none requires `null`. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
@@ -98,8 +99,8 @@ The internal test environment supplies the evaluation selection:
 - The operator supplies the exact judge selection through the test environment; the
   implementation has no model default.
 - Reports retain the complete resolved configuration, including `api:
-  "openai_responses"` or `"bedrock_converse"`, `region` and the selected `model`;
-  credentials remain separate and never enter a request body or report.
+  "openai_responses"` or `"bedrock_converse"`, `region`, `family` and the selected
+  `model`; credentials remain separate and never enter a request body or report.
 
 ### Provider behavior
 
@@ -111,7 +112,7 @@ The internal test environment supplies the evaluation selection:
   and [Structured
   Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 - `store: false` is not a claim of zero provider retention.
-- No SDK or production dependency was added.
+- It uses no SDK or production dependency.
 
 - The internal Bedrock adapter uses
   [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
@@ -120,28 +121,23 @@ The internal test environment supplies the evaluation selection:
   the production HTTPS transport, endpoint encoding, text request codec, response
   decoding and AWS exception classification.
 - Bedrock grading requires native JSON Schema capability from the existing model
-  registry in addition to the live-test policy. Explicitly select
-  `TEST_EVALUATION_PROVIDER=bedrock`,
-  `TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0` and
-  `TEST_EVALUATION_REGION=ap-southeast-2`. The selected GPT-OSS-20B profile satisfies
-  both gates.
-  No model or response mode falls back.
+  registry in addition to the live-test policy. The selection in the table above
+  satisfies both gates. No model or response mode falls back.
 - Unknown, mismatched or schema-incapable selections reject before a provider call;
-  no model, region, credential chain or endpoint is inferred.
-- The compiled `BedrockRequestProfile` and capability owner admit only verified
-  request fields. The selected GPT-OSS-20B judge sends explicit low effort through
-  `additionalModelRequestFields.reasoning_effort` and temperature `0.1` through
-  `inferenceConfig`. Offline fixtures may exercise other registered profiles
-  without granting live selection.
+  no model, region, family, credential chain or endpoint is inferred.
+- The compiled Bedrock family
+  ([ADR 0029](../decisions/0029-bedrock-model-families.md)) and capability owner admit
+  only verified request fields. The selected `gpt-oss` judge sends explicit low effort
+  through `additionalModelRequestFields.reasoning_effort` and temperature `0.1`
+  through `inferenceConfig`. Offline fixtures may exercise other families without
+  granting live selection.
 - These are the repository's registered contracts, not a catalogue of all models
   available from the provider.
 
-- The native-schema grading requirement remains in force. The canonical Converse
-  encoder requests `outputConfig.textFormat.type: "json_schema"` and passes the
-  schema string through `outputConfig.textFormat.structure.jsonSchema.schema`.
-  The selected GPT-OSS profile does not add Luna's
-  `additionalModelRequestFields.text.format.strict` field.
-  Common supported controls use `inferenceConfig`. These are the
+- Grading uses native schema: the canonical Converse encoder requests
+  `outputConfig.textFormat.type: "json_schema"` and passes the schema string through
+  `outputConfig.textFormat.structure.jsonSchema.schema`. Common supported controls use
+  `inferenceConfig`. These are the
   [Converse structured-output fields](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html).
 - `packet.resultSchema` derives one schema from the native judgment type; that
   same schema supplies prompt guidance and the serialized native schema string.
@@ -196,7 +192,7 @@ calibration retains raw scores while acceptance remains unresolved.
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
 - Cases, rubrics and configuration use distinct `/v2` identifiers.
-  Reports use `evaluation-report/v7` with typed judgment and acceptance evidence.
+  Reports use `evaluation-report/v8` with typed judgment and acceptance evidence.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths, rubric and grader-qualification paths.
@@ -223,7 +219,7 @@ Every criterion must receive exactly one of:
     coordinates (`source_coordinates.zig`): CR, LF and CRLF each end one line, and a
     final terminator ends the last line instead of starting another.
   - The protocol hash binds that numbering through a fixed probe document, so a
-    change to it invalidates retained qualification. Since `rubric-judge/v3` it also
+    change to it invalidates retained qualification. Under `rubric-judge/v3` it also
     binds the correction instruction, explanations, correctable reasons, attempt
     count, preservation rule, grade-pinned reasons, provider placement and the exact
     correction envelope through fixed probe diagnostics.
@@ -268,17 +264,15 @@ For scored criteria, the percentage is:
   non-applicable criteria.
 - These are visible rubric-author choices, not engine defaults or approved release
   policy.
-- Revision 2 adds UTC; revision 3 adds explicit critical-score metadata.
 - Its seven criteria address startup, exact greeting, UTC date/time, grounding,
   clarity/testability, organization and proportionate business scope.
 - It does not demand Node/Vitest implementation details, invented entities or filler for
   empty sections.
 
-- The calibration panels (`test/integration/fixtures/*/calibration/panel.json`)
-  provide equivalent wording plus missing behavior, changed greeting, unsupported scope
-  and embedded-instruction specimens.
-- They use this same evaluator and rubric; reviewer expectations are not included in
-  judge inputs. Human review and live calibration are tracked in FIX06 (H3; former FIX05 R8).
+- The calibration panels (`test/integration/fixtures/*/calibration/panel.json`;
+  [R8](acceptance.md#review-and-qualify-the-grader)) use this same evaluator and
+  rubric; reviewer expectations are not included in judge inputs. Human review and
+  live calibration are tracked in FIX06 H3.
 
 ## Attempts and failures
 
@@ -289,7 +283,7 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
-- `evaluation-report/v7` records each attempt's purpose (`judgment` or `correction`)
+- The report records each attempt's purpose (`judgment` or `correction`)
   and, for an invalid judgment, the judgment validator's typed diagnostic, in JSON
   and Markdown: parser byte/line/column for invalid JSON, or the affected
   criterion, zero-based evidence index and document ID for an unknown document,
@@ -365,10 +359,11 @@ For scored criteria, the percentage is:
 - Each invocation captures inputs once and receives a new random evaluation ID.
 - The existing output directory receives exclusively created `eval-<id>.json` and
   `eval-<id>.md` files with owner-only file permissions.
-- A matching `eval-<id>/` directory uses the same evaluation trace store as generated
-  specification grading. Each attempt retains its serialized request, raw provider
-  response, available final text and outcome with known credentials redacted. Capture
-  failure aborts evaluation; a score is never reported without its required evidence.
+- A matching `eval-<id>/` directory holds the exchanges under `evidence/evaluation/`,
+  in the evidence store E2E generation calls use. Each attempt retains its serialized
+  request, raw provider response, available final text and outcome with known
+  credentials redacted. Capture failure aborts evaluation; a score is never reported
+  without its required evidence.
 - Existing files, including specifications and clarifications, are never replaced.
 - Reports are retained until the operator removes them; no pruning, transaction store or
   resume path is created.
@@ -418,9 +413,8 @@ For scored criteria, the percentage is:
 - Native HTTPS uses Zig's standard library.
 - Shared strict JSON, normalized relative paths, descriptor-based file capture,
   provider/model identities and `ProviderUsage` validation are reused.
-- Closed native JSON decoding now also lives in the shared `strict_json` owner, used by
-  both evaluator contracts and specification candidates.
-- The old evaluator-local wire-kind checker has been removed.
+- Closed native JSON decoding uses the shared `strict_json` owner, as specification
+  candidates do.
 
 - `LLMProviderInterface` requires workflow request identities and authorization leases.
 - The standalone evaluator does not fabricate those to grade a supplied file: its narrow

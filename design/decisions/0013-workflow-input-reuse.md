@@ -62,8 +62,8 @@
 - One compiled schema owner retains exact captured source and derives compact, expanded
   JSON for model transport.
 - These are source and projection, not two authorities.
-- Providers and optional counting use the same compiled projection; they do not minify,
-  infer schemas, or rewrite requests independently.
+- Providers use the same compiled projection; they do not minify, infer schemas, or
+  rewrite requests independently.
 - The registry continues binding source bytes to captured resources.
 - All clones own their source, compiled nodes and projections for their required
   lifetime.
@@ -95,8 +95,8 @@
 - Evidence projections unwrap validated text into its existing content contract; native
   validation wrappers never become model instructions.
 - Claims, summary statements and signals use the same content shape.
-- Preserved-token content is an ID reference; a separate deduplicated `preserved_tokens`
-  collection retains the exact value, classification and citation.
+- Preserved-token content is an ID reference; a separate deduplicated `exact_texts`
+  collection (ADR 0043) retains the exact value, classification and citation.
 - Generation, review and repair reuse these projections without changing native or
   persisted authority.
 

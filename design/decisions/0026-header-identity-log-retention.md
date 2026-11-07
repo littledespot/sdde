@@ -39,10 +39,9 @@
 
 §26.5 requires retention after recovery and rotation, so that closed segments
 older than the compiler-fixed 14 days are pruned. It is the only authorized
-destructive log operation. Production never ran it: only tests reached the
-retention runner. §14.10 expects a fresh run to scan prior runs and resolve each
-one's policy through bootstrap lineage. That lineage does not exist, and ADR 0009
-removed saved execution state.
+destructive log operation. §14.10 expects a fresh run to scan prior runs and
+resolve each one's policy through bootstrap lineage. That lineage does not exist,
+and ADR 0009 removed saved execution state.
 
 ## Decision
 

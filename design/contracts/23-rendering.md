@@ -198,13 +198,10 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
   [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
   since 30 October 2026; not implemented), a Specify run that fails because model work
   couldn't be completed, or ends `blocked`, would publish an incomplete specification of
-  its validated content: `spec.md` starts with
-  `**Status: Incomplete — the run failed.**` or `**Status: Incomplete — the run was
-  blocked.**` and names the step and diagnostic, validated records appear without final
-  requirement IDs, each section not produced is marked not generated, and
-  `reference-context.md` has a "Run status" section. Other failed executions would
-  still publish nothing. A clarification pause (`needs_user`)
-  publishes the validated incomplete projection authorized by
+  its validated content, marked and logged as
+  [F0100 §5.5](../features/F0100-SpecWorkflow.md#55-incomplete-specification-and-controlled-clarifications)
+  specifies. Other failed executions would still publish nothing. A clarification pause
+  (`needs_user`) publishes the validated incomplete projection authorized by
   [ADR 0017](../decisions/0017-incomplete-specification-publication.md), together with
   current reference context, forms/registry and pending state. It cannot publish
   incomplete content as a completed specification.

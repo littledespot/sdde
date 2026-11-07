@@ -19,9 +19,9 @@ definitions or the provider document.
 SDDE against a target project and authorizes no project-content mutation.
 
 **Governing authority:** [Engine design](../design.md), especially Sections 1,
-3, 5-6, 9, 11, 15, 25-26, and 28-31; [F0001 —
+3, 5-6, 9, 11, 13.1, 15, 25-26, and 28-31; [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); and the
-[path contract](../paths.md).
+[configuration paths](../contracts/09-configuration.md#91-required-configuration-shape).
 
 ---
 
@@ -287,15 +287,3 @@ Implementation evidence must cover:
   operation ports out of the orchestrator; and
 - a clean native-executable test using a relocated project root and no source,
   example, schema, or packaged fallback assets.
-
-## 9. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Configuration transport boundary | F0001; Design Sections 9 and 13.1 |
-| Shared action/runner/composition ownership | Design Sections 5-6 and 15 |
-| Configured-root identity, containment, and separation | Design Sections 9 and 11; `design/paths.md` |
-| No-follow filesystem safety | Design Sections 25-26 |
-| Workflow handoff and reserved descendants | F0005; Design Sections 9.1 and 13.1 |
-| Provider-document handoff | F0008; F0006 Sections 3-5 |
-| Testing and native packaging | Design Sections 28 and 30-31 |

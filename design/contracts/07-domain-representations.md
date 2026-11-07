@@ -53,8 +53,6 @@ typed content without changing operational path authorization.
   true}` choices.
 - There is deliberately no passive-to-operational conversion action.
 
-`isOrganizer` does not reduce authority. It records that a file such as `README.md` helps describe the corpus; any requirements it contains remain peer authoritative with requirements in sibling files.
-
 - `sourceId`, `blockId`, and claim IDs are stable within a persisted feature-scoped
   `ReferenceSnapshot`, including across process restarts.
 - They are derived from normalized source position and snapshot-local ordinal, not content

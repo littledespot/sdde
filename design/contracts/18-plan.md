@@ -33,7 +33,7 @@ satisfy this gate. Nothing about principles bypasses an open `SNN`.
   through the shared authority contract. Spec runs no principle assessment (ADR 0015),
   so no Spec result proves current compliance.
   Assess the complete current business scope, including authenticated specification
-  edits and validated clarification-derived requirements, not only previously flagged units.
+  edits and validated clarification-derived requirements.
   Unresolved policy decisions use the existing `PNN` path after Plan input authority
   exists; no independently required policy decision may disappear from Plan's ledger or publication gate.
 - A successful specification or preserved upstream obligation is not itself proof that the
@@ -243,8 +243,7 @@ The LLM generates bounded plan units:
 
 ### 18.4 Plan clarification behavior
 
-- Questions use the [shared preparation contract](12-model-boundary.md#127-workflow-defined-model-operations);
-  detecting a policy conflict during Specify does not change its Plan owner or approve it.
+- Questions use the [shared preparation contract](12-model-boundary.md#127-workflow-defined-model-operations).
 - A plan need is deduplicated through the shared registry and allocated `P01` through `P99` only
   when its subject key has never existed.
 - Its only path is `<paths.specs>/<featureId>/clarify/PNN.md`.

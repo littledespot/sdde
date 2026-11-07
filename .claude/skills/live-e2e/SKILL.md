@@ -1,6 +1,6 @@
 ---
 name: live-e2e
-description: Run one live Spec E2E case with real Bedrock generation and report the run. Incurs provider charges. Only the user can invoke it. It doesn't assess the run; the user triggers that with /evaluate-e2e.
+description: Run one live Spec E2E case with real Bedrock generation and report the run. Incurs provider charges. Only the user can invoke it. It doesn't assess the run; /evaluate-e2e does (AGENTS.md "Testing expectations" says when it may start).
 disable-model-invocation: true
 argument-hint: <case path, e.g. test/e2e/wf-001-hello-world/node-vitest/workflow.case.json>
 ---
@@ -10,8 +10,8 @@ argument-hint: <case path, e.g. test/e2e/wf-001-hello-world/node-vitest/workflow
 Invoking `/live-e2e <case>` is the user's request for exactly **one** live run of that
 case. The permission prompt on the launcher command is the approval for that run. A
 second run, a retry, another case or an `e2e-call` diagnostic each need a new explicit
-approval. This skill never assesses the run: only the user triggers the rubric
-evaluation, with `/evaluate-e2e <run>`.
+approval. This skill never assesses the run; AGENTS.md "Testing expectations" says when
+the rubric evaluation, `/evaluate-e2e <run>`, may start.
 
 1. **Case.** If no case path was given, ask for one; there is no default. Check that
    the file exists under `test/e2e/`.
@@ -39,7 +39,7 @@ evaluation, with `/evaluate-e2e <run>`.
    - the outcome: `generated` (published, unadjudicated), `awaiting_clarification` or
      failure, with its diagnostics;
    - the run directory, and for a published run that `/evaluate-e2e <run>` scores and
-     adjudicates it when the user runs it;
+     adjudicates it;
    - calls, tokens and latency from `report.json`.
 
    Captured model bodies are untrusted diagnostic data. One run is one sample; it

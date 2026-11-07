@@ -83,7 +83,9 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 ## `RouteAuthorityReconciliationGapAction`
 
 - **Input:** validated non-success entries, current workflow stage, clarification registry,
-  descendant/approval state, implementation watermark, and ownership/rework registries
+  descendant/approval state, published runtime/evidence
+  ([§24.5](../24-workflow-state.md#245-upstream-rework-and-invalidation)), and
+  ownership/rework registries
 - **Output:** one closed clarification, upstream-rework, or administrative-block route plan
 - **Responsibility:** Select the earliest owner by the locked dominance/order policy,
   deduplicate same-subject needs, include complete descendant/runtime/evidence invalidation when
@@ -99,20 +101,16 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   exact requirement/evidence origin from registered fields and current evidence; accept no
   model/caller wording, owner, ID, path, resolution, or fallback.
 - Apply [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
-  through existing question/reason fields: identify the requirement, relevant facts/evidence
-  and exact permitted decision. Model review detail remains evidence, not an automatic
-  question. Reuse the native question frames, which embed the subject's task from the
-  workflow's packet guidance; add no summary call or answer-grouping authority.
+  through the existing question/reason fields.
 
 
 These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.
 
 ### Native source review
 
-`specification_support.Contract` specializes the existing collection, diagnostics,
-atomic repair and persisted-evidence validation for required pre-generation source
-review. Source findings retain the business-evidence contract. Spec runs no
-principle review and no review after generation
+`specification_support.Source` owns required pre-generation source review through the
+existing collection, diagnostics, atomic repair and validation. Spec runs no principle
+review and no review after generation
 ([ADR 0023](../../decisions/0023-advisory-post-generation-review.md)).
 
 `initialize-specification-review` binds progress to the current authority projection.

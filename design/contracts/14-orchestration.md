@@ -5,7 +5,6 @@ Part of the [proposed design](../design.md#14-orchestrator-composition), as amen
 
 [View the Orchestrator composition sample](../code.md#orchestrator-composition).
 
-
 An orchestrator “contains” children through composition. It does not contain their logic. Actions expose no child collection or dispatcher, so an action cannot contain or call an orchestrator.
 
 - For project workflow execution, every reusable workflow operation described in this section is
@@ -222,8 +221,6 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 - The YAML graph declares any further bounded retry transition.
 
 ### 14.7 `ClarificationLifecycleOrchestrator`
-
-[View the clarification lifecycle diagram](../diagrams/07-clarification-lifecycle.md).
 
 - This shared orchestrator coordinates Specify, Plan and Tasks clarification work through
   runner-owned bindings.

@@ -13,7 +13,8 @@ This implementation status does not accept the remainder of the proposed design.
 SDDE against a target project.
 
 **Governing authority:** [Engine design](../design.md), especially Sections
-5-6, 9, 13.1, 25-26, and 28-31; [path contract](../paths.md); the accepted
+5-6, 9, 11, 13.1, 13.9, 25-26, and 28-31; [F0002](F0002-LogService.md);
+[configuration paths](../contracts/09-configuration.md#91-required-configuration-shape); the accepted
 [configuration schema](../schemas/sddtoolkit-config.schema.json); and its
 [example instance](../examples/.sddtoolkit.json).
 
@@ -112,26 +113,15 @@ PathsConfig {
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 - A slot has no output-token allowance; `maxOutputTokens` is an unknown member and
   rejects as `ENGINE_CONFIG_PARSE_ERROR` under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance).
-- Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), the shared
-  effective F0002 policy selects complete capture at `debug`/`trace` and metadata
-  only at higher thresholds. The removed `promptCapture` field is rejected, with
-  no compatibility reader or migration.
-- All sink, format, size, retention, flush, redaction, failure, prompt-size, and lock
-  values are F0002 compiler constants, not configuration.
-- There is no file-output switch: every admitted F0002 record is written to its
-  feature/run `.log` file.
-- `console` can only add or suppress the same safe pipe-delimited row on `stderr`; it
-  can never replace or disable the file write.
+- `logs` decodes only `level` and `console`. The removed `promptCapture` field is an
+  unknown member and rejects as `ENGINE_CONFIG_PARSE_ERROR`, with no compatibility
+  reader or migration. Prompt capture under ADR 0018, the F0002 compiler constants,
+  mandatory file logging and the console mirror are logging semantics
+  ([§9.1](../contracts/09-configuration.md#91-required-configuration-shape), F0002).
 
 `models.slots` decodes named exact `(provider, model)` references and closed
 slot options. [F0006 §6](F0006-LLMProviderInterface.md#6-providermodel-binding-and-workflow-token-accounting)
-owns the semantic join to the provider catalogue:
-
-- Every slot tuple resolves exactly once.
-- Slots may select some or all catalogue models; unreferenced entries gain no
-  repository authority.
-- Distinct slot names may share a tuple; the subset rule compares distinct
-  tuples, not slot count.
+owns their semantic join to the provider catalogue.
 
 Structural decoding does not grant operational authority. In particular:
 
@@ -194,10 +184,10 @@ F0001 exposes exactly two terminal configuration errors:
 - The low-level cause may appear in bounded human-readable diagnostic detail, but it
   does not create another public error code or control branch.
 
-This pre-release proof of concept has no compatibility target or configuration
-version discriminator. The single closed contract is updated in place. A
-document containing a `version` member is rejected as unknown, and F0001
-contains no migration, alias, dual-reader, or fallback branch.
+[§9.5](../contracts/09-configuration.md#95-configuration-evolution) owns
+configuration evolution: there is no version discriminator, a `version` member
+is rejected as unknown, and F0001 contains no migration, alias, dual-reader, or
+fallback branch.
 
 Neither error publishes a partial config, writes a cache, creates project
 content, calls a model, or starts runtime logging.
@@ -235,7 +225,8 @@ owner's work.
 6. Consumers query typed fields without a second config value, cache, generic
    getter, or reread path.
 7. Structural success grants no logging, model, path, command, transaction, or
-   workflow authority.
+   workflow authority; only the F0006 consumer joins slot tuples to the
+   validated provider catalogue.
 8. Semantic validation occurs once in the owning consumer.
 9. All resources are released once on success, rejection, cancellation,
    timeout, and operational failure.
@@ -248,10 +239,6 @@ owner's work.
     and both terminate before workflow work. The separately owned F0006
     provider-catalogue and allowlist diagnostics do not broaden or replace this
     reader boundary.
-13. F0001 grants no model authority: the F0006 semantic consumer must prove
-    that every slot's exact `(provider, model)` tuple exists once in the
-    validated provider catalogue. The slots may select some or all catalogue
-    entries, never an entry outside it.
 
 ## 8. Verification
 
@@ -272,13 +259,3 @@ branch:
   every terminal class; and
 - packaging: a clean target directory containing only its own valid
   `.sddtoolkit.json`.
-
-## 9. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Current-directory project-root binding and config shape | Design Section 9 and 13.1 |
-| Action/runner/composition-root boundaries | Design Sections 5-6 |
-| Path safety | Design Sections 11, 25-26 and `design/paths.md` |
-| Logging handoff | Design Sections 13.1, 13.9, and 26.5; F0002 |
-| Verification and packaging | Design Sections 28, 30-31 |

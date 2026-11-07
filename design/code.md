@@ -146,7 +146,8 @@ NodeRuntime {
 - The runner owns invocation, delta checks/application, telemetry and cleanup.
 - [F0002](features/F0002-LogService.md) owns logging I/O through its
   [sink port](../src/ports/feature_log_sink.zig). Log-tail recovery never resumes
-  a workflow; ADR 0009 withdrew checkpoint, receipt and recovery-port samples.
+  a workflow; there are no checkpoint, receipt or recovery ports
+  ([ADR 0009](decisions/0009-atomic-workflow-execution.md)).
 
 Owners: [Design §6](design.md#6-common-action-and-orchestrator-contract),
 [runtime types](../src/domain/pipeline.zig),
@@ -192,14 +193,14 @@ Runner accounting capability registry:
 
 Compiler-locked model-request ledger DataKey ownership:
   BuildInitialModelRequestIdentityLedgerAction -> produces
-    DataKey<ModelRequestIdentityLedger>("model.request_identity_ledger", "1")
+    DataKey<ModelRequestIdentityLedger>(model_request_identity_ledger, 1)
   AssignModelRequestIdAction -> replaces that key by exact revision CAS
   AdvanceModelRequestLifecycleAction -> replaces that key by exact revision CAS
   every other action/orchestrator -> cannot produce or replace that key
 
 DataKey<T> {
-  id,                 // e.g. "spec.ir"
-  schemaVersion,      // e.g. "1"
+  id,                 // closed key name, e.g. model_request_identity_ledger
+  schemaVersion,      // integer, e.g. 1
   valueSchema
 }
 
@@ -261,14 +262,13 @@ PipelineEnvelope {
     environmentIds
   },
   policy: {
-    configVersion,
     rendererContractVersion,
     compiledPresetIds,
     validationProfile
   },
   data: ImmutableDataRegistry<DataKey, value>,
-  // The compiler-owned model.request_identity_ledger/v1 DataKey lives here;
-  // PipelineRunner alone applies its authorized immutable successor delta.
+  // The compiler-owned model_request_identity_ledger DataKey (schema version 1)
+  // lives here; PipelineRunner alone applies its authorized immutable successor delta.
   evidence: Evidence[],
   diagnostics: Diagnostic[]
 }
@@ -434,6 +434,7 @@ TelemetryFact =
   | RunBlockedFact { diagnosticCode, outcome }
   | RunFailedFact { diagnosticCode, outcome }
   | RunCancelledFact { outcome }
+  | PublicationPreparedFact { outcome }
   | StageStartedFact
   | StageCompletedFact { outcome, durationMs? }
   | StageBlockedFact { diagnosticCode, outcome }
@@ -446,6 +447,11 @@ TelemetryFact =
   | ModelRequestedFact { modelOperationId, modelSlotId }
   | ModelCompletedFact { modelOperationId, modelSlotId, outcome,
                          inputTokens?, outputTokens?, durationMs? }
+  | ModelProviderStoppedFact { modelOperationId, modelSlotId, diagnosticCode,
+                               outcome, inputTokens?, outputTokens? }
+  | ModelRunawayResentFact { modelOperationId, modelSlotId, diagnosticCode,
+                             inputTokens?, outputTokens? }
+  | ModelResponseNormalizedFact { modelOperationId, modelSlotId, diagnosticCode }
   | ModelProtocolFailedFact { modelOperationId, modelSlotId,
                               diagnosticCode, outcome }
   | ModelSchemaFailedFact { modelOperationId, modelSlotId,
@@ -456,6 +462,8 @@ TelemetryFact =
   | RepairAppliedFact { repairUnitKind, outcome }
   | RepairRejectedFact { repairUnitKind, diagnosticCode, outcome }
   | RepairExhaustedFact { repairUnitKind, diagnosticCode, outcome }
+  | RetryAdmittedFact { count }
+  | RetryExhaustedFact { count, diagnosticCode, outcome }
   | ReviewRequestedFact
   | ReviewApprovedFact { outcome }
   | ReviewRejectedFact { outcome }
@@ -690,7 +698,9 @@ responses select current whole groups through `signal_ids`; non-entity record
 responses keep their one native-assigned group and name a nonempty ordered subset of
 its claims as `claim_ids` ([ADR 0038](decisions/0038-record-claims-and-scenario-coverage.md));
 entities keep whole groups. Native admission stores canonical `source_group_ids` and
-those `claim_ids`.
+those `claim_ids`. The engine composes `primary_user_story` from the quoted business
+claims of its catalogue's groups; no model response carries it
+([ADR 0047](decisions/0047-engine-composed-primary-story.md)).
 Exact segments select preserved-token occurrences; effective claims and citations
 derive from explicit selection plus exact segments. Fixed repairs preserve the
 association and return content only. Earlier shapes have no reader.
@@ -1375,8 +1385,9 @@ FileOperation =
   shell-disabled execution and explicit directory/environment/network/resource/
   timeout policy.
 - Validate each effect and its evidence, then the whole candidate. Task completion
-  requires whole-workflow publication; ADR 0009 withdrew durable journals,
-  checkpoints, before-image recovery and per-task commit samples.
+  requires whole-workflow publication; there are no durable journals, checkpoints,
+  before-image recovery or per-task commits
+  ([ADR 0009](decisions/0009-atomic-workflow-execution.md)).
 
 ---
 
@@ -1468,8 +1479,8 @@ Diagnostic {
 
 [F0001](features/F0001-SDDToolKitConfigService.md) and the
 [configuration schema](schemas/sddtoolkit-config.schema.json) own the single
-unversioned contract. The [complete example](examples/.sddtoolkit.json) replaces
-an earlier extended sample whose fields F0001 rejects.
+unversioned contract; [examples/.sddtoolkit.json](examples/.sddtoolkit.json) is a
+complete example.
 
 ```text
 SDDToolKitConfig {
@@ -1496,8 +1507,9 @@ SDDToolKitConfig {
   example/default fallback.
 - The 1 MiB configuration-read guard is unrelated to provider-owned call limits.
 
-See [the path contract](paths.md) for configured roots and engine-derived
-children, [F0003](features/F0003-ToolChainService.md) for mechanical project policy,
+See [§9.1](contracts/09-configuration.md#91-required-configuration-shape) for
+configured roots and engine-derived children,
+[F0003](features/F0003-ToolChainService.md) for mechanical project policy,
 and [F0006](features/F0006-LLMProviderInterface.md) for provider catalogue joins.
 Templates remain inert; `init` is outside the initial suite.
 
@@ -1808,7 +1820,8 @@ generatedPaths:
 `forbiddenPaths` covers preset policy only. The compiler injects the overriding
 `ReservedEngineRootPathPolicy` from the seven directory capabilities, provider
 file capability and derived `<paths.workflows>/features/`. Models/presets supply
-none of its path text and cannot override it ([path contract](paths.md)).
+none of its path text and cannot override it
+([§9.1](contracts/09-configuration.md#91-required-configuration-shape)).
 
 ---
 
@@ -2593,7 +2606,7 @@ test/
   packaging/     # clean native-executable smoke
   calibration/   # calibration cases
   harness/       # development-only live E2E and rubric evaluation
-  e2e/           # declared test-project resources and calibration specimens
+  e2e/           # live E2E case declarations and their resources
 build.zig        # repository-owned build and verification steps
 ```
 

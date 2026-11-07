@@ -18,18 +18,13 @@ only once its logging preconditions hold. Each entry keeps its rules. The lock a
 one attempt with its fixed deadline, every lock is released on every path, and the emergency
 write stays exactly once.
 
-[ADR 0018](../../decisions/0018-debug-model-exchange-logging.md) makes production
-activation a selected-graph operation: `activate-feature-logging` runs after
-preflight, materializes only the observed selected target and registered log layout,
-then installs the composition-owned active runner. It returns fresh directory
-observations backed by a run-local capability. It grants no model or workflow
-completion authority.
-
-The common runner closes active logging before a registered `workflow_publication`
-operation can write outputs. A common terminal child binding closes all other
-outcomes and reports close failures before releasing the sink. Ordinary filesystem
-writes do not imply workflow publication. Both barriers use the same finalization
-owner and cannot finalize twice or discard an earlier logging failure.
+[ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#production-activation-and-finalization)
+owns production activation and finalization. The selected graph's
+`activate-feature-logging` step grants no model or workflow completion authority. The
+runner finalizes logging before a registered `workflow_publication` operation writes
+outputs, and the common terminal binding finalizes every other outcome; ordinary
+filesystem writes do not imply workflow publication. Both use one finalization owner,
+which cannot finalize twice or discard an earlier logging failure.
 
 ## `AcquireFeatureLogStreamLockAction`
 

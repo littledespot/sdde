@@ -5,8 +5,8 @@
   Documents that describe those orchestrators carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the docs
-  around yes, form b". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A3 as option (b): fixed
-  engine sequences become typed routines in the pattern of
+  around yes, form b". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A3 as
+  option (b): fixed engine sequences become typed routines in the pattern of
   [ADR 0031](0031-stage-actions.md), starting with startup. The user had earlier ranked
   the criteria for this proof of concept: "refactoring to best possible outcomes is the
   most important". The choices under "Derived under existing rules" follow from existing
@@ -211,7 +211,7 @@ change, so its evidence is offline:
   Use the integration matrix and two unrelated workflows that run startup: the Specify
   definition and the `toolchain-check` fixture.
 - **Clean packaged-executable smoke test.** Startup governs configuration discovery.
-- **The FIX05 A2 measures:** files touched per change, lines, and `anyopaque` count.
+- **Measures:** files touched per change, lines, and `anyopaque` count.
 
 Each conversion reports AGENTS.md's statements separately, with semantic benefit "none
 claimed".
@@ -236,9 +236,7 @@ from the user's words, and await the user's confirmation:
 5. **Specify invocation becomes an ADR 0031 stage action,** not a routine, because it
    is a registered operation. ADR 0031's definition is extended to its `invoke:` form.
 6. **ADR 0030's request coordinator keeps its form.**
-7. **Testing.** Routines are tested with fake ports instead of spy child bindings. FIX05
-   A3's earlier idea of keeping spy tests through a typed interface is superseded by
-   option (b).
+7. **Testing.** Routines are tested with fake ports instead of spy child bindings.
 8. **Validated wrapper types** replace the pipeline keys that kept candidate and
    validated values apart. The same rule applies to ADR 0031 stage actions.
 
@@ -309,7 +307,7 @@ All offline, for each conversion:
 
 ## Not decided here
 
-- The policy-transition coordinator's deferred historical authority (§14.10, and FIX05's
+- The policy-transition coordinator's deferred historical authority (§14.10, and with it
   prior-run crash finalization).
 - Reporting cancellation under a log lock as cancellation instead of a logging failure.
   That is separate known work, and it changes the shared sink contract.

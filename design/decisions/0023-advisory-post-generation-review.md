@@ -3,9 +3,9 @@
 - **Status:** Accepted amendment
 - **Date:** 2026-10-17
 - **Decision authority:** The user's instruction to implement FIX05 B2 and W1
-  together, include W2, and the explicit scope answer: "All post-generation
-  semantic reviews", including principle findings. The user separately approved
-  source-only positive readiness evidence on 17 October 2026.
+  together, include W2 (`fixes/Z_FIX05.md`, git `194e29a`), and the explicit scope
+  answer: "All post-generation semantic reviews", including principle findings. The
+  user separately approved source-only positive readiness evidence on 17 October 2026.
 - **Amends:** Design §§3.3 (invariants 20 and 22), 12.6–12.8, 17.3–17.4, 18.1, 22,
   24 and their acceptance criteria. Supersedes ADR 0015's promotion of semantic
   principle findings into mandatory Plan obligations and the post-generation
@@ -16,22 +16,23 @@
   omitted one member, with the follow-up option that opts preservation comparisons
   into the same admission rule. It amends §12.2 (a native-only `exact_members` rule
   beside the derived provider schema), §12.7, §17.3, §22.1, §22.4 and §22.6, and
-  advances ADR 0019's request description to `model-request-debug/v8`. See
+  ADR 0019's request description. See
   "Assignment membership at response admission".
 - **Amended by:** [ADR 0046](0046-complete-dispositions-at-admission.md) (31 October
   2026): the membership rule's scope extends to reconciliation dispositions and the
   source-omission conflict-group repair, with the member count native (the request
   states no count) and an omitted member reported as `missing_member`.
 - **Removal amendment (FIX06 D13.1, 1 November 2026):** by the user's decision to
-  remove both post-generation reviews (source and principle) in one change, after
-  reverting the 31 October advisory verdict-set amendment (D10.2) in full, and the
+  remove both post-generation reviews (source and principle) in one change, which also
+  reverted the 31 October advisory verdict-set amendment (record: `fixes/Z_FIX06.md` at
+  git `388438e`) in full, and the
   user's approval of the policy edits. The earlier rule that post-generation source
   and principle findings remain advice, its budget and incomplete-advice contract,
   whole-unit assignments, record families, unresolvable-verdict withholding, the
   advisory verdict set and the post-generation upstream-finding rule are withdrawn,
   with the advisory request protocol that only they used (ADR 0030's advisory variant).
-  [ADR 0040](0040-incomplete-review-published-marked-logged.md) and
-  [ADR 0042](0042-principle-verdict-citations-at-admission.md) are moot. Spec runs no
+  ADRs 0040 and 0042, which governed only that review, were deleted as moot (last at
+  git `8aa7fb5`). Spec runs no
   principle assessment ([ADR 0015](0015-specification-principle-review.md)). Judgments
   post-generation review was described as owning (business/technical placement,
   scenario-coverage meaning, support of each generated field) rest on the human who
@@ -92,9 +93,8 @@ invalidation or generic dependency-on-absence rule.
 - **Scope:** preservation comparisons bind their comparison IDs at response
   admission; ADR 0046 extends the rule to reconciliation dispositions and the
   source-omission conflict-group repair. Protocol exhaustion stays terminal.
-- **Diagnostics:** request descriptions (`model-request-debug/v8` and later, ADR 0019) record
-  each applied member set, so debugger inspection and replay enforce the same
-  admission as the original request.
+- **Diagnostics:** request descriptions (ADR 0019) record each applied member set, so
+  debugger inspection and replay enforce the same admission as the original request.
 - **Unchanged:** native collection still rejects partial, repeated or foreign
   membership atomically, as the authority behind admission; finding-evidence
   defects and repair exhaustion keep their terminal outcomes.
@@ -134,8 +134,8 @@ nor authored `S`, `E` or `L`. Source IDs remain model-selected and native code
 validates their identity and current captured authority. Empty, duplicate, foreign
 or stale selections and forged nonempty canonical claims/citations reject.
 
-The packet, wire decoder, admission and stored validation share this evidence
-rule. The model receives no claim-selection or provenance field. Authored values
+The packet, wire decoder, admission and collection validation share this evidence
+rule (state persists no review evidence). The model receives no claim-selection or provenance field. Authored values
 retain their exact bound provenance; source-preservation and reference-subject
 exact claim sets remain unchanged. This amends §12's restriction of source-only
 evidence to negative findings for this native pre-generation source-purpose context
@@ -167,5 +167,4 @@ field, which the next run's capture reads as its prior registry. Earlier contrac
 reject without migration or a compatibility reader. Stored validation recomputes
 native policy, authority currentness, provenance and coverage. Execution-local
 receipts and their origins remain separate from persisted workflow authority; a
-fresh invocation starts at `start`. Implementation and live evidence are recorded in
-`fixes/Z_FIX05.md` (git `194e29a`) and [FIX06](../../fixes/FIX06.md).
+fresh invocation starts at `start`.

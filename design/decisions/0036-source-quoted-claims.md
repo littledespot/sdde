@@ -43,19 +43,14 @@
 
 ## Context
 
-A model claim carried its own wording and a set of line ranges. In at least five
-loan-renewal runs from 17 to 24 October, extraction turned the source's "must be able to
-renew" into "may renew". Every later call received both the source and the weakened
-claim, followed the claim, and published a specification that contradicted itself. Review
-judged the weakened text supported each time.
+A model claim carried its own wording and a set of line ranges. In loan-renewal runs,
+extraction turned the source's "must be able to renew" into "may renew". Every later call
+received both the source and the weakened claim, followed the claim, and published a
+specification that contradicted itself. The claim's wording added nothing the source
+lacked; it only added a second wording that could disagree with the source.
 
 Extraction also returned one claim for each whole Markdown list, so every record cited the
-same claim and native checks couldn't tell distinct duties apart. Per-item chunking
-(ADR 0027) was reverted on 21 October because it added extraction calls without better
-output.
-
-The claim's wording added nothing the source lacked. It only added a second wording that
-could disagree with the source.
+same claim and native checks couldn't tell distinct duties apart.
 
 ## Decision
 
@@ -109,12 +104,8 @@ could disagree with the source.
      CommonMark itself: for example, `3)` after `1.` and `2.` stays inside item 2.
    - A claim within one item, with or without a heading or prose, stays whole. So do
      prose-only claims and a cited line holding two facts.
-   - **Why it was withdrawn and reinstated.** The split was withdrawn after two live
-     pairs in which the records call authored 3, 12, 8 and 304 records, against 2 to 4
-     with one claim per list. A later run gave the records call the same five-claim
-     input and it authored 2 records, so claim count wasn't driving the inflation.
-     ADR 0038's scenario rule needs one claim per requirement, which the split supplies
-     for list sources.
+   - ADR 0038's scenario rule needs one claim per requirement, which the split supplies
+     for list sources (ADR 0038 Decision 4).
 4. **Repair routes that served model wording are deleted.**
    - Text repair keeps only the `no_feature_claim` reason, still model text.
    - Citation repair (`citation_replacement`, `source_selection_replacement`), its
@@ -191,23 +182,16 @@ could disagree with the source.
     stays with the item. Both err toward not splitting; neither changes wording.
   - Reconciliation statements and signals still restate claims in model text. Whether
     they must reference claim text natively needs its own evidence.
-- **Ingestion.** The Markdown reader now rejects C1 control characters (U+0080–U+009F)
-  as malformed text, through the typed-text scalar rule. Previously a model paraphrase
-  could hide them; a quote can't, so the source fails at ingestion with a typed reason.
+- **Ingestion.** The Markdown reader rejects C1 control characters (U+0080–U+009F) as
+  malformed text, through the typed-text scalar rule. A quote can't hide them, so the
+  source fails at ingestion with a typed reason.
 - **Persistence.**
   - The extraction schema changes. Persisted specification state already records the
     compiled extraction schema bytes and rejects a mismatch as
     `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`, so no state version changes.
-  - Specification states written by this change before Decision 6 (only the uncommitted
-    live pair of 25 October) hold backtick-wrapped exact copies, and their readback now
-    fails. States from committed builds already fail on the extraction schema. Run
-    directories are evidence and are never resumed.
   - Stored readback validates claim text against the text policy but doesn't re-quote it
     from its citations. That would need the Unicode normalizer at readback; it is open
-    work (FIX05 B7).
-  - The E2E report's candidate diagnostic loses the `source_selections` variant and the
-    extraction-text claim target. No retained report contains either, so
-    `spec-e2e-report/v9` is unchanged and every retained report still decodes.
+    work ([FIX06](../../fixes/FIX06.md), B7 contract-review leftovers).
 - **Tests.**
   - Code delimiters:
     - at the recogniser: equal, double and unequal runs, a backtick shared by two values,

@@ -29,14 +29,11 @@
 
 The native duplicate rule compared a record's whole typed content, record kind included,
 and compared records only with other records. Identical wording in two record kinds, or a
-record repeating the primary user story, therefore passed.
-
-Both clean runs on `8a600d7` published a business rule identical, word for word, to the
-primary user story. Source review judged it `supported`, and review can't change output
-(ADR 0023).
+record repeating the primary user story, therefore passed: live runs published a business
+rule identical, word for word, to the story.
 
 The rule could delete only an "exact evidence-equivalent" duplicate: same groups and
-equal provenance. A record and the story never have equal evidence. The story cites
+equal provenance. A record and the story never had equal evidence: the story cited
 every group, while a record cites its batch's group.
 
 ## Decision
@@ -45,13 +42,9 @@ every group, while a record cites its batch's group.
    - The kinds are functional requirement, business rule, assumption, non-goal,
      prohibited behavior and user-visible outcome.
    - Each is compared by its typed statement value, using the same typed equality as
-     whole-content duplicates, against the primary user story. (The comparison across
-     kinds within one records batch was replaced on 2 November 2026 by ADR 0038
-     Decision 5.)
+     whole-content duplicates, against the primary user story.
    - Acceptance criteria, edge cases and entities still compare only as whole same-kind
      content.
-   - Records in different batches bind different source groups, so neither covers the
-     other. A cross-batch restatement is therefore never flagged.
 2. **A restatement is deleted only when the kept occurrence covers its evidence.**
    - The kept occurrence must cite every source group, claim, citation and clarification
      response the restatement cites.
@@ -66,8 +59,6 @@ every group, while a record cites its batch's group.
    - The primary user story is never deleted.
    - A functional requirement is never deleted as a restatement, because it is a
      required family.
-   - (Between other kinds in one batch, the earlier record was kept; replaced by ADR 0038
-     Decision 5.)
 5. **Same-kind duplicates are decided first.**
    - Every same-kind duplicate check runs before any restatement can remove a record:
      within the batch (unit validation) and against earlier batches (the session).
@@ -88,9 +79,9 @@ every group, while a record cites its batch's group.
   a requirement's or an earlier statement's claims is removed by ADR 0038 Decision 5.
 - **Not removed:**
   - paraphrases;
-  - entity descriptions, since deleting an entity would change the entity decision (FIX05
-    R6);
-  - restatements whose evidence isn't covered.
+  - entity descriptions, since deleting an entity would change the entity decision;
+  - restatements whose evidence isn't covered;
+  - a record naming a claim that no other record names (ADR 0047).
 - **Completion.** A run can't be blocked by this rule, because only covered restatements
   are flagged.
 - **Persistence.** No persisted format changes.
@@ -100,10 +91,7 @@ every group, while a record cites its batch's group.
 - **Tests.**
   - The family-purpose test keeps one shared wording for functional requirements,
     acceptance criteria, edge cases and entities, and gives each deletable kind its own.
-  - The coverage test's user-visible outcome no longer copies the story.
   - The R46 test keeps its original candidate, which still blocks as competing records.
-  - The scripted complete story in the integration fixture now has its own leading
-    words, so review-advice scenarios don't trip a restatement delete.
-  - New tests cover:
+  - Tests also cover:
     - a story that cites every group, against a batch-bound record;
     - an uncovered second-batch restatement that stays admitted.

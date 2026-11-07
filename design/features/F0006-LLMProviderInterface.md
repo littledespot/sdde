@@ -1,33 +1,12 @@
 # F0006 — LLMProviderInterface
 
-**Status:** Accepted feature design
+**Status:** Accepted feature design. Implemented, including production
+provider/model registration, Bedrock and Anthropic configuration, concrete
+authorization/inference wiring, native-schema projection and shared
+fake/real-adapter conformance; [F0007](F0007-AWSBedrockProvider.md) records the
+Bedrock implementation. The ADR 0032 routine (Amendment 2) and the ADR 0030
+`request-model` step (Amendment 13) are not yet implemented.
 
-**Production completion scope:** F0006 includes production provider/model
-registration, Bedrock configuration, concrete authorization/inference
-wiring, native-schema projection and shared fake/real-adapter conformance.
-[F0007](F0007-AWSBedrockProvider.md) records the Bedrock implementation using the
-existing composition boundary, runner ledgers and pinned Zig HTTP transport.
-
-**Amendments:** [ADR 0005](../decisions/0005-workflow-defined-operations.md#unversioned-operation-ids-accepted-2026-09-06)
-(one unversioned contract per operation), [ADR 0009](../decisions/0009-atomic-workflow-execution.md)
-(no provider-effect persistence or cross-execution recovery),
-[ADR 0011](../decisions/0011-provider-owned-request-limits.md) (provider-owned size
-limits; actual usage against the workflow budget),
-[ADR 0013](../decisions/0013-workflow-input-reuse.md) (compact transport derived from
-the captured schema; `result-selection: input` binds the packet's named result view
-once), [ADR 0028](../decisions/0028-anthropic-messages-provider.md) (the Anthropic
-Messages API as a peer provider on shared provider owners),
-[ADR 0029](../decisions/0029-bedrock-model-families.md) (Bedrock entries name a
-compiled family) and
-[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)
-(configured temperatures; one runaway re-send). Production Bedrock and Anthropic use
-the contracts below; see
-[Implementation status](#implementation-status).
-
-**Reading route:** [binding, §6](#6-providermodel-binding-and-workflow-token-accounting)
-→ [lifecycle, §7](#7-operation-identity-lifecycle-and-interface)
-→ [results, §8](#8-closed-request-observation-and-failure-algebra)
-→ [action ownership, §9](#9-action-and-orchestration-ownership).
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) owns request handoff;
 the [packaging test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml) shows inference,
 validation, closure and pre-call failure handling. It is test/design source,
@@ -45,14 +24,27 @@ run against a target project, a provider request, credential access, or a
 project-content change.
 
 **Governing authority:** [Engine design](../design.md), especially Sections 1,
-3-6, 9, 12-13.4, 15, 21-22, and 26-31; [ADR 0001 — Zig native
-engine](../decisions/0001-zig-engine.md); [ADR 0004 — conditional
-model-provider bootstrap](../decisions/0004-model-provider-bootstrap.md); [F0001 —
+3-6, 9, 12-13.4, 15, 21-22, and 24-31; the accepted ADRs that govern or amend this
+feature, whose decisions [design.md §32](../design.md#32-accepted-and-deferred-implementation-choices)
+indexes: [0001](../decisions/0001-zig-engine.md),
+[0004](../decisions/0004-model-provider-bootstrap.md),
+[0005](../decisions/0005-workflow-defined-operations.md),
+[0006](../decisions/0006-minimal-model-response.md),
+[0009](../decisions/0009-atomic-workflow-execution.md),
+[0011](../decisions/0011-provider-owned-request-limits.md),
+[0012](../decisions/0012-workflow-owned-model-request.md),
+[0013](../decisions/0013-workflow-input-reuse.md),
+[0018](../decisions/0018-debug-model-exchange-logging.md),
+[0028](../decisions/0028-anthropic-messages-provider.md),
+[0029](../decisions/0029-bedrock-model-families.md),
+[0030](../decisions/0030-engine-owned-model-request.md),
+[0032](../decisions/0032-engine-routines.md),
+[0037](../decisions/0037-configured-workflow-token-budget.md) and
+[0039](../decisions/0039-configured-temperatures-and-runaway-resend.md); [F0001 —
 SDDToolKitConfigService](F0001-SDDToolKitConfigService.md); [F0002 —
 LogService](F0002-LogService.md); [F0008 —
-LLMProviderConfigService](F0008-LLMProviderConfigService.md); accepted [ADR
-0005 — workflow-defined operations](../decisions/0005-workflow-defined-operations.md);
-the [path contract](../paths.md); and
+LLMProviderConfigService](F0008-LLMProviderConfigService.md); the
+[configuration paths](../contracts/09-configuration.md#91-required-configuration-shape); and
 `design/code.md` Sections 21-24. The
 [`.sddproviders.json`](../examples/.sddproviders.json) file is source material
 for the requested collection pattern. It is not runtime authority, a schema,
@@ -93,117 +85,66 @@ architectural port. There is no alias or parallel gateway.
 
 ## 2. Accepted amendments
 
-These amendments are accepted. ADR 0009 withdraws their former
-provider-effect journal and cross-execution recovery requirements; lifecycle
-facts remain local to the abandoned or completed execution.
+These amendments are accepted; each names the section that states it in full, except
+amendments 2 and 13, whose ADR 0032 and ADR 0030 terms are stated here. ADR 0009
+withdraws their former provider-effect journal and cross-execution recovery
+requirements; lifecycle facts remain local to the abandoned or completed execution.
 
-1. Require `paths.providers`; reserve its exact project-relative `.sddproviders.json`
-   capability and prove all configured-location collisions.
+1. `paths.providers` is required, its exact project-relative `.sddproviders.json`
+   capability is reserved with all configured-location collisions proved, and only
+   F0008 captures the file, when requested
+   ([F0004](F0004-BootstrapRootRegistryService.md#4-path-and-existence-contract);
+   [§5](#5-conditional-bootstrap-and-change-handling)).
+2. The fixed, capability-free `ModelProviderBootstrapOrchestrator` runs after
+   selected-workflow compilation and before execution, using runner-owned bindings;
+   this explicitly amends fixed startup-graph authority
+   ([§5](#5-conditional-bootstrap-and-change-handling);
+   [§9](#9-action-and-orchestration-ownership)). Under
+   [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) it becomes a
+   typed engine routine at the same point, reached through one runner-owned binding. It
+   keeps its single typed-requirement branch, outcomes and public codes; each step takes
+   only the port it uses, values pass as typed arguments instead of runner-applied
+   deltas, and fake-port routine tests replace the spy-binding checks in §§9 and 12–13.
+3. The closed document, provider-specific configuration union and its
+   byte/collection/nesting/identity limits are normative
+   ([§3](#3-exact-sddprovidersjson-contract)).
+4. Provider-file diagnostics are separate and do not broaden F0001's two reader codes
+   ([§10](#10-diagnostics-security-and-cleanup)).
+5. A required branch captures once and retains one immutable per-invocation
+   registry/allowlist ([§5](#5-conditional-bootstrap-and-change-handling)).
+6. The catalogue lists configured models and `models.slots` is the repository
+   allowlist; originating YAML requests select a slot, consumers retain that binding
+   under ADR 0012, and ADR 0005 removes built-in routes
+   ([§6](#6-providermodel-binding-and-workflow-token-accounting)).
+7. `AdvanceModelAttemptAccountingAction`, Design §§12.1/13.4 and `ModelRequestLifecycle`
+   are amended: the initial attempt is reserved once, later attempts require an
+   explicit operation-local `retry-limit`, every assigned/uninvoked branch closes,
+   inference failures consume their attempt, and no workflow-global attempt, retry,
+   unit-repair or stage-repair ceiling applies
+   ([§7](#7-operation-identity-lifecycle-and-interface)).
+8. `LLMProviderInterface` is the sole name in design, package and architecture-test
+   authority ([§1](#1-responsibility)).
+9. A relocated packaged executable uses target-owned provider configuration without
+   source examples ([§12](#12-acceptance-criteria); [§13](#13-verification)).
+10. Authorization is prepared from a preloaded, non-refreshing, no-I/O lease. Only a
+    narrowly defined environment preloader may obtain material: each provider family
+    reads one exact variable (Bedrock `AWS_BEARER_TOKEN_BEDROCK`, Anthropic
+    `ANTHROPIC_API_KEY`), only for families bound to the selected workflow's model
+    slots ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
+    Repository-selected secrets, files, processes, metadata, STS and refresh effects
+    are prohibited ([F0007](F0007-AWSBedrockProvider.md#credentials-and-transport)).
+11. Transport, authorization, throttling and timeout outcomes reach YAML; only its
+    explicit registered retry operation selects a retry, and providers and generation
+    orchestrators cannot hide it ([§8](#8-closed-request-observation-and-failure-algebra)).
+12. One positive workflow total-token budget is charged from actual usage
+    ([§6](#6-providermodel-binding-and-workflow-token-accounting)).
+13. Each model request runs as one engine-owned step
+    ([ADR 0030](../decisions/0030-engine-owned-model-request.md); the `request-model`
+    step is not yet implemented).
 
-   - Only F0008 captures the file, when requested.
-   - Contract: [F0004 path
-     validation](F0004-BootstrapRootRegistryService.md#4-path-and-existence-contract);
-     [conditional capture, §5](#5-conditional-bootstrap-and-change-handling).
-
-2. Place the fixed, capability-free `ModelProviderBootstrapOrchestrator` after
-   selected-workflow compilation and before execution, using runner-owned bindings.
-   Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), it becomes
-   a typed engine routine at the same point, reached through one runner-owned binding.
-   - It keeps its single typed-requirement branch, outcomes and public codes.
-   - Each step takes only the port it uses, and values pass as typed arguments instead of
-     runner-applied deltas.
-   - Fake-port routine tests replace the spy-binding checks in §§9 and 12–13.
-
-   - This explicitly amends fixed startup-graph authority.
-   - Contract: [Conditional bootstrap,
-     §5](#5-conditional-bootstrap-and-change-handling); [action ownership,
-     §9](#9-action-and-orchestration-ownership).
-
-3. Make the closed document, provider-specific configuration union, and
-   byte/collection/nesting/identity limits normative.
-
-   - Contract: [Provider document, §3](#3-exact-sddprovidersjson-contract).
-
-4. Add separate provider-file diagnostics without broadening F0001's two reader codes.
-
-   - Contract: [Diagnostics, §10](#10-diagnostics-security-and-cleanup).
-
-5. Capture once on a required branch; retain one immutable per-invocation
-   registry/allowlist, with no refresh, cache or last-known fallback.
-
-   - Contract: [Snapshot lifetime, §5](#5-conditional-bootstrap-and-change-handling).
-
-6. Treat the catalogue as configured models and `models.slots` as the repository
-   allowlist.
-
-   - Originating YAML requests select a slot; consumers retain that binding under ADR
-     0012.
-   - ADR 0005 removes built-in routes.
-   - Contract: [Binding, §6](#6-providermodel-binding-and-workflow-token-accounting).
-
-7. Amend `AdvanceModelAttemptAccountingAction`, Design §§12.1/13.4 and
-   `ModelRequestLifecycle`: reserve the initial attempt once; later attempts require
-   explicit operation-local `retry-limit`; close every assigned/uninvoked branch.
-
-   - Inference failures consume their attempt.
-   - No workflow-global attempt, retry, unit-repair or stage-repair ceiling applies.
-   - Contract: [Full-attempt lifecycle,
-     §7](#7-operation-identity-lifecycle-and-interface).
-
-8. Use `LLMProviderInterface` as the sole name in design, package and architecture-test
-   authority, without aliases.
-
-   - Contract: [Responsibility, §1](#1-responsibility).
-
-9. Require a relocated packaged executable to use target-owned provider configuration
-   without source examples.
-
-   - Contract: [Acceptance, §12](#12-acceptance-criteria); [verification,
-     §13](#13-verification).
-
-10. Prepare authorization from a preloaded, non-refreshing, no-I/O lease.
-
-    - Only a narrowly defined environment preloader may obtain material. Each provider
-      family reads one exact variable (Bedrock `AWS_BEARER_TOKEN_BEDROCK`, Anthropic
-      `ANTHROPIC_API_KEY`), only for families bound to the selected workflow's model
-      slots ([ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
-    - Repository-selected secrets, files, processes, metadata, STS and refresh effects
-      are prohibited.
-    - Contract: [F0007 credentials and
-      transport](F0007-AWSBedrockProvider.md#credentials-and-transport).
-
-11. Expose transport/auth/throttle/timeout outcomes to YAML; only its explicit
-    registered retry operation selects a retry.
-
-    - Providers and generation orchestrators cannot hide it.
-    - Contract: [Failure algebra,
-      §8](#8-closed-request-observation-and-failure-algebra).
-
-12. Use one positive workflow total-token budget.
-
-    - Before a call, reject exhaustion; afterward, charge reported inference
-      input/output once, including overshoot.
-    - Exact equality permits the current result only; retries share the total and a new
-      execution starts at zero.
-    - No reservation, estimate or budget-derived output allowance applies.
-    - Contract: [Actual-usage accounting,
-      §6](#6-providermodel-binding-and-workflow-token-accounting).
-13. Run each model request as one engine-owned step
-    ([ADR 0030](../decisions/0030-engine-owned-model-request.md), 22 October 2026, amended
-    23 October 2026; not yet implemented except the token-counting removal and the
-    catalogue deadline below).
-
-    - One `request-model` step makes one inference request.
-    - A `request-model` step declares the slot, resources, `retry-limit` and its outcomes
-      (`ok`, `invalid`, `failed`, `cancelled`).
-    - The provider-operation deadline moved to the bound catalogue entry's required
-      `requestTimeoutMs`, beside `maxOutputTokens`, on 24 October 2026 (implemented).
-      Authorization preparation takes no parameter, and compilation rejects a YAML
-      `timeout-ms`.
-    - Provider token counting was removed on 24 October 2026 (implemented), so this
-      document defines no count operation, capability or outcome. Actual-usage
-      accounting (§6) is unchanged and remains the only source of the workflow token
-      total.
+    - One `request-model` step makes one inference request and declares the slot,
+      resources, `retry-limit` and its outcomes (`ok`, `invalid`, `failed`,
+      `cancelled`).
     - A fixed, capability-free kernel orchestrator runs the lifecycle in §§7–9 as the
       stages ADR 0030 lists, through runner-owned child bindings. The runner keeps its
       §9 duties and chooses no workflow branch.
@@ -211,6 +152,12 @@ facts remain local to the abandoned or completed execution.
       stage of that one step. Each stage keeps its own action, narrow ports and rules.
     - Provider failures and timeouts still reach YAML as the step's typed outcomes.
       Fallback and repair stay YAML transitions.
+    - Implemented: the provider-operation deadline is the bound catalogue entry's
+      required `requestTimeoutMs`, beside `maxOutputTokens`; authorization preparation
+      takes no parameter, and compilation rejects a YAML `timeout-ms`. Provider token
+      counting is removed, so this document defines no count operation, capability or
+      outcome; actual-usage accounting (§6) is the only source of the workflow token
+      total.
 
 The two project inputs have distinct responsibilities:
 
@@ -285,9 +232,6 @@ ProviderModelDefinition {
   value is `LLM_PROVIDER_REGISTRY_INVALID`, not a partial decode.
 - This staged raw-to-validated boundary rejects any unsupported sibling before
   publishing the registry.
-- The current source example configures the Sydney GPT-OSS-20B Bedrock entry (family
-  `gpt-oss`); it is still
-  not an automatic runtime configuration or fallback.
 
 - There are no common (provider-independent) catalogue `endpoint`, `contextWindow`,
   `maxOutputTokens`, `requestTimeoutMs`, `supportsTemperature`, `structuredOutput`,
@@ -409,9 +353,11 @@ LLMProviderDispatch = union(enum) {
   `aws_bedrock { region, family, maxOutputTokens, requestTimeoutMs }` and
   `anthropic { maxOutputTokens, requestTimeoutMs }` configurations and exhaustive
   concrete dispatch.
-- The compiled Bedrock families and Regions are listed in ADR 0029 and F0007; the
-  Anthropic models in ADR 0028.
-- The empty-object variant belongs only to private test contracts, not production.
+- The compiled Bedrock families are listed in ADR 0029 and F0007, the compiled source
+  Regions in `domain/llm_provider_contracts.zig` (ADR 0029), and the Anthropic models
+  in ADR 0028.
+- The deadline-only variant (`{ requestTimeoutMs }`) belongs only to private test
+  contracts, not production.
 - External catalogue and slot selection remain mandatory; registration supplies support
   facts, never a default or repository authorization.
 
@@ -435,12 +381,9 @@ LLMProviderDispatch = union(enum) {
 - Unsupported modes reject without fallback.
 - Provider grammar never establishes candidate validity.
 - The compiled Bedrock family owns its verified wire fields, independently of those
-  neutral capabilities (ADR 0029). The `luna` family's native mode requires
-  an additional strict-format flag and admits only omitted temperature and
-  reasoning overrides. Provider-default medium reasoning is documented in
-  [F0007](F0007-AWSBedrockProvider.md); it is not a locally supplied control or
-  evidence of semantic quality. Live-test model selection is the separate development
-  cost policy (F0007), which grants no production catalogue authority.
+  neutral capabilities (ADR 0029; [F0007](F0007-AWSBedrockProvider.md)). Live-test
+  model selection is the separate development cost policy, which grants no production
+  catalogue authority.
 
 - The shared implementation conforms directly to `LLMProviderInterface`; its
   per-family dispatch forwards exactly one operation and introduces no second port.
@@ -1359,7 +1302,7 @@ Implementation evidence must cover:
 - duplicate keys/identities
 - unknown provider/config/field
 - malformed UTF-8/JSON
-- unimplemented OpenAI entries
+- unregistered (unimplemented) provider entries
 - invalid sibling with no partial registry
 - exact ownership and cleanup.
 
@@ -1441,34 +1384,5 @@ Implementation evidence must cover:
 - clean native executable without source examples or development assets.
 - Any live provider test is separately authorized, credential-gated, non-default, and
   excluded from deterministic CI.
-
-## Implementation status
-
-- Provider capture, decoding, registry construction and complete repository-slot
-  validation run immediately after exact workflow selection through the fixed
-  conditional bootstrap owner.
-- The request-identity ledger owns assignment and binding validation without
-  provider I/O.
-- Production contracts, attempt/operation accounting and authorization use the same
-  execution-local boundaries.
-- Native YAML connects retained requests, inference, response validation
-  and explicit lifecycle closure. Production Bedrock uses those contracts and
-  runner bindings.
-- Offline conformance and YAML tests establish mechanical boundary evidence;
-  they do not establish live reliability or semantic quality.
-
-## 14. Traceability
-
-| Concern | Authority |
-| --- | --- |
-| Candidate-only LLM boundary | Design Sections 1, 3-4, 12, and 26.1 |
-| Fixed conditional provider bootstrap and derivation | ADR 0004; Design Sections 3-6 and 13.1 |
-| Common port, action, runner, and dependency direction | Design Sections 5-6 and 13.4; ADR 0001 |
-| Current engine configuration ownership | Design Section 9; F0001; `design/paths.md` |
-| Request/invoke/decode separation | Design Sections 12.1-12.4 and 13.4; `design/code.md` Sections 21-24 |
-| Compact response and runner-owned correlation | [ADR 0006](../decisions/0006-minimal-model-response.md); Design Sections 12.3 and 22.4 |
-| Workflow-operation limits, retry, fallback, and repair authority | ADR 0005; Design Sections 12.5-12.7 and 21-22 |
-| Provider-owned size limits and actual workflow token accounting | [ADR 0011](../decisions/0011-provider-owned-request-limits.md); Section 6 |
-| Atomic execution and fresh reruns; no provider recovery | ADR 0009; Design Sections 24–25 |
-| Secret-safe logging | Design Sections 26.5 and 27; F0002 |
-| Fake-first testing and native packaging | Design Sections 28 and 30-31 |
+- Offline conformance and YAML tests establish mechanical boundary evidence; they do
+  not establish live reliability or semantic quality.

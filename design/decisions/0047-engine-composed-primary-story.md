@@ -12,11 +12,11 @@
     and the required-authority contract to 2.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
-  - [17-specify.md](../contracts/17-specify.md) §17.3: three model calls per specification
-    (brief, entities, record groups) and a native story; the story prompt clause; the
+  - [17-specify.md](../contracts/17-specify.md) §17.3: three model task types (brief,
+    entities, one call per record group) and a native story; the story prompt clause; the
     narrative-assignment population;
-  - [F0100](../features/F0100-SpecWorkflow.md) §5.2 "Main user journey", §5.7 and the four-call
-    text;
+  - [F0100](../features/F0100-SpecWorkflow.md) §5.2 (the story's purpose, formerly "Main
+    user journey"), §5.7 and the four-call text;
   - [text-field-composition.md](../contracts/text-field-composition.md): the story row's exact
     role;
   - ADR 0020: the story's group selection is native;
@@ -30,11 +30,11 @@
 
 ## Context
 
-Since 29 October, 26 of 30 weakened obligations and 15 of 59 unsupported additions scored in
-published specifications were in the model-written story ("A borrower may renew…", "logs into
-the library system and selects…"). Under the user's severity rulings (FIX06 H1) the story fails
-3 of the D12.2 set's 5 loan-renewal publications. Prompt wording moved the story between
-modes without removing them ([Z_FIX06](../../fixes/Z_FIX06.md) Q12 D12.2).
+The model-written story held 26 of 30 weakened obligations scored in published specifications
+since 29 October ("A borrower may renew…") and added unsupported content, such as invented
+steps ("logs into the library system and selects…"). Prompt wording moved the story between
+these modes without removing them ([Z_FIX06](../../fixes/Z_FIX06.md) Q12 D12.2 and Q19
+D19.2).
 
 ADR 0036 already makes each claim's wording the engine's quote of its cited source lines, so
 obligation strength, conditions and negation are the source's own words by construction.
@@ -76,7 +76,7 @@ claims, but it can't paraphrase them.
    story prompt and the generation schema's story variant are deleted.
 
 The story keeps its canonical `AttributedValue` shape, so no specification or state version
-changes. Its rejection reasons entered `spec-e2e-report/v15` (design/harness/e2e.md).
+changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/contracts.zig`).
 
 ## Consequences
 

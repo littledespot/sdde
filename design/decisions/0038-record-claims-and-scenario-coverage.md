@@ -76,8 +76,8 @@ only block.
    records step's existing `retry-limit` bounds the correction. Exhaustion fails the
    run. It asks for missing content and never removes any. Decision 5's partly taken
    statement, `shared_member`, takes the same route.
-   - Request descriptions record the constraint so replay enforces the same admission;
-     `model-request-debug` advances to v12.
+   - Request descriptions record the constraint so replay enforces the same admission
+     (from `model-request-debug/v12`).
 4. **List sources yield one claim per requirement.** ADR 0036 Decision 3's native
    list-item split is reinstated: a claim whose cited lines span several top-level
    list items becomes one quoted claim per item, so a list requirement can be checked
@@ -108,15 +108,8 @@ only block.
      kinds, as required members.
    - It replaces ADR 0035's comparison between records in one batch (user: "Yes, Q16
      replaces it"). ADR 0035's same-kind delete runs first and is unchanged.
-   - The first version, which corrected every second naming at the claim and deleted
-     none, failed 2 of 3 loan-renewal runs: no claim ID at the located position was
-     admissible, and the model returned the same records ([FIX06](../../fixes/FIX06.md)
-     Q16 set result). Deleting a repeat instead is an exception to FIX06 §2 rule 1,
-     decided by the user.
-   - The records prompt keeps its "at most one" sentence, requirements included, so the
-     model sees what the first version's set saw (user: "Yes, keep it").
-   - It is measured together with FIX06 D12.1, records requests with no unpublished
-     drafts, as one change set.
+   - The records prompt keeps its "at most one" sentence, requirements included, as the
+     rule's first version (FIX06 D16.1) had it (user: "Yes, keep it").
 
 ## Consequences
 
@@ -137,17 +130,6 @@ only block.
     - a narrative field that selects a group still maps every claim in it, so a
       corrected response that drops the functional requirement naming a claim passes
       coverage without a scenario.
-  - **Business rules restating requirements (amended 26 October 2026).** With one claim
-    per list item, every run of both cases from the first live pair on wrote business
-    rules that restate a functional requirement claim by claim, and organization scores
-    fell. On 26 October a records-prompt line was added against it ("A business rule
-    states a constraint that no functional requirement in this response already states;
-    never restate a requirement claim by claim."). It was a single-run patch, and the
-    27 October 08:31 and 09:40 hello-world runs still restated FR-001 claim by claim, so
-    it was removed on 28 October 2026 ([FIX06](../../fixes/FIX06.md) Q1a, D1.2).
-    Claim-by-claim restatement was left unpatched until Decision 5 removed it natively
-    on 2 November 2026. The list split stays: it is what gives a refusal requirement
-    its own claim and scenario.
   - **Repeated statements (Decision 5)** are judged on claim IDs and exact copies, not
     wording:
     - a business rule or prohibition stating a second obligation of an FR's prose claim
@@ -164,8 +146,6 @@ only block.
     uniqueness) and ends the unit at parsing, as a repeated `signal_ids` entry does.
 - **Persistence.** The canonical record shape is unchanged, so no specification or
   state version changes. The generation schema's records gain a required `claim_ids`.
-  Retained captures without it no longer admit, and `model-request-debug/v11`
-  descriptions no longer decode.
 - **Tests.**
   - The result-schema rule: admitted (covered, a non-covering kind ignored, empty),
     rejected at the exact uncovered value, restored by replay from the record, kept by

@@ -69,9 +69,8 @@ Model and reference content are untrusted data:
 - Configuration supplies no path, file-enable switch, timestamp, format, size, retention, flush,
   failure, redaction, prompt byte limit, lock value, per-event level, column-schema ID, or
   heading.
-- The example's lowercase `debug` is valid input.
-- Configuration is case-normalized, `CRITICAL` is the input alias of canonical `fatal`, and
-  `WARN` is the input alias of canonical `warning`.
+- Configuration is case-normalized (lowercase `debug` is valid input), `CRITICAL` is the
+  input alias of canonical `fatal`, and `WARN` is the input alias of canonical `warning`.
 - No other aliases or custom levels exist.
 
 | Accepted configured spelling | Canonical level/rank | Fixed meaning |

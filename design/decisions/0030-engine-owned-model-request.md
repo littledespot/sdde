@@ -9,22 +9,18 @@
 - **Date:** 2026-10-22; amended 2026-10-23.
 - **Decision authority:** The user's instruction on 22 October 2026, "A1, replace the
   subgraph as suggested, update documentations. do not make any code change yet". It
-  decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A1 after a review of the pros and cons of keeping
-  the 16-step `model-request-body` subgraph. The user's stated goal is simpler workflow
-  YAML.
+  decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A1 after a review of the pros
+  and cons of keeping the 16-step `model-request-body` subgraph. The user's stated goal
+  is simpler workflow YAML.
 - **Amendment authority:** On 23 October 2026 the user asked for "the best possible
   solution, remember this is a POC and best outcomes is the primary goal", then directed
-  "update docs with" the resulting table of choices. That settles the five choices first
+  "update docs with" the resulting table of choices. That settles the choices first
   derived under existing rules; see "Choices settled on 23 October 2026". The user also
   confirmed that the global token count stays, because it is built from actual inference
-  usage, not from token counting. A contract review then found one review site that
-  serves both required and advisory requests, and the user directed "update
-  documentations" with a one-directional advisory check: a step marked
-  `advisory: allowed` may carry both kinds, and only an advisory request at an unmarked
-  step is rejected. After comparing four ways to give one operation two outcome sets
-  (one shared variant mechanism, separate operations, a compiler special case, a union
-  contract), the user directed "update the documentation around option 1": one shared
-  contract-variant mechanism, built by this ADR and reused by
+  usage, not from token counting. After comparing four ways to give one operation two
+  outcome sets (one shared variant mechanism, separate operations, a compiler special
+  case, a union contract), the user directed "update the documentation around option
+  1": one shared contract-variant mechanism, built by this ADR and reused by
   [ADR 0033](0033-generic-repair-operations.md). That also confirms ADR 0033's derived
   choice 1.
 - **Amends:**
@@ -63,7 +59,7 @@
   - [F0005](../features/F0005-WorkflowDefinitionRegistryService.md),
     [F0006](../features/F0006-LLMProviderInterface.md) (including its count semantics),
     [F0007](../features/F0007-AWSBedrockProvider.md) (including CountTokens),
-    [F0100](../features/F0100-SpecWorkflow.md), diagram 16 and the
+    [F0100](../features/F0100-SpecWorkflow.md) and the
     [E2E harness](../harness/e2e.md) step events.
 
   The overall design remains **Proposed design**.
@@ -73,10 +69,10 @@
   step's `retry-limit`. A runaway on the re-send fails the step. Until
   `request-model` lands, the explicit request-lifecycle steps carry the re-send.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (27 October
-  2026, not yet implemented): exhausting a required request's correction stays a terminal
-  runner rejection, not a YAML outcome, but after it (and after a `RepairNoProgress` or
-  token-budget rejection) the engine may run the definition's declared, model-free
-  failure output, then returns the original failure.
+  2026; on hold since 30 October 2026, nothing implemented): exhausting a required
+  request's correction stays a terminal runner rejection, not a YAML outcome, but after
+  it (and after a `RepairNoProgress` or token-budget rejection) the engine may run the
+  definition's declared, model-free failure output, then returns the original failure.
 - **Advisory variant withdrawn (FIX06 D13.1, 1 November 2026):** by the user's decision
   to remove both post-generation reviews and to delete the advisory request protocol
   they alone used ([ADR 0023](0023-advisory-post-generation-review.md) removal
@@ -84,10 +80,8 @@
   `failed` and `cancelled`; the `advisory` parameter, the `advisory: allowed` marking,
   the advisory `more` and `blocked` outcomes, their deferred carriers, the
   one-directional check, `propagate-advisory-request-failure`, the advisory stop and
-  completion steps and `retire-advisory-protocol-transport` are withdrawn. This settles
-  the question this ADR left open about `propagate-advisory-request-failure`. The
-  contract-variant mechanism stays for ADR 0033, which is now its only user. The
-  23 October amendment authority below records the history of the withdrawn marking.
+  completion steps and `retire-advisory-protocol-transport` are withdrawn. The
+  contract-variant mechanism stays for ADR 0033, which is now its only user.
 
 ## Context
 
@@ -97,17 +91,14 @@ the request phase, advance two lifecycles, invoke the model, validate the observ
 complete the operation, admit the response, build a protocol correction, and close or
 terminate the request. Five wrapper subgraphs
 (`model-request`, `model-request-with-context`, `support-request`, `composition-request`
-and `composition-request-body`) add request preparation and route the result. With the
-`release-request` subgraph, this request region is 159 of the definition's 1,159 lines.
+and `composition-request-body`) add request preparation and route the result.
 
-- All 16 call sites run exactly the same sequence. Only `retry-limit` differs, and the
-  provider-operation `timeout-ms` is one fixed value. (FIX05's figure of 18 model-request
-  sites is its count at `b2f10a3`.)
+- Every call site runs exactly the same sequence; only `retry-limit` differs.
 - Subgraphs are definition-local ([ADR 0013](0013-workflow-input-reuse.md)), so every
   further workflow file would carry its own copy.
 - Because the sequence is project-authored, the generic runner has to reject every
   wrong ordering of it. A wiring mistake appears only when a run fails, often as a
-  rejection without a reason (FIX05 A4).
+  rejection without a reason.
 - Any change to the request lifecycle touches YAML, runner checks, bindings and tests
   together.
 
@@ -239,7 +230,7 @@ so there is one mechanism with two users.
   run-time selector check of its own; any check against native facts belongs to the
   operation that uses it.
 - **Why this option.** ADR 0033 needs per-owner variants anyway: separate operations
-  would bring back most of the 29 per-owner operations W3 removes, and a union contract
+  would bring back most of the 29 per-owner operations it removes, and a union contract
   would lose the per-owner checks. A compiler special case is the per-caller branch
   AGENTS.md forbids. Building the mechanism here keeps one way to do it.
 
@@ -256,21 +247,21 @@ return its documented maximum output (`maxOutputTokens`, ADR 0011).
 - **How it applies.** The authorization stage binds the deadline of the catalogue entry
   that the step's slot selects to every provider operation of that request, including
   protocol corrections. YAML carries no deadline.
-- **Values.** GPT-OSS-20B keeps today's 180,000 ms; its slowest observed call, a
-  16,384-token runaway, took 74.1 s. Every other entry, including both Claude Haiku 5.5
-  entries (128,000 maximum output tokens), also starts at 180,000 ms, the shared deadline
-  ADR 0028 applies today. Its replacement is derived from the measured time the model
-  takes to return its maximum output, not from the latency of one ordinary call, and
-  each change is recorded with its measurement.
+- **Values.** GPT-OSS-20B keeps 180,000 ms; its slowest observed call, a 16,384-token
+  runaway, took 74.1 s. Every other entry, including both Claude Haiku 5.5 entries
+  (128,000 maximum output tokens), also starts at 180,000 ms, the former shared deadline.
+  A replacement is derived from the measured time the model takes to return its maximum
+  output, not from the latency of one ordinary call, and each change is recorded with its
+  measurement.
 - **Bound.** Catalogue validation rejects a value too large to form a monotonic deadline,
   so an oversized value fails before any request instead of at authorization.
 - **Replay.** The request debugger ([ADR 0019](0019-single-request-debugger.md)) replays
   with the captured entry's `requestTimeoutMs`, not a fixed replay deadline, so the
   catalogue is the deadline's one owner.
 - **Why.** On 21 October 2026 a 60-second deadline, set below GPT-OSS-20B's own maximum
-  output time, turned three runaway responses into unexplained timeouts (FIX05 B9). A
-  per-step workflow value would repeat the same guess at every call site and apply it to
-  any model the slot selects.
+  output time, turned three runaway responses into unexplained timeouts. A per-step
+  workflow value would repeat the same guess at every call site and apply it to any
+  model the slot selects.
 
 ### What stays in YAML
 
@@ -307,28 +298,24 @@ This is the one list; other documents refer to it.
   `specification-state`'s persisted extraction contract. Persisted extraction contracts
   made before the change no longer match; that is the existing typed outcome for any
   workflow change.
-  - *Implementation note (24 October 2026, slice 3):* the deadline move advanced
-    `model-request-debug` to v11 and `model-call-evidence` to v3; their provider
-    configurations carry the entry's deadline (`request_timeout`). As ADR 0028 set out for
-    v1, `model-call-evidence` v2 and v1 stay readable only as historical evidence that
-    grants no current authority; keeping the v2 reader was user-approved. The other
-    candidates remain for the `request-model` change.
-- **Retained evidence.** Captured catalogues have no `requestTimeoutMs`, so every tool
-  that revalidates a retained catalogue through the production registry rejects runs and
-  captures made before the change, whether or not a version advances: the retained-call
-  replay (`e2e-call`), the compatibility inspection, the baseline and the frozen
-  binding. Measurements that need them, such as FIX05 W4's replay, run before the change
-  or use raw response bytes.
+  - The implemented deadline move advanced `model-call-evidence` to v3, whose provider
+    configuration carries the entry's deadline (`request_timeout`). Its v2 and v1
+    captures stay readable only as historical evidence that grants no current
+    authority; keeping the v2 reader was user-approved.
+- **Retained evidence.** Every tool that revalidates retained runs or captures through
+  the production registry or an advanced contract (the retained-call replay `e2e-call`,
+  the compatibility inspection, the baseline and the frozen binding) rejects those made
+  before the change. Measurements that need them run before the change or use raw
+  response bytes.
 
 ### Token counting is removed
 
 Provider input-token counting, which asks a provider how many input tokens a request would
 use before sending it, is removed. There is no `count-model-tokens` step.
 
-- **Nothing uses it.** No shipped workflow or packaging fixture runs a count operation;
-  only unit tests and smoke rejection cases exercise the path. No registered model can
-  count: the Anthropic contract and every Bedrock family register no CountTokens (ADRs
-  0028 and 0029).
+- **Nothing used it.** No shipped workflow or packaging fixture ran a count operation,
+  and no registered model could count: the Anthropic contract and every Bedrock family
+  registered no CountTokens (ADRs 0028 and 0029).
 - **Nothing could use it.** ADR 0011 forbids pre-call reservations, capacity prediction
   and local size ceilings, so a count could not gate a request.
 - **The global token count stays.** The workflow token budget, `WorkflowTokenBudgetExceeded`,
@@ -343,25 +330,14 @@ use before sending it, is removed. There is no `count-model-tokens` step.
 With no compatibility form (AGENTS.md), the implementation removes:
 
 - the YAML registration of every operation whose only job is one stage of a model
-  request or token count, detailed or consolidated. That includes
-  `prepare-model-request`, `admit-model-response`, the 15 other steps of
-  `model-request-body`, the detailed preparation and decoding operations the packaging
-  fixture uses, and the four count operations;
+  request, detailed or consolidated. That includes `prepare-model-request`,
+  `admit-model-response`, the 15 other steps of `model-request-body`, and the detailed
+  preparation and decoding operations the packaging fixture uses;
 - their application bindings as YAML operations, their registry entries and the runner
   checks that police their YAML ordering;
 - the body and wrapper subgraphs in the Specify definition, and the explicit request
   steps in the [packaging fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml);
-- the tests that pin YAML registration or YAML ordering of the removed operations;
-- the whole token-count path: the count operations and their actions, bindings and
-  registry entries, the count branches of provider-operation assignment, authorization,
-  invocation, observation, completion and accounting, the `input_token_count` operation
-  kind and capability, the exact-token-counter capability and its
-  `exact_token_count_unavailable` failure cause, Bedrock's CountTokens encoding and
-  decoding, the count fixtures and the tests of all of these;
-- the `timeout-ms` parameter of authorization preparation, and every per-step deadline in
-  the Specify definition (180,000 ms), the packaging fixture (60,000 ms) and the smoke
-  test (1,000 ms);
-- the request debugger's fixed 300,000 ms replay deadline.
+- the tests that pin YAML registration or YAML ordering of the removed operations.
 
 The inference stage actions and their unit tests stay, including ADR 0012's negative
 cases: forged deltas, stale or foreign evidence, cancellation and allocation cleanup.
@@ -370,7 +346,6 @@ cases: forged deltas, stale or foreign evidence, cancellation and allocation cle
 
 - Model calls, prompts, schemas, token usage and the single workflow budget (ADR 0011),
   including actual-usage accounting of every inference call.
-- The Specify definition's deadline: each GPT-OSS-20B request keeps 180,000 ms.
 - Retry limits and counting scopes, and response admission (ADRs 0006, 0014, 0016 and
   0020).
 - Request identity form, `model-request/v1` and retained-request consumers (ADR 0012).
@@ -378,59 +353,43 @@ cases: forged deltas, stale or foreign evidence, cancellation and allocation cle
 
 ## Choices settled on 23 October 2026
 
-On 22 October these five choices were derived from existing rules and awaited the user's
-confirmation. On 23 October the user directed the best option for each, for a proof of
-concept whose primary goal is the best outcome. Two were kept as derived and three
-changed:
+On 23 October the user directed the best option for each choice derived on 22 October,
+for a proof of concept whose primary goal is the best outcome:
 
-| Choice | Derived on 22 October | Settled on 23 October | Why |
-| --- | --- | --- | --- |
-| 1. Form | Kernel orchestrator | **Kept** | The only form that keeps the engine's core guarantees |
-| 2. Token counting | Rebuild as `count-model-tokens`, contract deferred | **Removed** | Nothing can use it |
-| 3. Deadline | `timeout-ms` on every request step | **Moved to each catalogue entry** as `requestTimeoutMs` | It depends on the model, not the workflow |
-| 4a. Release | Stays an explicit YAML step | **Kept** | It has to run after workflow-specific consumers |
-| 4b. Advisory routing | Every step maps all six outcomes | **Only steps marked `advisory: allowed` map `more` and `blocked`** (withdrawn 1 November 2026 with the advisory protocol) | Removes unreachable mappings from most sites |
-
-1. **Form: a fixed kernel orchestrator with runner-owned child bindings.** The request
-   stages change runner-owned state (accounting, leases and lifecycle ledgers) that the
-   runner must apply stage by stage. The split between invoking and interpreting the
-   model, and between the model and authorization capabilities, must be checked by the
-   runner per binding (§12.1). A single action, including an
+1. **Form: a fixed kernel orchestrator with runner-owned child bindings,** as derived.
+   The request stages change runner-owned state (accounting, leases and lifecycle
+   ledgers) that the runner must apply stage by stage. The split between invoking and
+   interpreting the model, and between the model and authorization capabilities, must
+   be checked by the runner per binding (§12.1). A single action, including an
    [ADR 0031](0031-stage-actions.md) stage action, can't give either, and neither can an
-   [ADR 0032](0032-engine-routines.md) routine. Sequencing in the runner itself would give
-   the runner workflow branching (F0006 §9).
-2. **Token counting is removed** rather than rebuilt; see "Token counting is removed". A
-   rebuilt count step would be a lifecycle with no caller and no capable model.
-3. **The deadline moves to the catalogue;** see "Request deadline". It is a model fact
-   beside `maxOutputTokens`, and the B9 timeouts came from a deadline set below one
-   model's maximum output time. This settles the per-provider and per-family deadline
-   questions that ADRs 0028 and 0029 left open.
-4. **4a. Release stays an explicit YAML step**, because sites choose different
-   retirements and a release must follow the request's workflow-specific consumers.
-   Engine-owned release needs the compiler to derive each request's lifetime, and stays a
-   separate question.
+   [ADR 0032](0032-engine-routines.md) routine. Sequencing in the runner itself would
+   give the runner workflow branching (F0006 §9).
+2. **Token counting is removed** rather than rebuilt as a `count-model-tokens` step; see
+   "Token counting is removed". A rebuilt count step would be a lifecycle with no caller
+   and no capable model.
+3. **The deadline moves to the catalogue** rather than a `timeout-ms` on every request
+   step; see "Request deadline". It is a model fact beside `maxOutputTokens`.
+4. **4a. Release stays an explicit YAML step**, as derived, because sites choose
+   different retirements and a release must follow the request's workflow-specific
+   consumers. Engine-owned release needs the compiler to derive each request's
+   lifetime, and stays a separate question.
 5. **4b. Advisory routing** was settled as a per-site `advisory: allowed` marking. It was
    withdrawn on 1 November 2026, when the advisory protocol it routed was removed with
    post-generation review (FIX06 D13.1).
 
 ## Consequences
 
-- **The request region goes.** The 159-line request region, including the 61-line body,
-  leaves the Specify definition, and later workflow files don't copy it.
-- **The net YAML saving grows.** The 22 October estimate was about 35–90 lines (3–8%) of
-  the Specify definition, because each call site still routed `more` and `blocked` and
-  declared `protocol-prompt` and `timeout-ms`. No site routes an advisory outcome or
-  declares a deadline, so the saving is larger. The implementation measures it.
+- **The request region goes.** The request body and its wrapper subgraphs leave the
+  Specify definition, and later workflow files don't copy them. The implementation
+  measures the saving.
 - **Deadlines follow the model.** Selecting a different model for a slot brings that
   model's deadline with it; no workflow edit is needed.
-- **Less engine code.** The token-count path, the count operation kind and Bedrock's
-  CountTokens wire code go, with their tests.
 - **A larger first change.** The shared contract-variant mechanism lands with this ADR,
   in the compiler, the registry and the runner, so ADR 0033 can reuse it. Its admission,
   compiler and runner tests are part of this ADR's acceptance.
-- **Most of the remaining YAML size is outside this decision.** Of the current 283 steps,
-  152 only pass `ok` to the next step and `failed` to the end (FIX05 §4 counted 157 of
-  282 at `b2f10a3`). FIX05 A2 and W3 address those.
+- **Most of the remaining YAML size is outside this decision.** More than half of the
+  Specify definition's steps only pass `ok` to the next step and `failed` to the end;
+  ADRs 0031 and 0033 address those.
 - **The runner stops policing lifecycle order.** It no longer checks project-authored
   orderings of the lifecycle; one fixed, spy-testable orchestrator runs it.
 - **Visibility moves to logs.** Request stages lose YAML visibility; logged stage events
@@ -471,8 +430,8 @@ All offline. The change makes no model call.
   - accepted: a selector forwarded through a subgraph `{param}`, as ADR 0033's call
     sites will;
   - rejected at admission: a variant that fails any per-contract check while its
-    sibling variant is valid; two variants with the same selector value; and a non-first variant that
-    produces another operation's gate evidence key;
+    sibling variant is valid; two variants with the same selector value; and a
+    non-first variant that produces another operation's gate evidence key;
   - rejected at compilation: a selector value with no variant, a missing required
     selector, and a step checked against the wrong variant's outcomes or data effects;
   - rejected by compiled-graph validation and by registry publication: a compiled step
@@ -509,7 +468,7 @@ All offline. The change makes no model call.
   - the runner remains the sole delta and accounting owner.
 - **Build checks.** `zig build verify` and the clean packaged-executable smoke test pass.
 - **Measure.** The change records the Specify definition's lines and steps, and the files
-  it touches, before and after (FIX05 A2's measure).
+  it touches, before and after.
 
 ## Not decided here
 
@@ -518,5 +477,6 @@ All offline. The change makes no model call.
   compiler to derive each request's lifetime, and needs its own decision.
 - The measured replacement for Claude Haiku 5.5's interim 180,000 ms `requestTimeoutMs`.
 - Token counting's return, if a workflow and a counting-capable model ever need it.
-- Any workflow-level parameter default. FIX05 A2 and W3 are decided separately, in
-  [ADR 0031](0031-stage-actions.md) and [ADR 0033](0033-generic-repair-operations.md).
+- Any workflow-level parameter default. Stage actions and generic repair operations are
+  decided separately, in [ADR 0031](0031-stage-actions.md) and
+  [ADR 0033](0033-generic-repair-operations.md).

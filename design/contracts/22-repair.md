@@ -73,8 +73,8 @@ repairs retire forced classifications and re-enter classification validation.
 Initial summary/signal assignment selections follow ADR 0022's native projection;
 atomic and omission repairs continue to use their authorized target and exact
 dependencies, rather than borrowing a broader initial authoring selection.
-Completed specification units use the authorized repair target and current review
-evidence; their packets do not reuse a consumed authoring assignment. Pending
+Completed specification units use the authorized repair target; their packets do not
+reuse a consumed authoring assignment. Pending
 authoring still binds and validates its current source group.
 Initial attributed authoring selects complete accepted group occurrences together
 with content under ADR 0020. Fixed repairs retain required canonical
@@ -94,12 +94,11 @@ to choose a handle. Composition correction and retry limits remain unchanged.
 
 A lost obligation outside that association has an explicit unresolved-association
 outcome and blocks; no membership-changing rebuild permission exists, and the
-outcome cannot blame extraction or grouping. There is no post-generation
-reviewed-omission insertion. A semantic omission note cannot authorize an invented association or
-cross-group insertion. Independently authorized native membership repair retains
-its current accepted group occurrence, complete selection and readback checks. It
-establishes the source occurrence and writable unit independently of dispatch order;
-the final record task is not evidence of ownership, and an association the current
+outcome cannot blame extraction or grouping. Independently authorized native
+membership repair retains its current accepted group occurrence, complete selection
+and readback checks. It establishes the source occurrence and writable unit
+independently of dispatch order; the final record task is not evidence of
+ownership, and an association the current
 authorized group cannot represent keeps an explicit ownership denial, with no
 cross-batch mutation or extra retry allowance.
 
@@ -113,7 +112,7 @@ source reviewer supplies a required nonblank `missing_obligation` for
 including its conditions, negation and obligation strength; `detail` explains the
 candidate defect separately. The selected original sources support the obligation.
 Native code carries the statement unchanged through admission, comparison,
-correction, repair and persisted evidence; it cannot extract, infer or rewrite an
+correction and repair; it cannot extract, infer or rewrite an
 obligation from diagnostic prose. Non-omission findings forbid it.
 The comparison assignment binds the exact obligation together with the existing
 subject, detail, source selections, revision and canonical evidence. Changed
@@ -177,7 +176,7 @@ Unresolved attribution grants no upstream rebuilding; independently authorized
 candidate-local checks remain available. No new exact-reference, association-membership, summary,
 entity-decision, retry or verdict-reassessment permission is added.
 
-Pre-generation collection, correction, authorization and readback use this one comparison
+Pre-generation collection, correction and authorization use this one comparison
 contract. Canonical pre-generation evidence retains native facts, bindings, the complete response
 and its comparison-call origin separately from the review-finding origin. Rebuild
 bindings from current canonical facts before deriving any retained attribution;
@@ -283,7 +282,7 @@ eligible occurrence scope, then fixes the inserted record's resulting `L` and ci
 replacements. Subsequent invalid fields of that record retain the same
 whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
-exact-token coverage, semantic assessment and publication validation remain required.
+exact-token coverage and publication validation remain required.
 
 The repair algebra is closed:
 
@@ -307,13 +306,12 @@ ends in the shared typed exhaustion `unchanged_repair`, defined in the
 route-specific rule or retry allowance.
 
 Composition defects (required prose, prohibited insertions and embedded insertion
-syntax) are no longer repair targets. They are rejected at response admission and
+syntax) are not repair targets. They are rejected at response admission and
 corrected through the existing bounded protocol correction with the complete
 original request, as defined in the
-[composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit).
-Repair responses apply the same admission rule within their own request's
-correction bound. Other repair kinds and `unchanged_repair` exhaustion are
-unchanged.
+[composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit);
+repair responses apply the same admission rule within their own request's
+correction bound.
 
 The repair guidance contains:
 
@@ -493,7 +491,7 @@ At the first quote or object opener after `{"`, it requires the exact continuati
 above. It rejects escapes, control bytes and any other closing-quote continuation;
 it never searches past another fragment or discards string-value content.
 
-**Partial member-name amendment (user-approved, 18 October 2026):** Bedrock GPT-OSS
+**Partial member name (user-approved, 18 October 2026):** Bedrock GPT-OSS
 also truncates the unfinished member name, for example `{"find{"findings":…}`.
 - In the `{"name` form only, `name` may be a nonempty start of the first member name
   rather than the whole name. It must still be unescaped, control-free, valid UTF-8,
@@ -503,7 +501,6 @@ also truncates the unfinished member name, for example `{"find{"findings":…}`.
 - The strict remainder parse still owns the validity of every key byte.
 - The candidate records `removed_partial_field_prefix`.
 - The string-value opener still requires the exact name.
-- Every other rule in this section is unchanged.
 
 Remove that one prefix and strictly parse the entire remainder. Accept normalization
 only when it is one complete JSON object. Valid input is never altered; no leading
