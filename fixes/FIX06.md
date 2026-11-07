@@ -12,8 +12,9 @@ earlier items at `0f3e4d2`; Q20 was never committed, §3).
 **Gate (ADR 0034): not met.** Every published run since D12.2 is adjudicated (§7 H1): D12.2,
 4 of 4 hello-world and 1 of 5 loan-renewal publications pass; the 12 kept-state runs since ADR
 0047, 5 of 6 and 1 of 6. `zig-out/e2e-spec/` holds only the six ADR 0047 runs of 3 November
-(`2026-11-03T04-1*`, report v14), the six ADR 0047 + D12.3 runs (`2026-11-06T22-4*`) and the six
-reverted Q20 runs (`2026-11-07T01-1*`), both v15, each recording `build.source.modified` true;
+(`2026-11-03T04-1*`, report v14), the six ADR 0047 + D12.3 runs (`2026-11-06T22-4*`), the six
+reverted Q20 runs (`2026-11-07T01-1*`) and the six reverted one-owner hygiene runs
+(`2026-11-07T06-1*`), all v15, each recording `build.source.modified` true;
 every earlier run has been removed, and its evaluation (and measures, where taken) remain
 under `evaluations/`. The current build decodes only `spec-e2e-report/v15`
 (`test/harness/e2e/contracts.zig:140`), so the 3 November runs can't be adjudicated again.
@@ -41,6 +42,7 @@ addition / contradiction:
 | ADR 0047, 3 runs per case (`28213a7` modified; direction only, §2 rule 3) | 2 of 3 pass; 0 / 1 / 0 / 0 | 1 of 3 pass; 3 / 1 / 2 / 0 |
 | ADR 0047 + D12.3, 3 runs per case (7 November, `f6ef0f6` modified, skill `0b552067…`; direction only) | 3 of 3 pass; 0 / 0 / 1 / 0 | 0 of 3 pass; 2 / 1 / 1 / 0 |
 | Q20, reverted (entity-meaning purpose; 3 runs per case, 7 November, `63fb521` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 1 of 3 pass; 6 / 0 / 0 / 0 |
+| One-owner hygiene, reverted (role-routed field instructions; 3 runs per case, 7 November, `014fd15` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 0 of 2 published pass, 2 of 3 published; 2 / 0 / 1 / 0 |
 
 Pooled over the 12 kept-state runs since ADR 0047, against D12.2: 12 of 12 published (9 of 10);
 hello-world 5 of 6 pass (4 of 5 runs); loan-renewal 1 of 6 pass (1 of 5); loan-renewal per run,
@@ -58,6 +60,7 @@ only, since keep decisions use accuracy defect counts, §2 rule 6):
 | ADR 0047 (6 runs, `28213a7` modified) | 91.7 (85.7–96.4) | 84.5 (75.0–92.9) | 1 |
 | ADR 0047 + D12.3 (6 runs, `f6ef0f6` modified) | 91.7 (89.3–92.9) | 85.7 (82.1–89.3) | 0 |
 | Q20, reverted (6 runs, `63fb521` modified) | 97.6 (92.9–100) | 85.7 (78.6–92.9) | 1 |
+| One-owner hygiene, reverted (6 runs, 5 published, `014fd15` modified) | 96.4 (96.4–96.4) | 83.9 (78.6–89.3) | 1 |
 
 ## 2. Rules for measured phases
 
@@ -118,7 +121,7 @@ governs; these add what the phases need.
      publication blocks a keep; the publication rate per case doesn't fall; and no class absent
      from the reference appears with an `established` trace to the changed owner. A watch item
      blocks only when it crosses the effect size recorded before the set. Hygiene phases (Q4's
-     retry, Q7 D7.5, the one-owner hygiene change in §3) are kept on guards alone plus their
+     retry, Q7 D7.5) are kept on guards alone plus their
      **Keep if** measures.
    - **Sampling:** look after three runs per case, then extend by two or three with approval;
      never sample until a preferred answer emerges.
@@ -179,8 +182,10 @@ research. "Gap" means between measurement sets.
 
 **Next:**
 
-1. **Preflight the one-owner hygiene change** (§3 open problems), extended to the field rule
-   that asks every prose field to restate (recommended after Q20's revert, 7 November 2026).
+1. **Entity restatement has no working lever** (§3 open problems). Q20 and the one-owner
+   hygiene change were both reverted on 7 November 2026 (user: "revert source code changes"):
+   neither achieved the desired outcome, an entity that stops restating and losing part of a
+   requirement. Find a structural lever with an owner, or record it as a model limitation.
 2. **Decision pending:** whether skill `1d66d882…` counts as the same evaluator as
    `af394020…` and `0b552067…`. Its two 7 November edits (retired-ID citations; the agent may
    start it when the user explicitly approves it for named runs) changed no scoring rule
@@ -204,18 +209,19 @@ own committed build, §2.1 and §2.3; completed change sets are in [Z_FIX06](Z_F
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **One-owner hygiene** (§3 open problems), with Q12's leftover and the field rule | lost source requirement and weakened obligation in entity meanings (5 of the 10 lossy-repeat failures, §3); unsupported addition in AC wording; repeated obligation instructions | S–M | Request projection, then a set | Q12 leftover folded in; field-rule extension needs a decision |
-| 2 | **Q14 b3** | lost source requirement: the add-a-link route of the missing refusal scenario (`728d…`; not `fa03…`'s first-attempt route, §4 Q14) | L | Measurement set | D14.1: held (§3 Next item 4) |
-| 3 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
-| 4 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
-| 5 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
+| 1 | **Q14 b3** | lost source requirement: the add-a-link route of the missing refusal scenario (`728d…`; not `fa03…`'s first-attempt route, §4 Q14) | L | Measurement set | D14.1: held (§3 Next item 4) |
+| 2 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
+| 3 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
+| 4 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
 
 **Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
 location. D13.1 removed the review calls where every runaway and SyntaxError of 31 October
 occurred and where the budget ran short. Since then the measured runs show 0 runaways and 0
 re-sends; the highest used 67,448 of the 125,000-token workflow budget
-(`2026-11-02T02-28-14Z`, which reached source review). None of the 18 runs since ADR 0047
-failed; they used 13,394–27,708 tokens.
+(`2026-11-02T02-28-14Z`, which reached source review). Of the 24 runs since ADR 0047, only
+`2026-11-07T06-12-34Z-f549…` (one-owner hygiene, reverted) failed: records retry exhaustion,
+not budget. They used 13,363–45,309 tokens; the highest, `06-11-33Z-6897…`, spent about 26k on
+five identical extraction claims (§4 Q8 D8.3).
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
 startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6, E8 and
@@ -248,12 +254,20 @@ or the user records it as a model limitation.
   meaning still restated the whole behaviour, and both failed Q20 runs were lossy repeats
   (`2026-11-07T01-18-01Z-4bec…` EC-001 without "calendar" and the new due date; `01-18-32Z-ba2e…`
   EC-001, the title, and EN-001 without "leave its due date unchanged"); loan-renewal lost
-  requirements rose to 2 per run. Likely cause: the engine asks every prose field to type exact
-  values verbatim (`text_field_policy.zig:92`, `:103`, `:107`) and to preserve obligations
-  (`generation.context.json:2`), although `entity_meaning`'s exact-copy role is `.prohibited`
-  (`:59`); the one-owner hygiene change takes it. Still open: edge-case
-  outcomes, whose purpose already asks to keep conditions and obligations
-  (`packet-guidance.json:26`), and titles (purpose `:4`); a lever with an owner or a recorded
+  requirements rose to 2 per run. Routing the field instructions by role didn't stop it
+  either (one-owner hygiene change, reverted 7 November 2026, §1; record in
+  `evaluations/e2e/2026-11-07T06-1*`): entity meanings, titles and goals no longer received
+  "Type required exact values verbatim" or the obligation clause (`packet-guidance/v4`
+  `field_roles.obligation_bearing`), and the no-invention instruction had one owner. Weakened
+  obligations fell to 0, but both published loan-renewal runs still failed
+  `successful-renewal` on "fourteen days" without "calendar": `06-11-33Z-6897…` in EN-001's
+  meaning, `06-14-18Z-7e23…` in its relationship after the meaning stopped restating; and
+  `06-12-34Z-f549…` published nothing (three `reference_only` rejections of the user-visible
+  outcome "Loan renewed!", link to the change speculative). Hello-world stopped publishing an
+  unneeded entity (0 of 3, against 3 of 3 in the D12.3 set). So neither Q20 nor the one-owner
+  hygiene change achieved the desired outcome: the model restates the requirement in whichever
+  entity field is open. Still open: entity fields, edge-case outcomes (purpose
+  `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a recorded
   model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
   source lines, since the result restates the Given and reads as requirements, not observed
@@ -264,19 +278,11 @@ or the user records it as a model limitation.
   lever; the `given` purpose forbids invented prerequisites (`packet-guidance.json:22`), the
   `when` purpose (`:23`) doesn't. An entity meaning carried the brief's invented goal once ("to
   confirm it is running correctly", hello-world `22-42-00Z-6422…`; the brief reaches the
-  entities request, D12.1), a watch item.
-  **One-owner hygiene change** (recommended; output track rank 1): give the no-invention
-  instruction one owner across the scenario clauses (`packet-guidance.json:22`,
-  `records.prompt.md:8`, `generation.context.json:4`). Q12's leftover joins it (decided 3
-  November 2026): `generation.prompt.md:2` and `packet-guidance.json:26` stop restating the
-  context's "conditions and obligations". Proposed extension (a **Decision**, amending
-  text-field-composition.md:21 and ADR 0020:26's general verbatim rule): the field rule's
-  verbatim sentence and the context's obligation clause reach only fields whose role carries
-  them (`text_field_policy.zig:56-62`), so entity meanings, titles and goals stop being asked
-  to restate. It keeps §9's single-run sentences (`records.prompt.md:7-8` shares a sentence
-  with the scenario clause). **Keep if** no guard blocks (§2 rule 6), with
-  unsupported addition in AC wording a watch item. After ADR 0047 and this change, report the
-  remaining AC elaboration as a model limitation (AGENTS.md) and let H1 judge it.
+  entities request, D12.1), a watch item. Q12's leftover restatements
+  (`generation.prompt.md:2`, `packet-guidance.json:26`) and the three no-invention texts
+  (`packet-guidance.json:22`, `records.prompt.md:8`, `generation.context.json:4`) stay as they
+  are after the one-owner hygiene change's revert. Report the remaining AC elaboration as a
+  model limitation (AGENTS.md) and let H1 judge it.
 - **Repair requests without step guidance:** six repair sites take their task only from the
   three-line `repair.prompt.md` (`spec.workflow.yaml:361`, `:398`, `:595`, `:750`, `:827`,
   `:842`), and the two reconciliation repairs among them (`:595`, `:842`) bind no context.
@@ -554,8 +560,8 @@ principles "should be used for context when executing the spec workflow".
   publication) unless the case rubrics gain a criterion. Amends ADR 0015 (0015:12-13 already
   names D17.1), ADR 0023 "Principles" (0023:149-159), 17-specify.md's generation inputs
   (:257-299) and F0100.
-- **Sequence (recommended, not decided; D17.1 places it after D12.2):** after the one-owner
-  hygiene change's set, with a records screen first: the loan-renewal rubric's
+- **Sequence (recommended, not decided; D17.1 places it after D12.2):** a records screen
+  first: the loan-renewal rubric's
   proportionate-scope criterion penalises principle-derived prescriptions, so its guards need
   a settled reference.
 
@@ -1057,7 +1063,7 @@ The user's standing constraints beyond AGENTS.md:
   cause, such as review cost or runaways (30 October 2026). No local token ceilings, no
   truncated required evidence, no claim that a larger budget fixes reliability.
 - These single-run prompt sentences stay until a defect is traced to one (D5.1, 3 November
-  2026; the former Q5, git `0f3e4d2`), and the one-owner hygiene change says which it keeps:
+  2026; the former Q5, git `0f3e4d2`):
   - `extraction.context.json` `claims`: "Include meaningful identity and purpose headings." and
     "Separate independent behavior, implementation and verification facts."; the second
     sentence of `business`, `technical` and `validation`;

@@ -183,8 +183,8 @@ live: none of the 12 runs since ADR 0047 reached source review.
   are deleted; `packet-guidance/v3` and required-authority contract 2 (old versions reject).
   The `captured-story` case leaves the read source-loss corpus.
 - **Q12 closed 7 November 2026.** Its last check, the story's invented-steps mode, didn't recur
-  in the 12 runs since ADR 0047. Q12's leftover restatements are in FIX06's one-owner hygiene
-  change. Not recommended: a typed obligation-strength field (07-domain-representations.md:158
+  in the 12 runs since ADR 0047. Q12's leftover restatements stay: the one-owner hygiene
+  change that removed them was reverted (FIX06 §3). Not recommended: a typed obligation-strength field (07-domain-representations.md:158
   forbids a duplicate modality field; making it matter needs a word check or engine-rendered
   modal text).
 
