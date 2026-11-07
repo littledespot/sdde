@@ -1,4 +1,4 @@
-//! Total mechanical claim/token accounting; semantic relevance remains reviewed.
+//! Total mechanical claim/token accounting. It checks links, not meaning: no review runs after generation (ADR 0023).
 const std = @import("std");
 const spec = @import("specification.zig");
 const g = @import("specification_generation.zig");

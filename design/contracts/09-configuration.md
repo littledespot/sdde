@@ -56,9 +56,10 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
   also owns each member's decode rejections.
 - The root requires `logs`, `models`, `workflowTokenBudget`, `temperature`,
   `temperatureRunawayRetry` and `paths` and permits
-  optional `principles` ([ADR 0015](../decisions/0015-specification-principle-review.md))
-  and `validation` ([ADR 0021](../decisions/0021-optional-source-preservation-review.md));
-  fixed records reject missing required, duplicate and unknown members.
+  optional `validation` ([ADR 0021](../decisions/0021-optional-source-preservation-review.md));
+  fixed records reject missing required, duplicate and unknown members. The removed
+  `principles` section is an unknown member
+  ([ADR 0015](../decisions/0015-specification-principle-review.md)).
 - `workflowTokenBudget` is the total model tokens one workflow execution may use, an
   integer from 1 to 4,294,967,295 with no default
   ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
@@ -67,7 +68,7 @@ Part of the [proposed design](../design.md#9-engine-configuration), as amended b
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). Each
   is a JSON number, zero or greater, with no default. Models whose registered contract
   takes no temperature omit it. The provider owns its accepted range.
-- `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
+- `models.slots` is a keyed collection; each model slot has the closed slot shape.
 - A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
   ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The `logs` object contains exactly the F0002 threshold and the required `console` boolean,
@@ -279,17 +280,11 @@ Content authority is domain-specific:
 
 ### 9.4 Project-principle resolution
 
-The optional `.sddtoolkit.json` `principles` section is the sole selection-policy
-input ([ADR 0015](../decisions/0015-specification-principle-review.md)).
-`filenameHints` maps exact normalized Markdown basenames to category hints.
-`selections` contains closed `{stage, environment, fileKind, categories}` rows;
-null environment/file-kind explicitly includes every matching scope. Matching rows
-contribute their category union; every row includes `core` and `custom`. Spec uses
-an explicit Spec row with null environment/file-kind. Missing section or applicable
-row rejects a principle-capturing operation. Unrelated workflows need not supply it.
-The existing config reader owns structural decoding; one principle-policy compiler
-validates rows, names and categories. No model, workflow prompt or mechanical
-`toolchain.yaml` supplies another selection table.
+Principle capture takes no configuration beyond `paths.principles`: the engine captures
+every semantic Markdown file in that root ([ADR 0015](../decisions/0015-specification-principle-review.md)).
+No filename category hint or selection table exists. Missing principle capture rejects a
+principle-capturing operation. No model, workflow prompt or mechanical `toolchain.yaml`
+supplies a selection table.
 
 - The new engine calls this authority **principles**.
 - It fulfils the role constitution/memory material had in the predecessor workflow: overarching
@@ -310,10 +305,8 @@ validates rows, names and categories. No model, workflow prompt or mechanical
   material.
 - The source templates under `design/templates/` are design/init inputs only and are never a
   runtime fallback.
-- Their filenames illustrate the initial category hints `core`, `architecture`,
-  `project_structure`, `security`, `validation`, `observability` and `user_interface`
-  (plus `custom` for an unmatched filename), but a Markdown principle body may be arbitrary
-  free text.
+- Their filenames illustrate typical principle topics, but a Markdown principle body may be
+  arbitrary free text.
 
 - The principle inventory nevertheless accounts for every encountered directory, regular file,
   link, and special node.
@@ -337,12 +330,12 @@ validates rows, names and categories. No model, workflow prompt or mechanical
 Resolution is explicit:
 
 1. resolve `paths.principles` through the root-access policy, account for the separately captured exact `toolchain.yaml`, select only bounded no-follow normalized `*.md` regular files as semantic sources, reject every unclassified regular file and alias/case collision, and sort the Markdown sources by normalized Unicode-scalar root-relative path;
-2. classify a category hint from the normalized filename using the configured mapping; an unmatched filename receives the explicit `custom` hint rather than having its meaning guessed from its body;
+2. assign no category: the engine guesses no meaning from a filename or its body;
 3. decode bounded UTF-8 text and preserve exact source-byte and line spans; no front matter, heading, Markdown structure, template placeholder, or content schema is required;
 4. split large files into deterministic transport chunks. A file with no headings or paragraph structure is still valid and receives a whole-file or fixed-window chunk;
-5. select categories solely from the configured stage/environment/file-kind hint table and include every chunk from those files in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
-6. include the exact selected raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures and selects them but sends them in no request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
-7. validate only transport facts deterministically: configured root, containment, identity, filename-to-hint mapping, UTF-8, source-capture byte/count ceilings, stable spans, registry joins, and prompt-selection coverage;
+5. include every chunk of every captured file in stable source order; no model classifies, summarizes, ranks, or omits principle prose;
+6. include the exact raw spans in plan, task, implementation, repair and semantic-review guidance without truncation or a local size-fit gate; Specify captures them but sends them in no request ([ADR 0015](../decisions/0015-specification-principle-review.md)); provider size errors follow the workflow's explicit outcome transitions;
+7. validate only transport facts deterministically: configured root, containment, identity, UTF-8, source-capture byte/count ceilings, stable spans, and registry joins;
 8. treat content compliance or conflict as model-assisted judgment backed by exact principle citations. Specify runs no principle assessment ([ADR 0023](../decisions/0023-advisory-post-generation-review.md)); Plan validates current policy and resolves its native required decisions at its own gate.
 
 - Semantic principle prose is never parsed or compiled into a deterministic validator, even when
@@ -357,13 +350,9 @@ Resolution is explicit:
 - When prose appears to conflict with those authorities, the mechanical boundary still holds and
   a cited semantic diagnostic asks for a project-level decision.
 
-- The filename is a guide used by the engine, not a claim that the contents obey a schema.
-- Category selection deliberately errs toward inclusion: `core` and `custom` are considered for
-  Spec capture and all technical stages; other category hints use explicit
-  configuration. Spec capture has an explicit selection scope in that same table;
-  missing selection authority is not an empty selection or a fallback to every file.
+- The filename is no claim that the contents obey a schema, and it carries no category.
 - The model never chooses which files to open and never sees an operational principle path—only
-  registered IDs, category hints, raw bounded spans, and citations.
+  registered IDs, raw bounded spans, and citations.
 
 - Principles are captured once per command-run bootstrap, bound into `BootstrapAuthorityState`,
   and compared by direct typed metadata/raw-byte equality at every consuming Spec capture,

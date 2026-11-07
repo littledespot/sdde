@@ -505,6 +505,6 @@ the compact form owned by
 - the mandatory `reference-context.md` exists and passes;
 - no behavior-changing reference conflict remains unresolved;
 - no specification clarification record remains open;
-- the captured principle registry and selection validate;
+- the captured principle registry validates;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.

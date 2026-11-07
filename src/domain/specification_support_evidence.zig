@@ -1,4 +1,5 @@
-//! Review-purpose evidence admission, shared by collection and state readback.
+//! Review-purpose evidence admission, shared by the packet, wire decoder, admission and
+//! collection validation. State persists no review evidence (ADR 0023).
 //! Business provenance retains its narrower retained-claim policy.
 const std = @import("std");
 const a = @import("required_authority.zig");

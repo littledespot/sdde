@@ -456,8 +456,8 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         .{ "build-specification-authority-requirements", "ok: end.ok, blocked: end.blocked" },
         .{ "build-required-authority-ledger", "ok: end.ok, blocked: end.blocked" },
         .{ "parse-required-authority-observations", "ok: end.ok, blocked: end.blocked" },
-        .{ "reconcile-required-authorities", "ok: end.ok, needs_user: end.needs_user, blocked: end.blocked" },
-        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs_user: end.needs_user, blocked: end.blocked" },
+        .{ "reconcile-required-authorities", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
+        .{ "validate-required-authority-reconciliation", "ok: end.ok, needs-user: end.needs-user, blocked: end.blocked" },
     }) |contract| {
         const project = b.addTempFiles();
         const binary = project.addCopyFile(executable.getEmittedBin(), executable.out_filename);

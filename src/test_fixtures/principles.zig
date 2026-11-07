@@ -1,7 +1,5 @@
 const std = @import("std");
 const r = @import("../domain/principle_registry.zig");
-const policy = @import("../domain/principle_policy.zig");
-pub const selection: policy.Row = .{ .stage = .spec, .environment = null, .fileKind = null, .categories = &.{ .core, .custom } };
 pub fn registry(a: std.mem.Allocator, prose: ?[]const u8) !r.Registry {
     const count: usize = if (prose != null) 2 else 1;
     const entries = try a.alloc(r.Entry, count);
@@ -9,5 +7,5 @@ pub fn registry(a: std.mem.Allocator, prose: ?[]const u8) !r.Registry {
     entries[count - 1] = .{ .kind = .mechanical_toolchain_layer_excluded, .descriptor = .{ .path = "toolchain.yaml", .raw_path = "toolchain.yaml", .observation = .{ .file = .{ .identity = .{ .filesystem_id = 1, .file_id = 3 }, .size = 20, .modified_ns = 0, .changed_ns = 0 } } } };
     const captures = try a.alloc(r.Capture, if (prose != null) 1 else 0);
     if (prose) |bytes| captures[0] = .{ .entry = 1, .bytes = bytes };
-    return r.build(a, .{ .inventory = .{ .root = .{ .path = "principles", .identity = .{ .filesystem_id = 1, .file_id = 1 } }, .entries = entries, .source_bytes = if (prose) |bytes| bytes.len else 0 }, .sources = captures }, .{ .hints = &.{.{ .basename = "core.md", .category = .core }}, .selections = &.{selection} }, null);
+    return r.build(a, .{ .inventory = .{ .root = .{ .path = "principles", .identity = .{ .filesystem_id = 1, .file_id = 1 } }, .entries = entries, .source_bytes = if (prose) |bytes| bytes.len else 0 }, .sources = captures }, null);
 }

@@ -229,8 +229,8 @@ pub const Assembly = struct {
             .inventory_principles = .{ .allocator = allocator, .action = .{} },
             .validate_principle_inventory = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
             .capture_principles = .{ .allocator = allocator, .action = .{} },
-            .capture_principle_registry = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
-            .build_principles = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
+            .capture_principle_registry = .{ .allocator = allocator, .action = .{} },
+            .build_principles = .{ .allocator = allocator, .action = .{} },
             .capture_packet_guidance = .{ .allocator = allocator },
             .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
             .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
@@ -566,15 +566,13 @@ pub const Assembly = struct {
         self.registry = .{ .operations = &self.entries, .policies = &profiles, .data_schemas = &schemas, .gates = &.{authority.gate_contract} };
     }
 
-    pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, config: *const @import("../domain/config.zig").SDDToolKitConfig, reader: @import("../ports/principle_source.zig").Reader, enumerator: @import("../ports/principle_source.zig").Enumerator, capturer: @import("../ports/principle_source.zig").Capturer) void {
+    pub fn bindPrinciples(self: *Assembly, root: *const roots.ConfiguredBaseRootCapability, reader: @import("../ports/principle_source.zig").Reader, enumerator: @import("../ports/principle_source.zig").Enumerator, capturer: @import("../ports/principle_source.zig").Capturer) void {
         self.inventory_principles.action.source = enumerator;
         self.inventory_principles.action.source.?.capability = root;
         self.capture_principles.action.source = capturer;
         self.capture_principles.action.source.?.capability = root;
         self.capture_principle_registry.action.source = reader;
         self.capture_principle_registry.action.source.?.capability = root;
-        self.capture_principle_registry.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
-        self.build_principles.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
     }
     pub fn bindConfiguration(self: *Assembly, config: *const @import("../domain/config.zig").SDDToolKitConfig) void {
         self.source_preservation_policy.policy = &config.validation;

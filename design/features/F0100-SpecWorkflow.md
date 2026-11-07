@@ -942,8 +942,8 @@ validators:
   registered outputs before the writer runs.
 - `workflow.json` is written last.
 
-- Specify captures the current configured principle registry and Spec selection and
-  runs no principle assessment (ADR 0015). Canonical state keeps the captured registry
+- Specify captures the current principle registry and runs no principle assessment
+  (ADR 0015). Canonical state keeps the captured registry
   identity as `principle_registry`, which the next run's capture reads as its prior
   registry. Specify creates no Plan form or obligation. Plan reassesses current
   principles under its own input authority.
@@ -955,7 +955,7 @@ validators:
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v21`). Neither variant holds review evidence.
+  registry identity (`specification-state/v22`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - `capture-workflow-state` and `parse-specification-state` validate this singleton
@@ -1463,8 +1463,8 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
    relabelled as `ok`.
 10. Success requires a committed valid specification, complete reference
     accounting, valid `reference-context.md`, no open `SNN`, and workflow state
-    `specified`, with a valid captured principle registry and selection (ADR 0015; no
-    principle assessment runs). A provider `output_limit` stop is first re-sent once
+    `specified`, with a valid captured principle registry (ADR 0015; no principle
+    assessment runs). A provider `output_limit` stop is first re-sent once
     ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
 11. Adding any other correctly configured workflow YAML composed only from
     registered generic operations requires no workflow-name branch, hidden

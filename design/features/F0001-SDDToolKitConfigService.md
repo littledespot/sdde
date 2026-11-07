@@ -61,7 +61,6 @@ SDDToolKitConfig {
   temperature: number,             // >= 0; no default (ADR 0039)
   temperatureRunawayRetry: number, // >= 0; no default (ADR 0039)
   paths: PathsConfig,
-  principles?: PrinciplesConfig | null,
   validation?: { sourcePreservationCheck?: boolean } // omitted = disabled
 }
 
@@ -78,12 +77,6 @@ ModelsConfig {
   }>
 }
 
-PrinciplesConfig {
-  filenameHints: map<normalizedMarkdownBasename, PrincipleCategory>,
-  selections: { stage, environment: string | null, fileKind: string | null,
-                categories: PrincipleCategory[] }[]
-}
-
 PathsConfig {
   specs: string,
   references: string,
@@ -98,10 +91,11 @@ PathsConfig {
 
 - The root and every fixed nested object are closed by `sddtoolkit-config.schema.json`.
 - Missing required, duplicate, unknown, or wrong-kind members are rejected.
-- Optional `principles` is the sole selection-policy input under [ADR 0015](../decisions/0015-specification-principle-review.md).
-  F0001 decodes its structure; the shared principle-policy compiler validates names,
-  collisions, scopes and category coverage before any consuming operation. An absent
-  section supplies no default policy. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution) owns the rules.
+- Principle capture takes no configuration beyond `paths.principles`. The removed
+  `principles` section is an unknown member and rejects as `ENGINE_CONFIG_PARSE_ERROR`,
+  with no compatibility reader or migration
+  ([ADR 0015](../decisions/0015-specification-principle-review.md);
+  [§9.4](../contracts/09-configuration.md#94-project-principle-resolution)).
 - Model slot names are data, but every slot value has the same closed shape.
 - `workflowTokenBudget` decodes into the typed total-token budget through the shared
   positive-integer rule; a missing, zero, negative, fractional, exponent, quoted or
@@ -111,6 +105,8 @@ PathsConfig {
   JSON number, zero or greater. A missing, negative, quoted, null or duplicate value
   rejects as `ENGINE_CONFIG_PARSE_ERROR`
   ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- `reasoningEffort` is a string when present. Omitting it selects no reasoning effort; an
+  explicit `null`, or any value that is not a string, rejects as `ENGINE_CONFIG_PARSE_ERROR`.
 - A slot has no output-token allowance; `maxOutputTokens` is an unknown member and
   rejects as `ENGINE_CONFIG_PARSE_ERROR` under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance).
 - `logs` decodes only `level` and `console`. The removed `promptCapture` field is an

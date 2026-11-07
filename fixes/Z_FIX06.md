@@ -214,8 +214,8 @@ that adds no claim an unchanged merge).
 
 ## Bare-value `reference_only` correction
 
-**Implemented 7 November 2026** (user: "fix the bare-message failure"). Not yet exercised
-live.
+**Implemented 7 November 2026** (user: "fix the bare-message failure"). First fired live on
+8 November (FIX06 Next item 1): it didn't change the model's output in that run.
 - **Defect:** loan-renewal `2026-11-07T06-12-34Z-f549…` and `07-38-56Z-2627…` published
   nothing: the records call wrote user-visible outcomes as the bare messages
   `"Loan renewed!"` and `"Renewal refused."`, three times each, until retry exhaustion. Two
@@ -235,6 +235,59 @@ live.
   bare value is corrected through that explanation; every offline request is
   byte-identical, since no scenario reaches this correction, so the sent correction bytes
   are pinned only at the owner.
+
+## E10. Alias, null effort, dead code, stale comments and start rule
+
+**Implemented 8 November 2026** (user: "implement E10", "remove dead code", "apply best
+recommendation"); the string-kind sweep stays in FIX06 §5 E10. No request, report member or
+state change.
+- **Alias:** `parseOutcome` (`validate_workflow_definition_schema.zig`) matches a closed
+  spelling table, `spelling`, an exhaustive switch over `OutcomeTag`, in place of the
+  `stringToEnum` fallback, so `needs_user` and `end.needs_user` reject as
+  `WorkflowDefinitionSchemaInvalid`. Two fixtures authored the alias and now use `needs-user`:
+  `required_authority_workflow_test.zig` and `test/packaging/smoke.zig`, whose pinned
+  `WORKFLOW_GRAPH_COMPILE_INVALID` would otherwise have come from the wrong stage. `end.more`
+  is unchanged: the compiler rejects it and `smoke.zig` pins that rejection
+  (14-orchestration.md:104).
+- **Explicit null:** `ModelSlotConfig.jsonParse` (`config.zig`) reads `reasoningEffort`
+  through a private wire struct that requires a string token when the member is present and
+  accepts omission, so `null` rejects. The in-memory type is unchanged. F0001 states the
+  contract (ADR 0039:84-86 is the precedent for the temperatures).
+- **Dead code:** `validateCitation`, `CitationDiagnostic` and `Citation` (they had only test
+  callers since D13.1); then the registry's `select`, `validateSelection` and `guidance`
+  (user: "delete select, validateSelection and guidance") with what only they used
+  (`sourceFor`, `chunkFor`, `Selection`, `Guidance`, `LineBounds`, `lineBounds`); then the
+  policy's `select`, `Scope` and `matches` (user: "clear up the unused code and tests"). The
+  tests that exercised them are removed; the byte-coverage test reads the registry's chunks
+  directly and `validate` keeps the omitted-chunk rejection. 22-repair.md:418-421 still
+  describes principle citation diagnostics (FIX06 §8).
+- **Principles section removed** (user: "if it unused and brings no value then remove it"):
+  nothing read the category policy once selection was gone (`Source.category` was read only
+  by the registry's own build and validate), and `capture-principle-registry` failed without
+  the section. Removed: the `principles` configuration section (`filenameHints`,
+  `selections`), `principle_policy.zig`, `Registry.policy`, `Source.category`,
+  `buildConfigured`, and the capture and build actions' config, normalizer and case-folder
+  fields. `specification-state` is v22 (ADR 0041, on hold, takes v23), and a source ID no
+  longer renews on a category change. A `principles` member rejects as unknown
+  (`decode_sddtoolkit_config.zig`). Amended: ADRs 0015 (retitled), 0023 and 0041,
+  09-configuration.md §9.4, F0001, the schema, the example config, 24-workflow-state.md,
+  F0100, 17-specify.md, 28-testing.md, 12-model-boundary.md, design.md and code.md. The
+  hello-world case config, both baseline fixtures and the integration test config dropped
+  the section. Plan-stage text that still names it is in FIX06 §8. **Consequence:**
+  the tools that decode a retained run's copied config with the closed decoder
+  (`e2e-measures`, `test/harness/e2e/measures_cli.zig:145`; `e2e-call`,
+  `test/harness/call/capture.zig:44`; the baseline tools, `scoring.zig:392` and `:745`,
+  `freeze.zig:212`, `feasibility.zig:146`) no longer read the retained runs under
+  `zig-out/e2e-spec/`, `zig-out/baseline/` and `zig-out/provider-compatibility/`, whose
+  configs carry the section; their evaluations and measures under `evaluations/` stay.
+  `adjudicate-spec` decodes no config.
+- **Text:** five stale comments (ADR 0023's removal, ADR 0047) and the `/evaluate-e2e` start
+  rule in `cli.zig`, `report.zig` and `acceptance.zig` now match AGENTS.md "Testing
+  expectations". Text only; "The harness makes no judge call." is pinned and kept.
+- **Proof:** accepted and rejected outcome-spelling fixtures
+  (`validate_workflow_definition_schema.zig`); accepted and rejected effort fixtures and the
+  rejected `principles` section (`decode_sddtoolkit_config.zig`). With the alias and null
+  defects reintroduced, two tests failed.
 
 ## H1. Adjudication and `spec-e2e-report/v15`
 

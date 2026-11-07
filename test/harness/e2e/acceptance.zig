@@ -1,6 +1,7 @@
 //! Development acceptance joins native outcomes and mechanical publication
-//! evidence. Semantic acceptance comes from the user-triggered /evaluate-e2e
-//! adjudication (R8); the harness makes no judge call.
+//! evidence. Semantic acceptance comes from /evaluate-e2e adjudication (R8), which
+//! starts only when the user triggers it or explicitly approves it for named runs; the
+//! harness makes no judge call.
 const std = @import("std");
 const c = @import("contracts.zig");
 const grading = @import("../contracts.zig");

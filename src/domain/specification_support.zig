@@ -84,11 +84,11 @@ pub const Source = struct {
 
     pub const Applicability = a.Applicability;
 
-    /// Requests, admission, repair and readback use the registered owner.
+    /// Requests, admission and repair use the registered owner.
     pub const applicability = a.applicability;
 
     /// Only unresolved native applicability permits a `not_applicable` source
-    /// verdict. Request schemas, guidance, admission and readback share this rule.
+    /// verdict. Request schemas, guidance and admission share this rule.
     pub fn permitsNotApplicable(required: Applicability) bool {
         return required == .review;
     }
