@@ -51,7 +51,7 @@ pub fn record(allocator: std.mem.Allocator, g: *const Guidance, kind: spec.Kind)
     inline for (comptime std.meta.tags(spec.Kind)) |family| {
         if (kind == family) {
             inline for (@typeInfo(@FieldType(spec.Content(spec.BusinessValue), @tagName(family))).@"struct".fields) |field| {
-                const slot: a.Slot = @field(a.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
+                const slot: a.Slot = @field(a.Slot, field.name);
                 // A text-only family's definition already describes its sole field.
                 if (slot != .text) {
                     try result.appendSlice(allocator, " ");

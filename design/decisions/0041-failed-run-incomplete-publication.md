@@ -4,7 +4,9 @@
   during implementation; nothing is implemented.
   [ADR 0023](0023-advisory-post-generation-review.md)'s amendments took
   `specification-state` v20 and v21, and the removal of the principle category policy
-  (ADR 0015, 8 November 2026) took v22, so when this ADR resumes it takes v23. Since
+  (ADR 0015, 8 November 2026) took v22, and the name-only entity
+  ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 6, 8 November 2026)
+  took v23, so when this ADR resumes it takes v24. Since
   post-generation review was removed (FIX06 D13.1, 1 November 2026), "review" leaves the
   checks a failed view lists as not completed.
 - **Date:** 2026-10-26
@@ -37,7 +39,7 @@
     fatal to model work, but publishes this projection;
   - §3.3 (invariant on failed publication), §12.8.1 (the terminal-error rows), §17,
     §22.6 (uncorrectable JSON/schema rejection), §23.2 and §25 (the published set),
-    §24 (`specification-state/v23`), §27 and F0002 (the `run.incomplete_published`
+    §24 (`specification-state/v24`), §27 and F0002 (the `run.incomplete_published`
     event), §31.15, F0100 §5.5, the [E2E harness](../harness/e2e.md) and the §32 index;
   - §23.2 ("blocked … executions publish no new specification") and the §12.8.1
     administrative-block row, for blocked runs;
@@ -220,7 +222,7 @@ incomplete specification when a run pauses for clarification.
 
 ## Consequences
 
-- **Persistence.** `specification-state` advances to v23 for the new variant. Earlier
+- **Persistence.** `specification-state` advances to v24 for the new variant. Earlier
   states reject without migration. Workflow definitions advance to `workflow/v2`; a
   project holding a copied `workflow/v1` definition must replace it.
 - **Risks.**

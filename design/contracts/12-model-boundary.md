@@ -43,7 +43,10 @@ ownership rules.
   for the existing bounded protocol correction. Pure syntax parsing stays separate
   for diagnostic inspection. These checks prove syntax and mechanical field
   composition; they perform no semantic assessment, provider call, accounting or
-  payload-schema check.
+  payload-schema check. In a records response the composition check omits a defect in
+  a statement that ADR 0038 Decision 5 deletes natively. It reads the response's claim
+  lists and the exact values recognized in the text, which is bookkeeping on IDs and
+  exact bytes, and the payload-schema check still judges the whole response.
 
 ### 12.2 Initial guidance packet
 
@@ -371,7 +374,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned: one closed
-  `packet-guidance/v3` resource, published as run data by one `capture-packet-guidance`
+  `packet-guidance/v4` resource, published as run data by one `capture-packet-guidance`
   step and received explicitly by each consuming operation that declares
   `.packet_guidance`, never as the resource. The
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance

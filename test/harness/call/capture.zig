@@ -40,7 +40,6 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
     const project = try directories.open(io, run, "project");
     defer project.close(io);
     const config_bytes = try files.read(io, a, project, engine_config.engine_config_basename);
-    if (config_bytes.len > engine_config.max_engine_config_bytes) return error.EngineConfigParseError;
     var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, config_bytes);
     errdefer config.deinit();
     const policy = try @import("../../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(io, project).resolve(a);

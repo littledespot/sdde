@@ -366,55 +366,6 @@
           ]
         },
         {
-          "field": "entity_meaning",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "business_meaning"
-            }
-          ]
-        },
-        {
-          "field": "entity_relationship",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "relationships"
-            },
-            {
-              "items": {}
-            }
-          ]
-        },
-        {
           "field": "clarification_question",
           "path": [
             {
@@ -793,55 +744,6 @@
             },
             {
               "property": "name"
-            }
-          ]
-        },
-        {
-          "field": "entity_meaning",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "business_meaning"
-            }
-          ]
-        },
-        {
-          "field": "entity_relationship",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "relationships"
-            },
-            {
-              "items": {}
             }
           ]
         },

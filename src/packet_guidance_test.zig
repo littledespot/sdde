@@ -75,7 +75,7 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         .{ .object = &.{"support_evidence"}, .key = "detail", .value = .{ .string = "MOCK\ndetail" } },
         .{ .object = &.{ "support_evidence", "question" }, .key = "omitted", .value = .{ .string = "MOCK\u{85}omitted" } },
         // Unsupported version.
-        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v2" } },
+        .{ .object = &.{}, .key = "schema", .value = .{ .string = "packet-guidance/v3" } },
     }) |change| {
         var document = try std.json.parseFromSliceLeaky(std.json.Value, a, valid, .{});
         var target = &document;
@@ -84,14 +84,14 @@ test "packet guidance rejects missing extra mistyped empty versioned duplicate n
         const changed = try std.json.Stringify.valueAlloc(a, document, .{});
         try std.testing.expectError(error.InvalidPacketGuidance, guidance.compile(a, changed));
     }
-    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v3\",", "{\"schema\":\"packet-guidance/v3\",\"schema\":\"packet-guidance/v3\",");
+    const duplicate = try std.mem.replaceOwned(u8, a, valid, "{\"schema\":\"packet-guidance/v4\",", "{\"schema\":\"packet-guidance/v4\",\"schema\":\"packet-guidance/v4\",");
     try std.testing.expect(!std.mem.eql(u8, duplicate, valid));
     for ([_][]const u8{
         duplicate,
         "",
         "[]",
         "null",
-        "\"packet-guidance/v3\"",
+        "\"packet-guidance/v4\"",
         try std.mem.concat(a, u8, &[_][]const u8{ "[", valid, "]" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "{}" }),
         try std.mem.concat(a, u8, &[_][]const u8{ valid, "x" }),
@@ -295,7 +295,7 @@ test "the compiler binds packet guidance only through its capture step and check
 
     // A registered entry is missing from the resource.
     var document = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{});
-    try std.testing.expect(document.object.getPtr("record_fields").?.object.orderedRemove("relationship"));
+    try std.testing.expect(document.object.getPtr("record_fields").?.object.orderedRemove("name"));
     const missing: Resource = .{ .path = guidance_file.path, .bytes = try std.json.Stringify.valueAlloc(a, document, .{}) };
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, compileGuided(a, guided_workflow, &.{ missing, prompt_file }));
     // The guidance alias is also bound as a prompt.

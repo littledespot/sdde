@@ -191,7 +191,7 @@ const response_wire = struct {
         .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
         .{ "non_goal", "{\"kind\":\"non_goal\",\"text\":" ++ normalized ++ "}" },
         .{ "prohibited_behavior", "{\"kind\":\"prohibited_behavior\",\"text\":" ++ normalized ++ "}" },
-        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ ",\"business_meaning\":" ++ normalized ++ ",\"relationships\":[" ++ plain ++ "]}" },
+        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ "}" },
     };
 };
 

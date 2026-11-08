@@ -27,12 +27,13 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 Completed and clarification-pending specification state share one versioned
-`specification-state` contract (currently v22,
-[ADR 0015](../decisions/0015-specification-principle-review.md) and
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md); v23 is reserved for
-the `spec_incomplete` variant of
+`specification-state` contract (currently v23,
+[ADR 0015](../decisions/0015-specification-principle-review.md),
+[ADR 0023](../decisions/0023-advisory-post-generation-review.md) and
+[ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 6; v24 is
+reserved for the `spec_incomplete` variant of
 [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
-since 30 October 2026, not implemented) over canonical `specification/v3` content;
+since 30 October 2026, not implemented) over canonical `specification/v4` content;
 stage discriminators distinguish the variants. Earlier versions reject without
 migration, aliases or a compatibility reader. The completed variant keeps the captured
 principle registry identity as its own `principle_registry` field, which the next

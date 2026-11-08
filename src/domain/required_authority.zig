@@ -6,10 +6,11 @@ pub const Stage = @import("clarification_inputs.zig").Stage;
 pub const DetectionStage = enum { spec, plan, tasks, implement, recovery };
 pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 /// 2: the engine-composed story is no required-authority subject (ADR 0047, amended
-/// 7 November 2026).
-pub const version: u32 = 2;
+/// 7 November 2026). 3: an entity's only authored field is its name (ADR 0038, amended
+/// 8 November 2026), so a record slot has no member index.
+pub const version: u32 = 3;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { display_name, description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, expected_outcome, name, business_meaning, relationship, entities, disposition, value, decision, compliance };
+pub const Slot = enum { display_name, description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, expected_outcome, name, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,
@@ -19,7 +20,7 @@ pub const Unit = union(enum) {
     token: @import("structured_tokens.zig").Id,
     decision: struct { ordinal: u32 },
 };
-pub const Id = struct { kind: Kind, unit: Unit, slot: Slot, member: u32 = 0, contract_version: u32 = version };
+pub const Id = struct { kind: Kind, unit: Unit, slot: Slot, contract_version: u32 = version };
 pub const Authority = @import("authority_identity.zig").Authority;
 pub const EvidenceId = struct { ordinal: u32 };
 pub const CandidateId = struct { ordinal: u32, revision: u64 };
@@ -61,8 +62,7 @@ pub fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
     const Content = @import("specification.zig").Content(@import("specification.zig").BusinessValue);
     switch (kind) {
         inline else => |tag| inline for (@typeInfo(@FieldType(Content, @tagName(tag))).@"struct".fields) |field| {
-            const name = if (comptime std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name;
-            if (std.mem.eql(u8, @tagName(slot), name)) return true;
+            if (std.mem.eql(u8, @tagName(slot), field.name)) return true;
         },
     }
     return false;
@@ -387,8 +387,6 @@ fn validRequiredness(seed: Seed) bool {
     };
 }
 fn validId(id: Id) bool {
-    if (id.member != 0 and id.slot != .relationship) return false;
-    if (id.slot == .relationship and id.member == 0) return false;
     return switch (id.unit) {
         .feature => true,
         .record => |record| record.ordinal != 0,
@@ -411,7 +409,6 @@ fn lessRequirement(_: void, a: Requirement, b: Requirement) bool {
     const y = unitOrdinal(right.unit);
     if (x != y) return x < y;
     if (left.slot != right.slot) return @intFromEnum(left.slot) < @intFromEnum(right.slot);
-    if (left.member != right.member) return left.member < right.member;
     return left.contract_version < right.contract_version;
 }
 fn unitOrdinal(unit: Unit) u64 {

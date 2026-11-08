@@ -5,7 +5,7 @@ const spec = @import("specification.zig");
 const reference = @import("reference_snapshot.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v22";
+pub const schema = "specification-state/v23";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,

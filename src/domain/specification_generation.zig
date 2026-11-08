@@ -280,6 +280,11 @@ fn inspectRecords(comptime boundary: spec.Boundary, allocator: std.mem.Allocator
         if ((unit == .entities) != (record.content == .entity)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
         const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
         accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, inspection) catch |err| {
+            if (boundary == .model) {
+                if (unit == .records and inspection.text_issue != null) if (try deletedBeforeRepair(allocator, context, records, index)) |deleted| {
+                    return .{ .invalid = repeatedStatementIssue(deleted, .{ .record = records[deleted] }) };
+                };
+            }
             const rejected_result = try rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection.*, err);
             return .{ .invalid = rejected_result.invalid };
         };
@@ -346,6 +351,59 @@ pub fn restatementIssue(index: usize, observed: ?candidate.Replacement) candidat
 /// such record already names; its repair is a native delete with no model call.
 pub fn repeatedStatementIssue(index: usize, observed: ?candidate.Replacement) candidate.Issue {
     return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .repeated_statement, .observed = observed };
+}
+
+/// ADR 0038 Decision 5's rule over a records batch, shared with response admission.
+pub const StatementRule = @import("statement_ownership.zig").Rule(@import("statement_ownership.zig").Prepared);
+
+/// A record as the rule sees it: its role, the claims it names and the exact values its
+/// text holds, by ordinal. Wording is never read.
+pub fn statementRecord(a: std.mem.Allocator, content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_reconciliation.zig").ClaimId) Error!@import("statement_ownership.zig").Record {
+    const claims = try a.alloc(i64, claim_ids.len);
+    for (claim_ids, claims) |id, *claim| claim.* = id.ordinal;
+    var exact: std.ArrayList(i64) = .empty;
+    for (try provenance.recordValues(a, content)) |value| for (value.segments) |segment| {
+        if (segment == .exact_copy) try exact.append(a, segment.exact_copy.claim_id.ordinal);
+    };
+    return .{
+        .role = switch (std.meta.activeTag(content).role()) {
+            .requirement => .owning,
+            .behaviour, .scope => .exclusive,
+            .scenario, .entity => .other,
+        },
+        .claims = claims,
+        .exact = try exact.toOwnedSlice(a),
+    };
+}
+
+/// ADR 0038 Decision 5: a record the owner deletes natively is deleted before its own
+/// text is repaired, so a text defect in it never fails the unit. `failing` is a record
+/// whose text broke its field's policy. When the owner deletes it, in turn, the first
+/// record it deletes is returned. The batch is judged on the claims and recognized exact
+/// values of the records as proposed, which is what response admission judged.
+fn deletedBeforeRepair(allocator: std.mem.Allocator, context: provenance.Context, records: []const spec.Values(.model).RecordProposal, failing: usize) Error!?usize {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
+    const a = scratch.allocator();
+    const statements = @import("statement_ownership.zig");
+    const prepared = try a.alloc(statements.Record, records.len);
+    for (records, prepared, 0..) |record, *entry, index| {
+        const recognized: ?spec.Content(spec.BusinessValue) = provenance.recognizeRecord(a, @import("reference_support.zig").records(context.references), record.content, null) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidTypedText => null,
+            // Not a text defect: leave it to the ordinary rejection.
+            else => return null,
+        };
+        entry.* = try statementRecord(a, recognized orelse record.content, record.provenance.claim_ids);
+        // Text whose exact values can't be identified is never judged deletable, as at admission:
+        // recognition failed, or skipped a run that is not a valid scalar.
+        if (recognized == null or provenance.hasUnreadableText(recognized.?)) entry.exact = try std.mem.concat(a, i64, &.{ entry.exact, &.{statements.unidentified(index)} });
+    }
+    const removed = try a.alloc(bool, records.len);
+    @memset(removed, false);
+    StatementRule.sequence(.{ .records = prepared }, removed);
+    if (!removed[failing]) return null;
+    return StatementRule.first(.{ .records = prepared }, &.{});
 }
 
 /// The kept occurrence cites every group, claim, citation and clarification

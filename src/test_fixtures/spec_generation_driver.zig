@@ -8,7 +8,7 @@ pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
     stage: enum { extraction, reconciliation, generation, repair, support, loss_review, records },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, shared_statement, runaway, runaway_uncovered, runaway_partial_assignment },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, shared_statement, bare_statement, duplicate_record, runaway, runaway_uncovered, runaway_partial_assignment },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -56,6 +56,10 @@ pub const Driver = struct {
     reconciliation_repair_calls: usize = 0,
     reconciliation_merges: usize = 0,
     unchanged_reconciliation_merges: usize = 0,
+    /// Records requests whose response gained a statement that is only an exact value.
+    bare_statements: usize = 0,
+    /// Records requests whose response gained an exact repeat of a requirement.
+    duplicate_records: usize = 0,
     malformed: bool = false,
     uncertain: bool = false,
     malformed_once: bool = false,
@@ -419,8 +423,9 @@ pub const Driver = struct {
                     std.testing.expectEqual(rule.covering.len, covering.get("kinds").?.array.items.len) catch unreachable;
                     for (rule.covering, covering.get("kinds").?.array.items) |kind, listed| std.testing.expectEqualStrings(kind, listed.string) catch unreachable;
                 }
-                // ADR 0038 Decision 5: a wholly taken statement never reaches a correction.
-                if (matches_stage and fault.shape == .shared_statement) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
+                // ADR 0038 Decision 5: a wholly taken statement never reaches a correction, and
+                // neither does an evidence-equivalent duplicate (ADR 0035).
+                if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record)) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at
                     // the runaway-retry temperature, with no correction guidance.
@@ -478,6 +483,8 @@ pub const Driver = struct {
                     } else if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {
                         self.fake.invocation_plan.complete.content_diagnostic = .missing_final_text;
                     } else self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol or fault.shape == .alternating_missing) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape, attempt) catch unreachable;
+                    if (fault.shape == .bare_statement and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.bare_statements += 1;
+                    if (fault.shape == .duplicate_record and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.duplicate_records += 1;
                     self.fault_calls += 1;
                 }
             }
@@ -917,6 +924,40 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
         var restated = try requirement.object.clone(allocator);
         try restated.put(allocator, "content", .{ .object = content });
         try items.append(.{ .object = restated });
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .duplicate_record) {
+        // Repeat the first functional requirement exactly: same content, groups and evidence.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        const requirement = for (items.items) |item| {
+            if (std.mem.eql(u8, item.object.get("content").?.object.get("kind").?.string, "functional_requirement")) break item;
+        } else return error.InvalidFixture;
+        try items.append(requirement);
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .bare_statement) {
+        // Add an outcome naming the claims of the first functional requirement that quotes an
+        // exact value between code delimiters, whose text is only that value. A batch with no
+        // such requirement is returned unchanged.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        const requirement, const value = holder: {
+            for (items.items) |item| {
+                const content = item.object.get("content").?.object;
+                if (!std.mem.eql(u8, content.get("kind").?.string, "functional_requirement")) continue;
+                const written = content.get("text").?;
+                if (written != .string) continue;
+                const close = std.mem.lastIndexOfScalar(u8, written.string, '`') orelse continue;
+                const open = std.mem.lastIndexOfScalar(u8, written.string[0..close], '`') orelse continue;
+                break :holder .{ item, written.string[open + 1 .. close] };
+            }
+            return body;
+        };
+        var content = try requirement.object.get("content").?.object.clone(allocator);
+        try content.put(allocator, "kind", .{ .string = "user_visible_outcome" });
+        try content.put(allocator, "text", .{ .string = value });
+        var outcome = try requirement.object.clone(allocator);
+        try outcome.put(allocator, "content", .{ .object = content });
+        try items.append(.{ .object = outcome });
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if (shape == .review_partial_assignment or shape == .review_repeated_member) {

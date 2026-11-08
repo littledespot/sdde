@@ -556,7 +556,7 @@ const aggregate_bindings: []const @import("domain/model_text_field.zig").Binding
     .{ .field = .entity_name, .path = &.{.{ .property = "identity" }} },
     .{ .field = .spec_title, .path = &.{.{ .property = "a/b~c" }} },
     // An absent selected union branch is not a returned leaf.
-    .{ .field = .entity_meaning, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "entity" }, .{ .property = "meaning" } } },
+    .{ .field = .edge_condition, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "edge_case" }, .{ .property = "condition" } } },
 };
 const aggregate_questions: []const @import("domain/model_text_wire.zig").ProseField = &.{
     .{ .field = .clarification_question, .path = &.{ .{ .property = "questions" }, .items } },
@@ -662,7 +662,7 @@ test "native exact scope classifies raw prose without granting semantic support 
         .{ .value = "\"ACTIVE\"", .scope = competing, .reason = .ambiguous_exact },
         .{ .value = "{\"fragments\":[{\"kind\":\"passive\",\"passive_literal_id\":7},\"ACTIVE\"]}" },
         .{ .value = "{\"fragments\":[\"ACT\",{\"kind\":\"passive\",\"passive_literal_id\":7},\"IVE\"]}" },
-        .{ .value = "\"ACTIVE\"", .field = .entity_meaning },
+        .{ .value = "\"ACTIVE\"", .field = .assumption },
         .{ .value = "\"ACTIVE\"", .field = .entity_name },
     }) |case| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -706,6 +706,151 @@ test "composition treats code delimiters around an exact value as markup" {
     var prose = try @import("domain/strict_json.zig").parse(a, "{\"value\":\"Show `ACTIVE` now.\"}", .{ .maximum_depth = schema.max_json_depth }, false, null);
     defer prose.deinit();
     try std.testing.expect((try @import("domain/model_text_composition.zig").check(a, prose.value, fields, &.{}, &.{}, .{ .exact_scope = scope })) == null);
+}
+const statement_bindings: []const @import("domain/model_text_field.zig").Binding = &.{
+    .{ .field = .functional_requirement, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "functional_requirement" }, .{ .property = "text" } } },
+    .{ .field = .visible_outcome, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "user_visible_outcome" }, .{ .property = "text" } } },
+    .{ .field = .business_rule, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "business_rule" }, .{ .property = "text" } } },
+    .{ .field = .assumption, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "assumption" }, .{ .property = "text" } } },
+    .{ .field = .non_goal, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "non_goal" }, .{ .property = "text" } } },
+    .{ .field = .prohibited_behavior, .path = &.{ .{ .property = "records" }, .items, .{ .property = "content" }, .{ .variant = "prohibited_behavior" }, .{ .property = "text" } } },
+};
+const statement_scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 3 }, .bytes = "Loan renewed!" }} };
+/// The value is also at a second claim, so a bare copy of it is ambiguous.
+const ambiguous_scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 3 }, .bytes = "Loan renewed!" }, .{ .claim_id = .{ .ordinal = 4 }, .bytes = "Loan renewed!" } } };
+const statement_rule: @import("domain/model_text_composition.zig").Statements = .{
+    .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } },
+    .rule = @import("domain/specification_session.zig").scenario_coverage,
+};
+/// `insertion` appends an exact-copy insertion of the claim 3 value (or a handle naming no claim).
+const StatementRecord = struct { kind: []const u8, text: []const u8, claims: []const i64 = &.{3}, insertion: enum { none, claim, handle } = .none };
+const exact_text = "Loan renewed!";
+const holding_text = "After renewal, display `Loan renewed!`.";
+const plain_text = "After renewal, confirm the renewal.";
+const encoded_text = "Send {\"kind\":\"exact_copy\"} to the user.";
+const unscalar_text = "Loan renewed! \x01";
+/// Insertion syntax and a control character in a field that forbids exact copies.
+const assumption_text = "Assume {\"kind\":\"exact_copy\"} \x01";
+const requirement_holding: StatementRecord = .{ .kind = "functional_requirement", .text = holding_text };
+const requirement_plain: StatementRecord = .{ .kind = "functional_requirement", .text = plain_text };
+const requirement_bare: StatementRecord = .{ .kind = "functional_requirement", .text = exact_text };
+const rule_holding: StatementRecord = .{ .kind = "business_rule", .text = holding_text };
+const rule_bare: StatementRecord = .{ .kind = "business_rule", .text = exact_text };
+const outcome_bare: StatementRecord = .{ .kind = "user_visible_outcome", .text = exact_text };
+const requirement_inserting: StatementRecord = .{ .kind = "functional_requirement", .text = "After renewal, display ", .insertion = .claim };
+const outcome_inserted: StatementRecord = .{ .kind = "user_visible_outcome", .text = "", .insertion = .claim };
+
+fn statementText(a: std.mem.Allocator, record: StatementRecord) !std.json.Value {
+    if (record.insertion == .none) return .{ .string = record.text };
+    var handle: std.json.ObjectMap = .{};
+    try handle.put(a, "kind", .{ .string = "exact_copy" });
+    if (record.insertion == .claim) try handle.put(a, "claim_id", .{ .integer = 3 });
+    var fragments: std.json.Value = .{ .array = .init(a) };
+    if (record.text.len != 0) try fragments.array.append(.{ .string = record.text });
+    try fragments.array.append(.{ .object = handle });
+    var text: std.json.ObjectMap = .{};
+    try text.put(a, "fragments", fragments);
+    return .{ .object = text };
+}
+fn statementResponse(a: std.mem.Allocator, records: []const StatementRecord) !std.json.Parsed(std.json.Value) {
+    const Wire = struct { content: struct { kind: []const u8, text: std.json.Value }, claim_ids: []const i64 };
+    const wires = try a.alloc(Wire, records.len);
+    for (records, wires) |record, *wire| wire.* = .{ .content = .{ .kind = record.kind, .text = try statementText(a, record) }, .claim_ids = record.claims };
+    const bytes = try std.json.Stringify.valueAlloc(a, .{ .records = wires }, .{});
+    return @import("domain/strict_json.zig").parse(a, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null);
+}
+/// The records whose text defect `composition.check` reports.
+const StatementReason = @FieldType(@import("domain/typed_text.zig").Issue, "reason");
+/// The records whose text defect admission reports, each with `reason` when one is given.
+fn reportedStatements(a: std.mem.Allocator, records: []const StatementRecord, rule: ?@import("domain/model_text_composition.zig").Statements, scope: @import("domain/model_exact_values.zig").Scope, reason: ?StatementReason) ![]const usize {
+    const document = try statementResponse(a, records);
+    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, document.value, statement_bindings, &.{}, &.{}, .{ .exact_scope = scope, .statements = rule })) orelse return &.{};
+    var reported: std.ArrayList(usize) = .empty;
+    for (diagnostic.fields) |field| {
+        const prefix = "/records/";
+        try std.testing.expect(std.mem.startsWith(u8, field.path, prefix));
+        const end = std.mem.indexOfScalarPos(u8, field.path, prefix.len, '/') orelse return error.TestUnexpectedResult;
+        try std.testing.expectEqualStrings("/content/text", field.path[end..]);
+        if (reason) |expected| try std.testing.expectEqual(expected, field.issue.reason);
+        try reported.append(a, try std.fmt.parseInt(usize, field.path[prefix.len..end], 10));
+    }
+    // The diagnostic lists issues by binding; only which records it names matters.
+    std.mem.sort(usize, reported.items, {}, std.sort.asc(usize));
+    return reported.items;
+}
+test "a text defect in a statement the owner deletes natively is no defect of the response" {
+    // ADR 0038 Decision 5: a statement whose every claim is taken and whose exact values
+    // another record holds is deleted by the owner after admission, so admission does not
+    // judge its text. Every other record's defect is still reported.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Case = struct { records: []const StatementRecord, reported: []const usize, scope: @import("domain/model_exact_values.zig").Scope = statement_scope, reason: StatementReason = .reference_only };
+    for ([_]Case{
+        // Taken by a requirement, which holds the value the statement repeats.
+        .{ .records = &.{ requirement_holding, outcome_bare }, .reported = &.{} },
+        .{ .records = &.{ requirement_holding, rule_bare }, .reported = &.{} },
+        .{ .records = &.{ requirement_holding, outcome_bare, rule_bare }, .reported = &.{} },
+        .{ .records = &.{ outcome_bare, requirement_holding }, .reported = &.{} },
+        // Taken by an earlier behaviour record.
+        .{ .records = &.{ rule_holding, outcome_bare }, .reported = &.{} },
+        // Any text defect of a deleted statement, not only a bare value.
+        .{ .records = &.{ requirement_holding, .{ .kind = "user_visible_outcome", .text = encoded_text } }, .reported = &.{} },
+        // The statement holds the only copy of the value: it is kept, so its text counts.
+        .{ .records = &.{ requirement_plain, outcome_bare }, .reported = &.{1} },
+        // Of two holders of the last copy the first is deleted and the last stays.
+        .{ .records = &.{ requirement_plain, outcome_bare, rule_bare }, .reported = &.{2} },
+        // A requirement is never deleted, and the defect beside a deleted record counts.
+        .{ .records = &.{ requirement_bare, requirement_holding }, .reported = &.{0} },
+        .{ .records = &.{ requirement_holding, outcome_bare, .{ .kind = "functional_requirement", .text = exact_text, .claims = &.{5} } }, .reported = &.{2} },
+        // A claim nothing takes, a claim only partly taken, or no claim at all.
+        .{ .records = &.{ .{ .kind = "functional_requirement", .text = holding_text, .claims = &.{1} }, outcome_bare }, .reported = &.{1} },
+        .{ .records = &.{ requirement_holding, .{ .kind = "user_visible_outcome", .text = exact_text, .claims = &.{ 3, 5 } } }, .reported = &.{1} },
+        .{ .records = &.{ requirement_holding, .{ .kind = "user_visible_outcome", .text = exact_text, .claims = &.{} } }, .reported = &.{1} },
+        // A later behaviour record never takes an earlier record's claim.
+        .{ .records = &.{ outcome_bare, rule_holding }, .reported = &.{0} },
+        // An explicit exact-copy insertion is never relied on, whatever it names: unit validation
+        // recognizes the text again as one run, where the handle need not survive. Its record is
+        // unidentified, kept, and holds nothing for the others.
+        .{ .records = &.{ requirement_inserting, outcome_bare }, .reported = &.{1} },
+        .{ .records = &.{ requirement_inserting, outcome_inserted }, .reported = &.{1} },
+        .{ .records = &.{ .{ .kind = "functional_requirement", .text = plain_text, .insertion = .handle }, outcome_bare }, .reported = &.{1} },
+        // Text that is not a valid scalar can't be read for values, so it holds none for the others.
+        .{ .records = &.{ requirement_plain, outcome_bare, .{ .kind = "business_rule", .text = unscalar_text } }, .reported = &.{1} },
+        .{ .records = &.{ requirement_holding, outcome_bare, .{ .kind = "business_rule", .text = unscalar_text } }, .reported = &.{} },
+        // An unidentified record blocks no other record's delete.
+        .{ .records = &.{ requirement_holding, .{ .kind = "user_visible_outcome", .text = encoded_text }, outcome_inserted }, .reported = &.{2} },
+        // Every other statement kind is judged the same way; an assumption forbids exact copies, so
+        // its text holds no value and a control character in it hides none.
+        .{ .records = &.{ requirement_holding, .{ .kind = "non_goal", .text = exact_text } }, .reported = &.{} },
+        .{ .records = &.{ requirement_holding, .{ .kind = "prohibited_behavior", .text = exact_text } }, .reported = &.{} },
+        .{ .records = &.{ requirement_plain, .{ .kind = "non_goal", .text = exact_text } }, .reported = &.{1} },
+        .{ .records = &.{ requirement_plain, .{ .kind = "assumption", .text = assumption_text } }, .reported = &.{} },
+        // An ambiguous value can't be identified: its record is kept, and it blocks no other delete.
+        .{ .records = &.{ requirement_inserting, outcome_bare }, .scope = ambiguous_scope, .reason = .ambiguous_exact, .reported = &.{1} },
+        .{ .records = &.{ requirement_inserting, .{ .kind = "user_visible_outcome", .text = encoded_text }, outcome_bare }, .scope = ambiguous_scope, .reason = .ambiguous_exact, .reported = &.{2} },
+    }) |case| {
+        try std.testing.expectEqualSlices(usize, case.reported, try reportedStatements(a, case.records, statement_rule, case.scope, case.reason));
+        // Without the rule every defective record is reported, as before.
+        var defective: std.ArrayList(usize) = .empty;
+        for (case.records, 0..) |record, index| {
+            const bare = std.mem.eql(u8, record.text, exact_text) or (record.text.len == 0 and record.insertion != .none);
+            if (bare or std.mem.eql(u8, record.text, encoded_text) or std.mem.eql(u8, record.text, assumption_text)) try defective.append(a, index);
+        }
+        try std.testing.expectEqualSlices(usize, defective.items, try reportedStatements(a, case.records, null, case.scope, null));
+    }
+    try @import("test_fixtures/untraced_allocator.zig").checkAllAllocationFailures(statementAllocation, .{});
+}
+fn statementAllocation(a: std.mem.Allocator) !void {
+    // The response is built outside the allocator under test, which covers the check alone.
+    var input: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer input.deinit();
+    // Two statements are exempt and one requirement keeps its defect, so the check frees the
+    // issues it drops and returns the rest.
+    const document = try statementResponse(input.allocator(), &.{ requirement_holding, outcome_bare, .{ .kind = "user_visible_outcome", .text = encoded_text }, requirement_bare });
+    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, document.value, statement_bindings, &.{}, &.{}, .{ .exact_scope = statement_scope, .statements = statement_rule })).?;
+    defer diagnostic.deinit(a);
+    try std.testing.expectEqual(@as(usize, 1), diagnostic.fields.len);
 }
 fn nativeCompositionAllocation(a: std.mem.Allocator) !void {
     const raw = "{\"value\":\"ACTIVE\"}";

@@ -1345,6 +1345,12 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // with no correction. Every scripted records batch has one claim, so a partly
         // taken one is proven at response admission instead.
         .{ .stage = .records, .shape = .shared_statement, .repetition = .{ .first_request = 1 } },
+        // The same holds for a wholly taken statement whose text is only the exact value
+        // another record holds: its text defect is no defect of the response.
+        .{ .stage = .records, .shape = .bare_statement, .repetition = .{ .every_request = 1 } },
+        // ADR 0035: a record that repeats another's content, groups and evidence is a
+        // duplicate; it is deleted natively and the run publishes with no correction.
+        .{ .stage = .records, .shape = .duplicate_record, .repetition = .{ .first_request = 1 } },
         // ADR 0039: a records runaway is re-sent once; a re-send that runs away
         // fails typed, and a re-sent response takes the same admission.
         .{ .stage = .records, .shape = .runaway, .repetition = .{ .first_request = 1 } },
@@ -1817,7 +1823,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             assertion_context = "applicability original source and rendered content";
             try std.testing.expectEqualStrings(mode.source(other_applicability), reference.inputs.corpus.sources[0].bytes);
             var expected_source: std.Io.Writer.Allocating = .init(a);
-            try @import("../../src/domain/specification_markdown.zig").literal(&expected_source.writer, mode.source(other_applicability));
+            try @import("../../src/domain/specification_markdown.zig").literal(&expected_source.writer, mode.source(other_applicability), .block_start);
             try std.testing.expect(std.mem.indexOf(u8, published, expected_source.written()) != null);
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
@@ -2230,11 +2236,30 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 }
             }
         }
-        if (fault != null and fault.?.shape == .shared_statement) {
-            // The business rule restating a requirement was deleted natively.
+        if (fault != null and (fault.?.shape == .shared_statement or fault.?.shape == .bare_statement)) {
+            // The statement restating a requirement was deleted natively; the requirement stays.
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-            for (session.record_batches) |batch| for (batch.response.content.records) |record| try std.testing.expect(record.content != .business_rule);
+            var requirements: usize = 0;
+            for (session.record_batches) |batch| for (batch.response.content.records) |record| {
+                if (record.content == .functional_requirement) requirements += 1;
+                try std.testing.expect(if (fault.?.shape == .shared_statement) record.content != .business_rule else record.content != .user_visible_outcome);
+            };
+            try std.testing.expect(requirements != 0);
+            // The statement was added to at least one batch, so the check is not vacuous.
+            if (fault.?.shape == .bare_statement) try std.testing.expect(driver.bare_statements != 0);
+        }
+        if (fault != null and fault.?.shape == .duplicate_record) {
+            // The repeat was deleted natively: no batch keeps two records of equal content.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            for (session.record_batches) |batch| for (batch.response.content.records, 0..) |record, index| {
+                for (batch.response.content.records[0..index]) |prior| {
+                    try std.testing.expect(!try @import("../../src/domain/specification_generation.zig").equalContent(allocator, prior.content, record.content));
+                }
+            };
+            // The repeat was added to at least one batch, so the check is not vacuous.
+            try std.testing.expect(driver.duplicate_records != 0);
         }
         if (fault) |selected_fault| switch (selected_fault.repetition) {
             .once => try std.testing.expectEqual(@as(usize, 1), driver.fault_calls),
@@ -2505,7 +2530,7 @@ fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflo
 
 /// Spec publishes from generation and native checks alone (D13.1): spec.md has no
 /// review status, reference-context has no review or principle section, and the
-/// canonical v22 state carries the principle registry this run captured.
+/// canonical state carries the principle registry this run captured.
 fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, driver: *@import("../../src/test_fixtures/spec_generation_driver.zig").Driver, contracts: @import("../../src/ports/workflow_contract_source.zig").Source) !void {
     var check: []const u8 = "native operation counts";
     errdefer std.debug.print("publication check failed: {s}\n", .{check});
@@ -2528,8 +2553,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v22", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v22", "specification-state/v21");
+    try std.testing.expectEqualStrings("specification-state/v23", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v23", "specification-state/v22");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

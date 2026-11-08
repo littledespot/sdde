@@ -195,8 +195,8 @@ or none. Each record names the claims it supports, a nonempty subset of that gro
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
-natively after validation unless it holds an exact copy no other record holds, and one
-naming such claims and others is a defect;
+natively unless it holds an exact copy no other record holds (a record so deleted is not
+judged on its text), and one naming such claims and others is a defect;
 requirements are never deleted or rejected by this rule. Every claim a behaviour
 statement names must also be named by an acceptance criterion or edge case. Admission
 rejects either defect for the request's existing protocol correction
@@ -219,6 +219,9 @@ A `required` decision requires at least one entity; `not_applicable` requires an
 empty collection. Each entity record explicitly selects its own eligible source
 groups, independently of the decision basis. Native code derives its full support
 and citations through the shared source association and exact-recognition owners.
+An entity's authored content is its name: it has no meaning or relationship text
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 6), and
+the engine derives the statements it relates to from its groups (§23.1).
 A record batch cannot author an entity: the closed schema, native admission,
 canonical revalidation and repair boundary enforce the same ownership rule.
 The feature collection participates once in canonical IDs, coverage and stored

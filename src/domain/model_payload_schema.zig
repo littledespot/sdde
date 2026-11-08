@@ -1,6 +1,7 @@
 const std = @import("std");
 const envelope = @import("model_envelope.zig");
 const schema = @import("model_result_schema.zig");
+const statements = @import("statement_ownership.zig");
 
 pub const Rejection = @import("model_schema_diagnostic.zig").Reason;
 pub const Diagnostic = @import("model_schema_diagnostic.zig").Diagnostic;
@@ -93,18 +94,47 @@ fn namesNew(items: *const envelope.Array, coverage: schema.Coverage, index: usiz
 }
 
 /// Whether `wanted` is taken for exclusive item `index`: an owning item names it, or an
-/// exclusive item before `index` does.
+/// exclusive item before `index` does. The rule is `statement_ownership.zig`'s, which the
+/// text composition check, unit validation and the session apply to the same records.
 fn taken(items: *const envelope.Array, coverage: schema.Coverage, index: usize, wanted: i64) bool {
-    for (0..items.count()) |position| {
-        const item = items.at(position).?;
-        const owning = hasKind(item, coverage.rule.kind_property, coverage.rule.owning);
-        if (!owning and !(position < index and hasKind(item, coverage.rule.kind_property, coverage.rule.exclusive))) continue;
-        const listed = (if (item == .object) item.object.get(coverage.property) else null) orelse continue;
-        if (listed != .array) continue;
-        for (0..listed.array.count()) |value| if (listedValue(listed.array.at(value).?) == wanted) return true;
-    }
-    return false;
+    return statements.Rule(WireItems).taken(.{ .items = items, .coverage = coverage }, &.{}, index, wanted);
 }
+
+/// The items of a covered array as the shared statement rule reads them: an item's kind
+/// selects its role and its integer list names its claims. Exact values are the text
+/// composition check's to read, so none are held here.
+const WireItems = struct {
+    items: *const envelope.Array,
+    coverage: schema.Coverage,
+
+    pub fn len(self: WireItems) usize {
+        return self.items.count();
+    }
+    pub fn role(self: WireItems, index: usize) statements.Role {
+        const item = self.items.at(index).?;
+        if (hasKind(item, self.coverage.rule.kind_property, self.coverage.rule.owning)) return .owning;
+        if (hasKind(item, self.coverage.rule.kind_property, self.coverage.rule.exclusive)) return .exclusive;
+        return .other;
+    }
+    fn listed(self: WireItems, index: usize) ?*const envelope.Array {
+        const item = self.items.at(index).?;
+        const values = (if (item == .object) item.object.get(self.coverage.property) else null) orelse return null;
+        return if (values == .array) values.array else null;
+    }
+    pub fn claimCount(self: WireItems, index: usize) usize {
+        return if (self.listed(index)) |values| values.count() else 0;
+    }
+    /// A value that is no integer names no claim.
+    pub fn claim(self: WireItems, index: usize, position: usize) i64 {
+        return listedValue(self.listed(index).?.at(position).?) orelse statements.no_claim;
+    }
+    pub fn exactCount(_: WireItems, _: usize) usize {
+        return 0;
+    }
+    pub fn exact(_: WireItems, _: usize, _: usize) i64 {
+        return 0;
+    }
+};
 
 // Traversal is bounded by the already compiled schema and captured response.
 // Only the schema compiler owns shape, variant uniqueness and structural limits.

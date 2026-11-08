@@ -382,7 +382,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const membership = auth.rule.group.?.membership;
                         var content_value = value.value;
                         if (options.failed_repair) content_value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
-                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = membership.fixed_provenance };
+                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
                 }
@@ -402,7 +402,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .entities => entity: {
                         const include = options.entities_required != options.contradict_entities;
                         const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
-                        if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
+                        if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value } }, .provenance = value.provenance };
                         break :entity .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value, .records = records } };
                     },
                     .records => result: {

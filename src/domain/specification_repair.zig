@@ -45,7 +45,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         const prior = candidate.group_repair orelse return error.InvalidSpecificationRepair;
         const active = (try candidate.origins.currentTarget(prior.target, recordCount(candidate.response))) orelse return error.InvalidSpecificationRepair;
         if (!std.meta.eql(active, target)) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, guidance, owner, candidate, facts, target, prior.policy, rejection, false);
+        return authorizeGroup(allocator, owner, candidate, facts, target, prior.policy, rejection, false);
     }
     if (rejection.issue.membership) |membership| {
         if (current.completed != session.entities_index or candidate.response != .content or candidate.response.content != .entities) return error.InvalidSpecificationRepair;
@@ -63,7 +63,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         // different source group or borrowing a batch's write permission.
         const groups = try p.validateAssociation(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), entities.basis.source_group_ids, entities.basis.provenance, .content);
         defer allocator.free(groups);
-        return authorizeGroup(allocator, guidance, owner, candidate, facts, .{ .record = 0 }, .{ .membership = .{ .fixed_provenance = entities.basis.provenance, .fixed_source_group_ids = entities.basis.source_group_ids } }, rejection, true);
+        return authorizeGroup(allocator, owner, candidate, facts, .{ .record = 0 }, .{ .membership = .{ .fixed_provenance = entities.basis.provenance, .fixed_source_group_ids = entities.basis.source_group_ids } }, rejection, true);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -125,12 +125,12 @@ fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.Evi
     r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
-fn authorizeGroup(a: std.mem.Allocator, guidance: *const @import("packet_guidance.zig").Guidance, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
+fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
     const requirement = switch (policy) {
         .membership => if (insert)
             "Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records."
         else
-            try std.fmt.allocPrint(a, "Return the complete corrected entity record, {s} and all siblings.", .{guidance.repair_tails.get(.entity_record_meaning)}),
+            "Return the complete corrected entity record and all siblings.",
     };
     const rule: Rule = .{ .requirement = requirement, .text_issue = rejection.issue.text_issue, .value_choices = null, .group = policy };
     var authorization = if (insert)
@@ -195,8 +195,8 @@ fn targetBound(response: g.Response) Error!u32 {
             for (g.recordCollection(.model, response.content).?) |record| {
                 count = std.math.add(usize, count, 3) catch return error.InvalidSpecificationRepair;
                 switch (record.content) {
-                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                        count = std.math.add(usize, count, if (comptime field.type == g.spec.BusinessValue) 1 else @field(fields, field.name).len) catch return error.InvalidSpecificationRepair;
+                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |_| {
+                        count = std.math.add(usize, count, 1) catch return error.InvalidSpecificationRepair;
                     },
                 }
             }

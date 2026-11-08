@@ -1757,7 +1757,7 @@ test "production workflow enforces one global token budget and fails required st
             for (audit.checks) |check| if (check.subject == .specification and check.subject.specification.unit == .entities and check.subject.specification.record_kind == .entity) {
                 entity_fields += 1;
             };
-            try std.testing.expect(entity_fields >= 2);
+            try std.testing.expect(entity_fields >= 1);
             continue;
         }
         try std.testing.expect(outcome == .execution);

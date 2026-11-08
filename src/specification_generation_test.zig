@@ -1476,7 +1476,6 @@ test "record generation and selected value repairs retain every family purpose w
             };
             records[index] = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, own.value)), .source_group_ids = own.source_group_ids, .provenance = .{ .claim_ids = named, .clarification_response_ids = &.{} } };
         }
-        records[records.len - 1].content.entity.relationships = &.{ value.value, value.value };
         var current = try completedFixtureValue(&fixture, false, value);
         current.completed = sessions.records_index;
         current.record_cursor = 0;
@@ -1508,44 +1507,41 @@ test "record generation and selected value repairs retain every family purpose w
 
         inline for (comptime std.meta.tags(spec.Kind), 0..) |kind, index| {
             inline for (std.meta.fields(@FieldType(spec.Content(spec.BusinessValue), @tagName(kind)))) |field| {
-                const slot: @import("domain/required_authority.zig").Slot = @field(@import("domain/required_authority.zig").Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
-                const count: usize = if (field.type == spec.BusinessValue) 1 else 2;
-                for (0..count) |member| {
-                    const selected: candidates.ValueField = if (comptime slot == .relationship) .{ .relationship = member } else @unionInit(candidates.ValueField, @tagName(slot), {});
-                    var selected_current = current;
-                    const owned_response: g.Response = if (kind == .entity) .{ .content = .{ .entities = .{ .disposition = .required, .basis = value, .records = records[records.len - 1 ..] } } } else response;
-                    if (kind == .entity) {
-                        selected_current.completed = sessions.entities_index;
-                        selected_current.units[sessions.entities_index] = null;
-                    }
-                    const local_index = if (kind == .entity) 0 else index;
-                    const target: candidates.Target = .{ .value = .{ .subject = .{ .record = local_index }, .field = selected } };
-                    const original = (try candidates.select(owned_response, target)).value;
-                    const candidate: repair.Candidate = .{
-                        .response = try candidates.replace(a, owned_response, target, .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} } }),
-                        .origins = .{ .initial = origin },
-                    };
-                    const rejected = (try validate_unit.execute(a, selected_current, fixture.context, candidate)).invalid;
-                    try std.testing.expectEqualDeep(target, rejected.issue.field.target);
-                    const authorization = try repair.authorize(a, selected_current, fixture.context, candidate, rejected, &packet_guidance.marked);
-                    const packet = try repair.packet(std.testing.allocator, selected_current, fixture.context, authorization, &packet_guidance.marked);
-                    defer packets.release(packet);
-                    const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
-                    const input = body.get("input").?.object;
-                    try std.testing.expect(!input.contains("record_requirements"));
-                    // A record repair carries no unpublished draft; an entity repair keeps
-                    // the brief its unit receives (FIX06 D12.1).
-                    try std.testing.expectEqual(kind == .entity, input.contains("brief"));
-                    try std.testing.expect(!input.contains("entities"));
-                    try std.testing.expectEqualStrings(try descriptions.recordTask(a, &packet_guidance.marked, kind, slot), try selectedNativeRepairTask(body.get("input").?));
-                    const selected_record = try json.decode(candidates.ReadContext, a, try std.json.Stringify.valueAlloc(a, input.get("candidate").?, .{}));
-                    try std.testing.expectEqualDeep(g.recordCollection(.model, candidate.response.content).?[local_index], selected_record.record);
-                    try std.testing.expectEqualDeep(origin, authorization.dependencies.candidate.origins.initial.?);
-                    try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema_owner, try json.encodeSelected(repair.Replacement, a, .{ .value = original }), null);
-                    const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context).inputs), selected_current, fixture.context, candidate, authorization, .{ .value = original }, null);
-                    try std.testing.expectEqualDeep(owned_response, fixed.response);
-                    _ = (try validate_unit.execute(a, selected_current, fixture.context, fixed)).valid;
+                const slot: @import("domain/required_authority.zig").Slot = @field(@import("domain/required_authority.zig").Slot, field.name);
+                const selected: candidates.ValueField = @unionInit(candidates.ValueField, @tagName(slot), {});
+                var selected_current = current;
+                const owned_response: g.Response = if (kind == .entity) .{ .content = .{ .entities = .{ .disposition = .required, .basis = value, .records = records[records.len - 1 ..] } } } else response;
+                if (kind == .entity) {
+                    selected_current.completed = sessions.entities_index;
+                    selected_current.units[sessions.entities_index] = null;
                 }
+                const local_index = if (kind == .entity) 0 else index;
+                const target: candidates.Target = .{ .value = .{ .subject = .{ .record = local_index }, .field = selected } };
+                const original = (try candidates.select(owned_response, target)).value;
+                const candidate: repair.Candidate = .{
+                    .response = try candidates.replace(a, owned_response, target, .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} } }),
+                    .origins = .{ .initial = origin },
+                };
+                const rejected = (try validate_unit.execute(a, selected_current, fixture.context, candidate)).invalid;
+                try std.testing.expectEqualDeep(target, rejected.issue.field.target);
+                const authorization = try repair.authorize(a, selected_current, fixture.context, candidate, rejected, &packet_guidance.marked);
+                const packet = try repair.packet(std.testing.allocator, selected_current, fixture.context, authorization, &packet_guidance.marked);
+                defer packets.release(packet);
+                const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+                const input = body.get("input").?.object;
+                try std.testing.expect(!input.contains("record_requirements"));
+                // A record repair carries no unpublished draft; an entity repair keeps
+                // the brief its unit receives (FIX06 D12.1).
+                try std.testing.expectEqual(kind == .entity, input.contains("brief"));
+                try std.testing.expect(!input.contains("entities"));
+                try std.testing.expectEqualStrings(try descriptions.recordTask(a, &packet_guidance.marked, kind, slot), try selectedNativeRepairTask(body.get("input").?));
+                const selected_record = try json.decode(candidates.ReadContext, a, try std.json.Stringify.valueAlloc(a, input.get("candidate").?, .{}));
+                try std.testing.expectEqualDeep(g.recordCollection(.model, candidate.response.content).?[local_index], selected_record.record);
+                try std.testing.expectEqualDeep(origin, authorization.dependencies.candidate.origins.initial.?);
+                try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema_owner, try json.encodeSelected(repair.Replacement, a, .{ .value = original }), null);
+                const fixed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, (fixture.context).inputs), selected_current, fixture.context, candidate, authorization, .{ .value = original }, null);
+                try std.testing.expectEqualDeep(owned_response, fixed.response);
+                _ = (try validate_unit.execute(a, selected_current, fixture.context, fixed)).valid;
             }
         }
         // Missing optional families remain allowed under the existing native
@@ -1711,7 +1707,7 @@ test "feature entity membership repair preserves fixed support origins and retry
         const packet = try repair.packet(a, current, fixture.context, auth, &packet_guidance.marked);
         defer @import("domain/model_input_packet.zig").release(packet);
         try std.testing.expectEqualStrings("repair_record_entity", packet.resultDefinition().?.bytes);
-        const record: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = basis.value, .business_meaning = basis.value, .relationships = &.{basis.value} } }, .source_group_ids = association.source_group_ids, .provenance = association.selection };
+        const record: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = basis.value } }, .source_group_ids = association.source_group_ids, .provenance = association.selection };
         const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
         const merged = try repair.merge(a, canonical, current, fixture.context, proposed, auth, .{ .record = record }, corrected);
         try std.testing.expectEqualDeep(first, merged.origins.at(.{ .target = .{ .attributed = .entity_basis } }).?);
@@ -1723,7 +1719,7 @@ test "feature entity membership repair preserves fixed support origins and retry
         foreign.source_group_ids = &.{groups[0].id};
         try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, canonical, current, fixture.context, proposed, auth, .{ .record = foreign }, corrected));
         var broken = record;
-        broken.content.entity.business_meaning = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
+        broken.content.entity.name = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
         const invalid = try repair.merge(a, canonical, current, fixture.context, proposed, auth, .{ .record = broken }, corrected);
         const invalid_rejection = (try validate_unit.execute(a, current, fixture.context, invalid)).invalid;
         const next_auth = try repair.authorize(a, current, fixture.context, invalid, invalid_rejection, &packet_guidance.marked);
@@ -1746,8 +1742,28 @@ test "feature entity membership repair preserves fixed support origins and retry
         const title_target: candidate_type.Target = .{ .value = .{ .subject = .{ .record = 0 }, .field = .name } };
         const named = try candidate_type.replace(a, merged.response, title_target, .{ .value = (try fixture.proposal("MOCK A supported identity")).value });
         try std.testing.expectEqualDeep(record.provenance, named.content.entities.records[0].provenance);
-        try std.testing.expectEqualDeep(record.content.entity.relationships, named.content.entities.records[0].content.entity.relationships);
     }
+}
+
+test "identical entities of one group are a deletable duplicate and of different groups block" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // A name is all an entity holds, so equal names are equal content (ADR 0038 Decision 6).
+    const name: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Loan" } }} };
+    const first: spec.RecordProposal = .{
+        .content = .{ .entity = .{ .name = name } },
+        .source_group_ids = &.{.{ .ordinal = 1 }},
+        .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} },
+    };
+    var elsewhere = first;
+    elsewhere.source_group_ids = &.{.{ .ordinal = 2 }};
+    elsewhere.provenance = .{ .claim_ids = &.{.{ .ordinal = 2 }}, .citation_ids = &.{.{ .ordinal = 2 }}, .clarification_response_ids = &.{} };
+    try std.testing.expect((try g.duplicateRecordIssue(a, first, first, 1, null)).?.blocked == null);
+    try std.testing.expectEqual(.competing_records, (try g.duplicateRecordIssue(a, first, elsewhere, 1, null)).?.blocked.?);
+    var other_name = first;
+    other_name.content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Borrower" } }} } } };
+    try std.testing.expect((try g.duplicateRecordIssue(a, first, other_name, 1, null)) == null);
 }
 
 test "feature entities keep independent support and record batches reject every entity entry path" {
@@ -1766,7 +1782,7 @@ test "feature entities keep independent support and record batches reject every 
         var current = try completedFixture(&fixture, false);
         const basis = try fixture.proposal("MOCK Business data is required.");
         const second = try binding.resolveGroups(a, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs, &.{fixture.context.references.records.signals[1].id}, .content);
-        const entity: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = basis.value, .business_meaning = basis.value, .relationships = &.{basis.value} } }, .source_group_ids = second.source_group_ids, .provenance = second.selection };
+        const entity: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = basis.value } }, .source_group_ids = second.source_group_ids, .provenance = second.selection };
         current.completed = sessions.entities_index;
         current.units[sessions.entities_index] = null;
         current.units[sessions.records_index] = null;
@@ -1956,7 +1972,7 @@ test "record assembly requirements and narrowed packets exclude feature-owned en
     current.record_batches = &.{};
     const value = try fixture.proposal("The requested action completes successfully.");
     const ordinary: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance };
-    const entity: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance };
+    const entity: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance };
     const ordinary_wire = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, .{ .content = .{ .records = &.{ordinary} } }));
     const entity_wire = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, .{ .content = .{ .records = &.{entity} } }));
     for ([_]bool{ false, true }) |required| {
@@ -2135,7 +2151,7 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
         var required_entities = current;
         required_entities.units[2].?.response.content.entities.disposition = .required;
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, required_entities));
-        required_entities.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{ .disposition = .required, .basis = good, .records = &.{.{ .content = .{ .entity = .{ .name = good.value, .business_meaning = good.value, .relationships = &.{} } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance }} } } })).valid;
+        required_entities.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{ .disposition = .required, .basis = good, .records = &.{.{ .content = .{ .entity = .{ .name = good.value } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance }} } } })).valid;
         _ = try sessions.assemble(a, text.validator, fixture.context, required_entities);
         required_entities.units[2].?.response.content.entities.disposition = .not_applicable;
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, required_entities));
@@ -2405,7 +2421,7 @@ test "native exact recognition shares equal bytes but rejects distinct overlappi
     try std.testing.expectEqual(@as(usize, 0), kept.code_spans.len);
     const document: spec.CapturedDocument = .{ .display_name = .{ .bytes = "Kept delimiters" }, .primary_user_story = kept, .records = &.{}, .entity_section = .omitted };
     const rendered = try markdown.render(a, document);
-    try std.testing.expect(std.mem.indexOf(u8, rendered, "Display \\`ACTIVE\\` VALUE\\.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, rendered, "Display \\`ACTIVE\\` VALUE.") != null);
     try std.testing.expectEqualDeep(document, try markdown.parse(a, rendered));
 
     var unique = try Fixture.init(a, "Display `ACTIVE` to the visitor.");
@@ -2822,9 +2838,7 @@ test "unit parsing rejects model authority and ID ledger allocation remains engi
 fn Fields(comptime kind: spec.Kind, value: spec.BusinessValue) @FieldType(spec.Content(spec.BusinessValue), @tagName(kind)) {
     const T = @FieldType(spec.Content(spec.BusinessValue), @tagName(kind));
     var result: T = undefined;
-    inline for (@typeInfo(T).@"struct".fields) |field| {
-        @field(result, field.name) = if (comptime field.type == spec.BusinessValue) value else &.{};
-    }
+    inline for (@typeInfo(T).@"struct".fields) |field| @field(result, field.name) = value;
     return result;
 }
 const Fixture = struct {
@@ -3070,7 +3084,7 @@ test "active scalar repairs present one selected task and retain their bound sou
             const good = try fixture.proposal(source);
             const original: g.Response = .{ .content = switch (case.index) {
                 0 => .{ .brief = .{ .title = good, .description = good, .primary_goal = good } },
-                2 => .{ .entities = .{ .disposition = case.disposition, .basis = good, .records = if (case.disposition == .required) &.{.{ .content = .{ .entity = .{ .name = good.value, .business_meaning = good.value, .relationships = &.{} } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance }} else &.{} } },
+                2 => .{ .entities = .{ .disposition = case.disposition, .basis = good, .records = if (case.disposition == .required) &.{.{ .content = .{ .entity = .{ .name = good.value } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance }} else &.{} } },
                 else => return error.UnexpectedRecordAssignment,
             } };
             current.completed = case.index;
@@ -3207,6 +3221,238 @@ test "a repeated statement holding the batch's only copy of an exact value is ke
         }
         _ = (try validate_unit.execute(a, current, fixture.context, proposed)).valid;
         try std.testing.expectEqualDeep(case.kept, proposed.response.content.records);
+    }
+}
+
+test "a wholly taken statement whose text breaks its field's policy is deleted, never repaired" {
+    // ADR 0038 Decision 5: the owner deletes a repeated statement before its own text is
+    // judged. A requirement, or a statement that is the batch's only holder of an exact
+    // value, is still held to its field's policy.
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const candidate_rule = @import("domain/specification_candidate.zig").Rule;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "After a successful loan renewal the service MUST display `MOCK Loan renewed!`.", .business_exact_string, true, 1);
+    defer fixture.deinit();
+    const items = try provenance.items(fixture.context);
+    const token = items.entries[items.entries.len - 1].claim;
+    var current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    current.completed = sessions.records_index;
+    current.record_cursor = 0;
+    const claim = try fixture.proposal("The service confirms the renewal.");
+    const copied: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = "The service displays " } }, .{ .exact_copy = .{ .claim_id = token.id } } } };
+    // Recognition makes this exactly the exact value, so a prose-required field rejects it.
+    const bare: spec.BusinessValue = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = token.id } }} };
+    // The model writes the value as plain text; native recognition makes it the same value.
+    const plain_value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = token.content.preserved_token.value.raw_value.bytes } }} };
+    const record = struct {
+        fn of(content: spec.Content(spec.BusinessValue), from: spec.Model.AttributedValue) spec.Model.RecordProposal {
+            return .{ .content = content, .source_group_ids = from.source_group_ids, .provenance = from.provenance };
+        }
+    }.of;
+    const requirement_plain = record(.{ .functional_requirement = .{ .text = claim.value } }, claim);
+    const requirement_copied = record(.{ .functional_requirement = .{ .text = copied } }, claim);
+    const requirement_bare = record(.{ .functional_requirement = .{ .text = bare } }, claim);
+    const outcome_bare = record(.{ .user_visible_outcome = .{ .text = bare } }, claim);
+    const rule_bare = record(.{ .business_rule = .{ .text = bare } }, claim);
+    const outcome_plain = record(.{ .user_visible_outcome = .{ .text = plain_value } }, claim);
+
+    // Accepted: the requirement holds the value, so the defective statement is deleted.
+    for ([_][]const spec.Model.RecordProposal{
+        &.{ requirement_copied, outcome_bare },
+        &.{ requirement_copied, rule_bare },
+        &.{ requirement_copied, outcome_bare, rule_bare },
+        &.{ requirement_copied, outcome_plain },
+    }) |records| {
+        var proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = records } } };
+        for (records[1..]) |_| {
+            const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
+            try std.testing.expectEqual(candidate_rule.repeated_statement, rejection.issue.rule);
+            try std.testing.expect(rejection.issue.text_issue == null);
+            const authorization = try repair.authorize(a, current, fixture.context, proposed, rejection, &packet_guidance.marked);
+            proposed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs), current, fixture.context, proposed, authorization, null, null);
+        }
+        try std.testing.expectEqualDeep(&[_]spec.Model.RecordProposal{requirement_copied}, proposed.response.content.records);
+        _ = (try validate_unit.execute(a, current, fixture.context, proposed)).valid;
+    }
+
+    // Rejected: the statement is the only holder of the exact value, so deleting it would
+    // lose the value; it keeps its text defect, which no unit repair can fix.
+    const only_holder: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ requirement_plain, outcome_bare } } } };
+    const kept = (try validate_unit.execute(a, current, fixture.context, only_holder)).invalid;
+    try std.testing.expectEqual(candidate_rule.typed_text, kept.issue.rule);
+    try std.testing.expectEqual(.reference_only, kept.issue.text_issue.?.reason);
+    try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, fixture.context, only_holder, kept, &packet_guidance.marked));
+    const only_plain: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ requirement_plain, outcome_plain } } } };
+    const kept_plain = (try validate_unit.execute(a, current, fixture.context, only_plain)).invalid;
+    try std.testing.expectEqual(candidate_rule.typed_text, kept_plain.issue.rule);
+    try std.testing.expectEqual(.reference_only, kept_plain.issue.text_issue.?.reason);
+
+    // Rejected: a requirement is never deleted, whatever else holds the value.
+    const requirement_first: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ requirement_bare, requirement_copied } } } };
+    const requirement = (try validate_unit.execute(a, current, fixture.context, requirement_first)).invalid;
+    try std.testing.expectEqual(candidate_rule.typed_text, requirement.issue.rule);
+    try std.testing.expectEqual(.reference_only, requirement.issue.text_issue.?.reason);
+
+    // Rejected: with nothing taking its claims, a lone defective statement keeps its defect.
+    const lone: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{outcome_bare} } } };
+    const untaken = (try validate_unit.execute(a, current, fixture.context, lone)).invalid;
+    try std.testing.expectEqual(candidate_rule.typed_text, untaken.issue.rule);
+
+    // Accepted: another record's exact value can't be identified (here a copy of a claim that
+    // holds none). That record is kept and holds nothing for the others, but it doesn't stop the delete.
+    const unrecognizable = record(.{ .business_rule = .{ .text = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 9999 } } }} } } }, claim);
+    const mixed: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{ requirement_copied, outcome_bare, unrecognizable } } } };
+    const deleted = (try validate_unit.execute(a, current, fixture.context, mixed)).invalid;
+    try std.testing.expectEqual(candidate_rule.repeated_statement, deleted.issue.rule);
+    try std.testing.expectEqual(@as(usize, 1), deleted.issue.field.target.record);
+}
+
+/// The records of `records` that the records validator deletes natively as repeated statements,
+/// in the original numbering, applying its deletes one at a time as the repair route does.
+fn deletedByValidator(a: std.mem.Allocator, current: @import("domain/specification_session.zig").Session, context: provenance.Context, records: []const spec.Model.RecordProposal) ![]const usize {
+    const repair = @import("domain/specification_repair.zig");
+    var live: std.ArrayList(usize) = .empty;
+    for (0..records.len) |index| try live.append(a, index);
+    var deleted: std.ArrayList(usize) = .empty;
+    while (true) {
+        const batch = try a.alloc(spec.Model.RecordProposal, live.items.len);
+        for (live.items, batch) |original, *slot| slot.* = records[original];
+        const proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = batch } } };
+        const result = try validate_unit.execute(a, current, context, proposed);
+        if (result != .invalid or result.invalid.issue.rule != .repeated_statement) break;
+        const at = result.invalid.issue.field.target.record;
+        try deleted.append(a, live.items[at]);
+        _ = live.orderedRemove(at);
+    }
+    std.mem.sort(usize, deleted.items, {}, std.sort.asc(usize));
+    return deleted.items;
+}
+
+/// The records whose text defects response admission reports for `records`, as the wire
+/// carries them, with and without ADR 0038 Decision 5's exemption.
+fn admissionReports(a: std.mem.Allocator, context: provenance.Context, records: []const spec.Model.RecordProposal, exempting: bool) ![]const usize {
+    const composition = @import("domain/model_text_composition.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const wire = try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, context, .{ .content = .{ .records = records } }));
+    const document = try @import("domain/strict_json.zig").parse(a, wire, .{ .maximum_depth = @import("domain/model_result_schema.zig").max_json_depth }, false, null);
+    const scope: @import("domain/model_exact_values.zig").Scope = .{
+        .reference_state = (try provenance.items(context)).state_id,
+        .occurrences = try provenance.exactOccurrences(a, @import("domain/reference_support.zig").records(context.references), null),
+    };
+    const statements: composition.Statements = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } }, .rule = @import("domain/specification_session.zig").scenario_coverage };
+    const diagnostic = (try composition.check(a, document.value, try json.fieldBindings(g.ModelResponse, a, .{}), &.{}, &.{}, .{ .exact_scope = scope, .statements = if (exempting) statements else null })) orelse return &.{};
+    var reported: std.ArrayList(usize) = .empty;
+    for (diagnostic.fields) |field| {
+        const prefix = "/records/";
+        try std.testing.expect(std.mem.startsWith(u8, field.path, prefix));
+        const end = std.mem.indexOfScalarPos(u8, field.path, prefix.len, '/') orelse return error.TestUnexpectedResult;
+        const index = try std.fmt.parseInt(usize, field.path[prefix.len..end], 10);
+        if (std.mem.indexOfScalar(usize, reported.items, index) == null) try reported.append(a, index);
+    }
+    std.mem.sort(usize, reported.items, {}, std.sort.asc(usize));
+    return reported.items;
+}
+
+test "response admission exempts only statements the records validator deletes" {
+    // ADR 0038 Decision 5: admission reads the wire and unit validation reads typed records, so
+    // the two must reach the same delete. Over each batch, the records admission stops reporting
+    // are a subset of those the validator deletes, and a record holding an exact value no other
+    // record holds is deleted by neither.
+    const sessions = @import("domain/specification_session.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "After a successful loan renewal the service MUST display `MOCK Loan renewed!`.", .business_exact_string, true, 1);
+    defer fixture.deinit();
+    const items = try provenance.items(fixture.context);
+    const token = items.entries[items.entries.len - 1].claim;
+    const raw = token.content.preserved_token.value.raw_value.bytes;
+    var current = (try sessions.initialize(a, .{ .bytes = "selected" }, fixture.context)).ready;
+    current.completed = sessions.records_index;
+    current.record_cursor = 0;
+    const claim = try fixture.proposal("The service confirms the renewal.");
+    const value = struct {
+        fn of(segments: []const @import("domain/typed_text.zig").BusinessSegment) spec.BusinessValue {
+            return .{ .segments = segments };
+        }
+    }.of;
+    const bare = value(&.{.{ .exact_copy = .{ .claim_id = token.id } }});
+    const copied = value(&.{ .{ .literal = .{ .value = "The service displays " } }, .{ .exact_copy = .{ .claim_id = token.id } } });
+    const unscalar = value(&.{.{ .literal = .{ .value = try std.mem.concat(a, u8, &.{ raw, " \x01" }) } }});
+    const record = struct {
+        fn of(content: spec.Content(spec.BusinessValue), from: spec.Model.AttributedValue) spec.Model.RecordProposal {
+            return .{ .content = content, .source_group_ids = from.source_group_ids, .provenance = from.provenance };
+        }
+    }.of;
+    const requirement_plain = record(.{ .functional_requirement = .{ .text = claim.value } }, claim);
+    const requirement_copied = record(.{ .functional_requirement = .{ .text = copied } }, claim);
+    const outcome_bare = record(.{ .user_visible_outcome = .{ .text = bare } }, claim);
+    const outcome_plain = record(.{ .user_visible_outcome = .{ .text = value(&.{.{ .literal = .{ .value = raw } }}) } }, claim);
+    const outcome_unscalar = record(.{ .user_visible_outcome = .{ .text = unscalar } }, claim);
+    const rule_bare = record(.{ .business_rule = .{ .text = bare } }, claim);
+    // Insertion syntax in prose is a composition defect whose control character the wire ignores.
+    const assumption_unscalar = record(.{ .assumption = .{ .text = value(&.{.{ .literal = .{ .value = "Assume {\"kind\":\"exact_copy\"} \x01" } }}) } }, claim);
+    const rule_copied = record(.{ .business_rule = .{ .text = copied } }, claim);
+    // An assumption forbids exact copies, so its value is plain text and has no defect to exempt.
+    const assumption_plain = record(.{ .assumption = .{ .text = value(&.{.{ .literal = .{ .value = raw } }}) } }, claim);
+    const non_goal_bare = record(.{ .non_goal = .{ .text = bare } }, claim);
+    const prohibition_bare = record(.{ .prohibited_behavior = .{ .text = bare } }, claim);
+    const criterion_unscalar = record(.{ .acceptance_criterion = .{ .given = claim.value, .when = claim.value, .then = unscalar } }, claim);
+    const Row = struct { records: []const spec.Model.RecordProposal, exempt: []const usize, deleted: []const usize };
+    const rows = [_]Row{
+        // A requirement holds the value the statements repeat, whatever their kind or spelling.
+        .{ .records = &.{ requirement_copied, outcome_bare }, .exempt = &.{1}, .deleted = &.{1} },
+        .{ .records = &.{ requirement_copied, outcome_plain }, .exempt = &.{1}, .deleted = &.{1} },
+        .{ .records = &.{ requirement_copied, assumption_plain, non_goal_bare, prohibition_bare }, .exempt = &.{ 2, 3 }, .deleted = &.{ 1, 2, 3 } },
+        // The only holder of the value is kept, as is the last of two.
+        .{ .records = &.{ requirement_plain, outcome_bare }, .exempt = &.{}, .deleted = &.{} },
+        .{ .records = &.{ requirement_plain, outcome_bare, rule_bare }, .exempt = &.{1}, .deleted = &.{1} },
+        // A value in text that is not a valid scalar can't be identified, so its record is kept
+        // and holds nothing for the others.
+        .{ .records = &.{ requirement_plain, outcome_unscalar }, .exempt = &.{}, .deleted = &.{} },
+        .{ .records = &.{ requirement_plain, outcome_bare, criterion_unscalar }, .exempt = &.{}, .deleted = &.{} },
+        // An assumption forbids exact copies, so text that is not a valid scalar hides no exact
+        // value there: its record is judged like any other, by both layers.
+        .{ .records = &.{ requirement_plain, assumption_unscalar }, .exempt = &.{1}, .deleted = &.{1} },
+        // An earlier statement takes its claims for a later one, never the reverse: here the
+        // earlier statement is the defective one and nothing takes it, so it keeps its defect.
+        .{ .records = &.{ outcome_bare, rule_copied }, .exempt = &.{}, .deleted = &.{} },
+        .{ .records = &.{ rule_copied, outcome_bare }, .exempt = &.{1}, .deleted = &.{1} },
+    };
+    for (rows, 0..) |row, row_index| {
+        errdefer std.debug.print("statement parity row {d} failed\n", .{row_index});
+        const exempt = try admissionReports(a, fixture.context, row.records, false);
+        const kept = try admissionReports(a, fixture.context, row.records, true);
+        var exempted: std.ArrayList(usize) = .empty;
+        for (exempt) |index| if (std.mem.indexOfScalar(usize, kept, index) == null) try exempted.append(a, index);
+        const deleted = try deletedByValidator(a, current, fixture.context, row.records);
+        try std.testing.expectEqualSlices(usize, row.exempt, exempted.items);
+        try std.testing.expectEqualSlices(usize, row.deleted, deleted);
+        for (exempted.items) |index| try std.testing.expect(std.mem.indexOfScalar(usize, deleted, index) != null);
+    }
+}
+
+test "a record's part in the repeated-statement rule is the part the request's coverage gives its kind" {
+    // The wire reads a kind's part from the recorded coverage kinds, the validator and the
+    // session from the kind itself. Both must agree for every kind.
+    const rule = @import("domain/specification_session.zig").scenario_coverage;
+    const ownership = @import("domain/statement_ownership.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const listed = struct {
+        fn in(kinds: []const []const u8, name: []const u8) bool {
+            for (kinds) |kind| if (std.mem.eql(u8, kind, name)) return true;
+            return false;
+        }
+    }.in;
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        const content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, .{ .segments = &.{} }));
+        const expected: ownership.Role = if (listed(rule.owning, @tagName(kind))) .owning else if (listed(rule.exclusive, @tagName(kind))) .exclusive else .other;
+        try std.testing.expectEqual(expected, (try g.statementRecord(a, content, &.{})).role);
     }
 }
 
@@ -5720,7 +5966,7 @@ test "support reviews retain original sources and discarded or misclassified tok
             try std.testing.expect(body.value.object.get("candidate") == null);
             const row = body.value.object.get("requirements").?.array.items[0].object;
             try std.testing.expect(row.get("contract_version") == null and row.get("requirement") == null);
-            try std.testing.expect(row.get("slot") == null and row.get("unit") == null and row.get("member") == null);
+            try std.testing.expect(row.get("slot") == null and row.get("unit") == null);
             try std.testing.expect(row.get("task") != null and row.get("evidence").?.object.get("eligible_claim_ids") != null);
             try std.testing.expectEqualStrings(source, body.value.object.get("sources").?.array.items[0].object.get("text").?.string);
             const classification = body.value.object.get("extraction").?.array.items[0].object.get("token_classifications").?.array.items[0];
@@ -6221,7 +6467,7 @@ test "incomplete specifications publish supported business evidence and bound qu
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Status: Incomplete") != null);
         // Exact business text is escaped by the canonical Markdown owner.
         var escaped: std.Io.Writer.Allocating = .init(a);
-        try @import("domain/specification_markdown.zig").literal(&escaped.writer, source);
+        try @import("domain/specification_markdown.zig").literal(&escaped.writer, source, .block_start);
         try std.testing.expect(std.mem.indexOf(u8, rendered, escaped.written()) != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "[S01](clarify/S01.md)") != null);
         // The pending projection shares reference classification, not keyword rules.
@@ -6238,6 +6484,12 @@ test "incomplete specifications publish supported business evidence and bound qu
         const without_technical = try codec.render(a, technical, validated);
         try std.testing.expect(std.mem.indexOf(u8, without_technical, escaped.written()) == null);
         try std.testing.expect(std.mem.indexOf(u8, try @import("domain/reference_context.zig").render(a, technical.reference, null), escaped.written()) != null);
+        // A claim's text opens its list item's line, so a byte that opens a block there is escaped.
+        var leading = value;
+        const leading_claims = try a.dupe(@import("domain/reference_extraction.zig").Claim, value.reference.extraction.claims);
+        leading_claims[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "- item" } }} } } } };
+        leading.reference.extraction.claims = leading_claims;
+        try std.testing.expect(std.mem.indexOf(u8, try codec.render(a, leading, validated), "\n- \\- item\n") != null);
 
         try std.testing.expectError(error.InvalidSpecification, @import("domain/specification_markdown.zig").parse(a, rendered));
         const bytes = try json.encode(draft.State, a, value);
@@ -6931,9 +7183,9 @@ test "admitted prose loses the code delimiters around a recognised exact value" 
         try std.testing.expectEqualStrings(" and stop.", recognized.segments[2].literal.value);
         try std.testing.expectEqualDeep(recognized, try provenance.recognizeValue(a, records, recognized, .functional_requirement, null));
         // A field that can't hold exact copies keeps the value as text.
-        const meaning = try provenance.recognizeValue(a, records, wrapped, .entity_meaning, null);
-        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "It must display {s} and stop.", .{bytes}), meaning.segments[0].literal.value);
-        try std.testing.expectEqualDeep(meaning, try provenance.recognizeValue(a, records, meaning, .entity_meaning, null));
+        const kept = try provenance.recognizeValue(a, records, wrapped, .assumption, null);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "It must display {s} and stop.", .{bytes}), kept.segments[0].literal.value);
+        try std.testing.expectEqualDeep(kept, try provenance.recognizeValue(a, records, kept, .assumption, null));
         // A code-wrapped value alone becomes the exact copy alone.
         const alone: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = try std.fmt.allocPrint(a, "`{s}`", .{bytes}) } }} };
         try std.testing.expectEqualDeep(&[_]@import("domain/typed_text.zig").BusinessSegment{.{ .exact_copy = .{ .claim_id = token.id } }}, (try provenance.recognizeValue(a, records, alone, .functional_requirement, null)).segments);
@@ -7036,15 +7288,20 @@ test "exact claim handles derive field and shared-record lineage without rewriti
         try std.testing.expectEqualDeep(&[_]r.ClaimId{explicit}, shared.provenance.claim_ids);
         try std.testing.expectEqual(@as(usize, 2), shared.provenance.citation_ids.len);
         const plain = try provenance.checkAttributed(.model, a, text.validator, fixture.context, try fixture.proposal("A user sees the result."), .spec_story);
+        const requirement = try provenance.checkRecord(.model, a, text.validator, fixture.context, .{
+            .content = .{ .functional_requirement = .{ .text = value } },
+            .source_group_ids = proposed.source_group_ids,
+            .provenance = proposed.provenance,
+        });
         const entity = try provenance.checkRecord(.model, a, text.validator, fixture.context, .{
-            .content = .{ .entity = .{ .name = value, .business_meaning = plain.value, .relationships = &.{plain.value} } },
+            .content = .{ .entity = .{ .name = value } },
             .source_group_ids = proposed.source_group_ids,
             .provenance = proposed.provenance,
         });
         const content = (try identifiers.assign(a, .{
             .display_name = plain,
             .primary_user_story = plain,
-            .records = &.{ shared, entity },
+            .records = &.{ shared, requirement, entity },
             .entities = .{ .disposition = .required, .basis = plain },
         }, .{})).content;
         const document = try projection.project(a, fixture.context, test_directory, content);
@@ -7054,13 +7311,16 @@ test "exact claim handles derive field and shared-record lineage without rewriti
                 try std.testing.expectEqualStrings("The application starts.", criterion.given.bytes);
                 try std.testing.expectEqualStrings(exact_bytes, criterion.when.bytes);
             },
+            .functional_requirement => {},
             .entity => |model| {
                 try std.testing.expectEqualStrings(exact_bytes, model.name.bytes);
-                try std.testing.expectEqualStrings("A user sees the result.", model.relationships[0].bytes);
+                // The requirement of its group is related; the criterion, a scenario, is not.
+                try std.testing.expectEqualDeep(&[_]spec.Id{.{ .kind = .functional_requirement, .ordinal = 1 }}, projected.related);
             },
             else => return error.UnexpectedRecordKind,
         };
         const markdown = try @import("domain/specification_markdown.zig").render(a, document);
+        try std.testing.expect(std.mem.indexOf(u8, markdown, "- **RELATED STATEMENTS** FR-001\n") != null);
         try std.testing.expectEqualDeep(document, try @import("domain/specification_markdown.zig").parse(a, markdown));
     }
 }
@@ -8191,9 +8451,9 @@ test "feature entity insertion pins native occurrence scope independently of aut
     try std.testing.expectEqual(.entity_membership, rejected.issue.rule);
     const auth = try repair.authorize(a, current, fixture.context, candidate, rejected, &packet_guidance.marked);
     try std.testing.expectEqualDeep(plain.provenance, auth.rule.group.?.membership.fixed_provenance);
-    // Insertion keeps its native requirement; only a record correction carries a tail.
+    // Insertion and record correction each keep their own native requirement.
     try std.testing.expectEqualStrings("Insert one source-backed entity required by the fixed applicability decision. Preserve all existing records.", auth.rule.requirement);
-    const record: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "ACTIVE" } }} }, .business_meaning = plain.value, .relationships = &.{} } }, .source_group_ids = plain.source_group_ids, .provenance = plain.provenance };
+    const record: spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "ACTIVE" } }} } } }, .source_group_ids = plain.source_group_ids, .provenance = plain.provenance };
     const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
     const inserted = try repair.merge(a, canonical, current, fixture.context, candidate, auth, .{ .record = record }, null);
     _ = (try validate_unit.execute(a, current, fixture.context, inserted)).valid;
@@ -8201,12 +8461,12 @@ test "feature entity insertion pins native occurrence scope independently of aut
     try std.testing.expectEqual(plain.provenance.claim_ids.len + 1, bound.effective.len);
     var broken = inserted;
     const records = try a.dupe(spec.Model.RecordProposal, inserted.response.content.entities.records);
-    records[0].content.entity.business_meaning = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
+    records[0].content.entity.name = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
     broken.response.content.entities.records = records;
     const next_rejection = (try validate_unit.execute(a, current, fixture.context, broken)).invalid;
     const correction = try repair.authorize(a, current, fixture.context, broken, next_rejection, &packet_guidance.marked);
-    // A record correction places the workflow's meaning tail in its native frame.
-    try std.testing.expectEqualStrings("Return the complete corrected entity record, MOCK repair_tails.entity_record_meaning and all siblings.", correction.rule.requirement);
+    // A record correction keeps its native requirement.
+    try std.testing.expectEqualStrings("Return the complete corrected entity record and all siblings.", correction.rule.requirement);
     const packet = try repair.packet(a, current, fixture.context, correction, &packet_guidance.marked);
     defer @import("domain/model_input_packet.zig").release(packet);
     try std.testing.expectEqual(@as(usize, 1), packet.exactScope().?.occurrences.len);

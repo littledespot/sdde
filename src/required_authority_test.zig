@@ -90,7 +90,7 @@ test "complete one-to-one observations reject missing duplicate foreign and omit
         for (0..5) |scenario| {
             var bad = good;
             switch (scenario) {
-                0 => bad.requirement.member = 999,
+                0 => bad.requirement.contract_version = a.version + 1,
                 1 => bad.inspected_authorities = &.{},
                 2 => bad.evidence_ids = &.{},
                 3 => bad.evidence_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 1 } },
@@ -258,11 +258,11 @@ test "record purposes place workflow guidance in native record frames" {
         var expected_record: std.ArrayList(u8) = .empty;
         try expected_record.print(allocator, "{s}: {s}", .{ @tagName(kind), family });
         inline for (std.meta.fields(@FieldType(spec.Content(spec.BusinessValue), @tagName(kind)))) |field| {
-            const slot: a.Slot = @field(a.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
+            const slot: a.Slot = @field(a.Slot, field.name);
             const purpose = try descriptions.recordField(g, kind, slot);
             try std.testing.expectEqualStrings(if (slot == .text) family else g.record_fields.get(keys.recordField(slot).?), purpose);
             if (slot != .text) try expected_record.print(allocator, " {s}: {s}", .{ field.name, purpose });
-            const selected: a.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = kind, .ordinal = 3 } }, .slot = slot, .member = if (slot == .relationship) 2 else 0 };
+            const selected: a.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = kind, .ordinal = 3 } }, .slot = slot };
             const task = try descriptions.task(allocator, g, selected);
             try std.testing.expectEqualStrings(if (slot == .text)
                 try std.fmt.allocPrint(allocator, "{s}.text: {s}", .{ @tagName(kind), family })

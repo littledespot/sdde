@@ -4,8 +4,10 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v3";
+pub const version = "specification/v4";
 pub const Error = error{InvalidSpecification};
+/// A record kind's part in ADR 0038's cross-record rules.
+pub const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
 pub const Kind = enum {
     acceptance_criterion,
     user_visible_outcome,
@@ -16,6 +18,16 @@ pub const Kind = enum {
     non_goal,
     prohibited_behavior,
     entity,
+
+    pub fn role(self: Kind) RecordRole {
+        return switch (self) {
+            .functional_requirement => .requirement,
+            .business_rule, .user_visible_outcome, .prohibited_behavior => .behaviour,
+            .assumption, .non_goal => .scope,
+            .acceptance_criterion, .edge_case => .scenario,
+            .entity => .entity,
+        };
+    }
 
     pub fn prefix(self: Kind) []const u8 {
         return switch (self) {
@@ -50,6 +62,15 @@ pub const Kind = enum {
         return switch (self) {
             .acceptance_criterion, .functional_requirement, .entity => true,
             .user_visible_outcome, .edge_case, .business_rule, .assumption, .non_goal, .prohibited_behavior => false,
+        };
+    }
+
+    /// The families an entity's related-statements line may list: the requirement and
+    /// behaviour statements (§23).
+    pub fn isStatement(self: Kind) bool {
+        return switch (self.role()) {
+            .requirement, .behaviour => true,
+            .scope, .scenario, .entity => false,
         };
     }
 };
@@ -189,10 +210,8 @@ pub fn Content(comptime Value: type) type {
             text: Value,
         },
         entity: struct {
-            pub const model_fields = .{ .name = text.field_policy.Field.entity_name, .business_meaning = text.field_policy.Field.entity_meaning, .relationships = text.field_policy.Field.entity_relationship };
+            pub const model_fields = .{ .name = text.field_policy.Field.entity_name };
             name: Value,
-            business_meaning: Value,
-            relationships: []const Value,
         },
     };
 }
@@ -251,7 +270,9 @@ pub const LineRange = struct { first: u32, last: u32 };
 /// One source file's merged cited lines, in ascending order: an engine-owned display
 /// of the record's lineage, never provenance authority.
 pub const SourceLines = struct { path: []const u8, ranges: []const LineRange };
-pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{} };
+/// `related` is an entity's engine-derived display of the statements that share one of its
+/// source groups, in document order: never provenance authority.
+pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{}, related: []const Id = &.{} };
 pub const CapturedDocument = struct {
     display_name: Scalar,
     primary_user_story: Scalar,
@@ -279,14 +300,7 @@ pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!voi
         } else if (require_ids) return error.InvalidSpecification;
         try sources(kind, record.sources);
         switch (record.content) {
-            inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| {
-                const value = @field(content, field.name);
-                if (comptime field.type == Scalar) {
-                    try scalar(value);
-                } else {
-                    for (value) |relationship| try scalar(relationship);
-                }
-            },
+            inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| try scalar(@field(content, field.name)),
         }
     }
 }

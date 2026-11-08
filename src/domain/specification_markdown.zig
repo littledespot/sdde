@@ -16,10 +16,13 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
     const w = &out.writer;
-    try field(w, title_prefix, document.display_name);
+    try write(w, title_prefix);
+    try scalar(w, document.display_name, .inline_text, .heading);
+    try write(w, "\n\n");
     try line(w, scenarios);
     try line(w, story);
-    try field(w, "", document.primary_user_story);
+    try scalar(w, document.primary_user_story, .block_start, .text);
+    try write(w, "\n\n");
     inline for (comptime std.meta.tags(spec.Kind)) |kind| {
         if (kind == .functional_requirement) try line(w, requirements);
         if (kind == .assumption and hasScope(document)) try line(w, scope);
@@ -32,13 +35,13 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try write(w, "- **");
                     try identity(w, record.id.?);
                     try write(w, "**: **Given** ");
-                    try scalar(w, content.given);
+                    try scalar(w, content.given, .inline_text, .text);
                     try write(w, clauseSeparator(content.given));
                     try write(w, "**When** ");
-                    try scalar(w, content.when);
+                    try scalar(w, content.when, .inline_text, .text);
                     try write(w, clauseSeparator(content.when));
                     try write(w, "**Then** ");
-                    try scalar(w, content.then);
+                    try scalar(w, content.then, .inline_text, .text);
                     try write(w, "\n\n");
                     try sourceLine(w, nested_source, record.sources);
                 } else if (comptime @hasField(@TypeOf(content), "text")) {
@@ -51,13 +54,14 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try write(w, "**");
                     try identity(w, record.id.?);
                     try write(w, "**\n");
-                    inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |f| {
-                        const value = @field(content, f.name);
-                        if (comptime f.type == spec.Scalar) {
-                            try inlineField(w, label(f.name), value);
-                        } else {
-                            for (value) |relationship| try inlineField(w, label(f.name), relationship);
+                    inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |f| try inlineField(w, label(f.name), @field(content, f.name));
+                    if (record.related.len != 0) {
+                        try write(w, related_label);
+                        for (record.related, 0..) |id, at| {
+                            if (at != 0) try write(w, ", ");
+                            try identity(w, id);
                         }
+                        try write(w, "\n");
                     }
                     if (record.sources.len != 0) {
                         try write(w, field_source);
@@ -103,6 +107,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 if (std.mem.startsWith(u8, next, "#")) break;
                 const header = try cursor.take();
                 var body: Body = undefined;
+                var related: []const spec.Id = &.{};
                 const id: ?spec.Id = if (comptime kind == .acceptance_criterion or @hasField(Body, "text")) blk: {
                     if (!std.mem.startsWith(u8, header, "- **")) return error.InvalidSpecification;
                     const end = std.mem.indexOf(u8, header[4..], "**: ") orelse return error.InvalidSpecification;
@@ -114,25 +119,15 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 } else blk: {
                     if (!std.mem.startsWith(u8, header, "**") or !std.mem.endsWith(u8, header, "**") or header.len <= 4) return error.InvalidSpecification;
                     const key = try readId(header[2 .. header.len - 2], kind);
-                    inline for (@typeInfo(Body).@"struct".fields) |f| {
-                        if (comptime f.type == spec.Scalar) {
-                            @field(body, f.name) = try readField(allocator, &cursor, label(f.name));
-                        } else {
-                            var relationships: std.ArrayList(spec.Scalar) = .empty;
-                            while (cursor.peek()) |peek| {
-                                if (!std.mem.startsWith(u8, peek, label(f.name))) break;
-                                try relationships.append(allocator, try readField(allocator, &cursor, label(f.name)));
-                            }
-                            @field(body, f.name) = try relationships.toOwnedSlice(allocator);
-                        }
-                    }
+                    inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = try readField(allocator, &cursor, label(f.name));
+                    if (comptime kind == .entity) related = try readRelated(allocator, &cursor);
                     break :blk key;
                 };
                 const sources: []const spec.SourceLines = if (comptime kind.showsSources())
                     try readSources(allocator, &cursor, if (comptime kind == .entity) field_source else nested_source)
                 else
                     &.{};
-                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources });
+                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related });
             }
             if (!mandatory(kind) and kind != .entity and records.items.len == start) return error.InvalidSpecification;
             if (isScope(kind)) scope_records += records.items.len - start;
@@ -245,6 +240,24 @@ fn singleLine(file: spec.SourceLines) bool {
     return file.ranges.len == 1 and file.ranges[0].first == file.ranges[0].last;
 }
 
+/// An entity's related-statements line, between its fields and its source line. It lists
+/// statement IDs only: like the source line it is a display that never becomes provenance,
+/// so the document check owns its shape and publication's byte comparison with the
+/// projection owns its derivation.
+const related_label = "- **RELATED STATEMENTS** ";
+
+fn readRelated(allocator: std.mem.Allocator, cursor: *Cursor) Error![]const spec.Id {
+    const next = cursor.peek() orelse return &.{};
+    if (!std.mem.startsWith(u8, next, related_label)) return &.{};
+    var ids: std.ArrayList(spec.Id) = .empty;
+    var parts = std.mem.splitSequence(u8, (try cursor.take())[related_label.len..], ", ");
+    while (parts.next()) |part| {
+        const id = spec.Id.parse(part) orelse return error.InvalidSpecification;
+        try ids.append(allocator, id);
+    }
+    return ids.toOwnedSlice(allocator);
+}
+
 /// An absent line means no shown sources. A present line must have the renderer's
 /// structure; like every field, an escaped or longer-fenced spelling of it parses but
 /// re-renders differently, so publication's byte checks reject it. It is a display
@@ -297,8 +310,6 @@ fn label(comptime name: []const u8) []const u8 {
     if (comptime std.mem.eql(u8, name, "condition")) return "- **CONDITION** ";
     if (comptime std.mem.eql(u8, name, "expected_outcome")) return "- **EXPECTED OUTCOME** ";
     if (comptime std.mem.eql(u8, name, "name")) return "- **NAME** ";
-    if (comptime std.mem.eql(u8, name, "business_meaning")) return "- **BUSINESS MEANING** ";
-    if (comptime std.mem.eql(u8, name, "relationships")) return "- **RELATIONSHIP** ";
     @compileError("Unregistered specification field label");
 }
 
@@ -318,27 +329,91 @@ fn field(w: *std.Io.Writer, prefix: []const u8, value: spec.Scalar) Error!void {
 }
 fn inlineField(w: *std.Io.Writer, prefix: []const u8, value: spec.Scalar) Error!void {
     try write(w, prefix);
-    try scalar(w, value);
+    try scalar(w, value, .inline_text, .text);
     try write(w, "\n");
 }
-fn scalar(w: *std.Io.Writer, value: spec.Scalar) Error!void {
+/// One value: its literal runs escaped, its exact spans as inline code. What ends the value
+/// stays escaped when it would read as more than text: a comma, so an acceptance-criterion
+/// clause never reads as joined by ", ", and, on a heading line, a closing run of `#`.
+fn scalar(w: *std.Io.Writer, value: spec.Scalar, position: Position, context: Context) Error!void {
     var offset: usize = 0;
     for (value.code_spans) |span| {
-        try literal(w, value.bytes[offset..span.start]);
+        try escape(w, value.bytes[offset..span.start], if (offset == 0) position else .inline_text, null);
         try code(w, value.bytes[span.start..span.end]);
         offset = span.end;
     }
-    try literal(w, value.bytes[offset..]);
+    try escape(w, value.bytes[offset..], if (offset == 0) position else .inline_text, .{ .context = context, .begins_value = offset == 0 });
 }
-pub fn literal(w: *std.Io.Writer, bytes: []const u8) Error!void {
-    for (bytes) |byte| switch (byte) {
+
+/// Where a text sits on its line. Text that opens a block line, such as the primary story or
+/// a list item's content, could read as a heading or a list marker; text after other text
+/// could not.
+pub const Position = enum { inline_text, block_start };
+
+/// What a value is the text of. A heading line ends at a closing run of `#`.
+const Context = enum { text, heading };
+
+/// How a run ends its value. A value begins after its field's prefix, which ends in a space.
+const End = struct { context: Context, begins_value: bool };
+
+/// The one place text is escaped (§23.1). A backslash precedes each byte Markdown reads as
+/// inline markup, and, as the first text of a block line only, a byte that opens a heading,
+/// a list item or an ordered list item. Line breaks and tabs are written as entities. Every
+/// other byte, ordinary punctuation included, is written as it is.
+pub fn literal(w: *std.Io.Writer, bytes: []const u8, position: Position) Error!void {
+    return escape(w, bytes, position, null);
+}
+
+/// `end` is set for the run that ends its value.
+fn escape(w: *std.Io.Writer, bytes: []const u8, position: Position, end: ?End) Error!void {
+    const first = if (position == .block_start) std.mem.indexOfNone(u8, bytes, " ") orelse bytes.len else bytes.len;
+    const hashes = if (end) |ending| (if (ending.context == .heading) closingHashes(bytes, ending.begins_value) else null) else null;
+    for (bytes, 0..) |byte, index| switch (byte) {
         '\n' => try write(w, "&#10;"),
         '\r' => try write(w, "&#13;"),
         '\t' => try write(w, "&#9;"),
         else => {
-            if (std.ascii.isPunctuation(byte)) try write(w, "\\");
+            const closing = if (hashes) |run| index >= run.start and index < run.end else false;
+            const final_comma = end != null and byte == ',' and index + 1 == bytes.len;
+            if (markup(byte) or opensBlock(bytes, first, index) or closing or final_comma) try write(w, "\\");
             w.writeByte(byte) catch return error.OutOfMemory;
         },
+    };
+}
+
+const Hashes = struct { start: usize, end: usize };
+
+/// The closing run of `#` of a heading's text. Markdown ends the heading before a run of `#`
+/// that follows a space, or begins the text when `begins_value`, and is followed by spaces only.
+fn closingHashes(bytes: []const u8, begins_value: bool) ?Hashes {
+    var end = bytes.len;
+    while (end > 0 and bytes[end - 1] == ' ') end -= 1;
+    var start = end;
+    while (start > 0 and bytes[start - 1] == '#') start -= 1;
+    if (start == end) return null;
+    if (if (start == 0) !begins_value else bytes[start - 1] != ' ') return null;
+    return .{ .start = start, .end = end };
+}
+
+/// Bytes Markdown reads as inline markup wherever they stand: escapes, code, emphasis,
+/// strikethrough, links, raw HTML and entities. `&` also keeps the entities this codec
+/// writes for line breaks unambiguous.
+fn markup(byte: u8) bool {
+    return switch (byte) {
+        '\\', '`', '*', '_', '~', '[', ']', '<', '>', '&' => true,
+        else => false,
+    };
+}
+
+/// Whether the byte at `index` opens a block when `first` is where the line's text begins:
+/// `#` (heading), `-` and `+` (list items), or the `.` or `)` that follows a leading digit
+/// run (ordered list item).
+fn opensBlock(bytes: []const u8, first: usize, index: usize) bool {
+    if (first >= bytes.len) return false;
+    return switch (bytes[index]) {
+        '#', '-', '+' => index == first,
+        '.', ')' => index > first and std.mem.indexOfNone(u8, bytes[first..index], "0123456789") == null,
+        else => false,
     };
 }
 fn codeFenceLength(bytes: []const u8) usize {
@@ -444,6 +519,9 @@ fn unescape(allocator: std.mem.Allocator, input: []const u8) Error!spec.Scalar {
     var index: usize = 0;
     while (index < input.len) {
         if (input[index] == '\\') {
+            // Any ASCII punctuation may follow, not only the bytes the renderer escapes. Text that
+            // escapes a byte the renderer does not reads back to the same value and re-renders
+            // differently, which publication's byte comparison rejects.
             index += 1;
             if (index == input.len or !std.ascii.isPunctuation(input[index])) return error.InvalidSpecification;
         } else if (input[index] == '&') {

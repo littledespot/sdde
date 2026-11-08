@@ -201,7 +201,7 @@ pub const Adapter = struct {
             result.reason = "Captured schema and native field policies disagree";
             return result;
         }
-        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources, .{ .exact_scope = description.exact_scope })) |diagnostic| {
+        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources, .{ .exact_scope = description.exact_scope, .statements = @import("../../domain/model_text_composition.zig").statementsOf(schema) })) |diagnostic| {
             defer diagnostic.deinit(a);
             result.json = .invalid;
             result.reason = "ModelTextComposition";

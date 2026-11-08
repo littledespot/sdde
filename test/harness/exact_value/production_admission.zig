@@ -187,7 +187,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
         // response remains byte-for-byte old output and is independently
         // rejected if it still tries to author an entity in a record batch.
         const entities = if (input.requires_entity) try a.dupe(g.spec.Model.RecordProposal, &.{.{
-            .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Application" } }} }, .business_meaning = basis.value, .relationships = &.{} } },
+            .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Application" } }} } } },
             .source_group_ids = basis.source_group_ids,
             .provenance = basis.provenance,
         }}) else &.{};

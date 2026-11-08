@@ -333,10 +333,7 @@ pub const Tracker = struct {
     fn auditRecords(self: *Tracker, sequence: usize, after_call: usize, checked: generation.Checked, record_offset: usize, proposals: []const specification.RecordProposal) !void {
         for (proposals, 0..) |record, index| switch (record.content) {
             inline else => |fields, kind| inline for (std.meta.fields(@TypeOf(fields))) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == specification.BusinessValue) {
-                    try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), value);
-                } else for (value, 0..) |relationship, relationship_index| try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = .{ .relationship = relationship_index } } } }, specification.textField(kind, field.name), relationship);
+                try self.business(sequence, after_call, checked, record_offset, .{ .target = .{ .value = .{ .subject = .{ .record = index }, .field = @unionInit(candidate.ValueField, field.name, {}) } } }, specification.textField(kind, field.name), @field(fields, field.name));
             },
         };
     }
@@ -665,7 +662,7 @@ test "wire escape checking uses original source bytes and declared identity exce
     try std.testing.expect((try check(a, &original, .functional_requirement, value)) == null);
     const insertion = [_]text.BusinessSegment{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 2 } } }};
     try std.testing.expect((try check(a, &.{}, .entity_name, .{ .business = .{ .segments = &insertion } })) == null);
-    for ([_]policy.Field{ .spec_story, .functional_requirement, .ac_then, .entity_meaning }) |field| {
+    for ([_]policy.Field{ .spec_story, .functional_requirement, .ac_then, .assumption }) |field| {
         const failure = (try check(a, &.{}, field, .{ .business = .{ .segments = &insertion } })).?;
         const expected: @FieldType(Violation, "reason") = if (policy.get(field).exact_copy == .prohibited) .prohibited_exact else .reference_only;
         try std.testing.expectEqual(expected, failure.reason);

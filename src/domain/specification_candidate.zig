@@ -5,7 +5,7 @@ const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
 pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
-pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name, business_meaning, relationship: usize };
+pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name };
 pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
     return switch (subject) {
         .title => .spec_title,
@@ -23,7 +23,7 @@ pub fn recordTextField(content: g.spec.Content(g.spec.BusinessValue), selected: 
 pub fn recordKindTextField(kind: g.spec.Kind, selected: ValueField) Error!@import("text_field_policy.zig").Field {
     switch (kind) {
         inline else => |tag| inline for (std.meta.fields(@FieldType(g.spec.Content(g.spec.BusinessValue), @tagName(tag)))) |field| {
-            if (std.mem.eql(u8, field.name, if (selected == .relationship) "relationships" else @tagName(selected))) return g.spec.textField(tag, field.name);
+            if (std.mem.eql(u8, field.name, @tagName(selected))) return g.spec.textField(tag, field.name);
         },
     }
     return error.InvalidSpecificationRepair;
@@ -207,16 +207,10 @@ fn valueField(content: *g.spec.Content(g.spec.BusinessValue), field: ValueField)
 fn valueAccess(content: *g.spec.Content(g.spec.BusinessValue), selected: ValueField, replacement: ?g.spec.BusinessValue) Error!g.spec.BusinessValue {
     switch (content.*) {
         inline else => |*fields| inline for (@typeInfo(@TypeOf(fields.*)).@"struct".fields) |field| {
-            if (comptime field.type == g.spec.BusinessValue) {
-                if (std.meta.activeTag(selected) == @field(std.meta.Tag(ValueField), field.name)) {
-                    const old = @field(fields, field.name);
-                    if (replacement) |value| @field(fields, field.name) = value;
-                    return old;
-                }
-            } else if (selected == .relationship and selected.relationship < @field(fields, field.name).len) {
-                // Mutation of array members is handled by replace after copying.
-                if (replacement != null) return error.InvalidSpecificationRepair;
-                return @field(fields, field.name)[selected.relationship];
+            if (std.meta.activeTag(selected) == @field(std.meta.Tag(ValueField), field.name)) {
+                const old = @field(fields, field.name);
+                if (replacement) |value| @field(fields, field.name) = value;
+                return old;
             }
         },
     }
@@ -266,13 +260,7 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
             .record => records[index] = replacement.record,
             .attributed => return error.InvalidSpecificationRepair,
             .provenance => return error.InvalidSpecificationRepair,
-            .value => |field| {
-                if (field.field == .relationship) {
-                    const relationships = try a.dupe(g.spec.BusinessValue, records[index].content.entity.relationships);
-                    relationships[field.field.relationship] = replacement.value;
-                    records[index].content.entity.relationships = relationships;
-                } else _ = try valueAccess(&records[index].content, field.field, replacement.value);
-            },
+            .value => |field| _ = try valueAccess(&records[index].content, field.field, replacement.value),
         }
     } else switch (selected) {
         .provenance => return error.InvalidSpecificationRepair,

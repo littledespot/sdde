@@ -35,7 +35,7 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, traces: ?[
             w.print("- **SIG-{d}** ", .{signal.id.ordinal}) catch return error.OutOfMemory;
             const content = @field(signal.value.content.model, @tagName(section[0])).value;
             if (comptime section[0] == .business or section[0] == .scope_guard) {
-                try @import("reference_markdown.zig").business(w, value, content);
+                try @import("reference_markdown.zig").business(w, value, content, .inline_text);
             } else try @import("reference_markdown.zig").semantic(w, value, content);
             try citations(w, signal.value.citation_ids);
         }

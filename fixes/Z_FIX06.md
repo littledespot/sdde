@@ -236,10 +236,11 @@ that adds no claim an unchanged merge).
   byte-identical, since no scenario reaches this correction, so the sent correction bytes
   are pinned only at the owner.
 
-## E10. Alias, null effort, dead code, stale comments and start rule
+## E10. Alias, string kind, dead code, principles section, stale comments and start rule
 
 **Implemented 8 November 2026** (user: "implement E10", "remove dead code", "apply best
-recommendation"); the string-kind sweep stays in FIX06 §5 E10. No request, report member or
+recommendation", "implement then"). Defect class reduced: none in published output (contract
+violations in the closed decoders, dead code and stale text). No request, report member or
 state change.
 - **Alias:** `parseOutcome` (`validate_workflow_definition_schema.zig`) matches a closed
   spelling table, `spelling`, an exhaustive switch over `OutcomeTag`, in place of the
@@ -249,10 +250,28 @@ state change.
   `WORKFLOW_GRAPH_COMPILE_INVALID` would otherwise have come from the wrong stage. `end.more`
   is unchanged: the compiler rejects it and `smoke.zig` pins that rejection
   (14-orchestration.md:104).
-- **Explicit null:** `ModelSlotConfig.jsonParse` (`config.zig`) reads `reasoningEffort`
-  through a private wire struct that requires a string token when the member is present and
-  accepts omission, so `null` rejects. The in-memory type is unchanged. F0001 states the
-  contract (ADR 0039:84-86 is the precedent for the temperatures).
+- **Explicit null:** `reasoningEffort` is a string when present and `null` rejects (F0001
+  states the contract; ADR 0039:84-86 is the precedent for the temperatures), through the
+  shared string-kind rule below.
+- **String kind** (found 8 November 2026): `std.json` reads a `[]const u8` from an array of
+  byte values, so `"provider": [112]` decoded though the schema allows only a string.
+  `strict_json` already rejected that for closed documents; the engine decoders that bypassed
+  it now use it. `decodeAuthored` is `decode` for a document a user writes: a member with a
+  default may be omitted, a present member keeps its wire kind, and a defaulted optional is
+  absent or a value and never `null`; in both modes a `std.json.ArrayHashMap` is an object of
+  its value kind. `decode_sddtoolkit_config.zig` calls `decodeAuthored`;
+  `decode_llm_provider_config.zig` (a user-written catalogue whose types have no defaults)
+  and the clarification-state parser (`adapters/parsers/clarification_inputs.zig`, the one
+  other typed `std.json` decode in `src/`) call `decode`, which requires every member. The
+  provider decoder keeps only its integer-only rule beside the shared transport checks.
+  `ModelSlotConfig`'s private wire struct and `jsonParse` are deleted, `WorkflowTokenBudget`
+  declares `ClosedJsonWire = u32`, and `max_engine_config_depth` (4) and `max_state_depth` (7)
+  bound the documents. An architecture rule (`architecture_test.zig`) now forbids a typed
+  `std.json` decode in the action, adapter, application and composition layers. The harness
+  and build tools that read their own reports (`test/harness/`, `build/code_heuristics/`) are
+  not engine inputs and were not swept. No code that builds or sends a model request changed;
+  no §2.10 projection comparison was taken, since the tree also holds the entity lever's
+  request change.
 - **Dead code:** `validateCitation`, `CitationDiagnostic` and `Citation` (they had only test
   callers since D13.1); then the registry's `select`, `validateSelection` and `guidance`
   (user: "delete select, validateSelection and guidance") with what only they used
@@ -267,8 +286,8 @@ state change.
   the section. Removed: the `principles` configuration section (`filenameHints`,
   `selections`), `principle_policy.zig`, `Registry.policy`, `Source.category`,
   `buildConfigured`, and the capture and build actions' config, normalizer and case-folder
-  fields. `specification-state` is v22 (ADR 0041, on hold, takes v23), and a source ID no
-  longer renews on a category change. A `principles` member rejects as unknown
+  fields. `specification-state` moved to v22, and a source ID no longer renews on a category
+  change. A `principles` member rejects as unknown
   (`decode_sddtoolkit_config.zig`). Amended: ADRs 0015 (retitled), 0023 and 0041,
   09-configuration.md §9.4, F0001, the schema, the example config, 24-workflow-state.md,
   F0100, 17-specify.md, 28-testing.md, 12-model-boundary.md, design.md and code.md. The
@@ -285,9 +304,52 @@ state change.
   rule in `cli.zig`, `report.zig` and `acceptance.zig` now match AGENTS.md "Testing
   expectations". Text only; "The harness makes no judge call." is pinned and kept.
 - **Proof:** accepted and rejected outcome-spelling fixtures
-  (`validate_workflow_definition_schema.zig`); accepted and rejected effort fixtures and the
-  rejected `principles` section (`decode_sddtoolkit_config.zig`). With the alias and null
-  defects reintroduced, two tests failed.
+  (`validate_workflow_definition_schema.zig`); accepted and rejected effort fixtures, a byte
+  array in three string members and the rejected `principles` section
+  (`decode_sddtoolkit_config.zig`); a byte array in the provider and model names
+  (`decode_llm_provider_config.zig`) and in a state string
+  (`clarification_inputs_test.zig`); and the authored-mode rules at the owner
+  (`strict_json.zig`). With the clarification parser's old `std.json` decode reintroduced,
+  the state test failed: it read `"schema":[99]` as `"c"`.
+
+## Repeated statement text is not judged
+
+**Implemented 8 November 2026** (user: "yes as per recommendation"); offline only. This
+change moved no request, report or state version, and changed no prompt, schema or
+request-description code (`Kind.role()` replaces the session's identical role table). Defect
+class reduced: run completion (a loan-renewal run that publishes nothing); no scored output changes.
+- **Defect:** loan-renewal `2026-11-07T07-38-56Z-2627…` and `2026-11-07T20-44-15Z-9273…`
+  exhausted the records retry limit on `reference_only`. Each response held a
+  user-visible outcome that was only a source message ("Loan renewed!", "Renewal
+  refused."), whose claim a functional requirement or an earlier rule also named and whose
+  value that record held. ADR 0038 Decision 5 deletes such a repeat natively, but its
+  consequences had the text repaired first, so the correction was spent on a record that
+  never publishes. `06-12-34Z-f549…` is not of this class: its outcome is the only
+  non-scenario record naming its claim, so the rule keeps it and its text still counts.
+  Read against the rule, not replayed.
+- **Change:** `statement_ownership.zig` is the one rule for which statement a batch deletes.
+  Payload admission (`shared_member`), the session's delete, the records validator
+  (`inspectRecords`, `repeated_statement` in place of the text issue) and the composition
+  check use it. The composition check reads the covered array and rule from the request's
+  coverage, which replay restores, and takes the exact values a record holds from
+  recognized prose. A record with a value that can't be identified (ambiguous,
+  unrecognizable, text that is not a valid scalar in a field that can hold an exact copy,
+  and at admission any explicit insertion) is never deleted and holds no value for another.
+  The kept cases stay judged: a requirement, the only holder of an
+  exact value (of two, the last), a partly taken, untaken or unnamed record. ADR 0038
+  Decision 5 and its consequences and tests, ADR 0035 item 5, text-field-composition.md,
+  22-repair.md, 12-model-boundary.md, 17-specify.md and F0100 amended.
+- **Proof:** accepted and rejected cases at the rule and at payload admission (the
+  existing `shared_member` cases, now on the shared rule), at the composition check, at the
+  validator, in replay and in a scripted run (an outcome that is only another record's value
+  publishes with it deleted and no correction). A parity test sends the same batches through
+  the wire encoder and the validator: every exemption is a validator delete, over each
+  statement kind, over text that is not a valid scalar and over a field that forbids exact
+  copies; a pin keeps the validator's
+  roles equal to the coverage kinds. The composition, validator, replay and scripted-run
+  tests fail with their part removed. The first request's wire and typed recognition read
+  the same exact occurrences; a value- or group-bound repair carries no coverage choice, so
+  the composition check exempts nothing there.
 
 ## H1. Adjudication and `spec-e2e-report/v15`
 
@@ -326,6 +388,26 @@ state change.
   ADR 0047 and Z_FIX06 T7, and the T5(b) citation is dropped; then (user: "you can start
   /evaluate-e2e if I give approval") the agent may start it on the user's approval for named
   runs. No scoring rule changed. Skill `1d66d882…fa3c3`.
+- **Closed 8 November 2026** (user: "recommendations accepted for 1 to 6"): skill `1d66d882…`
+  counts as the same evaluator as `af394020…` and `0b552067…`, since its edits changed no
+  scoring rule; the one divergence (a missing refusal scenario, `fa03…` against `728d…`) is
+  treated as evaluator variance, so a keep or revert is decided only on a reference scored in
+  the same version.
+- **Skill edit, 8 November 2026** (user: "recommendations accepted for 1 to 6"): the title
+  ruling (FIX06 §3 Next 3): a title that gives a requirement's value or wording states it.
+  Skill `3c74781e…9f262`, a new scoring rule and so a new version; the re-score of the
+  reference it requires is open (FIX06 §3 Next 3). No title in that reference drops a value
+  (hello-world's two value-bearing titles quote "Hello, World!" whole).
+
+## T3. A duplicate record is deleted in the scripted matrix
+
+**Implemented 8 November 2026** (user: "implement then"); test-only, so no request changes.
+Defect class reduced: none in published output (a coverage gap in the repair-harm class: a
+native delete must not need a correction). The scripted records fault `.duplicate_record` (`spec_generation_driver.zig`) repeats the first
+functional requirement exactly. The run publishes with no correction, because the faulted
+request is sent once (the driver rejects a second attempt), and no batch keeps two records of
+equal content (`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Its open
+parts stay in FIX06 T3.
 
 ## T5. Brittleness counts
 
@@ -411,3 +493,17 @@ no origin, which the shared `attribution()` mapped to `missing_response`. Fix: t
 names the rule (`producerless`, missing entries only) and `attribution()` gives `candidate`
 (contract 27); a lost origin on a duplicate, unknown or forbidden entry still rejects.
 Request projection byte-identical. Open parts stay in FIX06 E6.
+
+## E6. Lock failures report their own code
+
+**Implemented 8 November 2026** (user: "recommendations accepted for 1 to 6"). Defect class
+reduced: none in published output (a wrong failure code in the feature log). No request,
+report or state change; no §2.10 projection comparison was taken, since the tree also holds
+the entity lever's request change. `acquire_feature_log_stream_lock.zig` reported
+`LOG_LOCK_TIMEOUT` for every sink error. It now fails with `LogLockTimeout` only for
+`LockUnavailable` and with `LogSinkFailure` for every other sink error (an exhaustive switch in
+`Action.execute`), and its `failureCode` gives each one's log code, `LOG_LOCK_TIMEOUT` or
+`LOG_SINK_FAILURE` (F0002:542, :553-554); the feature log runner and the retention runner
+call it. Three tests that pinned the blanket mapping (a symlinked lock file, two rejecting
+sinks) now expect `LOG_SINK_FAILURE`; a held lock and the lock fault still report the
+timeout. The cancellation half stays in FIX06 E6.

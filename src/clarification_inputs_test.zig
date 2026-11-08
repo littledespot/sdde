@@ -298,6 +298,29 @@ test "strict state parser rejects unknown duplicate missing fields versions and 
     try std.testing.expectError(error.InvalidClarificationInput, c.validate(.{ .value = wrong }, selected));
 }
 
+test "a state string member is a JSON string, never an array of byte values" {
+    // std.json reads a byte slice from an array of numbers; the closed state contract allows only a string.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const valid = try std.json.Stringify.valueAlloc(allocator, fixture.state(&.{}), .{});
+    _ = try parser.stateParser().parse(allocator, valid);
+    const bytes = try std.mem.replaceOwned(u8, allocator, valid, "\"clarification-state/v2\"", "[99]");
+    try std.testing.expectError(error.InvalidClarificationInput, parser.stateParser().parse(allocator, bytes));
+}
+
+test "a state at the contract's deepest nesting parses within the bound" {
+    // Document, records, a record, its answer schema, `select_many`, its options, one option.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var record = fixture.record("S01");
+    record.answer_schema = .{ .select_many = .{ .minimum = 1, .maximum = 1, .options = &.{.{ .key = "a", .label = "A" }} } };
+    const expected = fixture.state(&.{record});
+    const bytes = try std.json.Stringify.valueAlloc(allocator, expected, .{});
+    try std.testing.expectEqualDeep(expected, try parser.stateParser().parse(allocator, bytes));
+}
+
 test "state validates IDs subjects revisions ledgers schemas and lifecycle bindings" {
     var records = [_]c.Record{ fixture.record("S01"), fixture.record("S02") };
     records[1].subject.slot = "confirmation";

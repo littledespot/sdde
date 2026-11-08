@@ -135,9 +135,11 @@ projection owner.
 
 **Packet-guidance amendment (user-approved, 30 October 2026, FIX06 D3.1, record in
 `fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
-FIX06 D13.1 and 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
-Decision 5):** workflow resources own the semantic guidance that native packet builders
-present. One closed `packet-guidance/v3` resource holds exactly one text for each
+FIX06 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
+Decision 5 and 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
+Decision 6, which removed the entity meaning and relationship entries and the entity
+repair tail):** workflow resources own the semantic guidance that native packet builders
+present. One closed `packet-guidance/v4` resource holds exactly one text for each
 registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
 requirements. The removed post-generation review's scopes and the engine-composed

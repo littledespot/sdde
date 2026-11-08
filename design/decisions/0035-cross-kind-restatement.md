@@ -65,7 +65,8 @@ every group, while a record cites its batch's group.
    - A competing pair therefore still blocks, even when one of its members also
      restates the story.
    - ADR 0038 Decision 5's repeated statements are decided after both, so a record
-     restating the story keeps this rule.
+     restating the story keeps this rule. The exception is a repeat whose own text is
+     defective: it is deleted when the unit is validated, ahead of these comparisons.
 6. **Ownership and diagnostics.**
    - Restatements belong to the session's consistency check, after its same-kind checks.
    - The session receives the model candidate the checked records came from. It binds
@@ -79,7 +80,7 @@ every group, while a record cites its batch's group.
   a requirement's or an earlier statement's claims is removed by ADR 0038 Decision 5.
 - **Not removed:**
   - paraphrases;
-  - entity descriptions, since deleting an entity would change the entity decision;
+  - entities, since deleting an entity would change the entity decision;
   - restatements whose evidence isn't covered;
   - a record naming a claim that no other record names (ADR 0047).
 - **Completion.** A run can't be blocked by this rule, because only covered restatements

@@ -18,7 +18,7 @@ pub fn render(a: std.mem.Allocator, value: draft.State, clarifications: c.Valida
             if (!@import("reference_support.zig").eligibleClaim(disposition.disposition) or
                 claim.content != .model or claim.content.model != section[0]) continue;
             try write(w, "- ");
-            try @import("reference_markdown.zig").business(w, value.reference, @field(claim.content.model, @tagName(section[0])).value);
+            try @import("reference_markdown.zig").business(w, value.reference, @field(claim.content.model, @tagName(section[0])).value, .block_start);
             try write(w, "\n");
             count += 1;
         }

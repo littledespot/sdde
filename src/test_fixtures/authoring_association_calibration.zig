@@ -353,7 +353,7 @@ const compose_story: @import("../actions/specification/compose_specification_sto
 fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Association) ![2]g.Response {
     return .{
         .{ .content = .{ .brief = .{ .title = try attributed(a, example.seed.title, selected), .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
-        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name), .business_meaning = try business(a, "MOCK Controlled business entity seed."), .relationships = &.{} } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
+        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name) } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
     };
 }
 fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBound) ![]const spec.Values(.model).RecordProposal {

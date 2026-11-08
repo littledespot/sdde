@@ -51,7 +51,7 @@ pub const Runner = struct {
     }
     fn invokeAcquire(context: *anyopaque) bindings.StepOutcome {
         const self = cast(context);
-        self.acquire_action.execute(self.historical, self.selected_stream.?) catch return .{ .failed = .LOG_LOCK_TIMEOUT };
+        self.acquire_action.execute(self.historical, self.selected_stream.?) catch |failure| return .{ .failed = acquire.failureCode(failure) };
         return .ok;
     }
     fn invokePrune(context: *anyopaque) bindings.StepOutcome {

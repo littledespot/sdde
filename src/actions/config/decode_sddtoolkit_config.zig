@@ -1,6 +1,7 @@
 const std = @import("std");
 const config = @import("../../domain/config.zig");
 const pipeline = @import("../../domain/pipeline.zig");
+const strict_json = @import("../../domain/strict_json.zig");
 
 pub const Error = error{EngineConfigParseError};
 
@@ -21,10 +22,9 @@ pub const Action = struct {
         var owned = config.Owned.init(allocator);
         errdefer owned.deinit();
 
-        owned.config = std.json.parseFromSliceLeaky(config.SDDToolKitConfig, owned.allocator(), bytes, .{
-            .duplicate_field_behavior = .@"error",
-            .ignore_unknown_fields = false,
-            .allocate = .alloc_always,
+        owned.config = strict_json.decodeAuthored(config.SDDToolKitConfig, owned.allocator(), bytes, .{
+            .maximum_bytes = config.max_engine_config_bytes,
+            .maximum_depth = config.max_engine_config_depth,
         }) catch return error.EngineConfigParseError;
 
         return owned;
@@ -87,6 +87,21 @@ test "a slot's reasoning effort is a string when present and never null" {
         defer a.free(replacement);
         const bytes = try std.mem.replaceOwned(u8, a, valid_config, model, replacement);
         defer a.free(bytes);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
+}
+
+test "a string member is a JSON string, never an array of byte values" {
+    // std.json reads a byte slice from an array of numbers; the closed contract allows only a string.
+    const a = std.testing.allocator;
+    for ([_][2][]const u8{
+        .{ "\"level\": \"debug\"", "\"level\": [100]" },
+        .{ "\"provider\": \"openai\"", "\"provider\": [111]" },
+        .{ "\"providers\": \".sddproviders.json\"", "\"providers\": [46]" },
+    }) |case| {
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, case[0], case[1]);
+        defer a.free(bytes);
+        try std.testing.expect(!std.mem.eql(u8, bytes, valid_config));
         try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
     }
 }
