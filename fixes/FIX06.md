@@ -15,6 +15,8 @@ published 6 of 6, and `adjudicate-spec` accepted every run (skill `185b9bc6…`,
 failure) with no lost or weakened requirement ([Z_FIX06](Z_FIX06.md) Next 6). Before it, every
 published run since D12.2 was adjudicated (§7 H1): D12.2, 4 of 4 hello-world and 1 of 5
 loan-renewal publications pass; the 12 kept-state runs since ADR 0047, 5 of 6 and 1 of 6.
+**Judged 9 November 2026** (user: "three per case is enough for now"): the HEAD set is enough
+stability evidence for now. ADR 0034 leaves actioning Plan to the user, so none is started.
 `zig-out/e2e-spec/` holds those six runs (`2026-11-08T22-3*`) and the twenty of 8 November 2026,
 report v15, each recording `build.source.modified` true: on `5b34dbc`, the "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
@@ -288,7 +290,9 @@ gap; T4 with E1–E4. **Adjudication:** H1 (the evaluate-e2e skill) for every se
 required source review is labelled or review returns; H3 when the user reviews the panels; H4
 before any formal baseline freeze; H5 at the user's choice. **Closing set:** repeated runs of
 both cases on one committed, unmodified build (ADR 0034:55-56) unless the user amends ADR 0034;
-every counted published run adjudicated (H1).
+every counted published run adjudicated (H1). The HEAD set of 9 November 2026 (3 per case) is
+enough for now (user); a later structural change (E1–E4) re-opens whether the gate is re-run
+on the new build (ADR 0034:93-95).
 
 **Open problems without an item.** Each stays until a structural lever with an owner is found
 or the user records it as a model limitation.
