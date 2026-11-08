@@ -396,8 +396,13 @@ class reduced: run completion (a loan-renewal run that publishes nothing); no sc
 - **Skill edit, 8 November 2026** (user: "recommendations accepted for 1 to 6"): the title
   ruling (FIX06 §3 Next 3): a title that gives a requirement's value or wording states it.
   Skill `3c74781e…9f262`, a new scoring rule and so a new version; the re-score of the
-  reference it requires is open (FIX06 §3 Next 3). No title in that reference drops a value
-  (hello-world's two value-bearing titles quote "Hello, World!" whole).
+  reference it requires was done on 9 November 2026 (FIX06 §3 Next 3). No title in that
+  reference drops a value (hello-world's two value-bearing titles quote "Hello, World!" whole).
+- **Skill edit, 9 November 2026** (user: "Once, same evaluator, no re-score"): an edge case's
+  outcome is its linked criterion's Then (ADR 0038 Decision 7), so a defect in that Then is one
+  defect, filed on the criterion (FIX06 §3 Next 8). No reference run has an outcome link, so
+  skill `185b9bc6…fcfa1` counts as the same evaluator as `3c74781e…`, and the reference isn't
+  re-scored.
 
 ## T3. A duplicate record is deleted in the scripted matrix
 
@@ -508,6 +513,48 @@ call it. Three tests that pinned the blanket mapping (a symlinked lock file, two
 sinks) now expect `LOG_SINK_FAILURE`; a held lock and the lock fault still report the
 timeout. The cancellation half stays in FIX06 E6.
 
+## Next 6. An entity is a name and its groups (ADR 0038 Decision 6)
+
+**Implemented 8 November 2026** (user: "Entity lever … is yes and approved", then "yes to all
+decisions"); **kept 9 November 2026**, with item 8, on the HEAD set (user: "approved" to the
+keep rule below). Defect class reduced: entity-field defects, an entity meaning or relationship
+that restated a requirement and lost, weakened or added to it (5 in the 6 reference runs: three
+restatements, one `weakened_obligation`, one `unsupported_addition`). The engine renders the
+statements that share a group (§23.1); `specification-state/v23`, `specification/v4`.
+- **Keep rule** (stated 9 November 2026): lost requirements per loan-renewal publication no
+  higher than the reference's 3 over 3 publications, and all six runs publish.
+- **Measured, direction only** (uncommitted trees, accuracy counts as lost / weakened /
+  unsupported / contradiction): reference, re-scored, hello-world 0 / 0 / 1 / 0 and loan-renewal
+  3 / 1 / 1 / 0, 1 of 3 pass; with items 6 and 7 (`05-5*`), loan-renewal 5 / 0 / 0 / 0, four of
+  them in EC-001's outcome and one in the title, entity-field defects 0; with item 8
+  (`09-2*`), loan-renewal lost 0, 3 of 3 pass.
+- **Measured on a committed build** (HEAD set: `a3d083e`, `modified` false, source `5fb59f67…`,
+  3 runs per case, none retried, skill `185b9bc6…`, every run accepted by
+  `adjudicate-spec`): hello-world 0 / 0 / 0 / 0, 3 of 3 pass (92.9, 96.4, 92.9); loan-renewal
+  0 / 0 / 4 / 0, 3 of 3 pass (85.7, 92.9, 92.9). Three of the four unsupported additions are
+  AC-001's minor "records the loan as renewed" (ruled minor, §7 H1); the fourth is an invented
+  timing condition in one EC-001. Entity-field defects 0. Thirteen engine deletions of a
+  repeated statement (3, 6 and 4 in the loan-renewal runs), all graded helpful. Each run took
+  9 calls and 12,971 to 17,037 tokens. The no-data entity in hello-world
+  (`invented_or_restating_entity`, a minor scope defect the lever doesn't target) was in 2 of 3.
+
+## Next 7. The renderer escapes only the bytes Markdown reads as markup
+
+**Implemented 8 November 2026** (user: "apply recommendations"); **kept 9 November 2026** (user:
+"apply recommendations", after the recommendation to keep it). Defect class reduced:
+`rendering_artefact`, a backslash before ordinary punctuation (`renewed\.`, `Hello\, World\!`)
+that the renderer introduced and the evaluator scores against `organization`. The owner is
+`literal`/`escape` in `src/domain/specification_markdown.zig` (:366-389) and §23.1's closed
+table. No request changes (§2 rule 1), so no guard could move.
+- **Measured** (direction only, uncommitted trees, one evaluator `3c74781e…`): the escape
+  artefact was in all 6 reference runs (`2026-11-08T00-3*` to `00-4*`) and in none of the 12
+  later runs (`05-5*`, `09-2*`); the artefacts that remain are the model's quote marks beside
+  the engine's code span (ADR 0036 Decision 6), which this change doesn't touch. Total
+  `rendering_artefact` defects 6 against 1 in `05-5*`, one-sided conditional binomial
+  p = 0.062.
+- **Kept on guards and mechanism**, like a hygiene phase (§2 rule 6), because the seven events
+  are under its evidence floor of about ten and the change is deterministic.
+
 ## Next 8. An edge case's outcome is the Then of a linked criterion (ADR 0038 Decision 7)
 
 **Implemented 8 November 2026** (user: "go", after "apply recommendations" and "recommendations
@@ -524,5 +571,5 @@ stored-link check), `scenario_link_request.zig` (the closed request and its admi
 resolves the links. Tests: the request, admission and rendering at the domain
 (`specification_generation_test.zig`, with three criteria in an unrelated domain), the wire
 (`model_candidate_json_test.zig`), three scripted scenarios with the requests' projection, and
-the state at v24. The open part (a measured set and the keep decision) stays in FIX06 §3 Next
-item 8.
+the state at v24. **Kept 9 November 2026** with item 6 on the HEAD set (Next 6): loan-renewal
+lost requirements 0 against 3 in the reference, 3 of 3 pass.

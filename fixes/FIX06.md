@@ -9,22 +9,27 @@ earlier items at `0f3e4d2`; Q20 was never committed, §3).
 
 ## 1. Gate status and output quality
 
-**Gate (ADR 0034): not met.** Every published run since D12.2 is adjudicated (§7 H1): D12.2,
-4 of 4 hello-world and 1 of 5 loan-renewal publications pass; the 12 kept-state runs since ADR
-0047, 5 of 6 and 1 of 6. `zig-out/e2e-spec/` holds the twenty runs of 8 November 2026, report
-v15, each recording `build.source.modified` true: on `5b34dbc`, the "Repeated-statement text not
+**Gate (ADR 0034): the user's to declare.** On 9 November 2026 the first set on a committed,
+unmodified build (the HEAD set: `a3d083e`, source `5fb59f67…`, 3 runs per case, none retried)
+published 6 of 6, and `adjudicate-spec` accepted every run (skill `185b9bc6…`, no critical
+failure) with no lost or weakened requirement ([Z_FIX06](Z_FIX06.md) Next 6). Before it, every
+published run since D12.2 was adjudicated (§7 H1): D12.2, 4 of 4 hello-world and 1 of 5
+loan-renewal publications pass; the 12 kept-state runs since ADR 0047, 5 of 6 and 1 of 6.
+`zig-out/e2e-spec/` holds those six runs (`2026-11-08T22-3*`) and the twenty of 8 November 2026,
+report v15, each recording `build.source.modified` true: on `5b34dbc`, the "Repeated-statement text not
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`) and §3 Next item 6's entity and escaping set (`05-5*`); on `071ce2b`, six runs of
 the edge-case lever before `e681cfd` committed it (`09-2*`). Every earlier run has been removed,
 and its evaluation (and measures, where taken) remain under `evaluations/`. The current build
 decodes only `spec-e2e-report/v15` (`test/harness/e2e/contracts.zig:140`).
 
-**Reference** for quality phases (§2 rule 7): the 12 adjudicated kept-state runs since ADR 0047
-(`2026-11-03T04-1*`, `2026-11-06T22-4*`; the reverted Q20 runs excluded), the last kept state,
-from uncommitted trees (§2 rule 3's recorded exception), so it is measured but not on a
-committed build. The two trees made the same requests for every call the 12 runs made: D12.3
-changes only source-review and clarification requests, and none of the runs reached them.
-**Previous reference:** the D12.2 set (kept 3 November 2026, [Z_FIX06](Z_FIX06.md) Q12 D12.2),
+**Reference** for quality phases (§2 rule 7): the HEAD set, six adjudicated runs
+(`2026-11-08T22-3*`) on committed `a3d083e`, the last kept state (items 6, 7 and 8).
+**Previous reference:** the 12 adjudicated kept-state runs since ADR 0047
+(`2026-11-03T04-1*`, `2026-11-06T22-4*`; the reverted Q20 runs excluded), from uncommitted
+trees (§2 rule 3's recorded exception). The two trees made the same requests for every call
+the 12 runs made: D12.3 changes only source-review and clarification requests, and none of the
+runs reached them. **Earlier reference:** the D12.2 set (kept 3 November 2026, [Z_FIX06](Z_FIX06.md) Q12 D12.2),
 10 runs (`2026-11-02T09-15-27Z` to `09-33-46Z`, 9 published) on source `bacfcd9ae368…`
 (revision `b38628c`, `modified` true; the first six summarised in
 `evaluations/d122-measures-set.json`). Whether its captured inputs equal `388438e` was never
@@ -45,6 +50,7 @@ counts, content basis, as lost / weakened / unsupported addition / contradiction
 | One-owner hygiene, reverted (role-routed field instructions; 3 runs per case, 7 November, `014fd15` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 0 of 2 published pass, 2 of 3 published; 2 / 0 / 1 / 0 |
 | E10 and principles removal (3 runs per case, 8 November, `496d754` modified, skill `1d66d882…`; no model-input change; direction only) | 2 of 2 published pass, 2 of 3 published; 0 / 0 / 1 / 0 | 1 of 2 published pass, 2 of 3 published; 0 / 1 / 1 / 0 |
 | Repeated-statement text not judged (3 runs per case, 8 November, `5b34dbc` modified, skill `1d66d882…`; the exemption never fired; the reference for the entity lever; direction only) | 3 of 3 pass; 0 / 0 / 1 / 0 | 1 of 3 pass; 3 / 1 / 1 / 0 |
+| **HEAD set, items 6, 7 and 8** (3 runs per case, 9 November, `a3d083e` committed, unmodified, skill `185b9bc6…`, which counts as the same evaluator, [Z_FIX06](Z_FIX06.md) T7) | 3 of 3 pass; 0 / 0 / 0 / 0 | 3 of 3 pass; 0 / 0 / 4 / 0 (three are AC-001's minor "records the loan as renewed") |
 
 Pooled over the 12 kept-state runs since ADR 0047, against D12.2: 12 of 12 published (9 of 10);
 hello-world 5 of 6 pass (4 of 5 runs); loan-renewal 1 of 6 pass (1 of 5); loan-renewal per run,
@@ -64,6 +70,7 @@ only, since keep decisions use accuracy defect counts, §2 rule 6):
 | Q20, reverted (6 runs, `63fb521` modified) | 97.6 (92.9–100) | 85.7 (78.6–92.9) | 1 |
 | One-owner hygiene, reverted (6 runs, 5 published, `014fd15` modified) | 96.4 (96.4–96.4) | 83.9 (78.6–89.3) | 1 |
 | E10 and principles removal (6 runs, 4 published, `496d754` modified) | 92.9 (89.3–96.4) | 89.3 (82.1–96.4) | 0 |
+| HEAD set, items 6, 7 and 8 (6 runs, `a3d083e`, skill `185b9bc6…`) | 94.0 (92.9–96.4) | 90.5 (85.7–92.9) | 0 |
 
 ## 2. Rules for measured phases
 
@@ -74,7 +81,8 @@ governs; these add what the phases need.
    development-case request byte-identical may share the build. A change set that isn't kept
    is reverted in full, never patched on top. Recorded exception: D16.2 amends the D12.1 +
    Q16 change set after its set failed the publication guard (user, 2 November 2026:
-   "approved").
+   "approved"). Recorded exception: items 6 and 8 of §3 Next, both request changes, are
+   committed together and measured as one set (user, 9 November 2026: "apply recommendations").
 2. **Owner first, offline first:** `/preflight`; regression and negative tests at the owning
    boundary, compared with owners rather than copied English; `zig build verify`;
    `contract-reviewer`. Cover unrelated members of the class (both development cases plus an
@@ -85,7 +93,7 @@ governs; these add what the phases need.
    build-provenance roots (`build/provenance.zig:21`). Recorded exception: ADR 0047 and D12.3
    were kept on 12 adjudicated runs from uncommitted trees (user, 7 November 2026: "approved",
    after being told they were direction only), so ADR 0047:102's live measurement set on a
-   committed build is unmet (§1 reference).
+   committed build was unmet until the HEAD set of 9 November 2026 (§1).
 4. **Measurement set:** three runs of each development case (decided 2 November 2026), each
    approved, extended under rule 6 to at most eight per case. Every attempt counts. Nothing is
    tuned on the reserved qualification features.
@@ -153,7 +161,13 @@ governs; these add what the phases need.
 12. **Report versions:** `adjudicate-spec` decodes `report.json` strictly, so adding, removing
     or renaming a closed member needs a report version. Runs before the closing set stay
     unadjudicated unless the user adjudicates them (decided 1 November 2026; no members-only
-    decoder).
+    decoder). **Breach found 9 November 2026:** the entity lever removed the `business_meaning`
+    entity field from the report's `admission_audit` subjects (ADR 0038 Decision 6) and left
+    `spec-e2e-report/v15` as it was, so the six `2026-11-08T00-3*` to `00-4*` reports no longer
+    decode and `adjudicate-spec` rejects any record for them (`InvalidAdjudication`, with no
+    message naming the member). Their `1d66d882…` adjudications stand. Adjudicate a set
+    before the next closed-member change lands, and advance the version with it. The twelve
+    `05-5*` and `09-2*` runs are adjudicated under `3c74781e…` already.
 
 **Why rules 4–7 changed** (H6.1–H6.4, decided 3 November 2026, user: "apply
 recommendations"): a set couldn't tell a change's effect from a re-roll of the generation
@@ -201,42 +215,34 @@ research. "Gap" means between measurement sets.
 3. **Decided 8 November 2026** (same words): a title that repeats a requirement's value states it
    (§7 H1), so `2026-11-06T22-45-46Z-d392…`'s "…extending the due date by 14 days" is a lost
    requirement. The ruling is in the evaluate-e2e skill (a new version, Z_FIX06 T7), so §2
-   rule 5 has the reference of the entity and escaping set re-scored under it first; no title
-   in that reference drops a value, so its scores are expected to stay.
+   rule 5 has the reference of the entity and escaping set re-scored under it first.
+   **Done 9 November 2026** (user: "yes, all six"): the six `2026-11-08T00-3*` to `00-4*` runs,
+   scored under `3c74781e…` by one scorer per case. The accuracy counts and pass counts are
+   unchanged (hello-world 0 / 0 / 1 / 0, 3 of 3 pass; loan-renewal 3 / 1 / 1 / 0, 1 of 3
+   pass); the advisory aggregates are hello-world 92.9, 92.9, 89.3 and loan-renewal 78.6,
+   78.6, 96.4. The scorings are in `evaluations/e2e/<run>/` (`evaluation.json`), the earlier
+   ones beside them as `*.1d66d882.*`. No `3c74781e…` adjudication exists: `adjudicate-spec`
+   rejected the first record, because these reports no longer decode (§2 rule 12), so their
+   `1d66d882…` adjudications stand and the unapplied records are
+   `adjudication-record.3c74781e-unapplied.json`. One scorer saw one old score (`2` for
+   `renewal-eligibility`, `00-40-49Z`), which it had already reached unaided.
 4. **Decided 8 November 2026** (same words): Q14 b3 stays held and b4 is not started. Lossy
    repeats caused 2 of today's 3 loan failures, which the entity and edge-case levers target; b3
    is large for a class absent from the last 3 loan runs, and b4's added restatements are the
    failure being removed. Revisit b3 after the edge-case set if refusal scenarios go missing.
 5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes (item 8,
-   applied) and titles (held to their values by item 3; no lever yet).
-6. **Implemented and measured; reference comparison and keep decision pending** (8 November
-   2026; user: "Entity lever … is yes and approved", then "yes to all decisions"): an entity is
-   a name and its groups, and the engine renders the statements that share a group (ADR 0038
-   Decision 6; §3 open problems). The set (3 runs per case, `/evaluate-e2e` under skill
-   `3c74781e…`; record `evaluations/e2e/entity-escaping-set-measures.json`): hello-world 0 content accuracy defects
-   in 3 runs; loan-renewal 5 `lost_source_requirement`, in 2 of 3 runs, both of which failed
-   `successful-renewal`: 4 in the records step (spec line 27, EC-001's outcome; item 8's target)
-   and 1 in the title (brief step; item 3). The reference is not re-scored
-   under this evaluator version, so §2 rules 5 and 6 have not been applied and the keep
-   decision is open.
-7. **Implemented and measured with item 6's set; keep decision pending** (8 November 2026;
-   user: "apply recommendations"): the renderer
-   escapes only the bytes Markdown reads as markup (§23.1's closed table), so `spec.md` no
-   longer shows `renewed\.`. No request changes (§2 rule 1), so it shares item 6's set, which
-   shows the readability effect (`organization`) beside the entity lever's accuracy effect.
-8. **Applied, unmeasured** (8 November 2026; user: "go"): ADR 0038 Decision 7
-   ([Z_FIX06](Z_FIX06.md); §3 open problems). Request projection (§2 rule 10): `evaluations/request-projection/lever-before`
-   (the committed tree) against `lever-after` shares 1,614 calls; all are byte-identical once the
-   retired `edge_outcome` field binding is set aside (the shared field-policy list) except 176
-   records requests, which differ in `content` and `schema` only, and 9 source-review repairs,
-   which differ in the required-authority `contract_version` (3 to 4). The 41 new calls are
-   the 3 new scenarios, three of them link requests. A set on both cases and `/evaluate-e2e` are still to
-   do; each needs its own approval. The closed request runs only when a batch holds several
-   candidates, so a set may not exercise it. ADR 0038:227-228's limit applies: a success
-   criterion citing the refusal claims, as `728d…`'s AC-001 did (§4 Q14), can be a refusal edge
-   case's only candidate and print the success Then. With an `established` trace to the link, a
-   defect of a class the reference lacks (contradiction is 0 in every §1 row) blocks a keep
-   (§2 rule 6 guards); changing the link rule amends ADR 0038 Decision 7 (a **Decision**).
+   kept) and titles (held to their values by item 3; no lever yet).
+6. **Kept 9 November 2026** (user: "approved" to the keep rule): an entity is a name and its
+   groups (ADR 0038 Decision 6). Measured with item 8 on the HEAD set; recorded in
+   [Z_FIX06](Z_FIX06.md) Next 6.
+7. **Kept 9 November 2026** (user: "apply recommendations"): the renderer escapes only the
+   bytes Markdown reads as markup. Recorded in [Z_FIX06](Z_FIX06.md) Next 7.
+8. **Kept 9 November 2026** with item 6: an edge case's outcome is the Then of a linked
+   criterion (ADR 0038 Decision 7). Recorded in [Z_FIX06](Z_FIX06.md) Next 8 and Next 6.
+   ADR 0038:227-228's limit still applies: a success criterion citing the refusal claims, as
+   `728d…`'s AC-001 did (§4 Q14), can be a refusal edge case's only candidate and print the
+   success Then. No HEAD-set run was scored with that defect; changing the link rule amends
+   ADR 0038 Decision 7 (a **Decision**).
 
 **Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
 Q17 after D12.2, and D14.1 holds Q14 b3 (§3 Next item 4); each change set is measured on its
@@ -324,7 +330,8 @@ or the user records it as a model limitation.
   6): the structural lever the limitation allowed. An entity holds its name and its groups;
   the free-text `business_meaning` and relationships are gone, and the engine renders the
   statements that share a group as a related-statements line, so no free-text field but the
-  name remains for the model to restate in. Measurement is pending. Still open: titles
+  name remains for the model to restate in. Measured and kept 9 November 2026
+  ([Z_FIX06](Z_FIX06.md) Next 6): no entity-field defect in the HEAD set. Still open: titles
   (purpose `packet-guidance.json:4`); a lever with an owner or a recorded model limitation.
   **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
@@ -333,8 +340,8 @@ or the user records it as a model limitation.
   Decision 7): the user decided that the 7 November rejection concerned only filling from
   source lines, so copying an acceptance criterion's Then is allowed, with acceptance criteria
   as the only targets, and that a model step after records names the criterion (not response
-  position). Measurement is pending, and a new call kind has no retained request to screen
-  (§2 rule 4).
+  position). Measured and kept 9 November 2026 ([Z_FIX06](Z_FIX06.md) Next 8): no lost or
+  weakened outcome in the HEAD set's loan-renewal runs.
 - **Unsupported additions in AC wording and entity meanings** (the story's ended with ADR
   0047). AC-001's recording of the renewal (4 of 5 D12.2, 2 of 3 ADR 0047, 1 of 3 D12.3 and 0
   of 3 Q20 loan-renewal publications) is ruled a minor addition (§7 H1) and has no structural
