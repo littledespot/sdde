@@ -10,6 +10,11 @@
   - Amended 7 November 2026 (user: "apply recommendations", then "yes, advance both"): Decision
     5 now removes the story from pre-generation source review, advancing `packet-guidance` to v3
     and the required-authority contract to 2.
+  - Amended 8 November 2026 ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7):
+    the typed rejection of Decision 2 also carries `edge_case_without_criterion`, which the
+    engine raises when a completed records unit holds an edge case that no acceptance criterion
+    of its records batch can serve. It is never repaired or retried, has no model origin, and
+    names the edge case's group and claims in place of a catalogue.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
   - [17-specify.md](../contracts/17-specify.md) §17.3: three model task types (brief,

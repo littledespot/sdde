@@ -5,7 +5,7 @@ const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
 pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
-pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name };
+pub const ValueField = union(enum) { value, given, when, then, text, condition, name };
 pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
     return switch (subject) {
         .title => .spec_title,

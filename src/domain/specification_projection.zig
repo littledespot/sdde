@@ -93,6 +93,19 @@ pub fn relatedStatements(allocator: std.mem.Allocator, records: []const spec.Ide
     return ids.toOwnedSlice(allocator);
 }
 
+/// An edge case's outcome (§23): the Then of the acceptance criterion it links to, as that
+/// criterion's own display. Criteria precede edge cases in document order, so `done` holds it.
+fn linkedOutcome(done: []const spec.CapturedRecord, link: ?spec.Id) Error!spec.Scalar {
+    const id = link orelse return error.InvalidSpecification;
+    for (done) |other| {
+        const other_id = other.id orelse continue;
+        if (!std.meta.eql(other_id, id)) continue;
+        if (other.content != .acceptance_criterion) return error.InvalidSpecification;
+        return other.content.acceptance_criterion.then;
+    }
+    return error.InvalidSpecification;
+}
+
 /// Sorts `ranges` in place and returns its prefix with overlapping or touching ranges
 /// joined, so one set of cited lines has one display.
 pub fn mergeLines(ranges: []spec.LineRange) []const spec.LineRange {
@@ -206,11 +219,12 @@ fn appendSpan(a: std.mem.Allocator, spans: *std.ArrayList(spec.CodeSpan), start:
 pub fn project(allocator: std.mem.Allocator, context: provenance.Context, directory: @import("reference_ingestion.zig").RelativePath, content: spec.IdentifiedContent) Error!spec.CapturedDocument {
     const records = try allocator.alloc(spec.CapturedRecord, content.records.len);
     const traces = try traceRequirements(allocator, context.inputs, @import("reference_support.zig").records(context.references), content);
-    for (content.records, records, traces) |record, *captured, trace| {
+    for (content.records, records, traces, 0..) |record, *captured, trace, index| {
         captured.id = record.id;
         const family: spec.Kind = record.proposal.content;
         captured.sources = if (family.showsSources()) try sourceLines(allocator, directory, context.inputs, trace.occurrences) else &.{};
         captured.related = if (family == .entity) try relatedStatements(allocator, content.records, record.proposal) else &.{};
+        captured.outcome = if (family.showsOutcome()) try linkedOutcome(records[0..index], record.outcome_of) else null;
         const scopes = try provenance.scopesForRecord(allocator, context, record.proposal);
         switch (record.proposal.content) {
             inline else => |fields, kind| {

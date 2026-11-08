@@ -7,10 +7,11 @@ pub const DetectionStage = enum { spec, plan, tasks, implement, recovery };
 pub const Error = std.mem.Allocator.Error || error{InvalidRequiredAuthority};
 /// 2: the engine-composed story is no required-authority subject (ADR 0047, amended
 /// 7 November 2026). 3: an entity's only authored field is its name (ADR 0038, amended
-/// 8 November 2026), so a record slot has no member index.
-pub const version: u32 = 3;
+/// 8 November 2026), so a record slot has no member index. 4: an edge case's outcome is the
+/// Then of its linked acceptance criterion, so it has no slot (ADR 0038 Decision 7).
+pub const version: u32 = 4;
 pub const Kind = enum { feature_intent, reference_meaning, entity_applicability, preservation, design_decision, executable_decomposition, policy_predicate };
-pub const Slot = enum { display_name, description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, expected_outcome, name, entities, disposition, value, decision, compliance };
+pub const Slot = enum { display_name, description, primary_goal, acceptance_criteria, functional_requirements, scenario_coverage, text, given, when, then, condition, name, entities, disposition, value, decision, compliance };
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,

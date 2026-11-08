@@ -207,7 +207,9 @@ pub const Assemble = struct {
         const authority = @import("required_authority_values.zig");
         const owner = authority.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer authority.destroy(owner);
-        const assigned = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), try readContext(&input.step.data)) catch |operation_error| return operation_error;
+        const current = try readSession(&input.step.data);
+        const links = try @import("scenario_link_workflow.zig").resolved(owner.arena.allocator(), &input.step.data, current);
+        const assigned = self.action.execute(owner.arena.allocator(), current, try readContext(&input.step.data), links) catch |operation_error| return operation_error;
         owner.payload = .{ .content = assigned.content };
         var delta: pipeline.NodeDelta = .{};
         const ids = values.create(self.allocator, ids_schema, @import("../domain/specification_identity.zig").Ledger, assigned.ledger) catch |operation_error| return operation_error;

@@ -206,16 +206,31 @@ research. "Gap" means between measurement sets.
    repeats caused 2 of today's 3 loan failures, which the entity and edge-case levers target; b3
    is large for a class absent from the last 3 loan runs, and b4's added restatements are the
    failure being removed. Revisit b3 after the edge-case set if refusal scenarios go missing.
-5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes (proposed
-   lever) and titles (held to their values by item 3; no lever yet).
+5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes (item 8,
+   applied) and titles (held to their values by item 3; no lever yet).
 6. **Applied, unmeasured** (8 November 2026; user: "Entity lever … is yes and approved", then
    "yes to all decisions"): an entity is a name and its groups, and the engine renders the
-   statements that share a group (ADR 0038 Decision 6; §3 open problems). A set on both
-   cases and `/evaluate-e2e` are still to do; each needs its own approval.
+   statements that share a group (ADR 0038 Decision 6; §3 open problems). **Measured** (8
+   November 2026; 3 runs per case, `/evaluate-e2e` under skill `3c74781e…`; record
+   `evaluations/e2e/entity-escaping-set-measures.json`): hello-world 0 content accuracy defects
+   in 3 runs; loan-renewal 5 `lost_source_requirement`, in 2 of 3 runs, both of which failed
+   `successful-renewal`: 4 in the records step (spec line 27, EC-001's outcome; item 8's target)
+   and 1 in the title (brief step; item 3). The reference is not re-scored
+   under this evaluator version, so §2 rules 5 and 6 have not been applied and the keep
+   decision is open.
 7. **Applied, unmeasured** (8 November 2026; user: "apply recommendations"): the renderer
    escapes only the bytes Markdown reads as markup (§23.1's closed table), so `spec.md` no
    longer shows `renewed\.`. No request changes (§2 rule 1), so it shares item 6's set, which
    shows the readability effect (`organization`) beside the entity lever's accuracy effect.
+8. **Applied, unmeasured** (8 November 2026; user: "go"): ADR 0038 Decision 7
+   ([Z_FIX06](Z_FIX06.md); §3 open problems). Request projection (§2 rule 10): `evaluations/request-projection/lever-before`
+   (the committed tree) against `lever-after` shares 1,614 calls; all are byte-identical once the
+   retired `edge_outcome` field binding is set aside (the shared field-policy list) except 176
+   records requests, which differ in `content` and `schema` only, and 9 source-review repairs,
+   which differ in the required-authority `contract_version` (3 to 4). The 41 new calls are
+   the 3 new scenarios, three of them link requests. A set on both cases and `/evaluate-e2e` are still to
+   do; each needs its own approval. The closed request runs only when a batch holds several
+   candidates, so a set may not exercise it.
 
 **Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
 Q17 after D12.2, and D14.1 holds Q14 b3 (§3 Next item 4); each change set is measured on its
@@ -302,28 +317,17 @@ or the user records it as a model limitation.
   6): the structural lever the limitation allowed. An entity holds its name and its groups;
   the free-text `business_meaning` and relationships are gone, and the engine renders the
   statements that share a group as a related-statements line, so no free-text field but the
-  name remains for the model to restate in. Measurement is pending. Still open: edge-case
-  outcomes (purpose
-  `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a recorded
-  model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
+  name remains for the model to restate in. Measurement is pending. Still open: titles
+  (purpose `packet-guidance.json:4`); a lever with an owner or a recorded model limitation.
+  **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
   source lines, since the result restates the Given and reads as requirements, not observed
-  outcomes. **Proposed lever, edge-case outcomes** (8 November 2026): an edge case keeps its
-  condition and claims, and its outcome becomes a link to an acceptance criterion whose Then
-  text the engine prints. The user decided that day that the 7 November rejection concerned
-  only filling from source lines, so the copy is allowed with acceptance criteria as the only
-  targets, and that a model step after records names the criterion (not response position).
-  Design accepted on "apply recommendations" and "recommendations accepted for 1 to 6" (8
-  November 2026), revised by the authority lookup: links stay inside the
-  edge case's own records batch; the engine computes each edge case's candidates (criteria
-  sharing a claim with it), links natively when exactly one, asks the model one closed choice
-  per edge case with two or more (the shared result-schema mechanism has one allowed list per
-  path), and fails the run with a typed reason when none, since the alternatives delete a
-  scenario (ADR 0038:97) or add a second coverage rule; a printed outcome is a derived
-  display. Needs a session unit and progress outcome, `specification/v5`, state v24 (ADR 0041
-  moves to v25), `packet-guidance/v5`, required-authority 4, and amends ADR 0047, §17.3, §23.1
-  and F0100 §5. A new call kind has no retained request to screen (§2 rule 4). Implementation
-  waits for the item 6 and 7 set, then its own.
+  outcomes. **Lever applied, edge-case outcomes** (8 November 2026, §3 Next item 8; ADR 0038
+  Decision 7): the user decided that the 7 November rejection concerned only filling from
+  source lines, so copying an acceptance criterion's Then is allowed, with acceptance criteria
+  as the only targets, and that a model step after records names the criterion (not response
+  position). Measurement is pending, and a new call kind has no retained request to screen
+  (§2 rule 4).
 - **Unsupported additions in AC wording and entity meanings** (the story's ended with ADR
   0047). AC-001's recording of the renewal (4 of 5 D12.2, 2 of 3 ADR 0047, 1 of 3 D12.3 and 0
   of 3 Q20 loan-renewal publications) is ruled a minor addition (§7 H1) and has no structural

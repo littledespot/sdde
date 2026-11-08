@@ -258,7 +258,7 @@ handles, never chooses semantic support or adds citations to satisfy a review.
 
 ## Persistence and readback
 
-Canonical content is `specification/v4`; completed and clarification-pending
+Canonical content is `specification/v5`; completed and clarification-pending
 specification state share one version and reject earlier versions without
 migration, dual reader or fallback. Canonical reference snapshots persist no
 presentation roles. Completed readback resolves handles from the captured ledger,

@@ -507,3 +507,22 @@ the entity lever's request change. `acquire_feature_log_stream_lock.zig` reporte
 call it. Three tests that pinned the blanket mapping (a symlinked lock file, two rejecting
 sinks) now expect `LOG_SINK_FAILURE`; a held lock and the lock fault still report the
 timeout. The cancellation half stays in FIX06 E6.
+
+## Next 8. An edge case's outcome is the Then of a linked criterion (ADR 0038 Decision 7)
+
+**Implemented 8 November 2026** (user: "go", after "apply recommendations" and "recommendations
+accepted for 1 to 6"). Defect class reduced: `lost_source_requirement` and `weakened_obligation`
+in an edge case's expected outcome, the free text that repeated an acceptance criterion's
+result and dropped part of it (EC-001 "extends the due date by fourteen days" without
+"calendar", "existing" or the new due date: `successful-renewal` failed in 4 of the 6 loan-renewal
+runs before 8 November and in 2 of the 3 of that day's set). The design, the candidate rule and
+the version changes are ADR 0038 Decision 7's. Owners: `scenario_link.zig` (candidates, links,
+stored-link check), `scenario_link_request.zig` (the closed request and its admission), the
+`link-scenarios` subgraph of `spec.workflow.yaml` (`plan-scenario-links`,
+`check-scenario-link-progress`, `build-scenario-link-input`, a `model-request` on
+`links.prompt.md` and `links.schema.json`, `admit-scenario-link-choice`) and `assemble`, which
+resolves the links. Tests: the request, admission and rendering at the domain
+(`specification_generation_test.zig`, with three criteria in an unrelated domain), the wire
+(`model_candidate_json_test.zig`), three scripted scenarios with the requests' projection, and
+the state at v24. The open part (a measured set and the keep decision) stays in FIX06 §3 Next
+item 8.

@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v4";
+pub const version = "specification/v5";
 pub const Error = error{InvalidSpecification};
 /// A record kind's part in ADR 0038's cross-record rules.
 pub const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
@@ -63,6 +63,12 @@ pub const Kind = enum {
             .acceptance_criterion, .functional_requirement, .entity => true,
             .user_visible_outcome, .edge_case, .business_rule, .assumption, .non_goal, .prohibited_behavior => false,
         };
+    }
+
+    /// The families whose records show an outcome the engine derives from another record: an
+    /// edge case prints the Then of the acceptance criterion it links to (§23).
+    pub fn showsOutcome(self: Kind) bool {
+        return self == .edge_case;
     }
 
     /// The families an entity's related-statements line may list: the requirement and
@@ -185,9 +191,8 @@ pub fn Content(comptime Value: type) type {
             text: Value,
         },
         edge_case: struct {
-            pub const model_fields = .{ .condition = text.field_policy.Field.edge_condition, .expected_outcome = text.field_policy.Field.edge_outcome };
+            pub const model_fields = .{ .condition = text.field_policy.Field.edge_condition };
             condition: Value,
-            expected_outcome: Value,
         },
         functional_requirement: struct {
             pub const model_fields = .{ .text = text.field_policy.Field.functional_requirement };
@@ -244,7 +249,9 @@ pub const ContentProposal = struct {
     entities: ApplicabilityProposal,
 };
 
-pub const IdentifiedRecord = struct { id: Id, proposal: RecordProposal };
+/// `outcome_of` is an edge case's one link: the acceptance criterion of its own records batch
+/// whose Then it prints (`scenario_link.zig`). It is the display's only canonical source.
+pub const IdentifiedRecord = struct { id: Id, proposal: RecordProposal, outcome_of: ?Id = null };
 pub const IdentifiedContent = struct {
     display_name: AttributedValue,
     primary_user_story: AttributedValue,
@@ -271,8 +278,9 @@ pub const LineRange = struct { first: u32, last: u32 };
 /// of the record's lineage, never provenance authority.
 pub const SourceLines = struct { path: []const u8, ranges: []const LineRange };
 /// `related` is an entity's engine-derived display of the statements that share one of its
-/// source groups, in document order: never provenance authority.
-pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{}, related: []const Id = &.{} };
+/// source groups, in document order; `outcome` is an edge case's engine-derived display of the
+/// linked acceptance criterion's Then: neither is provenance authority.
+pub const CapturedRecord = struct { id: ?Id, content: Content(Scalar), sources: []const SourceLines = &.{}, related: []const Id = &.{}, outcome: ?Scalar = null };
 pub const CapturedDocument = struct {
     display_name: Scalar,
     primary_user_story: Scalar,
@@ -302,6 +310,9 @@ pub fn validateDocument(document: CapturedDocument, require_ids: bool) Error!voi
         switch (record.content) {
             inline else => |content| inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |field| try scalar(@field(content, field.name)),
         }
+        // Only an edge case shows an outcome, and it always does.
+        if (kind.showsOutcome() != (record.outcome != null)) return error.InvalidSpecification;
+        if (record.outcome) |outcome| try scalar(outcome);
     }
 }
 

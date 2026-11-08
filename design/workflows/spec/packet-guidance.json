@@ -1,5 +1,5 @@
 {
-  "schema": "packet-guidance/v4",
+  "schema": "packet-guidance/v5",
   "feature_purposes": {
     "display_name": "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
     "description": "A description of intended user-visible behavior.",
@@ -10,7 +10,7 @@
   "record_families": {
     "acceptance_criterion": "An observable pass/fail flow with a precondition, trigger and expected result.",
     "user_visible_outcome": "A result, confirmation or response directly observable by the user.",
-    "edge_case": "A boundary or exceptional condition and its expected outcome.",
+    "edge_case": "A boundary or exceptional condition.",
     "functional_requirement": "Required application behavior, preserving its trigger and conditions.",
     "business_rule": "A rule or constraint governing business decisions or outcomes.",
     "assumption": "A supported premise on which the described behavior depends.",
@@ -23,7 +23,6 @@
     "when": "The action or event that triggers the behavior.",
     "then": "The observable consequences after the trigger, including the obligations being tested.",
     "condition": "The boundary or exceptional condition.",
-    "expected_outcome": "The observable result, preserving conditions and obligations.",
     "name": "The business entity's name."
   },
   "reference_tasks": {

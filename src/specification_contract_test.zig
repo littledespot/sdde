@@ -74,7 +74,7 @@ test "shape validation checks all record families without asserting their meanin
     var records = [_]spec.CapturedRecord{
         .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .content = .{ .acceptance_criterion = .{ .given = value, .when = value, .then = value } } },
         .{ .id = .{ .kind = .user_visible_outcome, .ordinal = 1 }, .content = .{ .user_visible_outcome = .{ .text = value } } },
-        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .condition = value, .expected_outcome = value } } },
+        .{ .id = .{ .kind = .edge_case, .ordinal = 1 }, .content = .{ .edge_case = .{ .condition = value } }, .outcome = value },
         .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .content = .{ .functional_requirement = .{ .text = value } } },
         .{ .id = .{ .kind = .business_rule, .ordinal = 1 }, .content = .{ .business_rule = .{ .text = value } } },
         .{ .id = .{ .kind = .assumption, .ordinal = 1 }, .content = .{ .assumption = .{ .text = value } } },
@@ -117,7 +117,7 @@ fn roundTrip(allocator: std.mem.Allocator) !void {
         const Body = @FieldType(spec.Content(spec.Scalar), @tagName(kind));
         var body: Body = undefined;
         inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = plain;
-        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body) };
+        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1001 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) plain else null };
     }
     records[3].content.functional_requirement.text = exact;
     records[8].related = &.{ .{ .kind = .user_visible_outcome, .ordinal = 1001 }, .{ .kind = .functional_requirement, .ordinal = 1001 }, .{ .kind = .prohibited_behavior, .ordinal = 1001 } };
@@ -348,7 +348,7 @@ test "every optional-section combination round trips without empty headings" {
             if (include) {
                 var body: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
                 inline for (@typeInfo(@TypeOf(body)).@"struct".fields) |field| @field(body, field.name) = value;
-                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body) });
+                try records.append(a, .{ .id = .{ .kind = kind, .ordinal = 1 }, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .outcome = if (kind.showsOutcome()) value else null });
             }
         }
         const document: spec.CapturedDocument = .{ .display_name = value, .primary_user_story = value, .records = records.items, .entity_section = if (mask & 64 != 0) .present else .omitted };

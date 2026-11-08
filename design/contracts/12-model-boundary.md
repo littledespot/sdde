@@ -374,7 +374,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   preparation paths, protocol corrections and diagnostic source capture retain
   that exact selection. It adds no caching behavior or schema authority.
 - Semantic guidance that native packet builders present is workflow-owned: one closed
-  `packet-guidance/v4` resource, published as run data by one `capture-packet-guidance`
+  `packet-guidance/v5` resource, published as run data by one `capture-packet-guidance`
   step and received explicitly by each consuming operation that declares
   `.packet_guidance`, never as the resource. The
   [ADR 0016](../decisions/0016-configured-json-response-composition.md) packet-guidance

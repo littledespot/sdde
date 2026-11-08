@@ -25,7 +25,10 @@
   and, as the user then decided ("accept both as documented"), the delete order and
   post-admission corner of that change below. The same day (FIX06 §3 Next item 6; user:
   "Entity lever … is yes and approved", then "yes to all decisions"): an entity is a name
-  and its groups (Decision 6).
+  and its groups (Decision 6). Amended again on 8 November 2026 (FIX06 §3, the edge-case
+  outcome lever; user: "apply recommendations", "recommendations accepted for 1 to 6", then
+  "go"): an edge case's outcome is the Then of an acceptance criterion it links to
+  (Decision 7).
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -55,6 +58,15 @@
     [ADR 0041](0041-failed-run-incomplete-publication.md) (its state version moves to
     v24). The entities schema and prompt change, and every generation request's shared
     guidance loses one sentence.
+  - Since 8 November 2026, Decision 7 (an edge case's outcome is a linked criterion's Then):
+    §17.3 (a fourth model task type, the outcome-link request), §23.1 (the outcome line),
+    §24 (`specification-state/v24`, `specification/v5`), the §32 index and F0100 §5;
+    [ADR 0016](0016-configured-json-response-composition.md) (`packet-guidance/v5`);
+    [ADR 0047](0047-engine-composed-primary-story.md) (its typed rejection gains a reason);
+    and [ADR 0041](0041-failed-run-incomplete-publication.md) (its state version moves to
+    v25). The records schema loses the edge case's outcome, the required-authority contract
+    is 4, and a link-scenarios step with its own prompt and result schema follows
+    generation.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -166,6 +178,38 @@ only block.
      earlier versions reject. `packet-guidance/v4` drops the meaning and relationship
      entries and the entity repair tail; the required-authority contract is 3 and loses
      those slots and the slot member index.
+7. **An edge case's outcome is the Then of a criterion it links to** (8 November 2026; user:
+   "apply recommendations", "recommendations accepted for 1 to 6", then "go"). The model
+   writes an edge case's condition and the claims it supports, and no outcome: the free
+   text restated a criterion's result and dropped part of it wherever it stayed open (the
+   loan-renewal edge case that extended the due date "by fourteen days", without
+   "calendar", "existing" or the new due date, in four of the last six runs; FIX06 §3).
+   The engine prints the Then of an acceptance criterion the edge case links to as its
+   `EXPECTED OUTCOME` line ([§23.1](../contracts/23-rendering.md)). Like the source line, it
+   is a display, never provenance. The 7 November rejection of an engine-written outcome
+   concerned filling it from source lines; copying a criterion's Then, the only target, is
+   allowed.
+   - **Candidates:** the acceptance criteria of the edge case's own records batch that name
+     at least one of its claims. They are found natively when the records unit completes;
+     no link crosses a batch.
+   - **One candidate** is the link; no model call. **Two or more** make one closed model
+     request per edge case, in a `link-scenarios` step after generation: the request offers
+     those criteria, numbered, with their given, when and then, and the answer is one offered
+     id, never text and never a record. The result schema admits only the offered ids, so a
+     bad answer takes the request's protocol correction and exhaustion fails the run.
+   - **None** blocks the run with the typed rejection `edge_case_without_criterion`
+     (ADR 0047's rejection), naming the edge case's group and claims. Deleting the edge case
+     would delete a scenario, which Decision 5 never does, and a second coverage rule would
+     send the batch back for a criterion no other record needs. Decision 2 still counts an
+     edge case as cover, so a claim that only an edge case names passes admission and blocks
+     here, after every generation call; of the 31 edge cases in the 26 retained loan-renewal
+     runs, 3 had no such criterion (two runs, both on 7 November builds), 20 had one and 8
+     had several, and hello-world wrote none.
+   - The canonical content is `specification/v5` and the state `specification-state/v24`: an
+     edge case keeps its `condition` and holds the ID of the criterion it links to, which
+     state readback checks against the same candidate rule. Earlier versions reject.
+     `packet-guidance/v5` drops the edge outcome entry; the required-authority contract is 4
+     and loses that slot. ADR 0041's state version moves to v25.
 
 ## Consequences
 
@@ -175,6 +219,15 @@ only block.
   - The rule checks links, not meaning: an acceptance criterion that names a claim
     but doesn't test it passes. Since 1 November 2026 no review runs after generation
     (ADR 0023); the human who reviews and edits `spec.md` judges meaning.
+  - **An edge case's outcome (Decision 7)** is only as right as its link. Sharing a claim
+    makes a criterion a candidate, not the one that governs the condition: with several
+    candidates the model's closed choice decides, and a wrong choice prints a wrong
+    outcome with no later check. The printed outcome is the criterion's Then exactly, so
+    an edge case that is a boundary of a flow, not a flow of its own, shows that flow's
+    result. A single candidate links without a choice, so an acceptance criterion that
+    names every claim of its batch is the link of every edge case, a refusal included.
+  - **Two edge cases with one condition** and different claims are no longer told apart by
+    their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
     unconditional; the condition survives only as its own claim.
@@ -218,7 +271,8 @@ only block.
 - **Persistence.** Decisions 1 to 5 left the canonical record shape unchanged, so they
   changed no specification or state version; the generation schema's records gained a
   required `claim_ids`. Decision 6 changed the entity shape, so it took
-  `specification/v4` and `specification-state/v23`.
+  `specification/v4` and `specification-state/v23`. Decision 7 changed the edge-case
+  shape, so it took `specification/v5` and `specification-state/v24`.
 - **Tests.**
   - The result-schema rule: admitted (covered, a non-covering kind ignored, empty),
     rejected at the exact uncovered value, restored by replay from the record, kept by
@@ -291,4 +345,23 @@ only block.
     the statements sharing a group and neither a scenario, a scope statement, an entity
     nor a statement of another group; the line and the `Source:` line render and read
     back; state `v22` rejects; identical entities of different groups block.
+  - An edge case's outcome (Decision 7):
+    - the candidates of an edge case are the criteria of its own batch that share a claim:
+      one links natively, several are one pending choice, none cannot be linked, and a
+      criterion of another batch is never a candidate;
+    - the request offers the candidates numbered from one with their given, when and then,
+      and nothing of another batch; its result schema admits only the offered ids and no
+      text, and a choice outside the offer, a stale request and a malformed answer reject;
+      with two candidates and with three in an unrelated domain, the answer's id names its
+      own criterion and the rendered outcome is that criterion's Then;
+    - the wire carries no outcome: the records response rejects an `expected_outcome`;
+    - an outcome edited in the rendering parses, yet differs from the render of the content's
+      projection, which publication compares; the state round-trips at v24, rejects v23, and
+      readback rejects an edge case whose link is missing, dangling or not a candidate;
+    - scripted runs link natively; by one closed request per pending edge case, over three
+      source groups with the answers alternating between the last and the first criterion
+      offered, so each edge case prints its own answer's Then, the loop runs more than once and
+      the persisted links read back; and block with the typed rejection when a batch has an
+      edge case and no criterion. Each request is projected as a closed choice with its own
+      prompt, and offered ids differ from unit positions in the domain cases.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

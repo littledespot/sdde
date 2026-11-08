@@ -2,6 +2,8 @@ const g = @import("../domain/specification_generation.zig");
 pub const Payload = union(enum) {
     session: @import("../domain/specification_session.zig").Session,
     binding_rejected: @import("../domain/specification_source_binding.zig").Rejection,
+    /// The edge cases' admitted model choices so far, in the plan's order.
+    links: []const @import("../domain/scenario_link.zig").Link,
     raw: @import("../domain/specification_candidate.zig").Raw,
     parsed: @import("../domain/specification_repair.zig").Candidate,
     repair_authorization: struct { authorization: @import("../domain/specification_repair.zig").Authorization, response: ?struct { value: @import("../domain/specification_repair.zig").Replacement, origin: @import("../domain/model_candidate_origin.zig").Origin } = null },

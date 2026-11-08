@@ -1160,6 +1160,57 @@ test "request projection records every provider invocation, keyed and determinis
     try untraced_allocator.run(checkRequestProjection, .{});
 }
 
+test "an outcome link request is projected as a closed choice with its own prompt, once per pending edge case" {
+    try untraced_allocator.run(checkLinkProjection, .{});
+}
+
+fn checkLinkProjection(allocator: std.mem.Allocator) !void {
+    const io = std.testing.io;
+    var freeze = std.testing.tmpDir(.{});
+    defer freeze.cleanup();
+    var sink: request_projection.Sink = .{ .allocator = allocator, .io = io, .root = freeze.dir };
+    defer sink.entries.deinit(allocator);
+    try runSpecificationWorkflows(allocator, .scenario_links, &sink);
+    // The first scenario links natively and asks nothing. The second asks once per pending edge
+    // case, after every other request of its run, and each request offers its own edge case.
+    const native = sink.entries.items[0].scenario;
+    var calls: usize = 0;
+    for (sink.entries.items) |entry| calls += @intFromBool(entry.scenario == native + 1);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const prompt = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/links.prompt.md", a, .limited(1_048_576));
+    var asked: usize = 0;
+    var bodies: std.ArrayList([]const u8) = .empty;
+    for (1..calls + 1) |call| {
+        const path = try std.fmt.allocPrint(a, "scenario_links/scenario-{d:0>3}/call-{d:0>4}.json", .{ native + 1, call });
+        const projection = try request_projection.Projection.decode(a, try freeze.dir.readFileAlloc(io, path, a, .limited(16 * 1024 * 1024)));
+        const schema = (try std.json.parseFromSlice(std.json.Value, a, projection.schema, .{})).value;
+        const properties = if (schema == .object) schema.object.get("properties") else null;
+        const criterion = if (properties) |members| members.object.get("criterion") else null;
+        if (criterion == null) {
+            // Every link request follows every other request of the run.
+            try std.testing.expectEqual(@as(usize, 0), asked);
+            continue;
+        }
+        asked += 1;
+        const offered = criterion.?.object.get("enum").?.array.items;
+        try std.testing.expectEqual(@as(usize, 2), offered.len);
+        try std.testing.expectEqual(@as(i64, 1), offered[0].integer);
+        try std.testing.expectEqual(@as(i64, 2), offered[1].integer);
+        var found_prompt = false;
+        var body: ?[]const u8 = null;
+        for (projection.content) |part| {
+            found_prompt = found_prompt or std.mem.eql(u8, part.bytes(), prompt);
+            if (std.mem.indexOf(u8, part.bytes(), "acceptance_criteria") != null) body = part.bytes();
+        }
+        try std.testing.expect(found_prompt);
+        for (bodies.items) |earlier| try std.testing.expect(!std.mem.eql(u8, earlier, body.?));
+        try bodies.append(a, body.?);
+    }
+    try std.testing.expect(asked >= 2);
+}
+
 fn checkRequestProjection(allocator: std.mem.Allocator) !void {
     const io = std.testing.io;
     var freeze = std.testing.tmpDir(.{});
@@ -1238,6 +1289,10 @@ test "configured native summary reuse advances a fresh validated plan after pre-
     try testSpecificationWorkflows(.reuse_regeneration);
 }
 
+test "an edge case links natively, by one closed model choice, or blocks the run when no criterion of its batch can serve it" {
+    try testSpecificationWorkflows(.scenario_links);
+}
+
 const step_trace = @import("../../src/test_fixtures/workflow_step_trace.zig");
 
 /// Records one scenario's step trace and totals beneath `.zig-cache` as
@@ -1299,7 +1354,7 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
     return inputs.corpus.state_id.bytes;
 }
 
-const SpecificationCases = enum { existing, source_preservation, reuse_regeneration };
+const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links };
 
 // Every scenario allocates through one leak-checked untraced allocator; the
 // sweep's allocations would otherwise each pay for a stack trace.
@@ -1389,16 +1444,22 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
     const timing = @import("../../src/test_fixtures/scenario_timing.zig");
     const membership_start = applicability_start + applicability_cases.len * 2;
     const preservation_start = membership_start + 8;
-    var costs: [preservation_start + 3]?timing.Sample = @splat(null);
+    // ADR 0038 Decision 7: an edge case's outcome link is native, a model's closed choice, or a
+    // blocked run. The last two use three source groups: the choice case makes one request per
+    // group, answered alternately, and the blocked case leaves criteria in only the first group.
+    const link_start = preservation_start + 3;
+    var costs: [link_start + 3]?timing.Sample = @splat(null);
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
         .reuse_regeneration => preservation_start + 1,
+        .scenario_links => link_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => preservation_start,
-        .source_preservation => costs.len,
+        .source_preservation => link_start,
         .reuse_regeneration => preservation_start + 2,
+        .scenario_links => costs.len,
     };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     for (case_range_begin..case_range_end) |scenario| {
@@ -1409,7 +1470,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const applicability = if (scenario >= applicability_start and scenario < membership_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
         const membership_scenario = scenario >= membership_start and scenario < preservation_start;
-        const preservation_scenario = scenario >= preservation_start;
+        const link_scenario = scenario >= link_start;
+        const preservation_scenario = scenario >= preservation_start and !link_scenario;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
         const summary_scenario = scenario >= summary_start and scenario < global_start;
@@ -1442,6 +1504,14 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
+        if (link_scenario) {
+            const several = scenario != link_start;
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (several) "Renew the loan.\n" else "A librarian renews an eligible loan and sees the new return deadline.\n" });
+            if (several) {
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = "Issue a receipt.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = "Confirm the renewal.\n" });
+            }
+        }
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
             "MOCK Track library loans and display their return deadlines.\n"
         else
@@ -1487,7 +1557,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "support.schema.json", "links.prompt.md", "links.schema.json", "repair.prompt.md", "packet-guidance.json" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -1633,6 +1703,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             driver.brief_text = if (summary_first) .{ "Startup greeting", "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Loan renewal", "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
         }
         cost.enter(.execution);
+        if (link_scenario) driver.edge_cases = switch (scenario - link_start) {
+            0 => .native,
+            1 => .chosen,
+            else => .unlinked,
+        };
         if (membership_scenario) {
             // This positive/retry matrix has one business group. Feature-wide
             // entities own their applicability and records; record batches cannot
@@ -1665,7 +1740,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
-        const expected: workflow.OutcomeTag = if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        const expected: workflow.OutcomeTag = if (link_scenario) (if (driver.edge_cases == .unlinked) .blocked else .ok) else if (membership_scenario) (if (driver.failed_repair and driver.entities_required) .failed else .ok) else if (applicability != null) .ok else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions or driver.source_loss == .unchanged_conflict or (driver.fault != null and driver.fault.?.repetition == .persistent)) .failed else .ok) else if (candidate_omission or extraction_omission or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_classification_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.generation_gap or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 0) {
@@ -1673,6 +1748,72 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expect(view.contains(.published_workflow_output));
             try std.testing.expect(!view.contains(.validated_reference_summary) and !view.contains(.reference_summary_identities));
+        }
+        if (link_scenario) {
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const refusal = "- **EXPECTED OUTCOME** The request is refused.";
+            switch (driver.edge_cases.?) {
+                // The run stops before any request, and the typed gap names the edge case's group.
+                .unlinked => {
+                    try std.testing.expectEqual(@as(usize, 0), driver.link_calls);
+                    try std.testing.expect(!view.contains(.published_workflow_output));
+                    const gap = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?.source_catalogue;
+                    try std.testing.expectEqual(.edge_case_without_criterion, gap.reason);
+                    try std.testing.expectEqual(@as(usize, 1), gap.eligible_signals.len);
+                    try std.testing.expect(gap.valid());
+                },
+                .native, .chosen => {
+                    const chosen = driver.edge_cases.? == .chosen;
+                    // One criterion needs no request. With two, each group's edge case makes its own
+                    // closed request, so the loop runs once per group.
+                    const groups = (try @import("../../src/application/specification_workflow.zig").readSession(&view)).record_group_count;
+                    try std.testing.expectEqual(if (chosen) groups else 0, driver.link_calls);
+                    try std.testing.expect(!chosen or groups > 1);
+                    try std.testing.expect(view.contains(.published_workflow_output));
+                    const rendered = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_rendering_workflow.zig").rendered_schema, .rendered);
+                    // The printed outcome is the linked criterion's Then: the one the model named for
+                    // that edge case. The answers alternate between the last and the first criterion
+                    // offered, so the refusal prints for the first, third, ... edge case only.
+                    const refusals: usize = if (chosen) (groups + 1) / 2 else 0;
+                    try std.testing.expectEqual(refusals, std.mem.count(u8, rendered, refusal));
+                    try std.testing.expectEqual(if (chosen) groups else 1, std.mem.count(u8, rendered, "- **EXPECTED OUTCOME** "));
+                    const content = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").content_schema, .content);
+                    var linked: usize = 0;
+                    for (content.records) |record| {
+                        if (record.proposal.content != .edge_case) continue;
+                        const target = record.outcome_of.?;
+                        const criterion = for (content.records) |other| {
+                            if (std.meta.eql(other.id, target)) break other;
+                        } else return error.DanglingOutcomeLink;
+                        const then = criterion.proposal.content.acceptance_criterion.then.segments;
+                        const refused = then.len == 1 and then[0] == .literal and std.mem.eql(u8, then[0].literal.value, "The request is refused.");
+                        // Edge cases are in authoring order, which is the order they were asked.
+                        try std.testing.expectEqual(chosen and linked % 2 == 0, refused);
+                        linked += 1;
+                    }
+                    try std.testing.expectEqual(if (chosen) groups else 1, linked);
+                    // The persisted state holds the link as the criterion's ID, and readback
+                    // rejects a dangling link, a missing link and a link on any other record.
+                    const specification_state = @import("../../src/domain/specification_state.zig");
+                    const contracts = boot.ready.workflows.registry().contractSource();
+                    const saved = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", allocator, .limited(64 * 1024 * 1024));
+                    defer allocator.free(saved);
+                    var readback: std.heap.ArenaAllocator = .init(allocator);
+                    defer readback.deinit();
+                    _ = (try specification_state.parse(readback.allocator(), saved, .{ .bytes = "chosen" }, contracts)).specified() orelse return error.ExpectedSpecifiedState;
+                    const link = if (chosen) "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":2}" else "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":1}";
+                    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, saved, link));
+                    for ([_][2][]const u8{
+                        .{ link, "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":9}" },
+                        .{ link, "\"outcome_of\":null" },
+                        .{ "\"outcome_of\":null", "\"outcome_of\":{\"kind\":\"acceptance_criterion\",\"ordinal\":1}" },
+                    }) |forgery| {
+                        const forged = try std.mem.replaceOwned(u8, readback.allocator(), saved, forgery[0], forgery[1]);
+                        try std.testing.expect(!std.mem.eql(u8, forged, saved));
+                        try std.testing.expectError(error.InvalidSpecificationState, specification_state.parse(readback.allocator(), forged, .{ .bytes = "chosen" }, contracts));
+                    }
+                },
+            }
         }
         if (preservation_scenario) {
             try std.testing.expect(driver.initial_source_review_calls != 0);
@@ -2553,8 +2694,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v23", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v23", "specification-state/v22");
+    try std.testing.expectEqualStrings("specification-state/v24", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v24", "specification-state/v23");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

@@ -55,6 +55,7 @@ pub fn render(allocator: std.mem.Allocator, document: spec.CapturedDocument) Err
                     try identity(w, record.id.?);
                     try write(w, "**\n");
                     inline for (@typeInfo(@TypeOf(content)).@"struct".fields) |f| try inlineField(w, label(f.name), @field(content, f.name));
+                    if (record.outcome) |outcome| try inlineField(w, outcome_label, outcome);
                     if (record.related.len != 0) {
                         try write(w, related_label);
                         for (record.related, 0..) |id, at| {
@@ -108,6 +109,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                 const header = try cursor.take();
                 var body: Body = undefined;
                 var related: []const spec.Id = &.{};
+                var outcome: ?spec.Scalar = null;
                 const id: ?spec.Id = if (comptime kind == .acceptance_criterion or @hasField(Body, "text")) blk: {
                     if (!std.mem.startsWith(u8, header, "- **")) return error.InvalidSpecification;
                     const end = std.mem.indexOf(u8, header[4..], "**: ") orelse return error.InvalidSpecification;
@@ -120,6 +122,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                     if (!std.mem.startsWith(u8, header, "**") or !std.mem.endsWith(u8, header, "**") or header.len <= 4) return error.InvalidSpecification;
                     const key = try readId(header[2 .. header.len - 2], kind);
                     inline for (@typeInfo(Body).@"struct".fields) |f| @field(body, f.name) = try readField(allocator, &cursor, label(f.name));
+                    if (comptime kind.showsOutcome()) outcome = try readField(allocator, &cursor, outcome_label);
                     if (comptime kind == .entity) related = try readRelated(allocator, &cursor);
                     break :blk key;
                 };
@@ -127,7 +130,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!spec.Capture
                     try readSources(allocator, &cursor, if (comptime kind == .entity) field_source else nested_source)
                 else
                     &.{};
-                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related });
+                try records.append(allocator, .{ .id = id, .content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), body), .sources = sources, .related = related, .outcome = outcome });
             }
             if (!mandatory(kind) and kind != .entity and records.items.len == start) return error.InvalidSpecification;
             if (isScope(kind)) scope_records += records.items.len - start;
@@ -240,6 +243,11 @@ fn singleLine(file: spec.SourceLines) bool {
     return file.ranges.len == 1 and file.ranges[0].first == file.ranges[0].last;
 }
 
+/// An edge case's outcome line, after its condition: the Then of the acceptance criterion it
+/// links to, derived by the projection. Like the source line it is a display that never becomes
+/// provenance, so publication's byte comparison with the projection owns its content.
+const outcome_label = "- **EXPECTED OUTCOME** ";
+
 /// An entity's related-statements line, between its fields and its source line. It lists
 /// statement IDs only: like the source line it is a display that never becomes provenance,
 /// so the document check owns its shape and publication's byte comparison with the
@@ -308,7 +316,6 @@ fn lineNumber(digits: []const u8) Error!u32 {
 
 fn label(comptime name: []const u8) []const u8 {
     if (comptime std.mem.eql(u8, name, "condition")) return "- **CONDITION** ";
-    if (comptime std.mem.eql(u8, name, "expected_outcome")) return "- **EXPECTED OUTCOME** ";
     if (comptime std.mem.eql(u8, name, "name")) return "- **NAME** ";
     @compileError("Unregistered specification field label");
 }

@@ -235,15 +235,11 @@
         },
         "condition": {
           "$ref": "#/$defs/business_value"
-        },
-        "expected_outcome": {
-          "$ref": "#/$defs/business_value"
         }
       },
       "required": [
         "kind",
-        "condition",
-        "expected_outcome"
+        "condition"
       ],
       "additionalProperties": false
     },

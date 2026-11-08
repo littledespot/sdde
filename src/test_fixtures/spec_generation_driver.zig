@@ -77,6 +77,9 @@ pub const Driver = struct {
     entities_required: bool = false,
     contradict_entities: bool = false,
     generation_gap: bool = false,
+    edge_cases: ?@import("spec_generation_responses.zig").EdgeCases = null,
+    /// Requests that asked the model to link an edge case to one of several criteria.
+    link_calls: usize = 0,
     calls: usize = 0,
     fault: ?Fault = null,
     fault_calls: usize = 0,
@@ -178,7 +181,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .edge_cases = self.edge_cases, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             if (self.runaway_displaced) |plan| {
                 self.fake.invocation_plan = .{ .complete = plan };
                 self.runaway_displaced = null;
@@ -488,7 +491,22 @@ pub const Driver = struct {
                     self.fault_calls += 1;
                 }
             }
-            if (current_request.id().immutable_unit_owner_id == .specification_unit and current_request.id().purpose == .initial_generation) {
+            const link_request = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition| std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition) else false else false;
+            if (link_request) {
+                // After generation completed, a closed choice with its own prompt and no
+                // generation context, offering the criteria of one records batch.
+                const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
+                std.testing.expectEqual(@import("../domain/specification_session.zig").unit_count, session.completed) catch unreachable;
+                const prompt = std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/links.prompt.md", arena.allocator(), .unlimited) catch unreachable;
+                const generation_context = std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.context.json", arena.allocator(), .unlimited) catch unreachable;
+                var found_prompt = false;
+                for (current_request.prepared().?.content) |part| if (part == .guidance) {
+                    found_prompt = found_prompt or std.mem.eql(u8, part.bytes(), prompt);
+                    std.testing.expect(!std.mem.eql(u8, part.bytes(), generation_context)) catch unreachable;
+                };
+                std.testing.expect(found_prompt) catch unreachable;
+                self.link_calls += 1;
+            } else if (current_request.id().immutable_unit_owner_id == .specification_unit and current_request.id().purpose == .initial_generation) {
                 std.testing.expect(!view.contains(.required_authority_gate)) catch unreachable;
                 const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
                 const unit = @import("../domain/specification_session.zig").unit(session.completed) catch unreachable;

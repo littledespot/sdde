@@ -225,7 +225,7 @@ pub fn run() !void {
         for (1..3) |repeat| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-records-{d}", .{ example.id, repeat }), .case_id = example.id, .repetition = @intCast(repeat), .requests = record_requests.items });
         for (0..2) |_| try starts.append(a, records_start);
         states[index] = .{ .context = prepared.context, .seed = current };
-        const candidate = try session.assemble(a, text.validator, prepared.context, current);
+        const candidate = try session.assemble(a, text.validator, prepared.context, current, &.{});
         try shared.writeAt(a, output, example.id, "seed.json", try std.json.Stringify.valueAlloc(a, .{ .session = current, .brief = current.units[0].?.response.content.brief, .candidate = candidate.content }, .{}));
         // Expectation labels and authored context seeds never become initial
         // brief/story inputs. Later business context uses resolved prior units.
