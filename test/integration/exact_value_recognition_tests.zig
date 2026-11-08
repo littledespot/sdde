@@ -71,44 +71,6 @@ fn measure(a: std.mem.Allocator, sample: Sample) !corpus.Measurement {
         .metadata_contract = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v5")) .historical_v5 else .historical_v3,
     }, .{ .boundary_fn = @import("exact_value_unicode").wholeWordBoundary });
 }
-test "test.integration.exact_value F13 identical bytes cannot bridge business and token requirement bindings" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const retained = try fixture(a);
-    const business = try measure(a, retained.samples[0]);
-    const token = try measure(a, retained.samples[1]);
-    try std.testing.expectEqualStrings("hello-world-business-binding", retained.samples[0].id);
-    try std.testing.expectEqualStrings("hello-world-token-binding", retained.samples[1].id);
-    try std.testing.expectEqual(corpus.State.measured, business.state);
-    try std.testing.expectEqual(corpus.State.measured, token.state);
-    try std.testing.expectEqual(corpus.MetadataContract.historical_v5, business.metadata_contract);
-    try std.testing.expectEqual(corpus.MetadataContract.historical_v5, token.metadata_contract);
-    try std.testing.expect(business.native_exact_scope == null and token.native_exact_scope == null);
-    var unbound: usize = 0;
-    var bound: usize = 0;
-    var unbound_behavior_fields: usize = 0;
-    for (business.fields) |selected| for (selected.plain_runs) |run| {
-        try std.testing.expectEqual(@as(usize, 0), run.result.matches.len);
-        unbound += run.result.unbound_matches.len;
-        if (selected.native_field != null and (selected.native_field.? == .ac_then or selected.native_field.? == .functional_requirement)) {
-            try std.testing.expectEqual(@as(usize, 1), run.result.unbound_matches.len);
-            unbound_behavior_fields += 1;
-        }
-    };
-    for (token.fields) |selected| for (selected.plain_runs) |run| {
-        try std.testing.expectEqual(@as(usize, 0), run.result.unbound_matches.len);
-        bound += run.result.matches.len;
-    };
-    // Both responses type the greeting in Then and FR. The business batch also
-    // types it in entity meaning. None of those bytes can bridge its missing
-    // token association; only the token batch has an explicit binding.
-    try std.testing.expectEqual(@as(usize, 2), unbound_behavior_fields);
-    try std.testing.expectEqual(@as(usize, 3), unbound);
-    try std.testing.expectEqual(@as(usize, 2), bound);
-    try std.testing.expect(!business.semantic_quality_assessed and !token.semantic_quality_assessed);
-    try std.testing.expect(!business.workflow_authority and !token.workflow_authority);
-}
 test "test.integration.exact_value loan embedded insertion syntax is never interpreted as a value occurrence" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

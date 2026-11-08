@@ -20,6 +20,15 @@
   Amended again on 2 November 2026 after the D16.1 set (FIX06 D16.2; user: "approved",
   then "Yes, exempt FRs"): Decision 5's repeats are deleted natively and requirements are
   exempt.
+  Amended on 8 November 2026 (FIX06 §3 Robustness track; user: "yes as per
+  recommendation"): the text of a repeat the owner deletes is not judged (Decision 5);
+  and, as the user then decided ("accept both as documented"), the delete order and
+  post-admission corner of that change below. The same day (FIX06 §3 Next item 6; user:
+  "Entity lever … is yes and approved", then "yes to all decisions"): an entity is a name
+  and its groups (Decision 6). Amended again on 8 November 2026 (FIX06 §3, the edge-case
+  outcome lever; user: "apply recommendations", "recommendations accepted for 1 to 6", then
+  "go"): an edge case's outcome is the Then of an acceptance criterion it links to
+  (Decision 7).
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -35,6 +44,29 @@
     `model-request-debug/v16` and reports to `spec-e2e-report/v14`;
     [ADR 0035](0035-cross-kind-restatement.md) keeps only its story comparison and its
     same-kind delete.
+  - Since 8 November 2026: [text-field-composition.md](../contracts/text-field-composition.md),
+    §12, §22 and §17 exempt a repeated statement from text admission and repair. That
+    change advances no version: first requests are byte-identical, and a recorded request
+    replays with the exemption its recorded coverage implies.
+  - Since 8 November 2026, Decision 6 (an entity is a name and its groups): §23.1 (the
+    related-statements line), §24 (`specification-state/v23`, `specification/v4`) and
+    §17; [ADR 0016](0016-configured-json-response-composition.md) (`packet-guidance/v4`);
+    [ADR 0020](0020-derived-exact-reference-lineage.md),
+    [ADR 0023](0023-advisory-post-generation-review.md) and
+    [ADR 0024](0024-native-exact-token-authority.md) (the content and state versions);
+    [ADR 0035](0035-cross-kind-restatement.md) (entities, not entity descriptions); and
+    [ADR 0041](0041-failed-run-incomplete-publication.md) (its state version moves to
+    v24). The entities schema and prompt change, and every generation request's shared
+    guidance loses one sentence.
+  - Since 8 November 2026, Decision 7 (an edge case's outcome is a linked criterion's Then):
+    §17.3 (a fourth model task type, the outcome-link request), §23.1 (the outcome line),
+    §24 (`specification-state/v24`, `specification/v5`), the §32 index and F0100 §5;
+    [ADR 0016](0016-configured-json-response-composition.md) (`packet-guidance/v5`);
+    [ADR 0047](0047-engine-composed-primary-story.md) (its typed rejection gains a reason);
+    and [ADR 0041](0041-failed-run-incomplete-publication.md) (its state version moves to
+    v25). The records schema loses the edge case's outcome, the required-authority contract
+    is 4, and a link-scenarios step with its own prompt and result schema follows
+    generation.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -91,10 +123,30 @@ only block.
    - **Repeated statement:** such a record whose every claim is taken restates them, and
      the records validator deletes it natively with no model call (`repeated_statement`;
      user, 2 November 2026: "approved"). It runs after ADR 0035's story comparison, so a
-     record restating the story keeps that rule. It is kept when it holds an exact copy
+     record restating the story keeps that rule, except for a repeat whose own text is
+     defective (below). It is kept when it holds an exact copy
      no other record of the batch holds, so no exact value is lost (user: "Yes, keep
      it"); each delete is decided on the batch it leaves. Deleting it leaves every claim
      and exact copy the batch names in place.
+   - **Its text is not judged** (user, 8 November 2026: "yes as per recommendation"). A
+     record the rule deletes never publishes, so a defect in its own text, such as a bare
+     exact value in a prose field, is no defect of the response: response admission omits
+     it, and the records validator reports the delete in its place. Both apply one rule,
+     `statement_ownership`, to the claim lists and the exact values recognized in the
+     text, so on the batch as returned a record admission exempts is a record the session
+     deletes. A requirement, a record holding the batch's only copy of an exact value, a
+     partly taken record and every defect outside a deleted record's text are judged as
+     before. A record whose text holds a value that can't be identified (an ambiguous or
+     unrecognizable one, text that is not a valid scalar in a field that can hold an exact
+     copy, or, at admission, any explicit insertion, which unit validation recognizes again
+     as one run where its handle need not survive) is never judged deletable, since the
+     keep rule can't be applied, and it supplies no value to another record.
+   - **Order for such a record** (user, 8 November 2026: "accept both as documented"): its
+     delete is decided when the unit is validated, ahead of ADR 0035's comparisons, which
+     then run on the batch it leaves. A behaviour statement that restates the story and
+     alone takes the repeat's claims is deleted after the repeat, not before it, so the
+     repeat is lost where valid text would have kept it. Deciding it later would leave the
+     exempted defect to a unit repair that refuses it (below).
    - **Partly taken statement:** such a record naming taken claims and others too is
      rejected at response admission as `shared_member` at `/records/<i>`, before any
      coverage gap. The correction offers the record's shape, names the exclusive and
@@ -110,6 +162,54 @@ only block.
      replaces it"). ADR 0035's same-kind delete runs first and is unchanged.
    - The records prompt keeps its "at most one" sentence, requirements included, as the
      rule's first version (FIX06 D16.1) had it (user: "Yes, keep it").
+6. **An entity is a name and its groups** (8 November 2026; user: "Entity lever … is yes
+   and approved", then "yes to all decisions"). The model writes an entity's name and
+   selects the groups that support it; it writes no meaning or relationship text, which
+   restated, weakened or added to requirements wherever it stayed open (FIX06 §3). The
+   engine renders a read-only related-statements line on each entity: the functional
+   requirements, business rules, user-visible outcomes and prohibited behaviours that
+   share one of its groups, in document order ([§23.1](../contracts/23-rendering.md)). It
+   is a display like the source line, never provenance, and the entity's sources do not
+   change. Applicability, the basis and the entity unit's order are unchanged.
+   - Two entities with the same name and different groups are not evidence-equivalent,
+     so the native duplicate rule blocks them as `competing_records` (Decision 1,
+     ADR 0035 Decision 3); with equal groups the later one is deleted.
+   - The canonical content is `specification/v4` and the state `specification-state/v23`;
+     earlier versions reject. `packet-guidance/v4` drops the meaning and relationship
+     entries and the entity repair tail; the required-authority contract is 3 and loses
+     those slots and the slot member index.
+7. **An edge case's outcome is the Then of a criterion it links to** (8 November 2026; user:
+   "apply recommendations", "recommendations accepted for 1 to 6", then "go"). The model
+   writes an edge case's condition and the claims it supports, and no outcome: the free
+   text restated a criterion's result and dropped part of it wherever it stayed open (the
+   loan-renewal edge case that extended the due date "by fourteen days", without
+   "calendar", "existing" or the new due date, in four of the last six runs; FIX06 §3).
+   The engine prints the Then of an acceptance criterion the edge case links to as its
+   `EXPECTED OUTCOME` line ([§23.1](../contracts/23-rendering.md)). Like the source line, it
+   is a display, never provenance. The 7 November rejection of an engine-written outcome
+   concerned filling it from source lines; copying a criterion's Then, the only target, is
+   allowed.
+   - **Candidates:** the acceptance criteria of the edge case's own records batch that name
+     at least one of its claims. They are found natively when the records unit completes;
+     no link crosses a batch.
+   - **One candidate** is the link; no model call. **Two or more** make one closed model
+     request per edge case, in a `link-scenarios` step after generation: the request offers
+     those criteria, numbered, with their given, when and then, and the answer is one offered
+     id, never text and never a record. The result schema admits only the offered ids, so a
+     bad answer takes the request's protocol correction and exhaustion fails the run.
+   - **None** blocks the run with the typed rejection `edge_case_without_criterion`
+     (ADR 0047's rejection), naming the edge case's group and claims. Deleting the edge case
+     would delete a scenario, which Decision 5 never does, and a second coverage rule would
+     send the batch back for a criterion no other record needs. Decision 2 still counts an
+     edge case as cover, so a claim that only an edge case names passes admission and blocks
+     here, after every generation call; of the 31 edge cases in the 26 retained loan-renewal
+     runs, 3 had no such criterion (two runs, both on 7 November builds), 20 had one and 8
+     had several, and hello-world wrote none.
+   - The canonical content is `specification/v5` and the state `specification-state/v24`: an
+     edge case keeps its `condition` and holds the ID of the criterion it links to, which
+     state readback checks against the same candidate rule. Earlier versions reject.
+     `packet-guidance/v5` drops the edge outcome entry; the required-authority contract is 4
+     and loses that slot. ADR 0041's state version moves to v25.
 
 ## Consequences
 
@@ -119,6 +219,15 @@ only block.
   - The rule checks links, not meaning: an acceptance criterion that names a claim
     but doesn't test it passes. Since 1 November 2026 no review runs after generation
     (ADR 0023); the human who reviews and edits `spec.md` judges meaning.
+  - **An edge case's outcome (Decision 7)** is only as right as its link. Sharing a claim
+    makes a criterion a candidate, not the one that governs the condition: with several
+    candidates the model's closed choice decides, and a wrong choice prints a wrong
+    outcome with no later check. The printed outcome is the criterion's Then exactly, so
+    an edge case that is a boundary of a flow, not a flow of its own, shows that flow's
+    result. A single candidate links without a choice, so an acceptance criterion that
+    names every claim of its batch is the link of every edge case, a refusal included.
+  - **Two edge cases with one condition** and different claims are no longer told apart by
+    their outcomes: like any single-field record they block as `competing_records`.
   - A lead-in condition is split from the items it governs. "Unless the borrower is
     staff:" followed by two items becomes three claims, and each item claim reads as
     unconditional; the condition survives only as its own claim.
@@ -137,15 +246,33 @@ only block.
     - admission judges the response as returned, so coverage is required of a record the
       session then deletes, and a statement taken only through a record that ADR 0035
       then deletes as a story restatement is kept;
-    - a repeated statement with a typed-text or exact-copy defect takes that unit repair
-      before the session can delete it.
+    - a repeated statement's own text defect takes no correction and no unit repair:
+      admission and the validator exempt the record the rule deletes. The text of a
+      record the rule keeps, and any defect elsewhere in the response, still take theirs;
+    - admission judges the response as returned (user, 8 November 2026: "accept both as
+      documented"). If a unit repair then rewrites the text of the record that held an
+      exempted statement's exact value, so that it no longer holds it, the statement is
+      kept and a composition defect in its text reaches unit repair, which refuses it
+      (`InvalidSpecificationRepair`): an operational failure in place of the protocol
+      correction admission would have sent. Repairs keep a record's claims, and no ADR 0035
+      delete runs while the defective statement is in the batch. When the statement is
+      deleted first and the holder's repair then drops the value, exact-copy coverage
+      (`missing_exact_copy`) catches it if the value is mandatory;
+    - the delete reads the text as typed, while admission normalizes text first (user, 8
+      November 2026: "apply recommendations"; recorded, not handled). A repeated statement
+      whose normalized form is an exact value no other record holds could lose it: coverage
+      fails the run when the value is mandatory, and an optional value would be lost
+      silently. It has not been seen.
   - **Identical records naming different claims** are not evidence-equivalent, so the
     native duplicate rule blocks them as `competing_records` instead of deleting one
     (ADR 0035 Decision 3).
   - **A repeated claim ID** passes the schema (subset selectors don't enforce
     uniqueness) and ends the unit at parsing, as a repeated `signal_ids` entry does.
-- **Persistence.** The canonical record shape is unchanged, so no specification or
-  state version changes. The generation schema's records gain a required `claim_ids`.
+- **Persistence.** Decisions 1 to 5 left the canonical record shape unchanged, so they
+  changed no specification or state version; the generation schema's records gained a
+  required `claim_ids`. Decision 6 changed the entity shape, so it took
+  `specification/v4` and `specification-state/v23`. Decision 7 changed the edge-case
+  shape, so it took `specification/v5` and `specification-state/v24`.
 - **Tests.**
   - The result-schema rule: admitted (covered, a non-covering kind ignored, empty),
     rejected at the exact uncovered value, restored by replay from the record, kept by
@@ -192,5 +319,49 @@ only block.
       outlines the record node and lists the taken naming;
     - a scripted records response that restates a requirement as a business rule
       publishes with the rule deleted and no correction. Every scripted records batch has
-      one claim, so a partly taken record is proven at admission only.
+      one claim, so a partly taken record is proven at admission only;
+    - the text of a repeated statement is not judged (8 November 2026):
+      - at the rule, a statement taken by a requirement before or after it, or by an earlier
+        statement, is deleted; one holding the only copy of an exact value, naming an
+        untaken, partly taken or no claim, taken only by a later statement, or holding a
+        value that can't be identified is kept, and blocks no other record's delete;
+      - at admission, the defect of a statement the rule deletes is omitted, for a bare
+        value and for another defect alike, and reported for every kept case above and for
+        a requirement; an explicit insertion is never read as a held value;
+      - at the records validator, the same set reports `repeated_statement` in place of the
+        text defect, for a value written as text and for a typed one, a kept record reports
+        its defect, which no unit repair can fix, and another record's unidentifiable value
+        doesn't stop the delete;
+      - the same batches, encoded as the wire carries them and validated as typed records,
+        give admission exemptions that are a subset of the validator's deletes, over every
+        statement kind and over text that is not a valid scalar; the roles the validator
+        gives each kind equal the kinds of the request's coverage rule;
+      - the statements array is the one array a schema covers, and replay restores it from
+        the record: a recorded request exempts a repeat's defect and keeps the first
+        statement's, and without the record the same bytes are reported;
+      - a scripted response whose extra outcome is only an exact value another record
+        holds publishes with the outcome deleted and no correction.
+  - An entity is a name and its groups (Decision 6): the related-statements line lists
+    the statements sharing a group and neither a scenario, a scope statement, an entity
+    nor a statement of another group; the line and the `Source:` line render and read
+    back; state `v22` rejects; identical entities of different groups block.
+  - An edge case's outcome (Decision 7):
+    - the candidates of an edge case are the criteria of its own batch that share a claim:
+      one links natively, several are one pending choice, none cannot be linked, and a
+      criterion of another batch is never a candidate;
+    - the request offers the candidates numbered from one with their given, when and then,
+      and nothing of another batch; its result schema admits only the offered ids and no
+      text, and a choice outside the offer, a stale request and a malformed answer reject;
+      with two candidates and with three in an unrelated domain, the answer's id names its
+      own criterion and the rendered outcome is that criterion's Then;
+    - the wire carries no outcome: the records response rejects an `expected_outcome`;
+    - an outcome edited in the rendering parses, yet differs from the render of the content's
+      projection, which publication compares; the state round-trips at v24, rejects v23, and
+      readback rejects an edge case whose link is missing, dangling or not a candidate;
+    - scripted runs link natively; by one closed request per pending edge case, over three
+      source groups with the answers alternating between the last and the first criterion
+      offered, so each edge case prints its own answer's Then, the loop runs more than once and
+      the persisted links read back; and block with the typed rejection when a batch has an
+      edge case and no criterion. Each request is projected as a closed choice with its own
+      prompt, and offered ids differ from unit positions in the domain cases.
   - The list-item split: its quoting, structure and omission-repair cases (ADR 0036).

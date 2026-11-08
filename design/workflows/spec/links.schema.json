@@ -1,0 +1,22 @@
+{
+  "$defs": {
+    "ordinal": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "scenario_link": {
+      "type": "object",
+      "properties": {
+        "criterion": {
+          "$ref": "#/$defs/ordinal"
+        }
+      },
+      "required": [
+        "criterion"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$ref": "#/$defs/scenario_link"
+}

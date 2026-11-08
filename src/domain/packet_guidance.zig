@@ -7,7 +7,7 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const review = @import("specification_review_subject.zig");
 
-pub const version = "packet-guidance/v3";
+pub const version = "packet-guidance/v5";
 pub const Error = error{InvalidPacketGuidance} || std.mem.Allocator.Error;
 pub const max_bytes: u32 = 64 * 1024;
 const max_depth = 3;
@@ -40,7 +40,7 @@ pub const FeaturePurpose = SlotKey(featurePurposeSlot);
 pub const RecordField = SlotKey(recordFieldSlot);
 pub const ReferenceUnit = std.meta.Tag(review.ReferenceSubject);
 pub const QuestionRule = enum { retained_gap, required, omitted };
-pub const RepairTail = enum { entity_record_meaning, value_choices };
+pub const RepairTail = enum { value_choices };
 /// A reference task brackets its native ordinal.
 pub const Fragments = struct { before: []const u8, after: []const u8 };
 
@@ -79,10 +79,10 @@ fn Entries(comptime Key: type, comptime Value: type) type {
     return std.enums.EnumFieldStruct(Key, Value, null);
 }
 
-/// The closed `packet-guidance/v3` wire shape. Missing, extra, duplicate and
+/// The closed `packet-guidance/v5` wire shape. Missing, extra, duplicate and
 /// wrongly typed entries reject while decoding.
 pub const Wire = struct {
-    schema: enum { @"packet-guidance/v3" },
+    schema: enum { @"packet-guidance/v5" },
     feature_purposes: Entries(FeaturePurpose, []const u8),
     record_families: Entries(spec.Kind, []const u8),
     record_fields: Entries(RecordField, []const u8),

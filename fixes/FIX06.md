@@ -11,10 +11,9 @@ earlier items at `0f3e4d2`; Q20 was never committed, §3).
 
 **Gate (ADR 0034): not met.** Every published run since D12.2 is adjudicated (§7 H1): D12.2,
 4 of 4 hello-world and 1 of 5 loan-renewal publications pass; the 12 kept-state runs since ADR
-0047, 5 of 6 and 1 of 6. `zig-out/e2e-spec/` holds only the six ADR 0047 runs of 3 November
-(`2026-11-03T04-1*`, report v14), the six ADR 0047 + D12.3 runs (`2026-11-06T22-4*`), the six
-reverted Q20 runs (`2026-11-07T01-1*`) and the six reverted one-owner hygiene runs
-(`2026-11-07T06-1*`), all v15, each recording `build.source.modified` true;
+0047, 5 of 6 and 1 of 6. `zig-out/e2e-spec/` holds the retained runs of 3 November 2026 and
+later (the ADR 0047 runs of 3 November, `2026-11-03T04-1*`, report v14, and every later set in
+the table below, v15), each recording `build.source.modified` true;
 every earlier run has been removed, and its evaluation (and measures, where taken) remain
 under `evaluations/`. The current build decodes only `spec-e2e-report/v15`
 (`test/harness/e2e/contracts.zig:140`), so the 3 November runs can't be adjudicated again.
@@ -32,9 +31,9 @@ checked and can't be now (run directories removed), so it counts under rule 3 on
 user's reading. A change proved under §2.10 moves neither kind of rule 7 reference.
 
 **Adjudicated reference** (§7 H1; skills `af394020…` and `0b552067…`, one evaluator by the
-user's decision of 7 November 2026, [Z_FIX06](Z_FIX06.md) T7; the Q20 row's `1d66d882…` awaits
-§3 Next item 2). Accuracy defect counts, content basis, as lost / weakened / unsupported
-addition / contradiction:
+user's decision of 7 November 2026, [Z_FIX06](Z_FIX06.md) T7; the rows scored under
+`1d66d882…` join them by the decision of 8 November 2026, §3 Next item 2). Accuracy defect
+counts, content basis, as lost / weakened / unsupported addition / contradiction:
 
 | Set | Hello-world | Loan-renewal |
 | --- | --- | --- |
@@ -44,6 +43,7 @@ addition / contradiction:
 | Q20, reverted (entity-meaning purpose; 3 runs per case, 7 November, `63fb521` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 1 of 3 pass; 6 / 0 / 0 / 0 |
 | One-owner hygiene, reverted (role-routed field instructions; 3 runs per case, 7 November, `014fd15` modified, skill `1d66d882…`; direction only) | 3 of 3 pass; 0 / 0 / 0 / 0 | 0 of 2 published pass, 2 of 3 published; 2 / 0 / 1 / 0 |
 | E10 and principles removal (3 runs per case, 8 November, `496d754` modified, skill `1d66d882…`; no model-input change; direction only) | 2 of 2 published pass, 2 of 3 published; 0 / 0 / 1 / 0 | 1 of 2 published pass, 2 of 3 published; 0 / 1 / 1 / 0 |
+| Repeated-statement text not judged (3 runs per case, 8 November, `5b34dbc` modified, skill `1d66d882…`; the exemption never fired; the reference for the entity lever; direction only) | 3 of 3 pass; 0 / 0 / 1 / 0 | 1 of 3 pass; 3 / 1 / 1 / 0 |
 
 Pooled over the 12 kept-state runs since ADR 0047, against D12.2: 12 of 12 published (9 of 10);
 hello-world 5 of 6 pass (4 of 5 runs); loan-renewal 1 of 6 pass (1 of 5); loan-renewal per run,
@@ -191,24 +191,46 @@ research. "Gap" means between measurement sets.
    are not enough evidence (as for D2.3 and D4.1). It first fired live on 8 November
    (`2026-11-07T20-44-15Z-9273…`, uncommitted tree): all three records attempts returned the
    same bare `"Loan renewed!"` and `"Renewal refused."`, and the run exhausted its retries.
-2. **Decision pending:** whether skill `1d66d882…` counts as the same evaluator as
-   `af394020…` and `0b552067…`. Its two 7 November edits (retired-ID citations; the agent may
-   start it when the user explicitly approves it for named runs) changed no scoring rule
-   ([Z_FIX06](Z_FIX06.md) T7), but scoring diverged on one class: a missing refusal scenario
-   was no defect in `2026-11-03T04-13-31Z-fa03…` (`af394020…`) and a lost source requirement
-   in `2026-11-07T01-19-36Z-728d…` (`1d66d882…`; §4 Q14). If not one evaluator, §2 rule 5
-   re-scores the reference before the next set.
-3. **Decision pending:** whether a title that repeats a requirement's value states it (§7 H1).
-   `2026-11-06T22-45-46Z-d392…`'s title "…extending the due date by 14 days" was scored a lost
-   requirement; if a title doesn't state one, that run passes (96.4%). The same ruling decides
-   `2026-11-07T01-18-32Z-ba2e…`'s title (that run fails on other defects). Recommended yes;
-   settling it adds the ruling to the evaluate-e2e skill.
-4. **Decision pending:** D14.1's condition is met under both readings (§4 Q14); proceed with
-   b3 as decided, or re-decide, given that b3 doesn't close the first-attempt route `fa03…`
-   took and a three-run set may show only "benefit not demonstrated". §4 Q14 adds option b4.
-5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes and titles.
-6. **Decision pending:** whether the proposed entity lever (§3 open problems) reopens entity
-   restatement.
+   The repeated-statement change ([Z_FIX06](Z_FIX06.md)) is judged on the same set: it
+   removes that failure where the bare outcome is a repeat, and the correction serves the
+   rest.
+2. **Closed 8 November 2026** (user: "recommendations accepted for 1 to 6"): skill `1d66d882…`
+   is the same evaluator as `af394020…` and `0b552067…`, and the one divergence in their
+   scores is evaluator variance ([Z_FIX06](Z_FIX06.md) T7).
+3. **Decided 8 November 2026** (same words): a title that repeats a requirement's value states it
+   (§7 H1), so `2026-11-06T22-45-46Z-d392…`'s "…extending the due date by 14 days" is a lost
+   requirement. The ruling is in the evaluate-e2e skill (a new version, Z_FIX06 T7), so §2
+   rule 5 has the reference of the entity and escaping set re-scored under it first; no title
+   in that reference drops a value, so its scores are expected to stay.
+4. **Decided 8 November 2026** (same words): Q14 b3 stays held and b4 is not started. Lossy
+   repeats caused 2 of today's 3 loan failures, which the entity and edge-case levers target; b3
+   is large for a class absent from the last 3 loan runs, and b4's added restatements are the
+   failure being removed. Revisit b3 after the edge-case set if refusal scenarios go missing.
+5. The rest of the lossy-repeat open problem (§3 open problems): edge-case outcomes (item 8,
+   applied) and titles (held to their values by item 3; no lever yet).
+6. **Applied, unmeasured** (8 November 2026; user: "Entity lever … is yes and approved", then
+   "yes to all decisions"): an entity is a name and its groups, and the engine renders the
+   statements that share a group (ADR 0038 Decision 6; §3 open problems). **Measured** (8
+   November 2026; 3 runs per case, `/evaluate-e2e` under skill `3c74781e…`; record
+   `evaluations/e2e/entity-escaping-set-measures.json`): hello-world 0 content accuracy defects
+   in 3 runs; loan-renewal 5 `lost_source_requirement`, in 2 of 3 runs, both of which failed
+   `successful-renewal`: 4 in the records step (spec line 27, EC-001's outcome; item 8's target)
+   and 1 in the title (brief step; item 3). The reference is not re-scored
+   under this evaluator version, so §2 rules 5 and 6 have not been applied and the keep
+   decision is open.
+7. **Applied, unmeasured** (8 November 2026; user: "apply recommendations"): the renderer
+   escapes only the bytes Markdown reads as markup (§23.1's closed table), so `spec.md` no
+   longer shows `renewed\.`. No request changes (§2 rule 1), so it shares item 6's set, which
+   shows the readability effect (`organization`) beside the entity lever's accuracy effect.
+8. **Applied, unmeasured** (8 November 2026; user: "go"): ADR 0038 Decision 7
+   ([Z_FIX06](Z_FIX06.md); §3 open problems). Request projection (§2 rule 10): `evaluations/request-projection/lever-before`
+   (the committed tree) against `lever-after` shares 1,614 calls; all are byte-identical once the
+   retired `edge_outcome` field binding is set aside (the shared field-policy list) except 176
+   records requests, which differ in `content` and `schema` only, and 9 source-review repairs,
+   which differ in the required-authority `contract_version` (3 to 4). The 41 new calls are
+   the 3 new scenarios, three of them link requests. A set on both cases and `/evaluate-e2e` are still to
+   do; each needs its own approval. The closed request runs only when a batch holds several
+   candidates, so a set may not exercise it.
 
 **Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
 Q17 after D12.2, and D14.1 holds Q14 b3 (§3 Next item 4); each change set is measured on its
@@ -220,7 +242,7 @@ own committed build, §2.1 and §2.3; completed change sets are in [Z_FIX06](Z_F
 | 2 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
 | 3 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
 | 4 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
-| 5 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 open |
+| 5 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
 location. D13.1 removed the review calls where every runaway and SyntaxError of 31 October
@@ -230,7 +252,10 @@ re-sends; the highest used 67,448 of the 125,000-token workflow budget
 retry exhaustion, never budget:
 - records, on the bare outcomes `"Loan renewed!"` and `"Renewal refused."`
   (`2026-11-07T06-12-34Z-f549…`, `07-38-56Z-2627…`, and on 8 November `2026-11-07T20-44-15Z-9273…`,
-  where the bare-value correction was sent and changed nothing);
+  where the bare-value correction was sent and changed nothing). Where the bare outcome is a
+  wholly taken repeat (`2627…`, `9273…`) its text is no longer judged ([Z_FIX06](Z_FIX06.md));
+  `f549…`'s outcome is the only non-scenario record naming its claim, so it is kept and still
+  fails;
 - reconcile dispositions (`2026-11-07T20-44-02Z-9d7f…`, hello-world): the model answered with
   its reasoning prose and no JSON, so `/claim_dispositions` was missing on all three attempts.
   `20-41-06Z-6197…` recovered from the same omission on its correction. The request is
@@ -241,8 +266,8 @@ The runs through 7 November used 13,363–45,309 tokens; the highest, `06-11-33Z
 about 26k on five identical extraction claims (§4 Q8 D8.3).
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
-startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6, E8 and
-E10 in any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
+startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8
+in any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
 with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with E1, E4 or
 E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5 and E9 land only under §2.12. E1–E4 before
 the closing set is the user's call (ADR 0034:91-95). **Tests:** T2 and T3 in any gap; T4
@@ -264,8 +289,8 @@ or the user records it as a model limitation.
   "successfully", `04-10-57Z`; "A borrower may renew", `04-13-31Z`; and `04-12-37Z`'s EN-001 and
   EC-001) and all 3 failed D12.3 runs (EC-001 "fourteen days", `22-43-53Z-8f8c…`, records
   step; EN-001 "Allows a borrower to renew", `22-45-22Z-c845…`, entities step; the title
-  "…extending the due date by 14 days", `22-45-46Z-d392…`, brief step, the first title case and
-  subject to §3 Next item 3). Rewording the entity-meaning purpose alone (Q20: `business_meaning`
+  "…extending the due date by 14 days", `22-45-46Z-d392…`, brief step, the first title case,
+  ruled a lost requirement by §3 Next item 3). Rewording the entity-meaning purpose alone (Q20: `business_meaning`
   read "What the business data concept is and the information it holds, without restating
   required behavior."; reverted 7 November 2026, §1) didn't stop restatement: every loan-renewal
   meaning still restated the whole behaviour, and both failed Q20 runs were lossy repeats
@@ -288,21 +313,21 @@ or the user records it as a model limitation.
   restate a requirement and lose or weaken part of it, observed with Bedrock
   `openai.gpt-oss-20b-1:0` (`ap-southeast-2`, the only model used in every live run, §7 H5).
   Runs that show it still fail their criterion; nothing is weakened, and no further prompt
-  change targets it. Reopen only for a structural lever with an owner, such as a contract
-  change to what an entity field may contain (a **Decision**, §3 Next item 6). **Proposed
-  lever** (8 November 2026): an entity holds its name and typed links to the statements that
-  govern it, rendered by the engine, in place of the free-text `business_meaning` and
-  relationship meaning (`packet-guidance.json:28-29`). It works only if no free-text field
-  but the name remains, since the model restates in whichever field stays open. Entities are
-  written before records and select whole groups (ADR 0038:63), so the links need an entity
-  claim selection or a step after records. Owner: the entity fields' contract
-  (`text-field-composition.md:67`) and rendering (F0100:1201-1203); amends ADR 0038
-  Decision 1. A screen, then a set. Still open: edge-case outcomes (purpose
-  `packet-guidance.json:26`) and titles (purpose `:4`); a lever with an owner or a recorded
-  model limitation. **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
+  change targets it. **Lever applied** (8 November 2026, §3 Next item 6; ADR 0038 Decision
+  6): the structural lever the limitation allowed. An entity holds its name and its groups;
+  the free-text `business_meaning` and relationships are gone, and the engine renders the
+  statements that share a group as a related-statements line, so no free-text field but the
+  name remains for the model to restate in. Measurement is pending. Still open: titles
+  (purpose `packet-guidance.json:4`); a lever with an owner or a recorded model limitation.
+  **Not accepted** (user, 7 November 2026: "that is a poor idea and I will
   not accept it"): the engine filling `then` and `expected_outcome` from the record's cited
   source lines, since the result restates the Given and reads as requirements, not observed
-  outcomes.
+  outcomes. **Lever applied, edge-case outcomes** (8 November 2026, §3 Next item 8; ADR 0038
+  Decision 7): the user decided that the 7 November rejection concerned only filling from
+  source lines, so copying an acceptance criterion's Then is allowed, with acceptance criteria
+  as the only targets, and that a model step after records names the criterion (not response
+  position). Measurement is pending, and a new call kind has no retained request to screen
+  (§2 rule 4).
 - **Unsupported additions in AC wording and entity meanings** (the story's ended with ADR
   0047). AC-001's recording of the renewal (4 of 5 D12.2, 2 of 3 ADR 0047, 1 of 3 D12.3 and 0
   of 3 Q20 loan-renewal publications) is ruled a minor addition (§7 H1) and has no structural
@@ -399,10 +424,9 @@ chase a leak.
   every development-case value. Where the span stays, the doubling is the engine's. Since ADR
   0047 the story shows one engine span; A remains in model-written FR and AC fields
   (`2026-11-07T01-18-32Z-dd03…`, `01-19-36Z-728d…`).
-- **B. Plain value in an entity meaning** (20 in 14 publications of 31 October): the field
-  bars exact copies (`text_field_policy.zig:59`). ADR 0045, which would have shown them as
-  code spans, is withdrawn (D7.2, [Z_FIX06](Z_FIX06.md)). By the user's rulings (§7 H1) an
-  entity meaning isn't an invention, so B is a rendering question only.
+- **B. Plain value in an entity meaning** (20 in 14 publications of 31 October): ended on
+  8 November 2026, when the entity lost its meaning (ADR 0038 Decision 6). ADR 0045, which
+  would have shown them as code spans, was withdrawn (D7.2, [Z_FIX06](Z_FIX06.md)).
 - **C. Fragments joined without a separator** (1 of 18 publications of 31 October; 2 of 5
   D12.2 loan-renewal stories): the schema keeps the fragments option when no reference is
   offered, and fragments join with no separator (`model_candidate_json.zig:251-253`). D7.5
@@ -420,9 +444,8 @@ chase a leak.
   (`admit_model_response.zig:19-21`) before the codec runs
   (`model_candidate_handoff.zig:24-32`), so a fragments object against a plain-string field
   fails as `type_mismatch` with a protocol correction. Effort S: `walk` in
-  `model_text_field.zig`, its tests, and the 9 `insertion-presentation` calibration requests
-  with their sha256 pins (7 in `prepared/plan.json`, 2 in `sources/provenance.json`);
-  `generation.context.json:2` still describes fragments. Every fragments object seen in a
+  `model_text_field.zig` and its tests; `generation.context.json:2` still describes
+  fragments. Every fragments object seen in a
   published field was a story, which ADR 0047 composes natively; since then one appeared in a
   reconciliation signal (`2026-11-03T04-13-31Z-fa03…` call 5, unpublished). So D7.5 is a
   hygiene phase (§2 rule 6). **Keep if** no fragments object appears where no reference is
@@ -562,7 +585,7 @@ over-citation, so `728d…`'s AC-001, which names refusal claims it doesn't test
     22-repair.md:268-272, :563-568 and :809-811; 12-model-boundary.md:105 and :870-872;
     17-specify.md:200-203; F0100:1224-1227 and :1402-1407.
   - An inserted scenario still links without checking meaning.
-- **b4** (proposed 8 November 2026; not decided): claim-bound scenarios at first generation
+- **b4** (proposed 8 November 2026; not started, §3 Next item 4): claim-bound scenarios at first generation
   too: the engine fixes each scenario's `claim_ids` before the model writes it, closing
   `fa03…`'s first-attempt route that b3 leaves. Slots can come only from IDs, so a slot per
   claim needs the statements first (a second records call per group) or D21.1's unit (§4
@@ -577,9 +600,9 @@ show only "benefit not demonstrated" (§2 rule 6). When it recurs, b3 goes ahead
 The condition is met under both readings: as Q14's class (no scenario tests refusal) it
 recurred in `fa03…` and `728d…` (2 in about 21 loan-renewal publications since D12.1, so a
 three-run set may still show only "benefit not demonstrated"); as any lost source
-requirement, the lossy repeats since D12.2 (§1) meet it. **Decision pending** (§3 Next item
-4): proceed with b3 as decided, or re-decide. **Keep if** lost source requirement falls and publication and exhausted runs don't
-worsen.
+requirement, the lossy repeats since D12.2 (§1) meet it. **Held** (8 November 2026, §3 Next
+item 4): b3 stays held and b4 is not started. **Keep if** lost source requirement falls and
+publication and exhausted runs don't worsen.
 
 ### Q17. Principles as Spec context
 
@@ -638,8 +661,13 @@ as loan-renewal's four-part refusal item (`stories.md:9`, ADR 0038:117-118), at 
 model step whose losses nothing native detects. Treating shared source evidence as no
 redundancy is not adopted: it would reverse ADR 0038 Decision 5 (user, 2 November 2026).
 
-**Next:** D21.1; fixtures at the owner (an unnamed claim, or one named only by an assumption,
-non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6).
+**D21.1 deferred** (8 November 2026; user: "recommendations accepted for 1 to 6"): no failure of
+this kind has occurred since ADR 0047, so a set could show only "benefit not demonstrated", and
+each option risks accuracy: (a) false blocks on identity claims, (b) a change to every
+extraction request, (c) losses nothing native detects. If it resumes, take (b).
+
+**Next:** D21.1 (deferred); fixtures at the owner (an unnamed claim, or one named only by an
+assumption, non-goal or scenario, rejects), then screens and a set (§2 rules 4 and 6).
 
 ## 5. Engine track (E)
 
@@ -651,8 +679,8 @@ per case (DE2–DE4 ask whether offline evidence replaces it), landing between s
 
 On hold since 30 October 2026 (ADR 0041:3-4). Nothing under `src/` names `failure-output`,
 `spec_incomplete` or `run.incomplete_published`. To resume: implement ADR 0041 Decisions 1–8,
-taking `specification-state/v23` (v22 is current, `specification_state.zig:8`; ADR 0041:5-8,
-:40); align the measures (`test/harness/e2e/measures.zig:207`, test `:739-742`;
+taking `specification-state/v24` (v23 is current, `specification_state.zig:8`; ADR 0041:5-10,
+:42, :225); align the measures (`test/harness/e2e/measures.zig:207`, test `:739-742`;
 e2e.md:681-684), design.md:208, 24-workflow-state.md:74, 25-publication.md:41-45, F0100:1171
 and `test/harness/e2e/contracts.zig:209-212` with Decision 7.1 (an `invalid` run stays
 `invalid` and may publish), and F0100:1165 with Decision 7.8 (the title precedes the status
@@ -729,14 +757,15 @@ rewrite land with that conversion. Failure-evidence gaps:
 
 - **Cancellation** during segment reads and under the log lock ends the run `blocked`, not
   `cancelled` (`operation_error.zig:16-24`; `feature_log_recovery.zig:29-61`;
-  `feature_log_historical_stream.zig:95-97`). **Decision:** should cancellation during log
-  reads or under the lock end the run `cancelled`? If yes: add `Cancelled` to the
-  `FeatureLogSink` error set and propagate it, amending ADR 0032:312-313's "Not decided"
-  bullet; no new `LOG_*` code.
-- **Lock failures** all report `LOG_LOCK_TIMEOUT` (`acquire_feature_log_stream_lock.zig:18`):
-  the single `tryLock` never waits, and `InvalidBinding` and `SinkFailure` aren't timeouts
-  (F0002:542, :553-554; `feature_log_lock.zig:9-27`). No decision needed: map those two to
-  F0002's existing `LOG_SINK_FAILURE` and keep `LockUnavailable` as `LOG_LOCK_TIMEOUT`.
+  `feature_log_historical_stream.zig:95-97`). **Decided yes** (8 November 2026; user:
+  "recommendations accepted for 1 to 6"): it ends `cancelled`, as its own phase after the
+  entity and escaping set (user, 8 November 2026: "after"). Not implemented: it adds
+  `Cancelled` to the `FeatureLogSink` error set and a `cancelled` log outcome, amending ADR
+  0032:312-313's "Not decided" bullet, with no new `LOG_*` code. Measured scope: about 35
+  `SinkFailure` mapping sites in the log adapters (`feature_log_segment_store.zig` 21,
+  `feature_log_retention_store.zig` 6, `feature_log_lock.zig` 5, `feature_log_recovery.zig` 2,
+  `feature_log_historical_stream.zig` 1) and about 9 consumers of the log outcome, not a small
+  change; it affects no model request.
 - **Prior-run crash finalization** (§14.10) is blocked on a persisted bootstrap authority that
   doesn't exist (14-orchestration.md:323-327), so a crashed run's logs are kept whole and
   damaged prior logs block later runs until someone repairs or removes them. **Decision:**
@@ -791,26 +820,6 @@ a model-authored exact handle that models can't author since `dfae959` (ADR 0020
 `evaluations/request-projection/` carries `rejected_exact`, and the only report that did (the failed
 `2026-10-31T03-01-37Z-7c6a…`) is no longer retained. Lands with E1, E4 or E5.
 
-### E10. Code defects found by the 7 November review
-
-**Defect:** none in published output: a contract violation in the closed decoders. The rest
-of E10 is implemented ([Z_FIX06](Z_FIX06.md)). Open, with no request or report change and no
-live run:
-
-- **Strings accept number arrays** (found 8 November 2026): `std.json` reads a `[]const u8`
-  from an array of byte values, and accepts quoted numbers and numeric enum tags
-  (`strict_json.zig:95-96`), so `"provider": [112]` decodes though the schema allows only a
-  string. **Decided 8 November 2026** (user: "apply best recommendation"): the owner is
-  `strict_json`'s kind rule (`:126-127`), and the fix is its own change after a `/preflight`.
-  Until then `reasoningEffort` keeps its local check (`config.zig`, `Effort.jsonParse`),
-  which that change deletes. Proposed for that change: the configuration decoder can't adopt
-  `wireTypes` as it stands (its types have defaults, and `wireTypes` needs every field
-  present, `:113`, and accepts null for any optional, `:133`), so `wireTypes` would gain a
-  kind check that tolerates absent defaulted fields. The provider-document decoder
-  (`src/actions/provider/decode_llm_provider_config.zig:26`) also calls `std.json` directly,
-  but its raw types have no optional or defaulted fields (`llm_provider_document.zig:9-22`),
-  so it may adopt `wireTypes` as is. Other closed-document decoders are not yet inspected.
-
 ## 6. Test track (T)
 
 ### T2. Test decoupling
@@ -829,16 +838,14 @@ and fix002 (`workflow_tests.zig:1556-1636`); tests R36 (`model_envelope_test.zig
 (`summary_protocol_sequence.zig:1`, `global_protocol_sequence.zig:1`); and
 `build/test_run_inputs.zig:22`, `:33-40`, deleting its orphaned `d1-review`, `r42-recovery`
 and `r43-recovery` entries (`:20`, `:39`, `:40`; its test at `:145` uses `d1-review` as an
-example). **Decision:** delete the never-run
-insertion-presentation panel with its `attribution-replay` tooling
-(`test/harness/attribution/preparation.zig:191-199`, whose first replacement phrase at `:195`
-no longer occurs in production text), or keep it.
+example). The never-run insertion-presentation panel with its `attribution-replay` tooling
+was deleted on 8 November 2026 (user: "Yes, retire both"): its hash-pinned records request
+listed the entity fields that ADR 0038 Decision 6 removed.
 
 ### T3. Coverage gaps (B5, B7)
 
-- No integration scenario reaches a `duplicate_record` delete or ADR 0035's story
-  `restatement`; unit coverage only. D16.2's `repeated_statement` has one
-  (`workflow_tests.zig:1345-1348`, `:2234-2239`).
+- No integration scenario reaches ADR 0035's story `restatement`; unit coverage only.
+  D16.2's `repeated_statement` has one (`workflow_tests.zig:1345-1348`, `:2234-2239`).
 - The no-feature-claim text-repair route (`spec.workflow.yaml:350-371`) has unit coverage only;
   the integration `.unbound` mode ends `.invalid` before it.
 - The retained GPT-OSS compatibility exchange is assessed `incompatible` since ADR 0036
@@ -848,6 +855,9 @@ no longer occurs in production text), or keep it.
   quotes an exact copy, so D7.4's freeze doesn't reach its path; Q13's two-source citations
   are covered at the codec, not the projection (the fixture reads one file); every scripted
   records batch has one claim, so D16.2's partly taken record is proven only at admission.
+  A scripted multi-claim batch needs a per-group generator, since the baseline one names one
+  claim per record (`spec_generation_responses.zig:769`); the scripted edge case waits for the
+  edge-case lever's record shape (§3 open problems).
 
 ### T4. Architecture rules and replay (A5)
 
@@ -936,6 +946,9 @@ table); every evaluation before them counted the edge cases and entity meanings 
   story is a minor addition; "notification" or "notified" where it names the displayed message
   is a minor addition; "The user launches the application" isn't an invented step; escapes,
   quoted code spans and joined sentences are judged as rendered and cost `organization` only.
+- **Titles** (8 November 2026; user: "recommendations accepted for 1 to 6"): a title that gives a
+  requirement's value or wording states it, like any repeat above; one that gives none is a
+  label, scored against `organization` only (§3 Next 3).
 
 ### H2. Review-label confirmation (B2)
 
@@ -1023,7 +1036,8 @@ has since left source review, [Z_FIX06](Z_FIX06.md) Q12 D12.3).
 
 **Defect:** none in published output: design text that the code contradicts or lacks misleads
 design-routed changes. **Owner:** the cited documents (ADR and AGENTS.md changes are policy
-edits); code defects are E10. **Status:** each verified against the tree on 7 November 2026.
+edits); the code defects it found are implemented ([Z_FIX06](Z_FIX06.md) E10). **Status:**
+each verified against the tree on 7 November 2026.
 **Next:** design edits on approval; **Decision** marks what only the user settles.
 
 - **§13 catalogue granularity (Decision):** registered operations have no entry

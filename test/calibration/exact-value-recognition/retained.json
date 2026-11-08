@@ -205,29 +205,6 @@
           ]
         },
         {
-          "field": "edge_outcome",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "edge_case"
-            },
-            {
-              "property": "expected_outcome"
-            }
-          ]
-        },
-        {
           "field": "functional_requirement",
           "path": [
             {
@@ -362,55 +339,6 @@
             },
             {
               "property": "name"
-            }
-          ]
-        },
-        {
-          "field": "entity_meaning",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "business_meaning"
-            }
-          ]
-        },
-        {
-          "field": "entity_relationship",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "relationships"
-            },
-            {
-              "items": {}
             }
           ]
         },
@@ -636,29 +564,6 @@
           ]
         },
         {
-          "field": "edge_outcome",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "edge_case"
-            },
-            {
-              "property": "expected_outcome"
-            }
-          ]
-        },
-        {
           "field": "functional_requirement",
           "path": [
             {
@@ -793,55 +698,6 @@
             },
             {
               "property": "name"
-            }
-          ]
-        },
-        {
-          "field": "entity_meaning",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "business_meaning"
-            }
-          ]
-        },
-        {
-          "field": "entity_relationship",
-          "path": [
-            {
-              "variant": "records"
-            },
-            {
-              "property": "records"
-            },
-            {
-              "items": {}
-            },
-            {
-              "property": "content"
-            },
-            {
-              "variant": "entity"
-            },
-            {
-              "property": "relationships"
-            },
-            {
-              "items": {}
             }
           ]
         },

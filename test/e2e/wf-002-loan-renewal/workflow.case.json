@@ -104,6 +104,14 @@
       "destination": ".sddtoolkit/workflows/spec/support.schema.json"
     },
     {
+      "source": "design/workflows/spec/links.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/links.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/links.schema.json",
+      "destination": ".sddtoolkit/workflows/spec/links.schema.json"
+    },
+    {
       "source": "design/workflows/spec/repair.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/repair.prompt.md"
     },

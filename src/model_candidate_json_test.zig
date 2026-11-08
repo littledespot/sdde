@@ -185,13 +185,13 @@ const response_wire = struct {
     const records = .{
         .{ "acceptance_criterion", "{\"kind\":\"acceptance_criterion\",\"given\":" ++ normalized ++ ",\"when\":" ++ normalized ++ ",\"then\":" ++ plain ++ "}" },
         .{ "user_visible_outcome", "{\"kind\":\"user_visible_outcome\",\"text\":" ++ normalized ++ "}" },
-        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ ",\"expected_outcome\":" ++ plain ++ "}" },
+        .{ "edge_case", "{\"kind\":\"edge_case\",\"condition\":" ++ normalized ++ "}" },
         .{ "functional_requirement", "{\"kind\":\"functional_requirement\",\"text\":" ++ normalized ++ "}" },
         .{ "business_rule", "{\"kind\":\"business_rule\",\"text\":" ++ plain ++ "}" },
         .{ "assumption", "{\"kind\":\"assumption\",\"text\":" ++ normalized ++ "}" },
         .{ "non_goal", "{\"kind\":\"non_goal\",\"text\":" ++ normalized ++ "}" },
         .{ "prohibited_behavior", "{\"kind\":\"prohibited_behavior\",\"text\":" ++ normalized ++ "}" },
-        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ ",\"business_meaning\":" ++ normalized ++ ",\"relationships\":[" ++ plain ++ "]}" },
+        .{ "entity", "{\"kind\":\"entity\",\"name\":" ++ normalized ++ "}" },
     };
 };
 
@@ -460,6 +460,20 @@ test "focused review evidence shapes follow native minima without excluding sour
     }
 }
 
+test "an edge case authors its condition only and its outcome link is one closed criterion id" {
+    // ADR 0038 Decision 7: the records response carries no expected outcome; the engine prints
+    // the linked criterion's Then, so a response that supplies one is not this contract.
+    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\",\"condition\":" ++ response_wire.normalized ++ ",\"expected_outcome\":" ++ response_wire.normalized ++ "},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .unknown_property, "/records/0/content/expected_outcome");
+    try candidateCase("generation", "records", "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"edge_case\"},\"claim_ids\":[" ++ response_wire.id ++ "]}]}", .missing_required_property, "/records/0/content/condition");
+    // The link is a request of its own: an id, never text, and no other property.
+    try checkCandidate("links", "scenario_link", "{\"criterion\":2}");
+    try candidateCase("links", "scenario_link", "{\"criterion\":2,\"outcome\":\"The renewal is refused.\"}", .unknown_property, "/outcome");
+    try candidateCase("links", "scenario_link", "{}", .missing_required_property, "/criterion");
+    try candidateCase("links", "scenario_link", "{\"criterion\":\"2\"}", .type_mismatch, "/criterion");
+    try candidateCase("links", "scenario_link", "{\"criterion\":[2]}", .type_mismatch, "/criterion");
+    try candidateSchemaCase("links", "scenario_link", "{\"criterion\":0}", .integer_range, "/criterion");
+}
+
 test "preservation wire is closed and rejects old attribution choices" {
     try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[]}");
     try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}");
@@ -537,6 +551,8 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         if (comptime std.mem.eql(u8, definition, "value")) return nativeWire(struct { value: @import("domain/specification.zig").BusinessValue }, a, bytes);
         if (comptime std.mem.startsWith(u8, definition, "repair_record_")) return nativeWire(@import("domain/specification.zig").Wire.RecordProposal, a, bytes);
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
+    } else if (comptime std.mem.eql(u8, name, "links")) {
+        return nativeWire(@import("domain/scenario_link_request.zig").Answer, a, bytes);
     } else if (comptime selection != null) {
         const selected = selection.?;
         if (comptime std.mem.eql(u8, selected, "preservation_comparisons")) return nativeWire(@import("domain/source_omission.zig").comparisons.Response, a, bytes);

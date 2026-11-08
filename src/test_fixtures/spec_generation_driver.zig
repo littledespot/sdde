@@ -8,7 +8,7 @@ pub const Fault = struct {
     /// `loss_review` selects only source-loss preservation comparisons.
     /// `records` selects only record-authoring generation requests.
     stage: enum { extraction, reconciliation, generation, repair, support, loss_review, records },
-    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, shared_statement, runaway, runaway_uncovered, runaway_partial_assignment },
+    shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, forbidden_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed, review_partial_assignment, review_repeated_member, uncovered_scenario, shared_statement, bare_statement, duplicate_record, runaway, runaway_uncovered, runaway_partial_assignment },
     repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
@@ -56,6 +56,10 @@ pub const Driver = struct {
     reconciliation_repair_calls: usize = 0,
     reconciliation_merges: usize = 0,
     unchanged_reconciliation_merges: usize = 0,
+    /// Records requests whose response gained a statement that is only an exact value.
+    bare_statements: usize = 0,
+    /// Records requests whose response gained an exact repeat of a requirement.
+    duplicate_records: usize = 0,
     malformed: bool = false,
     uncertain: bool = false,
     malformed_once: bool = false,
@@ -73,6 +77,9 @@ pub const Driver = struct {
     entities_required: bool = false,
     contradict_entities: bool = false,
     generation_gap: bool = false,
+    edge_cases: ?@import("spec_generation_responses.zig").EdgeCases = null,
+    /// Requests that asked the model to link an edge case to one of several criteria.
+    link_calls: usize = 0,
     calls: usize = 0,
     fault: ?Fault = null,
     fault_calls: usize = 0,
@@ -174,7 +181,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .edge_cases = self.edge_cases, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             if (self.runaway_displaced) |plan| {
                 self.fake.invocation_plan = .{ .complete = plan };
                 self.runaway_displaced = null;
@@ -419,8 +426,9 @@ pub const Driver = struct {
                     std.testing.expectEqual(rule.covering.len, covering.get("kinds").?.array.items.len) catch unreachable;
                     for (rule.covering, covering.get("kinds").?.array.items) |kind, listed| std.testing.expectEqualStrings(kind, listed.string) catch unreachable;
                 }
-                // ADR 0038 Decision 5: a wholly taken statement never reaches a correction.
-                if (matches_stage and fault.shape == .shared_statement) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
+                // ADR 0038 Decision 5: a wholly taken statement never reaches a correction, and
+                // neither does an evidence-equivalent duplicate (ADR 0035).
+                if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record)) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at
                     // the runaway-retry temperature, with no correction guidance.
@@ -478,10 +486,27 @@ pub const Driver = struct {
                     } else if (fault.shape == .missing_answer or (fault.shape == .alternating_missing and attempt % 2 == 0)) {
                         self.fake.invocation_plan.complete.content_diagnostic = .missing_final_text;
                     } else self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol or fault.shape == .alternating_missing) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape, attempt) catch unreachable;
+                    if (fault.shape == .bare_statement and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.bare_statements += 1;
+                    if (fault.shape == .duplicate_record and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.duplicate_records += 1;
                     self.fault_calls += 1;
                 }
             }
-            if (current_request.id().immutable_unit_owner_id == .specification_unit and current_request.id().purpose == .initial_generation) {
+            const link_request = if (current_request.packet()) |packet| if (packet.resultDefinition()) |definition| std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition) else false else false;
+            if (link_request) {
+                // After generation completed, a closed choice with its own prompt and no
+                // generation context, offering the criteria of one records batch.
+                const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
+                std.testing.expectEqual(@import("../domain/specification_session.zig").unit_count, session.completed) catch unreachable;
+                const prompt = std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/links.prompt.md", arena.allocator(), .unlimited) catch unreachable;
+                const generation_context = std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.context.json", arena.allocator(), .unlimited) catch unreachable;
+                var found_prompt = false;
+                for (current_request.prepared().?.content) |part| if (part == .guidance) {
+                    found_prompt = found_prompt or std.mem.eql(u8, part.bytes(), prompt);
+                    std.testing.expect(!std.mem.eql(u8, part.bytes(), generation_context)) catch unreachable;
+                };
+                std.testing.expect(found_prompt) catch unreachable;
+                self.link_calls += 1;
+            } else if (current_request.id().immutable_unit_owner_id == .specification_unit and current_request.id().purpose == .initial_generation) {
                 std.testing.expect(!view.contains(.required_authority_gate)) catch unreachable;
                 const session = @import("../application/specification_workflow.zig").readSession(&view) catch unreachable;
                 const unit = @import("../domain/specification_session.zig").unit(session.completed) catch unreachable;
@@ -917,6 +942,40 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
         var restated = try requirement.object.clone(allocator);
         try restated.put(allocator, "content", .{ .object = content });
         try items.append(.{ .object = restated });
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .duplicate_record) {
+        // Repeat the first functional requirement exactly: same content, groups and evidence.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        const requirement = for (items.items) |item| {
+            if (std.mem.eql(u8, item.object.get("content").?.object.get("kind").?.string, "functional_requirement")) break item;
+        } else return error.InvalidFixture;
+        try items.append(requirement);
+        return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+    }
+    if (shape == .bare_statement) {
+        // Add an outcome naming the claims of the first functional requirement that quotes an
+        // exact value between code delimiters, whose text is only that value. A batch with no
+        // such requirement is returned unchanged.
+        const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
+        const requirement, const value = holder: {
+            for (items.items) |item| {
+                const content = item.object.get("content").?.object;
+                if (!std.mem.eql(u8, content.get("kind").?.string, "functional_requirement")) continue;
+                const written = content.get("text").?;
+                if (written != .string) continue;
+                const close = std.mem.lastIndexOfScalar(u8, written.string, '`') orelse continue;
+                const open = std.mem.lastIndexOfScalar(u8, written.string[0..close], '`') orelse continue;
+                break :holder .{ item, written.string[open + 1 .. close] };
+            }
+            return body;
+        };
+        var content = try requirement.object.get("content").?.object.clone(allocator);
+        try content.put(allocator, "kind", .{ .string = "user_visible_outcome" });
+        try content.put(allocator, "text", .{ .string = value });
+        var outcome = try requirement.object.clone(allocator);
+        try outcome.put(allocator, "content", .{ .object = content });
+        try items.append(.{ .object = outcome });
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }
     if (shape == .review_partial_assignment or shape == .review_repeated_member) {

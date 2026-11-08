@@ -187,7 +187,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
         // response remains byte-for-byte old output and is independently
         // rejected if it still tries to author an entity in a record batch.
         const entities = if (input.requires_entity) try a.dupe(g.spec.Model.RecordProposal, &.{.{
-            .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Application" } }} }, .business_meaning = basis.value, .relationships = &.{} } },
+            .content = .{ .entity = .{ .name = .{ .segments = &.{.{ .literal = .{ .value = "Application" } }} } } },
             .source_group_ids = basis.source_group_ids,
             .provenance = basis.provenance,
         }}) else &.{};
@@ -269,7 +269,7 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
             const description = try plain(a, context, "The application provides the requested result.", .spec_description);
             const goal = try plain(a, context, "Provide the requested behavior.", .spec_goal);
             const story = try plain(a, context, "The user requests the supported behavior and observes the result.", .spec_story);
-            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{});
+            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{}, &.{});
             const coverage = try @import("../../../src/domain/specification_coverage.zig").validate(a, context.references, .{ .title = title, .description = description, .primary_goal = goal }, identified.content);
             var targets: usize = 0;
             for (coverage.obligations) |obligation| targets += obligation.exact_targets.len;

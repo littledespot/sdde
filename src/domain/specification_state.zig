@@ -5,7 +5,7 @@ const spec = @import("specification.zig");
 const reference = @import("reference_snapshot.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v22";
+pub const schema = "specification-state/v24";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -93,10 +93,12 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
     validateAssociations(allocator, state) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     var largest: [std.meta.tags(spec.Kind).len]u32 = @splat(0);
     for (spec.required_record_families) |kind| if (!spec.hasRecords(state.content, kind)) return error.InvalidSpecificationState;
-    for (state.content.records) |record| {
+    for (state.content.records, 0..) |record, position| {
         const index = @intFromEnum(record.id.kind);
         if (record.id.kind != std.meta.activeTag(record.proposal.content) or record.id.ordinal <= largest[index]) return error.InvalidSpecificationState;
         largest[index] = record.id.ordinal;
+        // An edge case links to an acceptance criterion it may link to; no other record links.
+        if (!@import("scenario_link.zig").validStored(state.content.records, position)) return error.InvalidSpecificationState;
     }
     for (state.id_ledger.next, largest) |next, used| if (next == 0 or next <= used) return error.InvalidSpecificationState;
 }

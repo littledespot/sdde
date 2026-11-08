@@ -955,7 +955,7 @@ validators:
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v22`). Neither variant holds review evidence.
+  registry identity (`specification-state/v24`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - `capture-workflow-state` and `parse-specification-state` validate this singleton
@@ -1080,13 +1080,13 @@ then applicable sections in this exact relative order:
 | Primary User Story | `primary_user_story` | The source's business claims, quoted in source order and joined natively ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
-| Edge Cases | `edge_case` / `EC-*` | Boundary/error condition and expected business response. |
+| Edge Cases | `edge_case` / `EC-*` | Boundary/error condition, with the expected business response the engine prints from the acceptance criterion it links to ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). |
 | Functional Requirements | `functional_requirement` / `FR-*` | Required system or user capability in business terms. |
 | Business Rules | `business_rule` / `BR-*` | Constraint, validation rule, or policy controlling behavior. |
 | Assumptions | `assumption` / `AS-*` | Supported assumption that keeps the feature bounded. |
 | Explicit Non-Goals | `non_goal` / `NG-*` | Supported adjacent behavior deliberately outside scope. |
 | Prohibited Behaviors | `prohibited_behavior` / `PB-*` | Behavior the feature must not perform. |
-| Key Entities | `entities` applicability plus `entity` / `EN-*` | Business data concepts and relationships, without implementation detail. |
+| Key Entities | `entities` applicability plus `entity` / `EN-*` | Business data concepts named by the source, with the statements the engine relates to each, without implementation detail. |
 
 The engine assigns and preserves record IDs; the model supplies neither IDs nor
 Markdown. The historical template's unnumbered example bullets do not permit
@@ -1197,10 +1197,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - Simple records use `- **FR-001**: <text>` with the applicable prefix.
 - Edge cases use `**EC-001**`, then `- **CONDITION** <text>` and
-  `- **EXPECTED OUTCOME** <text>`.
-- Entities use `**EN-001**`, then `- **NAME** <text>`,
-  `- **BUSINESS MEANING** <text>` and zero or more
-  `- **RELATIONSHIP** <text>` lines.
+  `- **EXPECTED OUTCOME** <text>`: the outcome is the `then` of the acceptance criterion the
+  edge case links to, derived by the engine (§23), never model text.
+- Entities use `**EN-001**`, then `- **NAME** <text>` and, when any statement shares one
+  of the entity's source groups, `- **RELATED STATEMENTS** <IDs>`: those statements' IDs
+  joined with `, ` in document order, derived by the engine (§23), never model text.
 - Source lines (§23): after an acceptance criterion or functional requirement, a blank line
   and `  - Source: <files>`; as an entity's last line, `- Source: <files>`. `<files>` lists
   each cited file in corpus order as inline code followed by ` line N` or ` lines A–B, C`
@@ -1238,8 +1239,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - The view codec receives already projected text and separated, non-overlapping exact
   inline-code spans (adjacent delimiter runs cannot preserve two identities); it escapes
-  punctuation and literal control whitespace, uses deterministic backtick
-  delimiters/padding, LF structural lines and one final newline.
+  the bytes §23.1's closed table names and literal control whitespace, uses deterministic
+  backtick delimiters/padding, LF structural lines and one final newline.
 - Code continuation lines have two structural indentation spaces, removed on parse.
 - Record order is section order, preserving order within each family.
 - The shared Markdown scanner owns code-span recognition.
@@ -1295,7 +1296,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   the same generation subgraph and generic model path; narrative, applicability and
   records use concise purpose-specific guidance. The registered action
   `compose-specification-story` composes the story between the brief and entities,
-  with no model call (ADR 0047).
+  with no model call (ADR 0047). After the records, the `link-scenarios` step links each
+  edge case to an acceptance criterion of its own batch that shares a claim: natively when
+  one does, by one closed model request offering those criteria when several do, and by a
+  typed block when none does (ADR 0038 Decision 7, §17.3).
   The record schema defines each content variant once under one collection envelope.
 - Every retained business claim maps to native content keys; non-spec context remains in
   identified reference signals.
@@ -1318,7 +1322,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 - An invalid mechanically repairable candidate authorizes one independent value in
   stable diagnostic order.
-- Record-field and relationship locations are closed native targets.
+- Record-field locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
   blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
   single-statement record that restates the primary user story is deleted only when the
@@ -1326,8 +1330,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   an uncovered restatement is not flagged, and a record naming a claim that no other
   record names is kept ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). Within one batch, a business rule, outcome,
   assumption, non-goal or prohibition whose every claim a requirement or an earlier such
-  record names is deleted natively too, unless it holds an exact copy no other record
-  holds; one naming such claims and others is an admission
+  record names is deleted natively too (its text is not judged), unless it holds an exact
+  copy no other record holds; one naming such claims and others is an admission
   defect; requirements are never deleted or rejected by this rule
   ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5). Closed variant/schema correction handles malformed record shapes; there
   is no whole-record kind replacement. Entity membership repair follows

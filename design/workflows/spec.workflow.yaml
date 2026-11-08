@@ -23,6 +23,8 @@ resources:
   entities-prompt: spec/entities.prompt.md
   records-prompt: spec/records.prompt.md
   generation-schema: spec/generation.schema.json
+  links-prompt: spec/links.prompt.md
+  links-schema: spec/links.schema.json
   repair-prompt: spec/repair.prompt.md
   support-prompt: spec/support.prompt.md
   loss-prompt: spec/support-loss.prompt.md
@@ -135,9 +137,17 @@ steps:
   generate:
     call: generate-specification
     on:
-      ok: assemble
+      ok: link
       invalid: end.invalid
       needs-user: generation-gaps
+      blocked: end.blocked
+      failed: end.failed
+      cancelled: end.cancelled
+  link:
+    call: link-scenarios
+    on:
+      ok: assemble
+      invalid: end.invalid
       blocked: end.blocked
       failed: end.failed
       cancelled: end.cancelled
@@ -762,6 +772,33 @@ subgraphs:
       repair-release:
         call: release-request
         on: {ok: merge-repair, failed: end.failed}
+  link-scenarios:
+    start: plan
+    steps:
+      plan:
+        use: plan-scenario-links
+        on: {ok: progress, blocked: end.blocked, failed: end.failed}
+      progress:
+        use: check-scenario-link-progress
+        on: {ok: end.ok, more: input, failed: end.failed}
+      input:
+        use: build-scenario-link-input
+        on: {ok: choose, failed: end.failed}
+      choose:
+        call: model-request
+        with:
+          slot: spec_generation
+          prompt: links-prompt
+          schema: links-schema
+          selection: input
+          retry-limit: 2
+        on: {ok: admit, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      admit:
+        use: admit-scenario-link-choice
+        on: {ok: release, failed: end.failed}
+      release:
+        call: release-request
+        on: {ok: progress, failed: end.failed}
   assemble-specification-candidate:
     start: assemble-specification
     steps:

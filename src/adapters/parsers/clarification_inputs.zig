@@ -2,6 +2,7 @@ const std = @import("std");
 const clarification = @import("../../domain/clarification_inputs.zig");
 const forms = @import("../../domain/clarification_form.zig");
 const port = @import("../../ports/clarification_input_parser.zig");
+const strict_json = @import("../../domain/strict_json.zig");
 
 pub fn stateParser() port.StateParser {
     return .{ .parse_state_fn = parseState };
@@ -10,10 +11,12 @@ pub fn formParser() port.FormParser {
     return .{ .parse_form_fn = parseForm };
 }
 fn parseState(allocator: std.mem.Allocator, bytes: []const u8) clarification.Error!clarification.State {
-    if (bytes.len == 0 or bytes.len > clarification.max_state_bytes or !std.unicode.utf8ValidateSlice(bytes)) return error.InvalidClarificationInput;
-    return std.json.parseFromSliceLeaky(clarification.State, allocator, bytes, .{ .allocate = .alloc_always, .max_value_len = clarification.max_state_bytes }) catch |err| return switch (err) {
+    return strict_json.decode(clarification.State, allocator, bytes, .{
+        .maximum_bytes = clarification.max_state_bytes,
+        .maximum_depth = clarification.max_state_depth,
+    }) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
-        else => error.InvalidClarificationInput,
+        error.InvalidJsonDocument => error.InvalidClarificationInput,
     };
 }
 fn parseForm(allocator: std.mem.Allocator, bytes: []const u8, record: clarification.Record, binding: forms.Binding) clarification.Error!port.Form {

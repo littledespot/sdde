@@ -21,7 +21,6 @@
         "adjudicate.zig",
         "tests.zig",
         "integration.zig",
-        "attribution_replay.zig",
         "exact_value_replay.zig",
         "build",
         "src",

@@ -92,7 +92,7 @@ test "descriptive insertions reject identically in native composition and stored
     const inputs = try reference.prepare(a, &ids, try @import("reference_ingestion_test.zig").read(a, "source.md", "An unrelated source-backed meaning.\n"));
     const value: []const text.BusinessSegment = &.{ .{ .literal = .{ .value = "A supported meaning with " } }, .{ .exact_copy = .{ .claim_id = .{ .ordinal = 1 } } } };
     var context: text.StoredContext = .{ .inputs = inputs, .passive = .{ .records = &.{}, .occurrences = &.{} }, .scopes = &.{.{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id }}, .field = .spec_title, .exact_copies = &.{value[1].exact_copy} };
-    for ([_]policy.Field{ .spec_title, .spec_goal, .spec_entity_basis, .entity_meaning, .entity_relationship, .assumption, .clarification_question }) |field| {
+    for ([_]policy.Field{ .spec_title, .spec_goal, .spec_entity_basis, .assumption, .clarification_question }) |field| {
         try std.testing.expectEqual(.prohibited_exact, text.composition(text.BusinessSegment, field, value).?.reason);
         context.field = field;
         try std.testing.expectError(error.InvalidTypedText, text.stored(text.BusinessSegment, a, context, value));

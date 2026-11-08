@@ -76,6 +76,36 @@ pub fn sourceLines(allocator: std.mem.Allocator, directory: @import("reference_i
     return files.toOwnedSlice(allocator);
 }
 
+/// An entity's related statements (§23): the requirement and behaviour records that share
+/// one of its source groups, in document order. The entity selected those groups; the
+/// engine reads no wording, and the display never becomes provenance. Caller owns an arena.
+pub fn relatedStatements(allocator: std.mem.Allocator, records: []const spec.IdentifiedRecord, entity: spec.RecordProposal) std.mem.Allocator.Error![]const spec.Id {
+    const reconciliation = @import("reference_reconciliation.zig");
+    var ids: std.ArrayList(spec.Id) = .empty;
+    for (records) |other| {
+        if (!std.meta.activeTag(other.proposal.content).isStatement()) continue;
+        for (other.proposal.source_group_ids) |group| {
+            if (!reconciliation.contains(reconciliation.SignalId, entity.source_group_ids, group)) continue;
+            try ids.append(allocator, other.id);
+            break;
+        }
+    }
+    return ids.toOwnedSlice(allocator);
+}
+
+/// An edge case's outcome (§23): the Then of the acceptance criterion it links to, as that
+/// criterion's own display. Criteria precede edge cases in document order, so `done` holds it.
+fn linkedOutcome(done: []const spec.CapturedRecord, link: ?spec.Id) Error!spec.Scalar {
+    const id = link orelse return error.InvalidSpecification;
+    for (done) |other| {
+        const other_id = other.id orelse continue;
+        if (!std.meta.eql(other_id, id)) continue;
+        if (other.content != .acceptance_criterion) return error.InvalidSpecification;
+        return other.content.acceptance_criterion.then;
+    }
+    return error.InvalidSpecification;
+}
+
 /// Sorts `ranges` in place and returns its prefix with overlapping or touching ranges
 /// joined, so one set of cited lines has one display.
 pub fn mergeLines(ranges: []spec.LineRange) []const spec.LineRange {
@@ -120,14 +150,7 @@ pub fn modelRecord(allocator: std.mem.Allocator, context: provenance.Context, re
         inline else => |fields, kind| result: {
             var rendered: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    @field(rendered, field.name) = try scalarInScopes(allocator, context, value, resolved.scopes);
-                } else {
-                    const relationships = try allocator.alloc(spec.Scalar, value.len);
-                    for (value, relationships) |entry, *destination| destination.* = try scalarInScopes(allocator, context, entry, resolved.scopes);
-                    @field(rendered, field.name) = relationships;
-                }
+                @field(rendered, field.name) = try scalarInScopes(allocator, context, @field(fields, field.name), resolved.scopes);
             }
             break :result @unionInit(spec.Content(spec.Scalar), @tagName(kind), rendered);
         },
@@ -196,23 +219,18 @@ fn appendSpan(a: std.mem.Allocator, spans: *std.ArrayList(spec.CodeSpan), start:
 pub fn project(allocator: std.mem.Allocator, context: provenance.Context, directory: @import("reference_ingestion.zig").RelativePath, content: spec.IdentifiedContent) Error!spec.CapturedDocument {
     const records = try allocator.alloc(spec.CapturedRecord, content.records.len);
     const traces = try traceRequirements(allocator, context.inputs, @import("reference_support.zig").records(context.references), content);
-    for (content.records, records, traces) |record, *captured, trace| {
+    for (content.records, records, traces, 0..) |record, *captured, trace, index| {
         captured.id = record.id;
         const family: spec.Kind = record.proposal.content;
         captured.sources = if (family.showsSources()) try sourceLines(allocator, directory, context.inputs, trace.occurrences) else &.{};
+        captured.related = if (family == .entity) try relatedStatements(allocator, content.records, record.proposal) else &.{};
+        captured.outcome = if (family.showsOutcome()) try linkedOutcome(records[0..index], record.outcome_of) else null;
         const scopes = try provenance.scopesForRecord(allocator, context, record.proposal);
         switch (record.proposal.content) {
             inline else => |fields, kind| {
                 var projected: @FieldType(spec.Content(spec.Scalar), @tagName(kind)) = undefined;
                 inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                    const value = @field(fields, field.name);
-                    if (comptime field.type == spec.BusinessValue) {
-                        @field(projected, field.name) = try scalarInScopes(allocator, context, value, scopes);
-                    } else {
-                        const relationships = try allocator.alloc(spec.Scalar, value.len);
-                        for (value, relationships) |entry, *result| result.* = try scalarInScopes(allocator, context, entry, scopes);
-                        @field(projected, field.name) = relationships;
-                    }
+                    @field(projected, field.name) = try scalarInScopes(allocator, context, @field(fields, field.name), scopes);
                 }
                 captured.content = @unionInit(spec.Content(spec.Scalar), @tagName(kind), projected);
             },

@@ -118,10 +118,7 @@ fn copies(value: spec.BusinessValue, field: text.field_policy.Field, claim_id: r
 fn recordCopies(content: spec.Content(spec.BusinessValue), claim_id: r.ClaimId) bool {
     switch (content) {
         inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-            const value = @field(fields, field.name);
-            if (comptime field.type == spec.BusinessValue) {
-                if (copies(value, spec.textField(kind, field.name), claim_id)) return true;
-            } else for (value) |relationship| if (copies(relationship, spec.textField(kind, field.name), claim_id)) return true;
+            if (copies(@field(fields, field.name), spec.textField(kind, field.name), claim_id)) return true;
         },
     }
     return false;

@@ -594,7 +594,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         _ = directory.add(".sddtoolkit.json", configured);
         _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
         _ = directory.addCopyFile(b.path("design/workflows/spec.workflow.yaml"), ".sddtoolkit/workflows/spec.workflow.yaml");
-        inline for (.{ "reconciliation", "generation", "support" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
+        inline for (.{ "reconciliation", "generation", "support", "links" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
         };
         inline for (.{ "support-loss.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "packet-guidance.json" }) |name| {

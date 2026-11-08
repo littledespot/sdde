@@ -83,6 +83,6 @@ pub fn subjectFor(allocator: std.mem.Allocator, id: a.Id) a.Error!c.Subject {
             .record => |record| try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(record.kind), record.ordinal }),
             inline .source, .signal, .conflict, .token, .decision => |value, tag| try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(tag), value.ordinal }),
         },
-        .slot = if (id.member == 0) @tagName(id.slot) else try std.fmt.allocPrint(allocator, "{s}.{d}", .{ @tagName(id.slot), id.member }),
+        .slot = @tagName(id.slot),
     };
 }

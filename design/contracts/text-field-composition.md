@@ -63,8 +63,8 @@ semantic judgments.
 
 | Declared fields | Nonblank prose | Exact-copy role | Passive/source roles |
 | --- | --- | --- | --- |
-| Brief description; AC Given/When/Then; visible outcome; edge condition/outcome; functional requirement, business rule, non-goal, prohibited behavior | Required | Obligation-bearing | Passive incidental; source prohibited |
-| Brief title and goal; entity-applicability basis; entity meaning and each relationship; assumption; clarification question | Required | Prohibited ([below](#exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
+| Brief description; AC Given/When/Then; visible outcome; edge condition; functional requirement, business rule, non-goal, prohibited behavior | Required | Obligation-bearing | Passive incidental; source prohibited |
+| Brief title and goal; entity-applicability basis; assumption; clarification question | Required | Prohibited ([below](#exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
 | Primary story: the engine's join of quoted business claims ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)) | Required | Incidental: an exact value may occur, but discharges no exact-copy duty | Passive incidental; source prohibited |
 | Entity name | Optional: supplied insertions may express an identity label | Incidental | Passive incidental; source prohibited |
 | Extraction and reconciliation business and scope-guard text | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive incidental; source prohibited by their business-text contract |
@@ -178,6 +178,17 @@ User answers retain their separate input contract.
   returned text leaf to its registry field. One rejection reports every violating
   field of that response, each with its typed reason (`reference_only`, prohibited
   insertion or embedded insertion syntax).
+- **A statement the owner deletes is not judged.** In a records response, a defect in the
+  text of a statement record that
+  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5 deletes
+  natively (every claim taken, every exact value held by another record) is not
+  reported, whatever its reason: the record never publishes, so no correction is spent
+  on it. Admission and the records validator apply one rule, `statement_ownership`, to
+  the response's claim lists and the exact values recognized in its text. A requirement,
+  a record holding the batch's only copy of an exact value, and a record whose text holds
+  a value that can't be identified (ambiguous, unrecognizable, not a valid scalar in a
+  field that can hold an exact copy, or, at admission, an explicit insertion) are judged
+  as before.
 - **Correction uses the existing protocol-correction owner.** The rejected response
   goes through the same bounded protocol correction as other admission failures. It
   retains the active assignment, schema, eligible catalogue and retry allowance, and
@@ -189,7 +200,10 @@ User answers retain their separate input contract.
   admission and correct through their own request's protocol-correction bound.
 - **Unit repair never receives composition defects.** There is no
   composition-specific repair presentation or parallel path. Repairs for other
-  defect kinds, and their `unchanged_repair` exhaustion, are unaffected.
+  defect kinds, and their `unchanged_repair` exhaustion, are unaffected. A composition
+  defect can still arrive when a statement admission exempted (above) loses the holder of
+  its exact value to a repair that rewrites that record's text; unit repair refuses it as
+  `InvalidSpecificationRepair`.
 - Native and stored-value validation still enforce the same rules for values that
   bypass wire decoding, with no compatibility reader.
 

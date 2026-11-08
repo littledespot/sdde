@@ -81,9 +81,21 @@ pub const Diagnostic = struct {
 /// Closed native data decoding. The caller's arena owns the returned value.
 /// Required fields and wire kinds come from T; no coercion or unknown fields.
 pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8, limits: Limits) Error!T {
+    return decodeWith(T, false, allocator, bytes, limits);
+}
+
+/// Closed decoding of a user-authored document, such as the engine configuration: as `decode`,
+/// but a member with a default may be omitted. A member that is present keeps the wire kind of
+/// its type, and a defaulted optional is absent or a value, never null. Persisted and model
+/// documents use `decode`, which requires every member.
+pub fn decodeAuthored(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8, limits: Limits) Error!T {
+    return decodeWith(T, true, allocator, bytes, limits);
+}
+
+fn decodeWith(comptime T: type, comptime authored: bool, allocator: std.mem.Allocator, bytes: []const u8, limits: Limits) Error!T {
     var parsed = try parse(allocator, bytes, limits, false, null);
     defer parsed.deinit();
-    try wireTypes(T, parsed.value);
+    try wireTypes(T, parsed.value, authored);
     return std.json.parseFromSliceLeaky(T, allocator, bytes, .{
         .allocate = .alloc_always,
         .duplicate_field_behavior = .@"error",
@@ -92,9 +104,25 @@ pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8,
     }) catch |err| return mapError(err);
 }
 
+/// The member type of a `std.json.ArrayHashMap`, which reads a JSON object of any keys.
+fn jsonMapMember(comptime T: type) ?type {
+    if (@typeInfo(T) != .@"struct") return null;
+    const fields = std.meta.fields(T);
+    if (fields.len != 1 or !std.mem.eql(u8, fields[0].name, "map") or !@hasDecl(fields[0].type, "KV")) return null;
+    const Member = @FieldType(fields[0].type.KV, "value");
+    return if (T == std.json.ArrayHashMap(Member)) Member else null;
+}
+
+fn unwrapOptional(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .optional => |o| o.child,
+        else => T,
+    };
+}
+
 // Zig also accepts quoted numbers, numeric enum tags and byte arrays as
 // strings. Closed wire contracts must reject those conversions consistently.
-fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
+fn wireTypes(comptime T: type, value: std.json.Value, comptime authored: bool) Error!void {
     // An explicit diagnostic JSON leaf is inert evidence at any nesting depth.
     // Its enclosing native metadata still follows the closed wire contract.
     if (T == std.json.Value) return;
@@ -108,16 +136,29 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
                     .int, .float, .bool, .@"enum" => {},
                     else => @compileError("A closed wire wrapper names one scalar wire kind"),
                 }
-                return wireTypes(T.ClosedJsonWire, value);
+                return wireTypes(T.ClosedJsonWire, value, authored);
             }
-            if (value != .object or value.object.count() != s.fields.len) return error.InvalidJsonDocument;
-            inline for (s.fields) |field| try wireTypes(field.type, value.object.get(field.name) orelse return error.InvalidJsonDocument);
+            if (comptime jsonMapMember(T)) |Member| {
+                if (value != .object) return error.InvalidJsonDocument;
+                for (value.object.values()) |member| try wireTypes(Member, member, authored);
+                return;
+            }
+            if (value != .object) return error.InvalidJsonDocument;
+            var present: usize = 0;
+            inline for (s.fields) |field| {
+                const optional_by_absence = comptime authored and field.defaultValue() != null;
+                if (value.object.get(field.name)) |child| {
+                    present += 1;
+                    try wireTypes(if (optional_by_absence) unwrapOptional(field.type) else field.type, child, authored);
+                } else if (!optional_by_absence) return error.InvalidJsonDocument;
+            }
+            if (value.object.count() != present) return error.InvalidJsonDocument;
         },
         .@"union" => |u| {
             if (u.tag_type == null) @compileError("Closed JSON requires tagged unions");
             if (value != .object or value.object.count() != 1) return error.InvalidJsonDocument;
             inline for (u.fields) |field| {
-                if (value.object.get(field.name)) |child| return wireTypes(field.type, child);
+                if (value.object.get(field.name)) |child| return wireTypes(field.type, child, authored);
             }
             return error.InvalidJsonDocument;
         },
@@ -127,13 +168,13 @@ fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
                 if (value != .string) return error.InvalidJsonDocument;
             } else {
                 if (value != .array) return error.InvalidJsonDocument;
-                for (value.array.items) |item| try wireTypes(p.child, item);
+                for (value.array.items) |item| try wireTypes(p.child, item, authored);
             }
         },
-        .optional => |o| if (value != .null) try wireTypes(o.child, value),
+        .optional => |o| if (value != .null) try wireTypes(o.child, value, authored),
         .array => |a| {
             if (value != .array or value.array.items.len != a.len) return error.InvalidJsonDocument;
-            for (value.array.items) |item| try wireTypes(a.child, item);
+            for (value.array.items) |item| try wireTypes(a.child, item, authored);
         },
         .void => if (value != .object or value.object.count() != 0) return error.InvalidJsonDocument,
         .@"enum" => {
@@ -253,6 +294,30 @@ test "a validated wrapper is checked as its declared scalar wire kind before its
     const Plain = struct { flag: struct { value: bool } };
     try std.testing.expect((try decode(Plain, a, "{\"flag\":{\"value\":true}}", .{ .maximum_depth = 4 })).flag.value);
     try std.testing.expectError(error.InvalidJsonDocument, decode(Plain, a, "{\"flag\":true}", .{ .maximum_depth = 4 }));
+}
+
+test "an authored document may omit defaulted members, but a present member keeps its wire kind" {
+    const Slot = struct { provider: []const u8, effort: ?[]const u8 = null };
+    const Document = struct { slots: std.json.ArrayHashMap(Slot), flag: bool = false };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const limits: Limits = .{ .maximum_depth = 8 };
+    const decoded = try decodeAuthored(Document, a, "{\"slots\":{\"a\":{\"provider\":\"p\"},\"b\":{\"provider\":\"q\",\"effort\":\"low\"}}}", limits);
+    try std.testing.expectEqual(@as(usize, 2), decoded.slots.map.count());
+    try std.testing.expect(!decoded.flag);
+    try std.testing.expectEqualStrings("low", decoded.slots.map.get("b").?.effort.?);
+    for ([_][]const u8{
+        // A byte array is no string, a defaulted optional is absent or a value, a member is
+        // of its own kind, unknown members reject, and a map is an object.
+        "{\"slots\":{\"a\":{\"provider\":[112]}}}",
+        "{\"slots\":{\"a\":{\"provider\":\"p\",\"effort\":null}}}",
+        "{\"slots\":{\"a\":{\"provider\":\"p\"}},\"flag\":\"true\"}",
+        "{\"slots\":{\"a\":{\"provider\":\"p\"}},\"extra\":1}",
+        "{\"slots\":[]}",
+    }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, decodeAuthored(Document, a, bytes, limits));
+    // `decode` still requires every member: persisted documents never rely on defaults.
+    try std.testing.expectError(error.InvalidJsonDocument, decode(Document, a, "{\"slots\":{}}", limits));
 }
 
 test "JSON syntax validation preserves explicit resource caps without requiring model-call caps" {

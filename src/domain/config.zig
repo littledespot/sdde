@@ -3,6 +3,8 @@ const model_controls = @import("model_controls.zig");
 
 pub const engine_config_basename = ".sddtoolkit.json";
 pub const max_engine_config_bytes: usize = 1024 * 1024;
+/// The deepest nesting the closed configuration contract has: the document, models, slots, one slot.
+pub const max_engine_config_depth: usize = 4;
 
 pub const LogsConfig = struct {
     level: []const u8,
@@ -12,41 +14,9 @@ pub const LogsConfig = struct {
 pub const ModelSlotConfig = struct {
     provider: []const u8,
     model: []const u8,
+    /// The configuration schema makes this a string when present: the authored-document
+    /// decoder (`strict_json.decodeAuthored`) rejects an explicit null and any other kind.
     reasoningEffort: ?[]const u8 = null,
-
-    /// The configuration schema makes `reasoningEffort` a string when present, so
-    /// an explicit null is rejected, not read as absent.
-    pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!ModelSlotConfig {
-        const wire = try std.json.innerParse(Wire, a, source, options);
-        return .{
-            .provider = wire.provider,
-            .model = wire.model,
-            .reasoningEffort = switch (wire.reasoningEffort) {
-                .absent => null,
-                .present => |effort| effort,
-            },
-        };
-    }
-
-    /// The same fields with the effort's presence explicit; decoding only.
-    const Wire = struct {
-        provider: []const u8,
-        model: []const u8,
-        reasoningEffort: Effort = .absent,
-    };
-    const Effort = union(enum) {
-        absent,
-        present: []const u8,
-
-        pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!Effort {
-            // std.json also reads a byte slice from an array of numbers; the schema allows only a string.
-            if (try source.peekNextTokenType() != .string) return error.UnexpectedToken;
-            return .{ .present = try std.json.innerParse([]const u8, a, source, options) };
-        }
-    };
-    comptime {
-        std.debug.assert(std.meta.fields(Wire).len == std.meta.fields(ModelSlotConfig).len);
-    }
 };
 
 pub const ModelsConfig = struct {
@@ -58,6 +28,9 @@ pub const ModelsConfig = struct {
 /// integer-written JSON number in the u32 range.
 pub const WorkflowTokenBudget = struct {
     budget: @import("workflow_token_budget.zig").TotalTokenBudget,
+
+    /// The closed wire kind `strict_json` checks before `jsonParse` runs.
+    pub const ClosedJsonWire = u32;
 
     pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!WorkflowTokenBudget {
         return .{ .budget = .{ .value = try @import("positive_json_integer.zig").jsonPositiveU32(a, source, options) } };

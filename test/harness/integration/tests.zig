@@ -129,8 +129,12 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "selection: input", "selection: missing-definition" },
         .{ "composition-part: content", "composition-part: classifications" },
         .{ "use: retain-json-part", "use: check-model-request-phase" },
-        // Draft admission cannot bypass assembly and coverage before publication.
-        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: assemble", "  generate:\n    call: generate-specification\n    on:\n      ok: publish" },
+        // Draft admission cannot bypass linking, assembly and coverage before publication.
+        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: link", "  generate:\n    call: generate-specification\n    on:\n      ok: publish" },
+        // Linking cannot be skipped: assembly cannot follow generation directly, which would leave the
+        // link steps unreachable. That assembly needs the links is proven by every scripted run, whose
+        // steps see only the data their contracts declare.
+        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: link", "  generate:\n    call: generate-specification\n    on:\n      ok: assemble" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
@@ -1757,7 +1761,7 @@ test "production workflow enforces one global token budget and fails required st
             for (audit.checks) |check| if (check.subject == .specification and check.subject.specification.unit == .entities and check.subject.specification.record_kind == .entity) {
                 entity_fields += 1;
             };
-            try std.testing.expect(entity_fields >= 2);
+            try std.testing.expect(entity_fields >= 1);
             continue;
         }
         try std.testing.expect(outcome == .execution);

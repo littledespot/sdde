@@ -159,8 +159,10 @@ without adding an assessment model, configuration option or principle loader.
 
 ## Persistence and evidence
 
-Completed and clarification-pending state use `specification-state/v22` (v21 until
-the principle category policy was removed, [ADR 0015](0015-specification-principle-review.md)): it holds
+Completed and clarification-pending state use `specification-state/v24` (v23 until an edge
+case's outcome became a link to an acceptance criterion, [ADR 0038](0038-record-claims-and-scenario-coverage.md)
+Decision 7; v22 until the entity lost its meaning and relationships, Decision 6; v21 until the principle category policy was removed,
+[ADR 0015](0015-specification-principle-review.md)): it holds
 no post-generation review, principle assessment or incomplete-advice evidence, and
 keeps the captured principle registry identity as its own `principle_registry`
 field, which the next run's capture reads as its prior registry. Earlier contracts

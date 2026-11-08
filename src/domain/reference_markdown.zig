@@ -10,16 +10,17 @@ fn passive(w: *std.Io.Writer, value: snapshot.Snapshot, id: @import("passive_lit
     if (record.id.ordinal != id.ordinal) return error.InvalidReferenceSnapshot;
     try markdown.code(w, record.value);
 }
-pub fn business(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.BusinessText) Error!void {
-    for (content.segments) |segment| switch (segment) {
+/// `position` is where the first segment sits on its line.
+pub fn business(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.BusinessText, position: markdown.Position) Error!void {
+    for (content.segments, 0..) |segment, index| switch (segment) {
         .exact_copy => return error.InvalidReferenceSnapshot,
-        .literal => |literal| try markdown.literal(w, literal.value),
+        .literal => |literal| try markdown.literal(w, literal.value, if (index == 0) position else .inline_text),
         .passive => |reference| try passive(w, value, reference.passive_literal_id),
     };
 }
 pub fn semantic(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.ReferenceSemanticText) Error!void {
     for (content.nodes) |node| switch (node) {
-        .literal => |literal| try markdown.literal(w, literal.value),
+        .literal => |literal| try markdown.literal(w, literal.value, .inline_text),
         .passive => |reference| try passive(w, value, reference.passive_literal_id),
         .source => |reference| {
             if (reference.source_id.ordinal == 0 or reference.source_id.ordinal > value.inputs.corpus.sources.len) return error.InvalidReferenceSnapshot;

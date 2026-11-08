@@ -601,6 +601,34 @@ test "model decoding consumes sealed complete evidence and exposes only immutabl
     }
 }
 
+test "typed JSON documents are decoded only by the shared strict decoder" {
+    // `std.json` reads a string from an array of byte values and makes other conversions a
+    // closed document must reject (FIX06 E10). A decode into `std.json.Value` is a dynamic tree.
+    const io = std.testing.io;
+    const allocator = std.testing.allocator;
+    inline for (.{ "src/actions", "src/adapters", "src/application", "src/composition" }) |directory_path| {
+        var directory = try std.Io.Dir.cwd().openDir(io, directory_path, .{ .iterate = true });
+        defer directory.close(io);
+        var walker = try directory.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next(io)) |entry| {
+            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".zig")) continue;
+            const source = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
+            defer allocator.free(source);
+            var lines = std.mem.splitScalar(u8, source, '\n');
+            while (lines.next()) |text| {
+                if (std.mem.indexOf(u8, text, "std.json.Value") != null) continue;
+                inline for (.{ "parseFromSlice", "parseFromValue", "parseFromTokenSource", "innerParse(" }) |decode| {
+                    if (std.mem.indexOf(u8, text, decode) != null) {
+                        std.debug.print("typed JSON decode outside strict_json: {s}/{s}\n", .{ directory_path, entry.path });
+                        return error.TypedJsonDecodedOutsideStrictJson;
+                    }
+                }
+            }
+        }
+    }
+}
+
 test "payload validation uses only the retained schema and produces allocation-free candidate evidence" {
     const validator = @import("actions/model/validate_model_payload_schema.zig").Action;
     const validation = @import("domain/model_payload_schema.zig");

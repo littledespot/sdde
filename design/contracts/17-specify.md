@@ -195,8 +195,8 @@ or none. Each record names the claims it supports, a nonempty subset of that gro
 claims kept in the group's order, and keeps exactly one group occurrence. Requirements
 own their claims: in one response, a business rule, outcome, assumption, non-goal or
 prohibition whose every claim a requirement or an earlier such record names is deleted
-natively after validation unless it holds an exact copy no other record holds, and one
-naming such claims and others is a defect;
+natively unless it holds an exact copy no other record holds (a record so deleted is not
+judged on its text), and one naming such claims and others is a defect;
 requirements are never deleted or rejected by this rule. Every claim a behaviour
 statement names must also be named by an acceptance criterion or edge case. Admission
 rejects either defect for the request's existing protocol correction
@@ -219,6 +219,9 @@ A `required` decision requires at least one entity; `not_applicable` requires an
 empty collection. Each entity record explicitly selects its own eligible source
 groups, independently of the decision basis. Native code derives its full support
 and citations through the shared source association and exact-recognition owners.
+An entity's authored content is its name: it has no meaning or relationship text
+([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 6), and
+the engine derives the statements it relates to from its groups (§23.1).
 A record batch cannot author an entity: the closed schema, native admission,
 canonical revalidation and repair boundary enforce the same ownership rule.
 The feature collection participates once in canonical IDs, coverage and stored
@@ -257,6 +260,7 @@ For each feature-brief or specification unit other than the engine-composed stor
 - **Consolidated generation:** the shipped workflow requests brief, feature entities and
   source-group records as three sequential task types through one shared
   generation subgraph: one call each for the brief and entities, and one per record group.
+  A fourth, closed request follows the records only when an edge case needs it (next bullet).
   Brief, entity-applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
@@ -274,7 +278,8 @@ For each feature-brief or specification unit other than the engine-composed stor
   in model text. It has no clarification or inconclusive outcome; a catalogue with no
   business claim blocks with `no_story_requirements`, and a composed story that fails
   unit validation or exact recognition blocks with `story_not_admissible`, carrying
-  its unit issue. Neither is repaired or retried. Its exact role is incidental, so it discharges no
+  its unit issue. Neither is repaired or retried (nor is an edge case with no criterion,
+  below). Its exact role is incidental, so it discharges no
   exact-copy duty, and ADR 0035 never deletes a record naming a claim that no other
   record names. The story is no source-readiness subject and has no packet-guidance
   purpose (ADR 0047 Decision 5).
@@ -328,6 +333,20 @@ For each feature-brief or specification unit other than the engine-composed stor
   units prohibit that field. The existing clarification builder uses that family
   as its subject, preserving identities across reruns instead of merging all record
   questions into a new generic subject. This changes no clarification admission rule.
+
+- **Edge-case outcome links** ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+  Decision 7): an edge case's response names its condition and claims, and no outcome. When
+  the records unit completes, the `link-scenarios` step finds each edge case's candidates
+  natively: the acceptance criteria of its own batch that name one of its claims. One
+  candidate is the link; two or more make one request per edge case that offers the
+  criteria, numbered, with their given, when and then, and returns one offered id (a result
+  schema that admits those ids and no text; the prompt is `links.prompt.md`); none blocks
+  with the typed rejection `edge_case_without_criterion`, which names the edge case's group
+  and claims and is never repaired or retried. The engine prints the linked criterion's Then
+  as the edge case's outcome (§23.1) and stores the link as the criterion's ID, which
+  readback checks against the same candidate rule. The step takes one native iteration
+  population, the edge cases that need a choice; the model never selects a record, writes
+  an outcome or sees another batch's criteria.
 
 - **Draft-first sequencing:** complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a

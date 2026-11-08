@@ -30,6 +30,10 @@ pub const applicability_detail = "The source requires a displayed value. Its ori
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
 pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
+/// Scripted edge cases (ADR 0038 Decision 7). Each model claim gets one: `native` beside its one
+/// acceptance criterion, `chosen` beside two so the model decides, and `unlinked` in every batch
+/// after the first, where the batch has no criterion at all.
+pub const EdgeCases = enum { native, chosen, unlinked };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
 }
@@ -62,6 +66,7 @@ pub const Options = struct {
     entities_required: bool = false,
     contradict_entities: bool = false,
     generation_gap: bool = false,
+    edge_cases: ?EdgeCases = null,
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
@@ -360,6 +365,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
         },
         .specification_unit => {
+            // An edge case's outcome link: the model names the last criterion it is offered for the
+            // first pending edge case, the first for the next, and so on, so a run proves the engine
+            // used each answer for its own edge case, not a default candidate.
+            if (request.packet()) |packet| if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, @import("../domain/scenario_link_request.zig").definition)) {
+                const offered = packet.integerChoices()[0].allowed;
+                const earlier = (try @import("../application/scenario_link_workflow.zig").chosen(&view)).len;
+                return std.fmt.allocPrint(allocator, "{{\"criterion\":{d}}}", .{if (earlier % 2 == 0) offered[offered.len - 1] else offered[0]});
+            };
             const current = try @import("../application/specification_workflow.zig").readSession(&view);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             const provenance = @import("../domain/specification_provenance.zig");
@@ -382,7 +395,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const membership = auth.rule.group.?.membership;
                         var content_value = value.value;
                         if (options.failed_repair) content_value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
-                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = membership.fixed_provenance };
+                        const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
                 }
@@ -402,7 +415,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .entities => entity: {
                         const include = options.entities_required != options.contradict_entities;
                         const records = try allocator.alloc(g.spec.Model.RecordProposal, @intFromBool(include));
-                        if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value, .business_meaning = value.value, .relationships = &.{} } }, .provenance = value.provenance };
+                        if (include) records[0] = .{ .content = .{ .entity = .{ .name = value.value } }, .provenance = value.provenance };
                         break :entity .{ .entities = .{ .disposition = if (options.entities_required) .required else .not_applicable, .basis = value, .records = records } };
                     },
                     .records => result: {
@@ -412,14 +425,24 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         // restates.
                         for (std.enums.values(g.spec.Kind)) |kind| {
                             if (omittedKind(options, kind)) continue;
-                            if (kind != .functional_requirement and kind != .acceptance_criterion) continue;
+                            if (kind != .functional_requirement and kind != .acceptance_criterion and !(kind == .edge_case and options.edge_cases != null)) continue;
                             for (all.entries) |item| {
                                 const retained = eligibleRecordClaim(dispositions, item.claim.id);
                                 if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
                                 const selected = try withoutExact(allocator, options, try attributed(allocator, all, &.{item.claim.id}));
-                                if (kind == .acceptance_criterion and item.claim.content == .model) {
+                                if (kind == .edge_case) {
+                                    if (item.claim.content == .model) try records.append(allocator, .{ .content = .{ .edge_case = .{ .condition = selected.value } }, .provenance = selected.provenance });
+                                    continue;
+                                }
+                                // `unlinked` leaves every batch after the first without a criterion.
+                                const unlinked = options.edge_cases == .unlinked and current.record_cursor != 0;
+                                if (kind == .acceptance_criterion and item.claim.content == .model and !unlinked) {
                                     const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = .{ .given = selected.value, .when = selected.value, .then = selected.value };
                                     try records.append(allocator, .{ .content = .{ .acceptance_criterion = criterion }, .provenance = selected.provenance });
+                                    if (options.edge_cases == .chosen) {
+                                        const refusal: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "The request is refused." } }} };
+                                        try records.append(allocator, .{ .content = .{ .acceptance_criterion = .{ .given = selected.value, .when = selected.value, .then = refusal } }, .provenance = selected.provenance });
+                                    }
                                 }
                                 if (kind != .functional_requirement or item.claim.content != .model) continue;
                                 var text: std.ArrayList(r.text.BusinessSegment) = .empty;

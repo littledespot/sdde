@@ -69,8 +69,21 @@ Renderers own:
   `true`/`false`/`null`, and emits integers in base 10 with no leading plus or zeroes.
 - Policy-bearing decimal values are represented as schema-normalized decimal strings; binary
   floating-point spellings are forbidden in canonical state.
-- Markdown uses a versioned escape table for text/table cells, a deterministic fence
+- Markdown uses one closed escape table for business text, a deterministic fence
   length/language rule, fixed blank-line rules, and renderer-owned path/link formatting.
+  The table escapes with a backslash only the bytes Markdown reads as markup: `\`, backtick,
+  `*`, `_`, `~`, `[`, `]`, `<`, `>` and `&`; as the first text of a block line, also `#`,
+  `-`, `+` and the `.` or `)` after a leading digit run; and, for the values of `spec.md`
+  only, a comma that ends a value, so an acceptance-criterion clause never reads as joined by
+  ", ", and a run of `#` that ends the title after a space, which Markdown reads as the
+  heading's closing sequence. Line breaks and tabs are the entities `&#10;`, `&#13;` and
+  `&#9;`. All other punctuation is written as it is, so business text reads as written (user,
+  8 November 2026). Readback accepts a backslash before any ASCII punctuation, not only
+  before the bytes the renderer escapes; text that escapes more reads back to the same value
+  and re-renders differently, which publication's byte comparison rejects. The same table
+  renders `spec.md`, the incomplete `spec.md` and `reference-context.md`. No renderer revision
+  exists to change ([ADR 0036](../decisions/0036-source-quoted-claims.md) Decision 6): a rerun
+  regenerates the views.
 - A passive literal is emitted as non-link inline code: the delimiter is one backtick longer
   than the longest contiguous run in the value and the fixed CommonMark padding rule is applied.
 - The renderer never emits it as a Markdown link, autolink, HTML anchor, or clickable local
@@ -136,6 +149,23 @@ Renderers own:
   provenance: readback compares it with the line the projection derives and never mints a
   binding or a passive literal. A record that cites no source line shows none. No other
   reference citation is rendered into `spec.md`.
+- Each entity record also shows one engine-rendered related-statements line between its
+  name and its source line: the IDs of the functional requirements, business rules,
+  user-visible outcomes and prohibited behaviours that share one of the entity's source
+  groups, in document order, joined by `, `
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 6). It is
+  derived from the groups the entity selected and is no model text. Like the source line
+  it is a display, never provenance: readback compares it with the line the projection
+  derives. An entity that shares a group with no such statement shows none.
+- Each edge case also shows one engine-rendered outcome line, `- **EXPECTED OUTCOME** <text>`,
+  after its condition: the `then` of the acceptance criterion it links to, as that
+  criterion's own display, exact-value spans included
+  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 7). The
+  link is the criterion's ID, held in the stored record (§24), and a candidate only when the
+  criterion is of the edge case's records batch and shares a claim with it. The line is no
+  model text and, like the source line, a display, never provenance: readback compares it
+  with the line the projection derives, so an edited outcome re-renders differently and
+  publication's byte comparison rejects it. Every edge case shows one.
 - On reparse, the engine joins the persisted `SpecificationProvenanceState` only when the
   fixed/allocated record key and `BusinessContentIdentity` still equal the entry: ordered
   literal segment bytes plus self-contained passive `(ID, kind, bytes)` identities for

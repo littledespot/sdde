@@ -692,7 +692,7 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This illustrative sample describes canonical `specification/v3` under
+This illustrative sample describes canonical `specification/v5` under
 [ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Initial narrative
 responses select current whole groups through `signal_ids`; non-entity record
 responses keep their one native-assigned group and name a nonempty ordered subset of
@@ -722,13 +722,13 @@ ContentProposal {
 RecordContent =
   | acceptance_criterion { given: BusinessValue, when: BusinessValue, then: BusinessValue }
   | user_visible_outcome { text: BusinessValue }
-  | edge_case { condition: BusinessValue, expected_outcome: BusinessValue }
+  | edge_case { condition: BusinessValue }  // its outcome is the linked criterion's Then (ADR 0038 Decision 7)
   | functional_requirement { text: BusinessValue }
   | business_rule { text: BusinessValue }
   | assumption { text: BusinessValue }
   | non_goal { text: BusinessValue }
   | prohibited_behavior { text: BusinessValue }
-  | entity { name: BusinessValue, business_meaning: BusinessValue, relationships: BusinessValue[] }
+  | entity { name: BusinessValue }  // the engine derives its related statements (§23.1)
 
 IdentifiedRecord { id: { kind, ordinal }, proposal: RecordProposal }
 IdentifiedContent {

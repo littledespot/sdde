@@ -11,6 +11,7 @@ const validate_prompt = @import("../actions/log/validate_prompt_log_fragment.zig
 const select_prompt = @import("../actions/log/evaluate_prompt_log_capture.zig");
 const evaluate_flush = @import("../actions/log/evaluate_feature_log_flush_need.zig");
 const advance_state = @import("../actions/log/advance_feature_log_stream_state.zig");
+const acquire_lock = @import("../actions/log/acquire_feature_log_stream_lock.zig");
 const feature_log_format = @import("../domain/feature_log_format.zig");
 const log_binding = @import("../domain/feature_log_binding.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
@@ -107,7 +108,7 @@ pub const Runner = struct {
     }
 
     fn prepareOne(self: *Runner, stream: log_stream.Stream, reading: log_stream.ClockReading) ?log_stream.FailureCode {
-        self.actions.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
+        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.failureCode(failure);
         var failure: ?log_stream.FailureCode = null;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
@@ -140,7 +141,7 @@ pub const Runner = struct {
             state.next_sequence - 1,
             reading.utc(),
         ) catch return .LOG_SERIALIZATION_FAILURE;
-        self.actions.acquire_lock.execute(self.binding, stream) catch return .LOG_LOCK_TIMEOUT;
+        self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return acquire_lock.failureCode(failure);
         var failure: ?log_stream.FailureCode = null;
         self.actions.close_stream.execute(self.binding, stream, state, trailer) catch |close_failure| {
             failure = if (close_failure == error.LogFlushFailure) .LOG_FLUSH_FAILURE else .LOG_SINK_FAILURE;
@@ -435,7 +436,7 @@ fn readClockBinding(context: *anyopaque) child_bindings.ClockOutcome {
 
 fn acquireBinding(context: *anyopaque, stream: log_stream.Stream) child_bindings.StepOutcome {
     const self = cast(context);
-    self.actions.acquire_lock.execute(self.binding, stream) catch return .{ .failed = .LOG_LOCK_TIMEOUT };
+    self.actions.acquire_lock.execute(self.binding, stream) catch |failure| return .{ .failed = acquire_lock.failureCode(failure) };
     return .ok;
 }
 

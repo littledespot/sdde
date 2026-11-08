@@ -301,7 +301,7 @@ test "native assembled observations resolve unrelated exact values and preserve 
             if (result != .valid) return error.InvalidNativeCandidateFixture;
             current = try session.appendBound(a, current, result.valid);
         }
-        const content = (try session.assemble(a, text.validator, context, current)).content;
+        const content = (try session.assemble(a, text.validator, context, current, &.{})).content;
         var view: data.View = .{};
         defer for (view.slots) |slot| if (slot) |value| values.destroy(value);
         const reference_owner = try @import("../../../src/domain/reference_candidate_value.zig").create(a, null);

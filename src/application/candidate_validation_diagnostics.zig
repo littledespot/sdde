@@ -27,6 +27,12 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         const value = storage.payload(try values.read(view, spec.session_schema, storage.Value));
         if (value.* == .binding_rejected) return .{ .source_catalogue = value.binding_rejected };
     }
+    const links = @import("scenario_link_workflow.zig");
+    if (view.contains(links.progress_schema.key)) {
+        const storage = @import("specification_values.zig").storage;
+        const value = storage.payload(try values.read(view, links.progress_schema, storage.Value));
+        if (value.* == .binding_rejected) return .{ .source_catalogue = value.binding_rejected };
+    }
     if (view.contains(spec.checked_schema.key)) {
         const storage = @import("specification_values.zig").storage;
         const value = storage.payload(try values.read(view, spec.checked_schema, storage.Value));

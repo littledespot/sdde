@@ -246,7 +246,7 @@ test "stream lock acquisition rejects a symbolic link" {
     var outputs: FakeOutputs = .{};
     var runner: runner_module.Runner = .{ .allocator = std.testing.allocator, .policy = &policy, .binding = log_binding.binding(owner), .actions = childrenFor(&sink_adapter, clock.port(), outputs.console(), outputs.emergency()) };
     const outcome = runner.process(.{ .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"), .fact = .{ .event_type = .run_started } });
-    try std.testing.expectEqual(log_stream.FailureCode.LOG_LOCK_TIMEOUT, outcome.blocked);
+    try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     const target = try directory.dir.readFileAlloc(io, "lock-target", std.testing.allocator, .limited(32));
     defer std.testing.allocator.free(target);
     try std.testing.expectEqualStrings("unchanged", target);
@@ -777,7 +777,7 @@ test "sink acquisition failure reports once and blocks" {
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
         .fact = .{ .event_type = .run_started },
     });
-    try std.testing.expectEqual(log_stream.FailureCode.LOG_LOCK_TIMEOUT, outcome.blocked);
+    try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_count);
     try std.testing.expectEqual(@as(usize, 1), rejecting_sink.calls);
     try std.testing.expect(runner.event_state == null);
@@ -804,7 +804,7 @@ test "emergency failure preserves the original logging failure without retry" {
         .workflow_shortcode = try telemetry.WorkflowShortcode.parse("SPEC"),
         .fact = .{ .event_type = .run_started },
     });
-    try std.testing.expectEqual(log_stream.FailureCode.LOG_LOCK_TIMEOUT, outcome.blocked);
+    try std.testing.expectEqual(log_stream.FailureCode.LOG_SINK_FAILURE, outcome.blocked);
     try std.testing.expectEqual(@as(usize, 1), outputs.emergency_calls);
     try std.testing.expectEqual(@as(usize, 0), outputs.emergency_count);
     try std.testing.expectEqual(@as(usize, 1), rejecting_sink.calls);

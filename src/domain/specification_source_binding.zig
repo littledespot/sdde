@@ -10,11 +10,13 @@ pub const Mode = enum { content, question };
 pub const Catalogue = struct { records: refs.Records, inputs: evidence.Inputs };
 pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
 pub const Association = struct { source_group_ids: []const r.SignalId, selection: spec.Selection };
-pub const Reason = enum { empty_catalogue, no_record_authoring_groups, no_story_requirements, story_not_admissible };
-/// Built only by `rejection` and `storyRejection`, and checked again on decode, so a
-/// reason and its issue always pair: `story_not_admissible` carries the unit issue
+pub const Reason = enum { empty_catalogue, no_record_authoring_groups, no_story_requirements, story_not_admissible, edge_case_without_criterion };
+/// Built only by `rejection`, `storyRejection` and `edgeCaseRejection`, and checked again on
+/// decode, so a reason and its issue always pair: `story_not_admissible` carries the unit issue
 /// that kept the engine-composed story out (ADR 0047); every other reason has none.
-/// A story reason has no model origin: the engine produced the story.
+/// A story reason has no model origin: the engine produced the story. Nor does
+/// `edge_case_without_criterion`, which the engine found in a completed records unit; its one
+/// eligible signal is the source group of the edge case, with the claims the edge case names.
 pub const Rejection = struct {
     state_id: evidence.identity.StateId,
     partition_id: r.PartitionId,
@@ -25,8 +27,9 @@ pub const Rejection = struct {
     issue: ?@import("specification_candidate.zig").Issue = null,
 
     pub fn valid(self: Rejection) bool {
-        const story = self.reason == .no_story_requirements or self.reason == .story_not_admissible;
-        return (self.reason == .story_not_admissible) == (self.issue != null) and (!story or self.origin == null);
+        const engine_found = self.reason == .no_story_requirements or self.reason == .story_not_admissible or self.reason == .edge_case_without_criterion;
+        return (self.reason == .story_not_admissible) == (self.issue != null) and (!engine_found or self.origin == null) and
+            (self.reason != .edge_case_without_criterion or self.eligible_signals.len == 1);
     }
 
     /// Decoding rejects an unpaired reason and issue, or a story reason with an origin.
@@ -233,6 +236,14 @@ pub fn storyRejection(a: std.mem.Allocator, references: r.Accounted, gap: StoryG
         .no_requirements => blocked(references, .no_story_requirements, null, null, available),
         .not_admissible => |issue| blocked(references, .story_not_admissible, null, issue, available),
     };
+}
+/// ADR 0038 Decision 7: an edge case of `group` names `claims`, and no acceptance criterion of
+/// its records batch names any of them. It has no outcome to print, and neither the engine nor
+/// the model supplies one, so the run blocks.
+pub fn edgeCaseRejection(a: std.mem.Allocator, references: r.Accounted, group: r.SignalId, claims: []const r.ClaimId) Error!Rejection {
+    const edge = try a.alloc(EligibleSignal, 1);
+    edge[0] = .{ .signal_id = group, .claim_ids = try a.dupe(r.ClaimId, claims) };
+    return blocked(references, .edge_case_without_criterion, null, null, edge);
 }
 fn blocked(references: r.Accounted, reason: Reason, origin: ?@import("model_candidate_origin.zig").Origin, issue: ?@import("specification_candidate.zig").Issue, available: []const EligibleSignal) Rejection {
     const prior = references.records.assignments.checked.prior.prior;

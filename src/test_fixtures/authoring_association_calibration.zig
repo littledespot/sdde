@@ -225,7 +225,7 @@ pub fn run() !void {
         for (1..3) |repeat| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-records-{d}", .{ example.id, repeat }), .case_id = example.id, .repetition = @intCast(repeat), .requests = record_requests.items });
         for (0..2) |_| try starts.append(a, records_start);
         states[index] = .{ .context = prepared.context, .seed = current };
-        const candidate = try session.assemble(a, text.validator, prepared.context, current);
+        const candidate = try session.assemble(a, text.validator, prepared.context, current, &.{});
         try shared.writeAt(a, output, example.id, "seed.json", try std.json.Stringify.valueAlloc(a, .{ .session = current, .brief = current.units[0].?.response.content.brief, .candidate = candidate.content }, .{}));
         // Expectation labels and authored context seeds never become initial
         // brief/story inputs. Later business context uses resolved prior units.
@@ -353,7 +353,7 @@ const compose_story: @import("../actions/specification/compose_specification_sto
 fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Association) ![2]g.Response {
     return .{
         .{ .content = .{ .brief = .{ .title = try attributed(a, example.seed.title, selected), .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
-        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name), .business_meaning = try business(a, "MOCK Controlled business entity seed."), .relationships = &.{} } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
+        .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name) } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
     };
 }
 fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBound) ![]const spec.Values(.model).RecordProposal {

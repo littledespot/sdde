@@ -2,6 +2,7 @@ const std = @import("std");
 const document = @import("../../domain/llm_provider_document.zig");
 const identity = @import("../../domain/llm_provider_identity.zig");
 const pipeline = @import("../../domain/pipeline.zig");
+const strict_json = @import("../../domain/strict_json.zig");
 
 pub const Error = error{LLMProviderConfigParseError};
 
@@ -19,64 +20,36 @@ pub const Action = struct {
         allocator: std.mem.Allocator,
         bytes: []const u8,
     ) Error!document.Owned {
-        try validateTransport(allocator, bytes);
-
         var owned = document.Owned.init(allocator);
         errdefer owned.deinit();
-        owned.document = std.json.parseFromSliceLeaky(
+        owned.document = strict_json.decode(
             document.RawLLMProviderDocument,
             owned.allocator(),
             bytes,
-            .{
-                .duplicate_field_behavior = .@"error",
-                .ignore_unknown_fields = false,
-                .max_value_len = document.max_bytes,
-                .allocate = .alloc_always,
-            },
+            .{ .maximum_bytes = document.max_bytes, .maximum_depth = document.max_nesting_depth },
         ) catch return error.LLMProviderConfigParseError;
 
+        try validateIntegers(allocator, bytes);
         try validateCommonShape(owned.value());
         return owned;
     }
 };
 
-fn validateTransport(allocator: std.mem.Allocator, bytes: []const u8) Error!void {
-    if (bytes.len > document.max_bytes or !std.unicode.utf8ValidateSlice(bytes) or
-        std.mem.startsWith(u8, bytes, "\xef\xbb\xbf"))
-    {
-        return error.LLMProviderConfigParseError;
-    }
-
+/// The catalogue holds integers only, wherever they stand, a model's `config` included.
+fn validateIntegers(allocator: std.mem.Allocator, bytes: []const u8) Error!void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, bytes);
     defer scanner.deinit();
-    var depth: usize = 0;
-    while (true) {
-        const token = scanner.next() catch return error.LLMProviderConfigParseError;
-        switch (token) {
-            .object_begin, .array_begin => {
-                depth += 1;
-                if (depth > document.max_nesting_depth) {
-                    return error.LLMProviderConfigParseError;
-                }
-            },
-            .object_end, .array_end => {
-                if (depth == 0) return error.LLMProviderConfigParseError;
-                depth -= 1;
-            },
-            .number, .partial_number => |number| {
-                if (!isIntegerLexeme(number)) return error.LLMProviderConfigParseError;
-            },
-            .allocated_number => |number| {
-                defer allocator.free(number);
-                if (!isIntegerLexeme(number)) return error.LLMProviderConfigParseError;
-            },
-            .end_of_document => {
-                if (depth != 0) return error.LLMProviderConfigParseError;
-                break;
-            },
-            else => {},
-        }
-    }
+    while (true) switch (scanner.next() catch return error.LLMProviderConfigParseError) {
+        .number, .partial_number => |number| {
+            if (!isIntegerLexeme(number)) return error.LLMProviderConfigParseError;
+        },
+        .allocated_number => |number| {
+            defer allocator.free(number);
+            if (!isIntegerLexeme(number)) return error.LLMProviderConfigParseError;
+        },
+        .end_of_document => return,
+        else => {},
+    };
 }
 
 fn validateCommonShape(raw: *const document.RawLLMProviderDocument) Error!void {
@@ -132,6 +105,8 @@ test "strict decoder rejects malformed closed-shape and transport violations" {
         "{\"providers\":[{\"provider\":\"compiled\",\"models\":[{\"config\":{}}]}]}",
         "{\"providers\":[{\"provider\":\"compiled\",\"models\":[{\"model\":\"model-a\"}]}]}",
         "{\"providers\":[{\"provider\":\"Compiled\",\"models\":[]}]}",
+        "{\"providers\":[{\"provider\":[99],\"models\":[]}]}",
+        "{\"providers\":[{\"provider\":\"compiled\",\"models\":[{\"model\":[109],\"json\":false,\"config\":{}}]}]}",
         "{\"providers\":[{\"provider\":\"compiled\",\"models\":[],\"extra\":true}]}",
         "{\"providers\":[{\"provider\":\"compiled\",\"models\":[{\"model\":\"model-a\",\"json\":false,\"config\":[],\"extra\":true}]}]}",
         "{\"providers\":[{\"provider\":\"compiled\",\"models\":[{\"model\":\"model-a\",\"json\":false,\"config\":{\"weight\":1.5}}]}]}",

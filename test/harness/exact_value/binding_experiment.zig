@@ -338,7 +338,7 @@ fn altered(comptime change: Alteration) Input {
         .empty_relations => result.relations = .{ .context = context, .edges = &.{} },
         .ineligible => result.catalogue = .{ .context = context, .occurrences = &.{.{ .id = token.id, .bytes = token.bytes, .eligibility = .ineligible }} },
         .prohibited_field, .incidental_field => {
-            result.context.field = if (change == .prohibited_field) .entity_meaning else .entity_name;
+            result.context.field = if (change == .prohibited_field) .assumption else .entity_name;
             result.catalogue.?.context = result.context;
             result.relations.?.context = result.context;
             if (change == .incidental_field) {

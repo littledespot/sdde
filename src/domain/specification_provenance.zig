@@ -150,12 +150,7 @@ pub fn effectiveClaims(a: std.mem.Allocator, selected: []const r.ClaimId, values
 pub fn recordValues(a: std.mem.Allocator, content: spec.Content(spec.BusinessValue)) Error![]const spec.BusinessValue {
     var values: std.ArrayList(spec.BusinessValue) = .empty;
     switch (content) {
-        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-            const value = @field(fields, field.name);
-            if (comptime field.type == spec.BusinessValue) {
-                try values.append(a, value);
-            } else for (value) |relationship| try values.append(a, relationship);
-        },
+        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| try values.append(a, @field(fields, field.name)),
     }
     return values.toOwnedSlice(a);
 }
@@ -328,18 +323,30 @@ pub fn recognizeRecord(a: std.mem.Allocator, references: refs.Records, content: 
         inline else => |fields, kind| result: {
             var result = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    @field(result, field.name) = try recognizeValue(a, references, value, spec.textField(kind, field.name), fixed);
-                } else {
-                    const relationships = try a.alloc(spec.BusinessValue, value.len);
-                    for (value, relationships) |entry, *recognized| recognized.* = try recognizeValue(a, references, entry, spec.textField(kind, field.name), fixed);
-                    @field(result, field.name) = relationships;
-                }
+                @field(result, field.name) = try recognizeValue(a, references, @field(fields, field.name), spec.textField(kind, field.name), fixed);
             }
             break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), result);
         },
     };
+}
+
+/// Whether a field that can hold an exact copy has a literal that is not a valid scalar.
+/// Recognition skips such a run without error, so what it holds is unknown. A field that
+/// forbids exact copies can hide none.
+pub fn hasUnreadableText(content: spec.Content(spec.BusinessValue)) bool {
+    return switch (content) {
+        inline else => |fields, kind| unreadable: {
+            inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                if (comptime text.field_policy.get(spec.textField(kind, field.name)).exact_copy == .prohibited) continue;
+                if (unreadableValue(@field(fields, field.name))) break :unreadable true;
+            }
+            break :unreadable false;
+        },
+    };
+}
+fn unreadableValue(value: spec.BusinessValue) bool {
+    for (value.segments) |segment| if (segment == .literal and !text.validScalar(segment.literal.value)) return true;
+    return false;
 }
 
 /// Model-facing projections contain literal exact bytes, never canonical
@@ -376,14 +383,7 @@ pub fn modelRecord(a: std.mem.Allocator, references: refs.Records, content: spec
         inline else => |fields, kind| result: {
             var projected = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    @field(projected, field.name) = try modelValue(a, references, value);
-                } else {
-                    const relationships = try a.alloc(spec.BusinessValue, value.len);
-                    for (value, relationships) |entry, *next| next.* = try modelValue(a, references, entry);
-                    @field(projected, field.name) = relationships;
-                }
+                @field(projected, field.name) = try modelValue(a, references, @field(fields, field.name));
             }
             break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), projected);
         },
@@ -519,10 +519,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
         switch (record.proposal.content) {
             inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    try storedValue(a, inputs, passive, references, resolved, value, spec.textField(kind, field.name));
-                } else for (value) |relationship| try storedValue(a, inputs, passive, references, resolved, relationship, spec.textField(kind, field.name));
+                try storedValue(a, inputs, passive, references, resolved, @field(fields, field.name), spec.textField(kind, field.name));
             },
         }
     }
@@ -604,18 +601,8 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
         inline else => |fields, kind| {
             var recognized_fields = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const value = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                    @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), value, spec.textField(kind, field.name), inspection);
-                } else {
-                    const relationships = try scratch.allocator().alloc(spec.BusinessValue, value.len);
-                    for (value, relationships, 0..) |entry, *recognized, index| {
-                        inspection.part = .{ .value = .{ .relationship = index } };
-                        recognized.* = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), entry, spec.textField(kind, field.name), inspection);
-                    }
-                    @field(recognized_fields, field.name) = relationships;
-                }
+                inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
+                @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), @field(fields, field.name), spec.textField(kind, field.name), inspection);
             }
             recognized_content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), recognized_fields);
         },
@@ -627,18 +614,8 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
         inline else => |fields, kind| {
             var normalized = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                const proposed = @field(fields, field.name);
-                if (comptime field.type == spec.BusinessValue) {
-                    inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed, spec.textField(kind, field.name), inspection);
-                } else {
-                    const relationships = try allocator.alloc(spec.BusinessValue, proposed.len);
-                    for (proposed, relationships, 0..) |entry, *checked, index| {
-                        inspection.part = .{ .value = .{ .relationship = index } };
-                        checked.* = try valueIn(allocator, validator, context, resolved, entry, spec.textField(kind, field.name), inspection);
-                    }
-                    @field(normalized, field.name) = relationships;
-                }
+                inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
+                @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, @field(fields, field.name), spec.textField(kind, field.name), inspection);
             }
             result.content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), normalized);
         },

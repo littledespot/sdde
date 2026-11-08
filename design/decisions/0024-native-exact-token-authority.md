@@ -87,7 +87,7 @@ choice cannot become authority through a later merge or stored readback.
 
 Completed and clarification-pending specification state persists these facts;
 earlier state versions reject without a migration or compatibility reader.
-Canonical specification content remains `specification/v3`. Readback recomputes
+Canonical specification content is `specification/v5`. Readback recomputes
 native appearance, dispositions, duplicate identities, exact eligibility and
 complete coverage; it does not fill corrupt state with a reconstructed success value.
 

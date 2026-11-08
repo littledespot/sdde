@@ -6,6 +6,9 @@ const feature = @import("feature_identity.zig");
 pub const max_forms = 297;
 pub const max_form_bytes = 16 * 1024;
 pub const max_state_bytes = 8 * 1024 * 1024;
+/// The deepest nesting the closed state has: the document, records, a record, its answer
+/// schema, `select_many`, its options, one option.
+pub const max_state_depth = 7;
 pub const max_responses = 4096;
 pub const max_text_bytes = 2000;
 pub const schema_version = "clarification-state/v2";

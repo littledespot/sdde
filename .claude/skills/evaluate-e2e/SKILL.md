@@ -127,6 +127,11 @@ the engine, its prompts or its deterministic code.
        its verb ("leaves the due date unchanged and displays `Renewal refused.`" without
        "refuses").
 
+     Ruling of 8 November 2026 (FIX06 section 3 Next 3): a title that gives a requirement's
+     value or wording states it, like any other repeat above, so a title that drops part of it
+     ("by 14 days" for "fourteen calendar days") scores that requirement's criterion below 3.
+     A title that gives no value is a label, scored against `organization` only.
+
      The `Source:` line under each AC, FR and EN is the engine's decided display of the
      record's cited lines (23-rendering.md §23). Don't count it as a defect or against a
      business-facing criterion. Section 3 step 7 checks the links themselves.

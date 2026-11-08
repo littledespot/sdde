@@ -235,15 +235,11 @@
         },
         "condition": {
           "$ref": "#/$defs/business_value"
-        },
-        "expected_outcome": {
-          "$ref": "#/$defs/business_value"
         }
       },
       "required": [
         "kind",
-        "condition",
-        "expected_outcome"
+        "condition"
       ],
       "additionalProperties": false
     },
@@ -335,23 +331,11 @@
         },
         "name": {
           "$ref": "#/$defs/business_value"
-        },
-        "business_meaning": {
-          "$ref": "#/$defs/business_value"
-        },
-        "relationships": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/business_value"
-          },
-          "maxItems": 4294967295
         }
       },
       "required": [
         "kind",
-        "name",
-        "business_meaning",
-        "relationships"
+        "name"
       ],
       "additionalProperties": false
     },

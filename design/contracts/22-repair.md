@@ -311,7 +311,8 @@ corrected through the existing bounded protocol correction with the complete
 original request, as defined in the
 [composition contract](text-field-composition.md#composition-defects-are-corrected-as-a-unit);
 repair responses apply the same admission rule within their own request's
-correction bound.
+correction bound. A statement record that ADR 0038 Decision 5 deletes natively is
+exempt from both: its text defect is neither rejected nor repaired.
 
 The repair guidance contains:
 
@@ -569,8 +570,9 @@ defined response-level correction containing:
   the partly taken record and offering its shape, names its exclusive and owning kinds
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
   naming in such records (`shared`; FIX06 D16.1 and D16.2, 2 November 2026); no other
-  correction changes. A wholly taken record is never corrected: the records validator
-  deletes it natively (`repeated_statement`, ADR 0038 Decision 5). Correction does not repeat schema subtrees. Syntax correction uses that
+  correction changes. A wholly taken record is never corrected: the records validator deletes it natively
+  (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
+  the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that
   same complete schema. Guidance never selects a semantic branch, moves fields or
   synthesizes values. For an integer-enum rejection, guidance uses the exact schema locator and a short integer-type outline; it does not copy
   the allowed-ID list from the complete selected schema into the outline.

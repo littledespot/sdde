@@ -1123,7 +1123,7 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     if (shape == 8) {
         const canonical = try compiler.compile(a, coverage_schema);
         const restriction = try @import("domain/model_result_schema.zig").restrict(a, canonical, &.{}, &.{.{ .target = .{ .path = coverage_path }, .allowed = &.{ 2, 4 }, .collection = .unique_subset, .coverage = coverage_rule }});
-        return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}", .restriction = restriction };
+        return .{ .schema = restriction.selected(), .response = "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2,4]}]}", .fields = &.{.{ .field = .business_rule, .path = &.{ .{ .property = "entries" }, .items, .{ .property = "content" }, .{ .variant = "rule" }, .{ .property = "text" } } }}, .restriction = restriction };
     }
     if (shape == 7) {
         const canonical = try compiler.compile(a, member_schema);
@@ -1181,7 +1181,7 @@ fn expectReplayedMembers(a: std.mem.Allocator, fixture: *Fixture, selected: debu
     try std.testing.expectEqualDeep(selected.members, (try debug.Description.decode(a, try std.json.Stringify.valueAlloc(a, selected, .{}))).members);
 }
 
-const coverage_variant = "{{\"type\":\"object\",\"properties\":{{\"kind\":{{\"const\":\"{s}\"}},\"text\":{{\"type\":\"string\",\"maxLength\":16}}}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}}";
+const coverage_variant = "{{\"type\":\"object\",\"properties\":{{\"kind\":{{\"const\":\"{s}\"}},\"text\":{{\"type\":\"string\",\"maxLength\":40}}}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}}";
 const coverage_schema = std.fmt.comptimePrint("{{\"type\":\"object\",\"properties\":{{\"entries\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":8,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ coverage_variant ++ "," ++ coverage_variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}}},\"required\":[\"entries\"],\"additionalProperties\":false}}", .{ "rule", "check" });
 const coverage_path: []const @import("domain/model_result_schema.zig").ChoiceStep = &.{ .{ .property = "entries" }, .{ .items = {} }, .{ .property = "ids" } };
 const coverage_rule: @import("domain/model_result_schema.zig").ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
@@ -1203,10 +1203,23 @@ fn expectReplayedCoverage(a: std.mem.Allocator, fixture: *Fixture, selected: deb
     try std.testing.expectEqualStrings("/entries/1", shared_check.path.?);
     const repeated = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"rule\",\"text\":\"s\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2]}]}");
     try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, repeated)).schema);
+    // The record also replays ADR 0038 Decision 5's exemption: a statement that repeats an earlier
+    // one's claims is deleted natively, so a defect in its text (embedded insertion syntax) is
+    // none of the response's; the first statement, which nothing takes, keeps its defect.
+    const defect = "Send {\\\"kind\\\":\\\"exact_copy\\\"} now.";
+    const repeated_defect = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"r\"},\"ids\":[2]},{\"content\":{\"kind\":\"rule\",\"text\":\"" ++ defect ++ "\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2]}]}");
+    try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, selected, repeated_defect)).json);
+    const first_defect = try debugResponse(a, "{\"entries\":[{\"content\":{\"kind\":\"rule\",\"text\":\"" ++ defect ++ "\"},\"ids\":[2]},{\"content\":{\"kind\":\"check\",\"text\":\"c\"},\"ids\":[2]}]}");
+    const kept_defect = try fixture.provider.provider().inspect(a, selected, first_defect);
+    try std.testing.expectEqual(.invalid, kept_defect.json);
+    try std.testing.expectEqualStrings("/entries/0/content/text", kept_defect.path.?);
     // Without the record the same bytes pass, so the record is what replays admission.
     var unrestricted = selected;
     unrestricted.coverages = &.{};
     try std.testing.expectEqual(.valid, (try fixture.provider.provider().inspect(a, unrestricted, uncovered)).schema);
+    const unexempt = try fixture.provider.provider().inspect(a, unrestricted, repeated_defect);
+    try std.testing.expectEqual(.invalid, unexempt.json);
+    try std.testing.expectEqualStrings("/entries/1/content/text", unexempt.path.?);
     // A record that does not fit the captured schema cannot be read or replayed.
     var foreign = selected;
     foreign.coverages = &.{.{ .path = coverage_path, .allowed = &.{ 2, 4 }, .coverage = .{ .kind_property = "content", .covered = &.{"ghost"}, .covering = &.{"check"}, .exclusive = &.{}, .owning = &.{} } }};

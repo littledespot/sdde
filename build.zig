@@ -237,21 +237,6 @@ fn define(b: *std.Build) Graph {
     const call_tests = b.addRunArtifact(b.addTest(.{ .root_module = call_module }));
     call_tests.setCwd(b.path("."));
     b.step("test-e2e-call", "Test captured-call selection, binding and reporting offline").dependOn(&call_tests.step);
-    const attribution_module = b.createModule(.{
-        .root_source_file = b.path("attribution_replay.zig"),
-        .target = target,
-        .optimize = optimize,
-        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
-    });
-    const attribution_executable = b.addExecutable(.{ .name = "sdde-attribution-replay", .root_module = attribution_module });
-    const run_attribution = b.addRunArtifact(attribution_executable);
-    run_attribution.setCwd(b.path("."));
-    run_attribution.has_side_effects = true;
-    if (b.args) |args| run_attribution.addArgs(args);
-    b.step("attribution-replay", "Prepare and score retained presentation replays offline; never send model requests").dependOn(&run_attribution.step);
-    const attribution_tests = b.addRunArtifact(b.addTest(.{ .root_module = attribution_module }));
-    attribution_tests.setCwd(b.path("."));
-    b.step("test-attribution-replay", "Test offline attribution preparation and scoring contracts").dependOn(&attribution_tests.step);
     const exact_value_module = b.createModule(.{
         .root_source_file = b.path("exact_value_replay.zig"),
         .target = target,
@@ -290,7 +275,7 @@ fn define(b: *std.Build) Graph {
     exact_value_scan.clearEnvironment();
     exact_value_scan.expectExitCode(0);
     exact_value_scan.expectStdErrEqual("");
-    exact_value_scan.expectStdOutEqual("Offline corpus: 3 captures, 22 measured fields; report report.json. Zero model calls.\n");
+    exact_value_scan.expectStdOutEqual("Offline corpus: 3 captures, 8 measured fields; report report.json. Zero model calls.\n");
     const exact_value_smoke = b.step("smoke-exact-value-replay", "Test isolated offline exact-value prototype startup");
     exact_value_smoke.dependOn(&exact_value_help.step);
     exact_value_smoke.dependOn(&exact_value_scan.step);
@@ -958,7 +943,6 @@ fn define(b: *std.Build) Graph {
     lint_command.addFileArg(b.path("e2e_measures.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
-    lint_command.addFileArg(b.path("attribution_replay.zig"));
     lint_command.addFileArg(b.path("exact_value_replay.zig"));
     lint_command.addFileArg(b.path("provider_compatibility.zig"));
     lint_command.addFileArg(b.path("baseline.zig"));

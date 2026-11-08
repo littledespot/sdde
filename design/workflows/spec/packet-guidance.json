@@ -1,32 +1,29 @@
 {
-  "schema": "packet-guidance/v3",
+  "schema": "packet-guidance/v5",
   "feature_purposes": {
     "display_name": "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
     "description": "A description of intended user-visible behavior.",
     "primary_goal": "The intended user benefit derived from the source-backed behavior and outcome.",
     "scenario_coverage": "Source-required triggers, outcomes and exact copy.",
-    "entities": "The disposition states whether required behavior needs business entities or relationships. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary."
+    "entities": "The disposition states whether required behavior needs business entities. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary."
   },
   "record_families": {
     "acceptance_criterion": "An observable pass/fail flow with a precondition, trigger and expected result.",
     "user_visible_outcome": "A result, confirmation or response directly observable by the user.",
-    "edge_case": "A boundary or exceptional condition and its expected outcome.",
+    "edge_case": "A boundary or exceptional condition.",
     "functional_requirement": "Required application behavior, preserving its trigger and conditions.",
     "business_rule": "A rule or constraint governing business decisions or outcomes.",
     "assumption": "A supported premise on which the described behavior depends.",
     "non_goal": "Behavior explicitly excluded from the feature's scope.",
     "prohibited_behavior": "An action or behavior that must not occur.",
-    "entity": "A business data concept with its meaning and relationships."
+    "entity": "A business data concept."
   },
   "record_fields": {
     "given": "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites.",
     "when": "The action or event that triggers the behavior.",
     "then": "The observable consequences after the trigger, including the obligations being tested.",
     "condition": "The boundary or exceptional condition.",
-    "expected_outcome": "The observable result, preserving conditions and obligations.",
-    "name": "The business entity's name.",
-    "business_meaning": "The entity's business purpose.",
-    "relationship": "The business relationship to another entity, including its meaning."
+    "name": "The business entity's name."
   },
   "reference_tasks": {
     "source": {
@@ -70,7 +67,6 @@
     }
   },
   "repair_tails": {
-    "entity_record_meaning": "preserving its source meaning",
     "value_choices": "Preserve the fixed evidence and source meaning."
   }
 }

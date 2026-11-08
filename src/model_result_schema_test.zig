@@ -1031,6 +1031,31 @@ test "coverage requires every value a covered item names to be named by a coveri
     }) |invalid| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{invalid}));
 }
 
+test "the statements array of a response is the array its schema covers, as replay restores it" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const composition = @import("domain/model_text_composition.zig");
+    const variant = "{{\"type\":\"object\",\"properties\":{{\"kind\":{{\"const\":\"{s}\"}},\"text\":{{\"type\":\"string\",\"maxLength\":20}}}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false}}";
+    const items = try std.fmt.allocPrint(a, "{{\"type\":\"array\",\"minItems\":0,\"maxItems\":10,\"items\":{{\"type\":\"object\",\"properties\":{{\"content\":{{\"oneOf\":[" ++ variant ++ "," ++ variant ++ "]}},\"ids\":{{\"type\":\"array\",\"minItems\":1,\"maxItems\":5,\"items\":{{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}}}}},\"required\":[\"content\",\"ids\"],\"additionalProperties\":false}}}}", .{ "rule", "check" });
+    const resource = try compile(a, try fieldSchema(a, items));
+    // A schema that covers no array has no statements.
+    try std.testing.expect(composition.statementsOf(resource) == null);
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "value" }, .{ .items = {} }, .{ .property = "ids" } };
+    const rule: schema.ItemCoverage = .{ .kind_property = "content", .covered = &.{"rule"}, .covering = &.{"check"}, .exclusive = &.{"rule"}, .owning = &.{} };
+    const covered = try schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 3, 5 }, .collection = .unique_subset, .coverage = rule }});
+    defer covered.release();
+    const statements = composition.statementsOf(covered.selected()).?;
+    try std.testing.expectEqualDeep(path, statements.path);
+    try std.testing.expectEqualDeep(rule, statements.rule);
+    // The recorded coverage restores the same statements, so replay exempts what live admission does.
+    const restored = try schema.restrictRecorded(std.testing.allocator, try compile(a, covered.selected().modelBytes()), &.{}, covered.selected().coverageChoices());
+    defer restored.release();
+    const replayed = composition.statementsOf(restored.selected()).?;
+    try std.testing.expectEqualDeep(statements.path, replayed.path);
+    try std.testing.expectEqualDeep(statements.rule, replayed.rule);
+}
+
 test "cross-item rules govern one array, never arrays nested in an outer array" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

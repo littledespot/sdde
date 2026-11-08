@@ -228,8 +228,8 @@ event-stream encoding page. Integers are big-endian.
   stream decoders.
 - **Standalone evaluator:** `test/harness/bedrock.zig:8-9`, `:89` uses the Bedrock encoder
   and `decodeConverse`. It moves with the connector (Decision 1). The same decoder
-  references appear in `test/harness/baseline/feasibility.zig`,
-  `test/harness/attribution/{preparation,scoring}.zig` and `test/harness/exact_value/cli.zig`.
+  references appear in `test/harness/baseline/feasibility.zig` and
+  `test/harness/exact_value/cli.zig`.
 
 ### Security and packaging
 

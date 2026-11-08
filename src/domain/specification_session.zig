@@ -6,6 +6,7 @@ const p = @import("specification_provenance.zig");
 const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
 const binding = @import("specification_source_binding.zig");
+const scenario_link = @import("scenario_link.zig");
 pub const unit_count = std.meta.fields(g.Unit).len;
 pub const story_index = @intFromEnum(std.meta.Tag(g.Unit).primary_user_story);
 pub const entities_index = @intFromEnum(std.meta.Tag(g.Unit).entities);
@@ -347,22 +348,11 @@ pub const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .
     .exclusive = recordKinds(&.{ .behaviour, .scope }),
     .owning = recordKinds(&.{.requirement}),
 };
-/// Each record kind's part in ADR 0038's cross-item rules, by exhaustive switch.
-const RecordRole = enum { requirement, behaviour, scope, scenario, entity };
-fn recordRole(kind: g.spec.Kind) RecordRole {
-    return switch (kind) {
-        .functional_requirement => .requirement,
-        .business_rule, .user_visible_outcome, .prohibited_behavior => .behaviour,
-        .assumption, .non_goal => .scope,
-        .acceptance_criterion, .edge_case => .scenario,
-        .entity => .entity,
-    };
-}
-fn recordKinds(comptime roles: []const RecordRole) []const []const u8 {
+fn recordKinds(comptime roles: []const g.spec.RecordRole) []const []const u8 {
     comptime {
         var names: []const []const u8 = &.{};
         for (std.meta.tags(g.spec.Kind)) |kind| for (roles) |role| {
-            if (recordRole(kind) == role) names = names ++ &[_][]const u8{@tagName(kind)};
+            if (kind.role() == role) names = names ++ &[_][]const u8{@tagName(kind)};
         };
         return names;
     }
@@ -568,56 +558,19 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Conte
 }
 
 /// ADR 0038 Decision 5: the first non-requirement statement record whose every claim a
-/// requirement or an earlier such record in the batch names, by the same rule response
-/// admission applies, unless it holds an exact copy no other record of the batch holds.
-/// Deleting it leaves every claim and exact copy the batch names in place. Each delete
-/// is decided on the batch it leaves, so of two records holding the same last exact
-/// copy, the later one stays. Records in different batches bind different groups, so
-/// they share no claim.
+/// requirement or an earlier such record in the batch names, unless it holds an exact
+/// copy no other record of the batch holds (`statement_ownership.zig`, the rule response
+/// admission and unit validation apply too). Deleting it leaves every claim and exact
+/// copy the batch names in place. Each delete is decided on the batch it leaves, so of
+/// two records holding the same last exact copy, the later one stays. Records in
+/// different batches bind different groups, so they share no claim.
 fn repeatedStatementIssue(a: std.mem.Allocator, records: []const g.spec.RecordProposal, model: ?g.Response) Error!?@import("specification_candidate.zig").Issue {
-    for (records, 0..) |record, index| {
-        switch (recordRole(std.meta.activeTag(record.content))) {
-            .behaviour, .scope => {},
-            .requirement, .scenario, .entity => continue,
-        }
-        if (record.provenance.claim_ids.len == 0) continue;
-        for (record.provenance.claim_ids) |claim| {
-            if (!claimTaken(records, index, claim)) break;
-        } else if (try exactCopiesHeldElsewhere(a, records, index)) return g.repeatedStatementIssue(index, try observedRecord(model, index));
-    }
-    return null;
-}
-/// Whether another record of the batch holds every exact copy `records[index]` holds.
-fn exactCopiesHeldElsewhere(a: std.mem.Allocator, records: []const g.spec.RecordProposal, index: usize) Error!bool {
-    const values = try p.recordValues(a, records[index].content);
-    defer a.free(values);
-    for (values) |value| for (value.segments) |segment| {
-        if (segment != .exact_copy) continue;
-        for (records, 0..) |other, position| {
-            if (position != index and try holdsExactCopy(a, other, segment.exact_copy.claim_id)) break;
-        } else return false;
-    };
-    return true;
-}
-fn holdsExactCopy(a: std.mem.Allocator, record: g.spec.RecordProposal, claim: @import("reference_reconciliation.zig").ClaimId) Error!bool {
-    const values = try p.recordValues(a, record.content);
-    defer a.free(values);
-    for (values) |value| for (value.segments) |segment| {
-        if (segment == .exact_copy and std.meta.eql(segment.exact_copy.claim_id, claim)) return true;
-    };
-    return false;
-}
-/// Whether a requirement names `claim`, or a non-requirement statement before `index` does.
-fn claimTaken(records: []const g.spec.RecordProposal, index: usize, claim: @import("reference_reconciliation.zig").ClaimId) bool {
-    for (records, 0..) |record, position| {
-        if (!@import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, record.provenance.claim_ids, claim)) continue;
-        switch (recordRole(std.meta.activeTag(record.content))) {
-            .requirement => return true,
-            .behaviour, .scope => if (position < index) return true,
-            .scenario, .entity => {},
-        }
-    }
-    return false;
+    var scratch: std.heap.ArenaAllocator = .init(a);
+    defer scratch.deinit();
+    const prepared = try scratch.allocator().alloc(@import("statement_ownership.zig").Record, records.len);
+    for (records, prepared) |record, *entry| entry.* = try g.statementRecord(scratch.allocator(), record.content, record.provenance.claim_ids);
+    const index = g.StatementRule.first(.{ .records = prepared }, &.{}) orelse return null;
+    return g.repeatedStatementIssue(index, try observedRecord(model, index));
 }
 
 /// ADR 0035 restatements of the story, decided before ADR 0038 Decision 5's repeated
@@ -661,7 +614,8 @@ fn completedStory(current: Session) ?g.spec.AttributedValue {
     return checked.response.content.primary_user_story;
 }
 
-pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
+/// `links` holds the link of every edge case of the completed records unit (`scenario_link.resolve`).
+pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session, links: []const scenario_link.Link) Error!@import("specification_identity.zig").Assigned {
     if (current.completed != unit_count or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     try validateRecordAssignments(allocator, current, context);
     var records: std.ArrayList(g.spec.RecordProposal) = .empty;
@@ -690,12 +644,39 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
         }
     }.before);
     const entities = current.units[2].?.response.content.entities.decision();
+    const unit_records = g.recordCollection(.canonical, (current.units[records_index] orelse return error.InvalidSpecificationUnit).response.content) orelse return error.InvalidSpecificationUnit;
+    const outcomes = try outcomeIds(allocator, current.starting_ledger, unit_records, links);
     return @import("specification_identity.zig").assign(allocator, .{
         .display_name = current.units[0].?.response.content.brief.title,
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
         .entities = entities,
         .records = records.items,
-    }, current.starting_ledger);
+    }, current.starting_ledger, outcomes);
+}
+
+/// The IDs `assign` gives the records of the completed records unit, in authoring order within
+/// each family, for the links the unit's edge cases resolved to (`scenario_link.zig`). A link
+/// that is not a candidate of its edge case is refused here, beside the owner that builds the
+/// IDs, whatever produced it.
+fn outcomeIds(allocator: std.mem.Allocator, ledger: @import("specification_identity.zig").Ledger, unit_records: []const g.spec.RecordProposal, links: []const scenario_link.Link) Error![]const @import("specification_identity.zig").Outcome {
+    const outcomes = try allocator.alloc(@import("specification_identity.zig").Outcome, links.len);
+    for (links, outcomes) |link, *outcome| {
+        if (link.edge_case >= unit_records.len or link.criterion >= unit_records.len) return error.InvalidSpecificationUnit;
+        if (!scenario_link.candidate(unit_records[link.edge_case], unit_records[link.criterion])) return error.InvalidSpecificationUnit;
+        outcome.* = .{ .edge_case = try positionId(ledger, unit_records, link.edge_case), .criterion = try positionId(ledger, unit_records, link.criterion) };
+    }
+    return outcomes;
+}
+
+/// The ID of the record at `position` of the records unit: the ledger's next ordinal of its
+/// family plus the records of that family before it, since assignment keeps authoring order.
+fn positionId(ledger: @import("specification_identity.zig").Ledger, unit_records: []const g.spec.RecordProposal, position: usize) Error!g.spec.Id {
+    const kind: g.spec.Kind = unit_records[position].content;
+    var ordinal = ledger.next[@intFromEnum(kind)];
+    for (unit_records[0..position]) |record| {
+        if (record.content == kind) ordinal = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecificationUnit;
+    }
+    return .{ .kind = kind, .ordinal = ordinal };
 }
 
 /// Locate a canonical ID in the retained request order, without reordering
