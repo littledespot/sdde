@@ -831,14 +831,25 @@ ProviderRetryClass = never | policy_eligible
 ProviderDeliveryDisposition =
   not_sent | response_received | accepted_or_unknown
 
+TransportDiagnostic {
+  phase: preparing | connecting | sending | response_headers | response_body,
+  cause: unknown | name_resolution | connection_refused | connection_reset | tls |
+         timeout | malformed_response | premature_eof | read | write
+}
+
 ProviderFailure {
   operationId: ProviderOperationId,
   cause: ProviderFailureCause,
   retryClass: ProviderRetryClass,
   delivery: ProviderDeliveryDisposition,
+  transport?: TransportDiagnostic,
   content?: invalid_content | missing_final_text
 }
 ```
+
+- `transport` is present only for a failure the shared HTTP exchange reports; it records
+  where and how that exchange failed. It is diagnostic only and never affects `cause`,
+  `retryClass` or `delivery`; the E2E report records it with the exchange evidence.
 
 `ProviderInvocationObservation.completed` means the provider operation returned
 a complete recognized terminal response; it does not mean candidate or

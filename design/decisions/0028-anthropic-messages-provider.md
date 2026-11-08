@@ -33,7 +33,8 @@
   unaccepted source document; its normative content moves here.
 - **Amended by:** [ADR 0029](0029-bedrock-model-families.md) (22 October 2026):
   Bedrock contracts join by compiled family, Claude through Bedrock is its `claude`
-  family, and the live-test cost policy names Claude Haiku 5.5 through Bedrock.
+  family, and the live-test cost policy names Claude Haiku 5.5 through Bedrock; amended
+  9 November 2026, it also names `anthropic` / `claude-haiku-5-5` for generation.
   [ADR 0030](0030-engine-owned-model-request.md) (23 October 2026, implemented
   24 October 2026): each catalogue entry also requires its own `requestTimeoutMs`
   deadline, and provider token counting is removed for every provider. The text below
@@ -166,13 +167,6 @@ binding, correction or replay can narrow it.
 
 ## Not decided here
 
-- **Live use.** [ADR 0029](0029-bedrock-model-families.md#live-test-cost-policy) lists
-  two Bedrock tuples. `test/harness/model_cost_policy.zig` also permits `anthropic` /
-  `claude-haiku-5-5` for generation, citing a user direction of 22 October 2026 ("update
-  the providers to connect to claude") that no ADR records; whether that is an accepted
-  live-test policy is a pending decision (FIX06). Until it is decided, a live Anthropic
-  Messages API probe or E2E run needs a policy change that names the model (ADR 0029's
-  list governs), and every live run needs its own approval.
 - **Response mode.** Whether Claude entries use native schema or prompt-only waits for
   measured compatibility. Both are implemented, and the catalogue's `json` flag
   selects one.

@@ -45,7 +45,9 @@ Renderers own:
 
 - Every canonical-state serializer and generated-view renderer executes under an exact
   `rendererContractVersion`, stored in canonical workflow state and in each `GeneratedView`
-  binding.
+  binding. Not yet implemented: Spec state and views record no renderer version
+  (`specification_state.zig:8-24`); this section's version rules remain the target (FIX06
+  "Renderer version").
 - `renderer/v1` requires strict UTF-8 with no BOM, NFC-normalized ordinary textual scalars, LF
   line endings, no trailing spaces introduced by the renderer, and exactly one final newline.
 - Tagged `RawSourceScalar`/verbatim values are the underlying text exception: their validated

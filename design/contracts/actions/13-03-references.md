@@ -7,12 +7,12 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `AssignReferenceStateIdAction`
 
-- **Input:** feature ID, optional parent state ID, validated current feature `StateIdLedger`,
-  and matching single-use namespace capability
-- **Output:** prospective reference-state reservation plus successor ledger
-- **Responsibility:** Allocate the candidate state ID before any local ID/citation/blob binding.
-  Retain its successor ledger in the execution; publication follows §25 or the clarification
-  persistence exception, never a write-before-call prerequisite.
+- **Input:** feature ID, optional parent state ID, and the `reference-identity` port
+- **Output:** prospective reference-state ID
+- **Responsibility:** Draw the state ID, `reference-<hex>`, from 128 bits of system randomness
+  before any local ID/citation/blob binding; entropy failure fails the operation. No feature
+  `StateIdLedger` or persisted counter allocates it
+  ([F0100 §3.4](../../features/F0100-SpecWorkflow.md#34-citable-reference-inputs)).
 
 ## `BuildReferenceIdLedgerAction`
 
@@ -21,6 +21,10 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Initialize or advance monotonic
   source/block/chunk/citation/claim/signal/conflict/feedback/conflict-decision/token/reconciliation-partition/reconciliation-summary/reconciliation-statement
   allocators and the shared tombstone set.
+- Initial ingestion has no persisted ledger: it assigns positional ordinals within its fresh
+  state (`src/actions/reference/assign_reference_identities.zig`). The persisted ledger,
+  tombstones and no reuse across successor states remain the target for the feedback revision
+  path below, which no code implements.
 
 ## `RetireReferenceAllocatedIdAction`
 

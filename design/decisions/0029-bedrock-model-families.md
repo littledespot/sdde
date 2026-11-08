@@ -42,6 +42,11 @@
   `repair`. This supersedes "for the e2e tests make use of haiku 5.5 on bedrock with low
   reasoning effort" for the slots only: Claude Haiku 5.5 stays in the E2E catalogue and
   the live-test allowlist for generation.
+- **Amended (9 November 2026, user decision):** the live-test cost policy also names
+  `anthropic` / `claude-haiku-5-5` for generation only, recording the 22 October 2026
+  direction ("update the providers to connect to claude") that
+  `test/harness/model_cost_policy.zig` already implements. This amends ADR 0028 "Not
+  decided here".
 
 ## Context
 
@@ -124,6 +129,7 @@ named tuples, each for named uses:
 | --- | --- |
 | `aws-bedrock` / `openai.gpt-oss-20b-1:0` | Generation and rubric judging |
 | `aws-bedrock` / `au.anthropic.claude-haiku-5-5` | Generation only |
+| `anthropic` / `claude-haiku-5-5` | Generation only (amended 9 November 2026) |
 
 Rubric judging stays on GPT-OSS-20B ([acceptance.md](../harness/acceptance.md)). The
 shipped E2E cases select GPT-OSS-20B (amended 24 October 2026), with the frozen

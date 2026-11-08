@@ -39,12 +39,11 @@ live case from the repository root:
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only named tuples ([ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy)):
-  `aws-bedrock` / `openai.gpt-oss-20b-1:0` for generation and judging, and
-  `aws-bedrock` / `au.anthropic.claude-haiku-5-5` for generation only. E2E preflight
-  checks every configured generation slot before reading credentials or starting the
-  workflow. Sonnet, Sol, Luna, direct OpenAI and other aliases reject; no target is
-  substituted.
+  permits only the named tuples in
+  [ADR 0029](../decisions/0029-bedrock-model-families.md#live-test-cost-policy), each for
+  its named uses. E2E preflight checks every configured generation slot before reading
+  credentials or starting the workflow. Any other provider, model or alias rejects; no
+  target is substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -250,7 +249,9 @@ Offline tests of this command do not authorize a run.
 2. Fill [.env.e2e.example](../../.env.e2e.example)'s declared values in the
    Git-ignored `.env.e2e`. Never put credentials in tracked configuration or
    command arguments.
-3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`. E2E reads no
+3. Set the key of each provider family the case's slots select:
+   `TEST_AWS_BEARER_TOKEN_BEDROCK` for `aws-bedrock`, `TEST_ANTHROPIC_API_KEY` for
+   `anthropic` (`test/harness/environment.zig`). E2E reads no
    `TEST_EVALUATION_*` selection; those variables configure only the standalone
    [supplied-spec evaluator](evaluator.md#run).
 4. For direct build commands, load the file in the invoking shell:

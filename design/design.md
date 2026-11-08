@@ -727,7 +727,7 @@ and import only domain and port modules.
 > passed ([ADR 0034](decisions/0034-spec-quality-gate.md)).
 
 - Implement repository/manifest discovery and environment facts.
-- Implement plan IR, artifact applicability, and bounded applicable-principle selection over the bootstrap-captured free-text registry.
+- Implement plan IR, artifact applicability, and principle use over the bootstrap-captured free-text registry.
 - Add path/coverage/token/quickstart validators.
 - Integrate the shared reconciliation boundary for every planning-owned architecture, policy, repository/capability, dependency, design, and verification-strategy decision; no plan-domain fallback may bypass it.
 - Implement `P01..P99` clarification persistence/deduplication and fresh reruns, full plan regeneration, generated-view rendering, explicit plan review, and the blocking tasks gate.

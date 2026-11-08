@@ -67,7 +67,7 @@ The model receives only:
 - exact allowed copy `sourceId`s from the current immutable source-registry revision;
 - bounded current contents of target and directly related files;
 - nearby repository conventions selected deterministically;
-- applicable raw principle guidance and separately enforceable preset rules;
+- raw principle guidance from the captured registry and separately enforceable preset rules;
 - exact available command IDs;
 - required evidence;
 - one response schema.

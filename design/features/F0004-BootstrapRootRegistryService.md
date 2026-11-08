@@ -53,8 +53,10 @@ actions through runner-owned bindings:
 
 | Action | Sole responsibility |
 | --- | --- |
-| `ValidateEnginePathPolicyAction` | Validate one required path or overlap relation under the compiler-locked project-root and portability rules. |
-| `ResolveConfiguredBaseRootAction` | Join one decoded relative configured directory or provider-document path to the canonical project root without following an alias or deriving a child path. |
+| `ValidateConfiguredRootPathPolicyAction` | Normalize one configured directory path under the compiler-locked portability rules. |
+| `ValidateLLMProviderConfigPathPolicyAction` | Normalize the provider-document path under the same rules and require the exact `.sddproviders.json` basename. |
+| `ResolveConfiguredBaseRootAction` | Join one normalized directory path to the canonical project root without following an alias or deriving a child path. |
+| `ResolveLLMProviderConfigPathAction` | Join the normalized provider-document path to the canonical project root the same way. |
 | `ValidateConfiguredBaseRootAction` | Convert that one candidate into its typed root-role capability after normalization, containment, representability, no-follow, and existence/type checks. |
 | `BuildBootstrapRootRegistryIdAction` | Construct only the self-validating `(canonical project root, bootstrap-root contract version)` identity. |
 | `BuildBootstrapRootRegistryAction` | Assemble the seven validated directory capabilities and one provider-document capability exactly once under that identity. |

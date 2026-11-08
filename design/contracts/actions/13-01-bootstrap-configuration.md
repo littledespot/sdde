@@ -67,19 +67,36 @@ design; they do not extend the current YAML schema or claim implemented capabili
 - Do not default/reinterpret the configured level or accept any operational override/dynamic
   schema.
 
-## `ValidateEnginePathPolicyAction`
+## `ValidateConfiguredRootPathPolicyAction`
 
-- **Input:** one configured path relation
-- **Output:** path-policy evidence
-- **Responsibility:** Validate one engine path/overlap relation.
+- **Input:** one decoded `PathsConfig` directory entry and active workspace path policy
+- **Output:** normalized relative path bound to its key and root role
+- **Responsibility:** Normalize one configured directory path under the portable path rules,
+  rejecting empty, absolute, drive, empty-segment, `..`, backslash, encoded-separator,
+  reserved-name, non-ASCII and over-limit paths
+  (`src/actions/bootstrap/validate_configured_root_path_policy.zig`).
+
+## `ValidateLLMProviderConfigPathPolicyAction`
+
+- **Input:** the decoded provider-document path and active workspace path policy
+- **Output:** normalized relative provider-document path
+- **Responsibility:** Normalize that path under the same portable rules and require the exact
+  basename `.sddproviders.json`
+  (`src/actions/bootstrap/validate_llm_provider_config_path_policy.zig`).
 
 ## `ResolveConfiguredBaseRootAction`
 
-- **Input:** exact project-root descriptor, one decoded `PathsConfig` entry, and active
-  workspace filesystem policy
-- **Output:** configured-location candidate
-- **Responsibility:** Join exactly one required relative configured directory or
-  provider-document path to project root without following aliases or deriving fixed children.
+- **Input:** canonical project root and one normalized configured directory path
+- **Output:** configured-root candidate
+- **Responsibility:** Join exactly one normalized directory path to the project root without
+  following aliases or deriving fixed children.
+
+## `ResolveLLMProviderConfigPathAction`
+
+- **Input:** canonical project root and the normalized provider-document path
+- **Output:** provider-document path candidate
+- **Responsibility:** Join that path to the project root the same way
+  (`src/actions/bootstrap/resolve_llm_provider_config_path.zig`).
 
 ## `ValidateConfiguredBaseRootAction`
 
@@ -339,12 +356,13 @@ design; they do not extend the current YAML schema or claim implemented capabili
   reserved-child exclusion, and validation evidence for every indexed graph; require no
   particular workflow name or count.
 
-## `ResolveSelectedWorkflowAction`
+## `SelectCompiledWorkflowAction`
 
-- **Input:** validated workflow-definition registry and one validated invocation `WorkflowId`
+- **Input:** validated workflow-definition registry and one validated invocation
 - **Output:** exactly one selected compiled workflow graph or typed unknown-workflow diagnostic
 - **Responsibility:** Resolve the requested workflow exactly once without filename inference,
-  default selection, directory auto-selection, or workflow-specific branching.
+  default selection, directory auto-selection, or workflow-specific branching
+  (`src/actions/workflow/select_compiled_workflow.zig`).
 
 ## `DeriveProviderRequirementAction`
 
@@ -1458,13 +1476,6 @@ and the guidance rules for principle text.
 - **Responsibility:** Reserve that semantic source's reported bytes once or emit a closed budget
   diagnostic; reject the mechanical `toolchain.yaml` member and every non-semantic entry.
 
-## `ClassifyPrincipleCategoryFromFilenameAction`
-
-- **Input:** one validated filename and configured basename-hint table
-- **Output:** known or custom category hint
-- **Responsibility:** Use only the filename mapping; never inspect body text to choose a
-  category.
-
 ## `CapturePrincipleSourceAction`
 
 - **Input:** one contained semantic-Markdown inventory entry, exact reservation,
@@ -1531,14 +1542,14 @@ and the guidance rules for principle text.
 - **Input:** source identity, optional retained source/module join, and current principle ID
   ledger
 - **Output:** retained/new principle-module identity plus successor ledger
-- **Responsibility:** Retain only an exact prior source/category mapping; otherwise allocate
-  once in `module`; infer no meaning.
+- **Responsibility:** Retain only an exact prior source mapping; otherwise allocate once in
+  `module`; infer no meaning.
 
 ## `BuildPrincipleModuleAction`
 
-- **Input:** module/source identities, filename category hint, exact blob/debit/source map
+- **Input:** module/source identities and exact blob/debit/source map
 - **Output:** opaque principle module
-- **Responsibility:** Bind free-text bytes to transport/category metadata only.
+- **Responsibility:** Bind free-text bytes to transport metadata only.
 
 ## `PartitionPrincipleTextAction`
 
@@ -1612,7 +1623,7 @@ and the guidance rules for principle text.
 ## `BuildPrincipleRegistryStateAction`
 
 - **Input:** state identity, validated inventory state, final successor principle ID ledger,
-  ordered modules/chunks, and category hints
+  and ordered modules/chunks
 - **Output:** principle-registry candidate
 - **Responsibility:** Assemble the immutable source/allocation registry without compiling prose
   into rules.
@@ -1620,46 +1631,18 @@ and the guidance rules for principle text.
 ## `ValidatePrincipleRegistryStateAction`
 
 - **Input:** registry candidate, optional prior registry, inventory/source-map/budget/ID-ledger
-  evidence, exact mechanical-toolchain exclusion account, and category table
+  evidence, and exact mechanical-toolchain exclusion account
 - **Output:** principle-registry evidence
 - **Responsibility:** Prove complete module/chunk/source/identity accounting, exact spans,
-  unique IDs, filename-only category provenance, and that no semantic source, module, or chunk
-  is owned by or references the mechanical `toolchain.yaml` member.
-
-## `SelectApplicablePrinciplesAction`
-
-- **Input:** exact registry, stage, environment, task/file kinds, and category-hint table
-- **Output:** complete ordered chunk/span selection candidate
-- **Responsibility:** Select all raw chunks in eligible categories in stable order; never assign
-  an ID or use a model to rank/omit them.
-
-## `AssignPrincipleSelectionIdAction`
-
-- **Input:** exact immutable principle-registry revision, stage, validated
-  `ImmutableUnitOwnerId`, and consumer ordinal
-- **Output:** closed owner-local principle-selection identity tuple
-- **Responsibility:** Construct and validate `(registry state/revision, stage, immutable unit
-  owner, ordinal)`; use no allocator, prose, selected content, or process-local state.
-
-## `BuildApplicablePrincipleSelectionAction`
-
-- **Input:** selection identity, complete candidate, exact registry/stage/consumer bindings
-- **Output:** applicable-principle selection
-- **Responsibility:** Bind the selected chunks/spans without interpreting them.
-
-## `ValidateApplicablePrincipleSelectionAction`
-
-- **Input:** applicable selection and registry/category table
-- **Output:** principle-selection evidence
-- **Responsibility:** Prove registry/revision/category/chunk/span/consumer joins,
-  all-eligible-chunk coverage and stable ordering without summary, omission or a size-fit gate.
+  unique IDs, and that no semantic source, module, or chunk is owned by or references the
+  mechanical `toolchain.yaml` member.
 
 ## `BuildPrincipleGuidanceAction`
 
-- **Input:** validated selection and exact raw source spans
+- **Input:** the captured principle registry and its exact raw source spans
 - **Output:** complete immutable model guidance
-- **Responsibility:** Render registered IDs/category hints/raw excerpts/citations; never reveal
-  an operational source path.
+- **Responsibility:** Render registered IDs, raw excerpts and citations without summary or
+  omission; never reveal an operational source path.
 
 ## `ComparePrincipleRegistryStateAction`
 

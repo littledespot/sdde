@@ -218,6 +218,9 @@ maps to exactly one event in the closed proof-of-concept registry in Section
 6.2. The registry, rather than the caller, supplies its canonical level,
 message-template ID, fields, and sensitivity.
 
+The code doesn't meet this shape or the Section 6.2 registry yet (FIX06 "F0002 event
+registry"); this section and Section 6.2 remain the target (user decision, 9 November 2026).
+
 A fact may contain registered typed IDs, enums, counts, durations, diagnostic
 codes, command IDs, exit codes, and evidence outcomes. It cannot contain:
 
@@ -349,13 +352,13 @@ Logging-internal nodes are not recursively observed.
 | `action.completed` | `debug` | `outcome` | `duration_ms` |
 | `action.invalid` | `warning` | `diagnostic_code`, `outcome` | — |
 | `action.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms` |
-| `model.requested` | `debug` | `model_operation_id`, `model_slot_id` | — |
-| `model.completed` | `debug` | `model_operation_id`, `model_slot_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
-| `model.protocol_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
-| `model.schema_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
-| `model.response_normalized` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | — |
-| `model.provider_stopped` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
-| `model.runaway_resent` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | `input_tokens`, `output_tokens` |
+| `model.requested` | `debug` | `model_route_id`, `model_profile_id` | — |
+| `model.completed` | `debug` | `model_route_id`, `model_profile_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
+| `model.protocol_failed` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | — |
+| `model.schema_failed` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | — |
+| `model.response_normalized` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code` | — |
+| `model.provider_stopped` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
+| `model.runaway_resent` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code` | `input_tokens`, `output_tokens` |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
 | `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |
@@ -375,7 +378,7 @@ Logging-internal nodes are not recursively observed.
 | `task.blocked` | `warning` | `task_id`, `diagnostic_code`, `outcome` | — |
 | `task.failed` | `error` | `task_id`, `diagnostic_code`, `outcome` | `duration_ms` |
 | `security.denied` | `warning` | `rule_id`, `diagnostic_code`, `outcome` | — |
-| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `model_operation_id`, `model_slot_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | `workflow_id`, `action_id`, `call_id`, `call_kind`, `original_call_id`, `parent_call_id`, `body_bytes` ([ADR 0019](../decisions/0019-single-request-debugger.md)) |
+| `model.prompt_fragment` | `debug` | `attempt`, `request_id`, `route_id`, `model_profile_id`, `fragment_id`, `direction`, `body_class`, `content`, `retained_bytes`, `truncated`, `redacted` | `workflow_id`, `action_id`, `call_id`, `call_kind`, `original_call_id`, `parent_call_id`, `body_bytes` ([ADR 0019](../decisions/0019-single-request-debugger.md)) |
 
 - `model.prompt_fragment` exists only in the prompt stream, enabled automatically by
   `debug`/`trace` under ADR 0018.

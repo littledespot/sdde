@@ -356,7 +356,7 @@ runtime registry. Their closed operation contracts must enforce Sections 20–22
 and 26 before being registered:
 
 - Build and validate one immutable task context from approved file IDs, current
-  repository facts, exact principle selections and authorized copy sources.
+  repository facts, the captured principle registry and authorized copy sources.
 - Build and validate an ordered operation-intent plan; assign intent, attempt,
   operation and evidence IDs inside the current execution.
 - Authorize one file operation with exact target state, revision, capability and

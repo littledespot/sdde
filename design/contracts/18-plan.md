@@ -25,13 +25,14 @@ satisfy this gate. Nothing about principles bypasses an open `SNN`.
 6. builds the current `RequirementIndex` and token/scope obligation ledger;
 7. rejects unresolved reference-conflict records;
 8. confirms resolved environments still match the current repository;
-9. builds/validates the normalized editable-spec authorities, baseline file and repository-fact registries, configured read-only research evidence, complete principle selection, and initial `PlanIdLedger`, then retains one validated `PlanInputAuthorityState` candidate before the first plan model call. An authenticated edit and its acknowledgement/passive/provenance candidates remain bound to that input; any persisted clarification must carry the complete stable support required by its own contract.
+9. builds/validates the normalized editable-spec authorities, baseline file and repository-fact registries, configured read-only research evidence, the current captured principle registry, and initial `PlanIdLedger`, then retains one validated `PlanInputAuthorityState` candidate before the first plan model call. An authenticated edit and its acknowledgement/passive/provenance candidates remain bound to that input; any persisted clarification must carry the complete stable support required by its own contract.
 
 - The pre-generation boundary also rebuilds the shared authority-requirement projection for all
   planning-owned decision slots.
-- Recapture/select current principles and independently validate required policy
-  through the shared authority contract. Spec runs no principle assessment (ADR 0015),
-  so no Spec result proves current compliance.
+- Recapture current principles and independently validate required policy through the
+  shared authority contract. Filtering principles by stage needs its own decision
+  ([ADR 0015](../decisions/0015-specification-principle-review.md)). Spec runs no
+  principle assessment, so no Spec result proves current compliance.
   Assess the complete current business scope, including authenticated specification
   edits and validated clarification-derived requirements.
   Unresolved policy decisions use the existing `PNN` path after Plan input authority
@@ -89,7 +90,8 @@ Before an LLM design call, actions perform a bounded project-file discovery and 
 - compiler, formatter, linter, AST parser, and import resolver availability;
 - current files near requirement-relevant terms and known entry points;
 - generated and forbidden paths;
-- selected raw semantic-principle spans and the separately compiled project-toolchain layer;
+- raw semantic-principle spans from the captured registry and the separately compiled
+  project-toolchain layer;
 - missing prerequisites where a required capability has no current command/tool.
 
 - The scanner uses the same traversal-hard-limit pattern as reference enumeration.

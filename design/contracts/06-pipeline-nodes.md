@@ -35,7 +35,7 @@ The common contract makes data dependencies explicit:
   compiler; an orchestrator cannot hide a child's capability or claim a narrower effect.
 - Its internal child-only keys are not exposed outside the composition boundary.
 
-Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec.ir@1`, `plan.ir@1`, `tasks.graph@1`, and `implementation.overlay.T007@1`. Keys are constants supplied by domain modules, never ad hoc strings inside actions.
+Keys are tags of the engine's one closed, unversioned `DataKey` enum, for example `engine_config`, `reference_snapshot`, `validated_specification_unit` and `specification_publication_state`; never ad hoc strings inside actions. The value schema the operation registry registers for a key carries its type and version.
 
 `PipelineEnvelope` is immutable and identical for all nodes:
 
@@ -49,7 +49,8 @@ Examples of keys are `environment.compiled.web@1`, `reference.manifest@1`, `spec
   are exercised on every outcome and error path.
 
 - The registry is not an untyped property bag.
-- Every value is retrieved through a versioned typed key and schema-checked on insertion.
+- Every value is retrieved through its typed key and checked against that key's registered
+  value schema on insertion.
 - A node may read only keys declared by `requires`/`optional`, write only keys declared by
   `produces`/`replaces`, and invalidate only declared keys.
 - Large bodies use engine-controlled content handles; arbitrary model paths are never registry

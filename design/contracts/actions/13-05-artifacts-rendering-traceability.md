@@ -975,7 +975,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 ## `BuildPlanInputAuthorityStateAction`
 
 - **Input:** identity/parent, exact
-  bootstrap/feature-request/reference/normalized-specification/spec-ID/acknowledgement/provenance/passive/clarification/principle-selection/repository-fact/baseline-file/research-evidence
+  bootstrap/feature-request/reference/normalized-specification/spec-ID/acknowledgement/provenance/passive/clarification/principle-registry/repository-fact/baseline-file/research-evidence
   authorities, and current plan ID ledger
 - **Output:** plan-input-authority candidate
 - **Responsibility:** Bundle every ID/value that a plan route or `PNN` may cite; perform no
@@ -1894,4 +1894,4 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Responsibility:** Invalidate declared descendant states/approvals only.
 
 
-For a complete workflow output that needs two control events, the orchestrator statically invokes `AppendWorkflowControlEventAction` twice against successive in-memory registry candidates in the sequence above. Only the final validated registry revision is prepared with the complete output set. The intermediate candidate is neither persisted nor externally visible; validators prove both parent links and require the output set's event records to equal the exact appended suffix.
+For a complete workflow output that needs two control events, the orchestrator coordinates two runner-owned child bindings of `AppendWorkflowControlEventAction`, and the runner executes each against successive in-memory registry candidates in the sequence above. Only the final validated registry revision is prepared with the complete output set. The intermediate candidate is neither persisted nor externally visible; validators prove both parent links and require the output set's event records to equal the exact appended suffix.

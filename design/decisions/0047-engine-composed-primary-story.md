@@ -15,6 +15,8 @@
     engine raises when a completed records unit holds an edge case that no acceptance criterion
     of its records batch can serve. It is never repaired or retried, has no model origin, and
     names the edge case's group and claims in place of a catalogue.
+  - Corrected 9 November 2026 (user decision: "Yes, keep it"): Decision 5's rationale and the
+    first consequence state only what native composition establishes. No decision changes.
 - **Amends:**
   - design.md §1 and §4: the story is no longer LLM-owned content (the Spec structure row);
   - [17-specify.md](../contracts/17-specify.md) §17.3: three model task types (brief,
@@ -73,7 +75,8 @@ claims, but it can't paraphrase them.
 5. **The story is no source-review subject** (amended 7 November 2026). Pre-generation source
    readiness (ADR 0023) assesses the other required feature subjects, not the story: its
    support is the provenance of the claims it quotes (Decision 1), and a catalogue with none
-   blocks (Decision 2), so a model review of it can only raise false findings (FIX06,
+   blocks (Decision 2), so a support review of it checks nothing that provenance doesn't
+   already establish; the one such review that ran raised a false finding (FIX06,
    `2026-11-02T09-15-31Z`). The story has no required-authority policy, clarification question
    or packet-guidance purpose; removing them advanced `packet-guidance` to v3 and the
    required-authority contract to 2.
@@ -85,7 +88,10 @@ changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/
 
 ## Consequences
 
-- The story can't weaken an obligation or add content, in any language or source format.
+- No model paraphrases the story: it copies the selected business claims' quoted words under
+  Decision 1's formatting rules and adds no wording of its own. Its completeness and meaning
+  still depend on which claims extraction cites and classifies as `business`, and on the
+  context that dropped headings and list markers carried.
 - One model call (about 1.4k tokens) leaves every specification run.
 - The story reads as the source's requirement sentences, not a narrative; it mirrors the
   functional requirements (D19.1 allows this, and the evaluator doesn't count it as

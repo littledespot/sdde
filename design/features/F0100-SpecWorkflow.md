@@ -499,7 +499,7 @@ request/repair call sites; shared bodies do not share their retry counters.
 Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
 `model-request-body` subgraph and its wrappers (`model-request`,
 `model-request-with-context`, `support-request`, `composition-request` and
-`composition-request-body`) are removed. Each of the 16 call sites becomes one
+`composition-request-body`) are removed. Each request call site becomes one
 `request-model` step, followed by its consumers, any `retain-json-part` and its release
 step, and each call site keeps its own retry counter.
 
@@ -1527,9 +1527,10 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   groups, compact criteria with exact-code delimiters, missing mandatory groups,
   zero-record collections without filler, data-required entities, validated
   non-data omission, and render/parse equality;
-- negative fixtures reject every placeholder spelling, inline clarification,
-  unresolved question, malformed/reordered record ID, and invalid acceptance
-  triplet; and
+- negative fixtures reject malformed/reordered record IDs, invalid acceptance
+  triplets, an unresolved typed clarification at success and readback outside the
+  closed grammar (no placeholder scan,
+  [§21.1](../contracts/21-validation.md#211-cross-stage-validators)); and
 - golden tests prove byte-stable `spec.md`, mandatory sidecar generation, and
   complete validated publication before `specified`, including failure at each
   write without new successful completion.

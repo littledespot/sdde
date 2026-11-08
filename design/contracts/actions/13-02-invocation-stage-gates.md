@@ -5,20 +5,16 @@ boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local 
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
 
-## `ParseWorkflowSelectionAction`
+## `ParseWorkflowInvocationAction`
 
-- **Input:** captured CLI/API invocation
-- **Output:** raw workflow selector plus remaining workflow arguments
-- **Responsibility:** Parse exactly one explicit leading workflow selector after the
-  executable/API operation; choose no default, inspect no workflow definition, and do not parse
-  workflow-specific arguments.
-
-## `ValidateWorkflowIdAction`
-
-- **Input:** raw workflow selector and workflow-ID lexical policy
+- **Input:** captured CLI/API arguments and the operation-registry evidence of
+  `validate-workflow-operation-registry`
 - **Output:** validated invocation `WorkflowId` plus unchanged remaining arguments
-- **Responsibility:** Validate the closed workflow-ID syntax without filename inference,
-  registry lookup, normalization fallback, or workflow-specific branching.
+- **Responsibility:** Take exactly one explicit leading workflow selector and validate the
+  closed workflow-ID syntax; reject a missing or malformed ID and more than 64 workflow
+  arguments. Choose no default, apply no filename inference, registry lookup or
+  normalization fallback, and parse no workflow-specific argument
+  (`src/actions/workflow/parse_workflow_invocation.zig`).
 
 > **ADR 0032 (not yet implemented).** The two `specify` invocation actions below become the
 > internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action with
@@ -30,15 +26,16 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 - **Input:** remaining workflow arguments
 - **Output:** parsed specify invocation
-- **Responsibility:** Parse the required `--feature` and `--reference` values without resolving
-  paths or reading files.
+- **Responsibility:** Parse the `--feature` and `--reference` flag/value pairs without resolving
+  paths or reading files; reject a duplicate flag, a positional or unknown input, and a flag
+  with no value (`src/actions/specify/parse_specify_invocation.zig`).
 
 ## `ValidateSpecifyArgumentsAction`
 
 - **Input:** parsed invocation
 - **Output:** validated specify invocation context
-- **Responsibility:** Require one non-empty `--feature` directory and one non-empty
-  `--reference` selector; reject missing, duplicate, positional and unknown inputs.
+- **Responsibility:** Require both `--feature` and `--reference`, each non-empty, within the
+  relative-path byte limit and not starting with `-`.
 
 ## `NormalizeReferenceSelectorAction`
 
@@ -165,8 +162,10 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 Under [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md), current-run
 activation uses the immutable bootstrap observation plus this fresh capability;
 it may create observed-absent paths but never changes a bootstrap observation or
-reuses an earlier run. The production policy ID fingerprints the validated compiled
-logging policy, and a fresh run ID separates its binding and streams.
+reuses an earlier run. Its identities are the ones `BuildFeatureLogPolicyIdAction` and
+`BuildFeatureLogBindingIdAction` below describe. Today no registered action builds them: one
+adapter builds the policy, run and binding IDs together
+(`src/adapters/system/feature_log_identity.zig`), and nothing recomputes the policy ID.
 
 The historical maintenance catalogue below is deferred source material. Its saved
 bootstrap-policy-lineage and restart prerequisites were withdrawn by
@@ -246,39 +245,37 @@ requirements to activate or capture the current execution.
 
 ## `BuildFeatureLogPolicyIdAction`
 
-- **Input:** feature ID, exact bootstrap-authority-state ID, and compiler-locked
-  `feature_logging` slot
-- **Output:** stable feature-log-policy identity
-- **Responsibility:** Construct the closed tuple without consulting the current root config and
-  without an allocator, path, content value, clock, user/model scalar, or run-local capability.
+- **Input:** the current execution's validated compiled logging policy
+- **Output:** feature-log-policy identity `LOGPOL-<SHA-256 of the policy's serialization>`
+- **Responsibility:** Fingerprint only that policy, so an equal policy yields an equal ID; read
+  no bootstrap authority, path, clock, user/model scalar or run-local capability.
 
 ## `BuildFeatureLogPolicyAction`
 
-- **Input:** assigned feature-log-policy identity, exact persisted
-  `CompiledFeatureLoggingPolicyFragment` from the bound bootstrap authority, event-definition
-  registry, feature ID, and workflow-artifact registry
+- **Input:** assigned feature-log-policy identity, the validated compiled logging policy,
+  event-definition registry, feature ID, and workflow-artifact registry
 - **Output:** feature-log-policy candidate
-- **Responsibility:** Bind the historical/current authority-owned threshold and
-  safety/rotation/retention constants to the exact authority-derived ID and engine-derived
-  event/prompt collection IDs; never consult a possibly changed root config for an existing
-  authority.
+- **Responsibility:** Bind the policy's threshold and safety/rotation/retention constants to
+  that ID and the engine-derived event/prompt collection IDs. No persisted bootstrap-policy
+  fragment or lineage is read ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)).
 
 ## `ValidateFeatureLogPolicyAction`
 
-- **Input:** log-policy candidate and exact bound bootstrap compiled-policy/artifact authorities
+- **Input:** log-policy candidate and the validated compiled logging policy and
+  workflow-artifact registry
 - **Output:** feature-log-policy evidence
-- **Responsibility:** Recompute and prove the closed ID tuple, persisted fragment equality,
-  level rank/aliases, console boolean, level-owned prompt-capture selection, compiler-fixed
-  redaction/limits, and fixed per-feature destinations; equal restart inputs must reproduce the
-  same policy identity.
+- **Responsibility:** Recompute and prove the fingerprint ID, level rank/aliases, console
+  boolean, level-owned prompt-capture selection, compiler-fixed redaction/limits, and fixed
+  per-feature destinations.
 
 ## `BuildFeatureLogBindingIdAction`
 
-- **Input:** validated log-policy ID, run ID, workflow-artifact-registry-state ID, and
-  compiler-locked `feature_run_logging` slot
-- **Output:** stable feature-log-binding identity
-- **Responsibility:** Construct the closed tuple without an allocator, path, clock, or
-  active-directory capability token.
+- **Input:** validated log-policy ID, a fresh engine-generated random run ID
+  (`RUN-<128-bit hex>`), and the binding ordinal
+- **Output:** feature-log-binding identity
+- **Responsibility:** Construct the tuple without a path, clock, or active-directory capability
+  token. The run ID identifies observations, never workflow state, and an existing run ID
+  rejects rather than reusing an earlier run.
 
 ## `ResolveFeatureLogBindingAction`
 
@@ -291,13 +288,11 @@ requirements to activate or capture the current execution.
 
 ## `ValidateFeatureLogBindingAction`
 
-- **Input:** binding, root registry, no-follow metadata, bound bootstrap authority, and
-  workflow-artifact registry
+- **Input:** binding, root registry, no-follow metadata, and workflow-artifact registry
 - **Output:** log-binding evidence
-- **Responsibility:** Recompute and prove the closed policy/binding tuple, containment beneath
-  the active feature, append-only access class, owner-only mode, regular-file/ancestor safety,
-  and exact authority IDs; historical `segment_header` control rows can be rejoined to the same
-  tuple after restart.
+- **Responsibility:** Prove the policy/binding/run/feature tuple
+  (`src/domain/feature_log_binding.zig`), containment beneath the active feature, append-only
+  access class, owner-only mode, and regular-file/ancestor safety.
 
 ## `BuildFeatureLogPolicyTransitionAction`
 

@@ -33,11 +33,11 @@ workflow without branching on workflow names:
    invokes no binding for it, and this portion acquires no workflow execution
    capability. Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet
    implemented), that portion becomes the startup engine routine;
-2. invoke `ParseWorkflowSelectionAction` and `ValidateWorkflowIdAction` through
-   runner-owned bindings to obtain one explicit `WorkflowId` and the unchanged
-   workflow-specific arguments;
-3. invoke `ResolveSelectedWorkflowAction` through its runner-owned binding for
-   that validated `WorkflowId`;
+2. invoke `validate-workflow-operation-registry`, then `ParseWorkflowInvocationAction`
+   (`parse-workflow-invocation`), through runner-owned bindings to obtain one explicit
+   `WorkflowId` and the unchanged workflow-specific arguments;
+3. invoke `select-compiled-workflow` through its runner-owned binding for that
+   validated `WorkflowId`;
 4. receive from the runner the selected graph's bound registered operations;
 5. invoke the fixed `ModelProviderBootstrapOrchestrator` through its runner-owned
    binding; it prepares provider authority only when the selected compiled graph
@@ -372,13 +372,14 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), th
 - For a same-stage gap, the generic need-builder action constructs the registered typed need and
   then enters `ClarificationLifecycleOrchestrator`; an earlier-owner gap enters the Section 24.5
   invalidation/rework route; an unregistered or administratively owned gap blocks.
-- When multiple gaps exist, the routing action preserves the complete ordered set, chooses the
-  earliest owner through the compiler-locked dominance policy, and sends the first canonical gap
-  to the existing single-need clarification lifecycle.
-- No other gap is treated as resolved or omitted; after that clarification resolves, full
-  owning-stage regeneration rebuilds the ledger before another gap can be selected.
-- The separately specified complete reference-conflict set transition remains the only v1 batch
-  clarification mutation because its accepted snapshot-consistency contract explicitly requires
-  atomic set equality.
+- Only a gate whose gaps are all `clarification_required` reaches the need builder; an
+  upstream-rework or administrative-block entry blocks the gate first
+  (`required_authority.zig:275`). The builder converts every such gap in one run: one
+  registered typed need per gap, owned by its requirement's registered owner stage (user
+  decision, 9 November 2026). The shared clarification refresh opens or updates one form per
+  need, keyed by its structural subject, and rejects two needs with the same stage and subject.
+- No gap is treated as resolved or omitted; a rerun rebuilds the ledger from current authority.
+- The complete reference-conflict set transition keeps its separate snapshot-consistency
+  contract, which requires atomic set equality.
 
 The orchestrator has no domain-specific branches. A new requirement kind becomes usable only through the common registry, actions, and conformance suite; adding a caller condition to this orchestrator is an architecture violation.

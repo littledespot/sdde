@@ -25,13 +25,13 @@ Bootstrap has a fixed engine-startup portion, conditional provider bootstrap
 - The YAML-named registered invocation operation then produces the workflow's typed run
   context.
 - Only the selected graph decides whether to invoke registered target-context setup nodes.
-- The initial SDD graphs do so after their workflow arguments validate: the SDD setup owns exact
-  feature-target resolution and the selected feature's existing published-state validation.
+- The Spec graph does so after its workflow arguments validate, in the order its definition
+  declares (`spec.workflow.yaml`): it parses the exact project `toolchain.yaml`, resolves its
+  complete preset inheritance closure from `paths.toolchainPreset`, and composes and validates
+  the toolchain; resolves the exact feature target and validates the selected feature's
+  existing published state; and captures semantic Markdown principles, excluding
+  `toolchain.yaml`.
 - No project-level transaction storage is required.
-- After the exact feature target is known, its remaining nodes parse the exact project
-  `toolchain.yaml`, resolve its complete preset inheritance closure from
-  `paths.toolchainPreset`, capture semantic Markdown principles while excluding
-  `toolchain.yaml`, and compile operational policy.
 - An unrelated workflow does not inherit that feature/toolchain setup unless its validated graph
   references the same registered contracts.
 - No model or project-changing node runs before the setup required by its compiled graph

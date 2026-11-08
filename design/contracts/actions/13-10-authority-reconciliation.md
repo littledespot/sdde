@@ -86,22 +86,26 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   descendant/approval state, published runtime/evidence
   ([§24.5](../24-workflow-state.md#245-upstream-rework-and-invalidation)), and
   ownership/rework registries
-- **Output:** one closed clarification, upstream-rework, or administrative-block route plan
+- **Output:** one closed clarification, upstream-rework, or administrative-block route plan; a
+  clarification plan covers every gap
+  ([§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator))
 - **Responsibility:** Select the earliest owner by the locked dominance/order policy,
   deduplicate same-subject needs, include complete descendant/runtime/evidence invalidation when
   required, and never route to the detecting caller merely for convenience.
 
 ## `BuildAuthorityGapClarificationNeedAction`
 
-- **Input:** one validated clarification route plan, its selected `clarification_required`
-  outcome, structural requirement, and compiler-locked question/answer-schema descriptor
-- **Output:** engine-built `ClarificationNeedProposal` candidate plus
+- **Input:** one validated clarification route plan, its `clarification_required` outcomes,
+  structural requirements, admitted review evidence, and compiler-locked
+  question/answer-schema descriptors
+- **Output:** one engine-built `ClarificationNeedProposal` candidate per gap, each with its
   `authority_reconciliation_gap` origin
-- **Responsibility:** Build the bounded question/why/answer schema, subject descriptor, and
-  exact requirement/evidence origin from registered fields and current evidence; accept no
-  model/caller wording, owner, ID, path, resolution, or fallback.
-- Apply [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
-  through the existing question/reason fields.
+- **Responsibility:** The engine owns each need's subject, identity, owner stage, routing and
+  answer schema, derived from registered fields; it accepts no model or caller owner, ID, path,
+  resolution or fallback. Admitted review questions and details are attributed evidence that
+  [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
+  carries into the existing question/reason fields; a descriptor question serves only a
+  mechanically established gap.
 
 
 These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.

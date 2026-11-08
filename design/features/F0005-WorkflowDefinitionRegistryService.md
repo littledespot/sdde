@@ -44,9 +44,8 @@ the configured workflow-authority root.
 - A bootstrap materialization owner (not implemented) may consume this same validated
   value to assign an ID and construct `WorkflowDefinitionRegistryState`; F0005 does not
   allocate that identity.
-- Generic workflow execution owns exact selection through
-  `ResolveSelectedWorkflowAction` (not implemented; the engine currently selects through
-  `select-compiled-workflow`); the service performs no selection itself.
+- Generic workflow execution owns exact selection through `select-compiled-workflow`;
+  the service performs no selection itself.
 
 The one feature outcome is built by separate owners:
 
@@ -820,7 +819,7 @@ source identity and no `BootstrapComponentId`.
   component ID, and construct immutable `WorkflowDefinitionRegistryState`.
 - That later identity does not alter graph semantics and is not a precondition for
   selection.
-- `ResolveSelectedWorkflowAction` and workflow execution are not part of F0005.
+- `select-compiled-workflow` and workflow execution are not part of F0005.
 
 ## 9. Failure and cleanup contract
 

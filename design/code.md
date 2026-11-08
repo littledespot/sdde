@@ -915,7 +915,6 @@ FactSelection {
 }
 
 PrincipleConsideration {
-  principleSelectionId,
   principleChunkIds[],
   disposition: aligned | not_applicable | deviation | conflict,
   rationale: SemanticText,
@@ -1240,7 +1239,7 @@ PlanReviewUnitRegistry {
       | { kind: research, researchDecisionId }
       | { kind: dependency, dependencyId }
       | { kind: fact_selection, factId }
-      | { kind: principle_consideration, principleSelectionId, principleChunkIds[] }
+      | { kind: principle_consideration, principleChunkIds[] }
   }[]
 }
 ```
@@ -1843,15 +1842,12 @@ GuidancePacket {
 PrincipleGuidance {
   principleRegistryStateId,
   principleRegistryStateRevision,
-  principleSelectionId,
   entries: {
     principleChunkId,
-    categoryHint: PrincipleCategoryHint,
     sourceSpan: PrincipleSourceSpan,
     rawUtf8BytesHandle,
     byteLength
   }[],
-  completeSelection: true,
   semanticOnly: true,
   grantsOperationalAuthority: false
 }
@@ -2018,15 +2014,15 @@ CompositionRoot (before the engine starts; ADR 0032 routine when implemented)
 
 PipelineRunner
 ├── WorkflowEngineOrchestrator (capability-free graph coordination)
-│   ├── ParseWorkflowSelectionAction and ValidateWorkflowIdAction through runner-owned child bindings
-│   ├── ResolveSelectedWorkflowAction through a runner-owned child binding
+│   ├── validate-workflow-operation-registry, parse-workflow-invocation and
+│   │   select-compiled-workflow, in that order, through runner-owned child bindings
 │   ├── ModelProviderBootstrapOrchestrator through a runner-owned child binding (ADR 0004)
 │   └── Selected CompiledWorkflowGraph
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them
 │       ├── selected-graph target-context setup binding when required
-│       │   ├── explicit feature-directory and selected-state validation
 │       │   ├── toolchain-preset registry/compilation actions
+│       │   ├── explicit feature-directory and selected-state validation
 │       │   ├── free-text principles ingestion/indexing actions
 │       │   └── repository discovery actions
 │       └── follow typed transitions; each YAML-selected operation uses a runner-owned binding
@@ -2205,7 +2201,6 @@ ClosedAtomicValueSchema {
 }
 
 SemanticGuidanceBinding {
-  principleSelectionId,
   principleRegistryStateId,
   principleRegistryStateRevision,
   immutableUnitOwnerId: ImmutableUnitOwnerId,

@@ -176,8 +176,8 @@ against 7 in the D12.2 reference's 9 publications; the other results are in FIX0
 live: none of the 12 runs since ADR 0047 reached source review.
 - **Defect:** `2026-11-02T09-15-31Z` ended `workflow_invalid` after 34 calls: the second
   readiness pass filed the story purpose itself as a `candidate_omission`, which loss
-  comparison couldn't localize. The engine composes the story, so a model review of it can
-  only raise false findings.
+  comparison couldn't localize. The engine composes the story, so a support review of it
+  checks nothing that the quoted claims' provenance doesn't already establish.
 - **Change:** `specification_authority.projectRecords` no longer seeds the story; the story's
   required-authority policy, slot and clarification question and its packet-guidance purpose
   are deleted; `packet-guidance/v3` and required-authority contract 2 (old versions reject).
