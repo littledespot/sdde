@@ -341,8 +341,12 @@ retained its forced classifications (`InvalidAssembledCandidate`), and a model a
 "irrelevant classifications satisfy the extraction schema for every registered extractor"
 (three unrelated-domain sources covering the extractor registry, the forced wire and a `claims`
 answer through the real composition, an unknown extractor rejected, and ADR 0024's rule that a
-wholly quoted value of any extractor cannot be irrelevant); it fails on the old schema. Its live set and
-keep decision are open in FIX06 E14.
+wholly quoted value of any extractor cannot be irrelevant); it fails on the old schema. It
+changes model input only by the `irrelevant` variant's extractor list (108 of the scripted
+matrix's 1,656 requests). **Kept 10 November 2026** (user: "keep E14") on its set
+`2026-11-09T19-51-5*`: 6 of 6 published and passed, no lost source requirement, no token
+classified `irrelevant`; its target can't occur in the development cases (benefit not
+demonstrated).
 
 ## E11. One owner for record identity
 
