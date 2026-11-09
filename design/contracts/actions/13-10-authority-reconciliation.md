@@ -4,120 +4,100 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
+These actions own the shared contract
+([§12.8.1](../12-model-boundary.md), [§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator));
+domain code ([`required_authority.zig`](../../../src/domain/required_authority.zig)) supplies
+registered requirements, candidates and evidence only. No domain action may add a parallel
+reconciliation outcome, clarification shortcut or stage-specific success rule. Turning gaps
+into clarification needs is `build-required-authority-clarification-needs`
+([13.5](13-05-artifacts-rendering-traceability.md)).
 
-## `BuildAuthorityRequirementLedgerAction`
+## `BuildSpecificationAuthorityRequirementsAction` (`build-specification-authority-requirements`)
 
-- **Input:** exact stage, closed schema/policy registries, accepted upstream authorities, and
-  current obligation sources
-- **Output:** complete `AuthorityRequirementLedger` candidate
-- **Responsibility:** Enumerate every contract-required datum/decision exactly once with
-  structural identity, earliest owner, required slot, reconciliation policy, and downstream
-  obligations; add no domain interpretation.
+- **Owner:** [`src/actions/authority/build_specification_authority_requirements.zig`](../../../src/actions/authority/build_specification_authority_requirements.zig)
+- **Reads:** `relative_feature_directory`, `accounted_reference_reconciliation` (optional:
+  `specification_generation_session`, `identified_specification_content`) · **Writes:**
+  `required_authority_inputs` · **Side effect:** `none`
+- **Does:** Project the source-readiness requirements for the feature's required subjects from
+  the accounted reference reconciliation, detected at `spec`
+  ([`specification_authority.zig`](../../../src/domain/specification_authority.zig)).
+- **Rejects:** `InvalidRequiredAuthority` (outcome `blocked`).
 
-## `ValidateAuthorityRequirementLedgerAction`
+## `BuildSourcePreservationRequirementsAction` (`build-source-preservation-requirements`)
 
-- **Input:** ledger candidate and the same closed requiredness/ownership registries
-- **Output:** requirement-ledger evidence
-- **Responsibility:** Prove exhaustive required-slot coverage, unique structural IDs, current
-  input-authority bindings, registered ownership/policy, and no model/caller-defined or omitted
-  requirement.
+- **Owner:** [`src/actions/authority/build_source_preservation_requirements.zig`](../../../src/actions/authority/build_source_preservation_requirements.zig)
+- **Reads:** `relative_feature_directory`, `accounted_reference_reconciliation`,
+  `citable_reference_inputs` (optional: `specification_generation_session`,
+  `identified_specification_content`) · **Writes:**
+  `required_authority_inputs` · **Side effect:** `none`
+- **Does:** Project the optional source-preservation requirements from the reconciled records
+  and captured sources
+  ([ADR 0021](../../decisions/0021-optional-source-preservation-review.md);
+  [`source_preservation.zig`](../../../src/domain/source_preservation.zig)).
+- **Rejects:** `InvalidRequiredAuthority` (outcome `blocked`).
 
-## `BuildAuthorityCandidateSetAction`
+## `BuildRequiredAuthorityLedgerAction` (`build-required-authority-ledger`)
 
-- **Input:** one validated requirement and the exact authorities/read-only evidence permitted by
-  its reconciliation policy
-- **Output:** closed candidate-set candidate
-- **Responsibility:** Select and type every potentially supporting current authority under the
-  registered policy; do not rank, approximate, choose a winner, or invoke semantic
-  interpretation.
+- **Owner:** [`src/actions/authority/build_required_authority_ledger.zig`](../../../src/actions/authority/build_required_authority_ledger.zig)
+- **Reads:** `required_authority_inputs` · **Writes:** `required_authority_ledger` · **Side effect:** `none`
+- **Does:** Re-derive the projection the inputs claim and require it to match, then build one
+  requirement per seed in requirement-identity order with its registered policy; candidate or
+  model order never decides order.
+- **Rejects:** `InvalidRequiredAuthority` for an invalid feature, a projection mismatch, a
+  repeated or invalid requirement, authority, evidence, exception, candidate or forced gap, or
+  one naming an unknown requirement.
 
-## `ValidateAuthorityCandidateSetAction`
+## `BuildRequiredAuthorityObservationsAction` (`build-required-authority-observations`)
 
-- **Input:** candidate set, requirement, current authority registries, and policy
-- **Output:** candidate-set evidence
-- **Responsibility:** Prove total permitted-source accounting, identity/currentness, no extra or
-  missing candidate, and exact deterministic equivalence partitions where the policy defines
-  them.
+- **Owner:** [`src/actions/authority/build_required_authority_observations.zig`](../../../src/actions/authority/build_required_authority_observations.zig)
+- **Reads:** `required_authority_ledger` · **Writes:** `required_authority_observations` · **Side effect:** `none`
+- **Does:** Record, natively, each requirement's inspected input authorities and the IDs of its
+  bound evidence.
+- **Rejects:** none beyond allocation failure.
 
-## `BuildAuthoritySemanticAssessmentRequestAction`
+## `ParseRequiredAuthorityObservationsAction` (`parse-required-authority-observations`)
 
-- **Input:** one validated candidate set whose policy permits semantic assessment and for which
-  deterministic comparison cannot decide support/equivalence
-- **Output:** bounded input for the YAML-declared semantic-review operation
-- **Responsibility:** Expose only the requirement, supplied candidates, citations, and closed
-  allowed assessment labels; create no authority or resolution.
+- **Owner:** [`src/actions/authority/parse_required_authority_observations.zig`](../../../src/actions/authority/parse_required_authority_observations.zig)
+- **Reads:** `raw_required_authority_observations` · **Writes:** `required_authority_observations` · **Side effect:** `none`
+- **Does:** Strictly decode an observation document; observations may reference evidence IDs
+  but never create the evidence registry. The Spec workflow doesn't use it.
+- **Rejects:** `InvalidRequiredAuthority` for any document that isn't the closed shape.
 
-## `BuildAuthorityReconciliationOutcomeAction`
+## `ReconcileRequiredAuthoritiesAction` (`reconcile-required-authorities`)
 
-- **Input:** one requirement, validated candidate set, deterministic comparison evidence,
-  optional validated model-assisted assessment, current exception/clarification authorities, and
-  ownership registry
-- **Output:** one closed `AuthorityReconciliationOutcome` candidate
-- **Responsibility:** Produce exactly one resolution, clarification, upstream-rework, or
-  administrative-block variant; never default, approximate, use model memory, or repair missing
-  authority into content.
+- **Owner:** [`src/actions/authority/reconcile_required_authorities.zig`](../../../src/actions/authority/reconcile_required_authorities.zig)
+- **Reads:** `required_authority_ledger`, `required_authority_observations` · **Writes:** `required_authority_result` · **Side effect:** `none`
+- **Does:** Give each requirement exactly one outcome (resolved, explicit not-applicable or
+  explicit exception; clarification required; upstream rework; administrative block) and any
+  candidate defect, and set the continuation: all resolved, invalid, needs user or blocked.
+- **Rejects:** `InvalidRequiredAuthority`.
 
-## `ValidateAuthorityReconciliationOutcomeAction`
+## `ValidateRequiredAuthorityReconciliationAction` (`validate-required-authority-reconciliation`)
 
-- **Input:** outcome candidate and all bound requirement/candidate/authority/ownership evidence
-- **Output:** reconciliation evidence
-- **Responsibility:** Prove cardinality, currentness, allowed `not_applicable`/exception scope,
-  earliest-owner routing, semantic-assessment labelling, and the absence of a success variant
-  for a gap.
+- **Owner:** [`src/actions/authority/validate_required_authority_reconciliation.zig`](../../../src/actions/authority/validate_required_authority_reconciliation.zig)
+  (runner [`required_authority_workflow.zig`](../../../src/application/required_authority_workflow.zig))
+- **Reads:** `required_authority_inputs`, `required_authority_observations`,
+  `required_authority_result` · **Writes:** `required_authority_gate` · **Side effect:** `none`
+- **Does:** Rebuild the result from current native inputs and compare it, so no earlier ledger
+  or result certifies a newer revision; it is the sole issuer of the `required-authority@1`
+  gate.
+- **Rejects:** outcome `invalid` for a candidate defect, `needs-user` for clarification gaps,
+  `blocked` for upstream rework, an administrative block or `InvalidRequiredAuthority`.
 
-## `BuildAuthorityReconciliationLedgerAction`
+## `RetireRequiredAuthorityProjectionAction` (`retire-required-authority-projection`)
 
-- **Input:** validated requirement ledger and exactly one validated outcome per requirement
-- **Output:** complete reconciliation-ledger projection
-- **Responsibility:** Join outcomes to requirements in canonical structural order without
-  dropping, merging, or locally reclassifying an entry.
-
-## `ValidateAuthorityReconciliationLedgerAction`
-
-- **Input:** reconciliation projection, requirement ledger, current stage/authorities, and
-  closed stage-gate policy
-- **Output:** complete-success evidence or exact ordered non-success entries
-- **Responsibility:** Prove one-to-one exhaustive coverage; authorize stage continuation only
-  when every entry is an allowed resolved variant, otherwise return every gap for typed routing.
-
-## `RouteAuthorityReconciliationGapAction`
-
-- **Input:** validated non-success entries, current workflow stage, clarification registry,
-  descendant/approval state, published runtime/evidence
-  ([§24.5](../24-workflow-state.md#245-upstream-rework-and-invalidation)), and
-  ownership/rework registries
-- **Output:** one closed clarification, upstream-rework, or administrative-block route plan; a
-  clarification plan covers every gap
-  ([§14.14](../14-orchestration.md#1414-authorityreconciliationorchestrator))
-- **Responsibility:** Select the earliest owner by the locked dominance/order policy,
-  deduplicate same-subject needs, include complete descendant/runtime/evidence invalidation when
-  required, and never route to the detecting caller merely for convenience.
-
-## `BuildAuthorityGapClarificationNeedAction`
-
-- **Input:** one validated clarification route plan, its `clarification_required` outcomes,
-  structural requirements, admitted review evidence, and compiler-locked
-  question/answer-schema descriptors
-- **Output:** one engine-built `ClarificationNeedProposal` candidate per gap, each with its
-  `authority_reconciliation_gap` origin
-- **Responsibility:** The engine owns each need's subject, identity, owner stage, routing and
-  answer schema, derived from registered fields; it accepts no model or caller owner, ID, path,
-  resolution or fallback. Admitted review questions and details are attributed evidence that
-  [shared clarification preparation](../12-model-boundary.md#127-workflow-defined-model-operations)
-  carries into the existing question/reason fields; a descriptor question serves only a
-  mechanically established gap.
-
-
-These actions own the shared contract. Domain actions only produce registered requirements, candidates, and evidence. They may not create a parallel reconciliation outcome, clarification shortcut, or stage-specific success rule.
+- **Owner:** [`src/actions/authority/retire_required_authority_projection.zig`](../../../src/actions/authority/retire_required_authority_projection.zig)
+- **Reads:** none · **Writes:** invalidates `specification_support_review`,
+  `required_authority_inputs`, `required_authority_ledger`, `required_authority_observations`,
+  `required_authority_result` and `required_authority_gate` · **Side effect:** `none`
+- **Does:** Retire the source-review authority before generation consumes the sources.
+- **Rejects:** none.
 
 ### Native source review
 
 `specification_support.Source` owns required pre-generation source review through the
-existing collection, diagnostics, atomic repair and validation. Spec runs no principle
-review and no review after generation
-([ADR 0023](../../decisions/0023-advisory-post-generation-review.md)).
-
-`initialize-specification-review` binds progress to the current authority projection.
-The assessment uses the declared request and repair loop. Only completed review
-replaces the source authority inputs. No action selects a successor, invokes another
-action, or changes a negative verdict to obtain admission.
+existing collection, diagnostics, atomic repair and validation. Spec runs no principle review
+and no review after generation
+([ADR 0023](../../decisions/0023-advisory-post-generation-review.md)). Only completed review
+replaces the source authority inputs, and no action changes a negative verdict to obtain
+admission.

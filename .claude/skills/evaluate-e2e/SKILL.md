@@ -132,6 +132,10 @@ the engine, its prompts or its deterministic code.
      ("by 14 days" for "fourteen calendar days") scores that requirement's criterion below 3.
      A title that gives no value is a label, scored against `organization` only.
 
+     Ruling of 9 November 2026 (FIX06 section 3 Next 8): an edge case's outcome is its linked
+     acceptance criterion's Then (ADR 0038 Decision 7), so a defect in that Then is one
+     defect, filed on the criterion with the edge case named in its evidence.
+
      The `Source:` line under each AC, FR and EN is the engine's decided display of the
      record's cited lines (23-rendering.md §23). Don't count it as a defect or against a
      business-facing criterion. Section 3 step 7 checks the links themselves.

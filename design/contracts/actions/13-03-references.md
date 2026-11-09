@@ -4,1145 +4,597 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
+One entry per registered reference operation, in workflow order: owner, data keys, side
+effect, responsibility and typed rejections. Entries marked "Proposed, no code" are
+responsibilities another document names and no code implements yet; §16 owns the
+reference contract.
 
-## `AssignReferenceStateIdAction`
+## `NormalizeReferenceSelectorAction` (`normalize-reference-selector`)
 
-- **Input:** feature ID, optional parent state ID, and the `reference-identity` port
-- **Output:** prospective reference-state ID
-- **Responsibility:** Draw the state ID, `reference-<hex>`, from 128 bits of system randomness
-  before any local ID/citation/blob binding; entropy failure fails the operation. No feature
-  `StateIdLedger` or persisted counter allocates it
-  ([F0100 §3.4](../../features/F0100-SpecWorkflow.md#34-citable-reference-inputs)).
+- **Owner:** [`src/actions/reference/normalize_reference_selector.zig`](../../../src/actions/reference/normalize_reference_selector.zig)
+- **Reads:** `specify_invocation` · **Writes:** `normalized_reference_selector` · **Side effect:** `none`
+- **Does:** NFC-normalizes the raw `--reference` value within the selector byte limit, then normalizes it as a relative directory path.
+- **Rejects:** errors of `unicode_normalizer.Error`
 
-## `BuildReferenceIdLedgerAction`
+## `ValidateReferenceSelectorAction` (`validate-reference-selector`)
 
-- **Input:** prospective state identity and optional prior snapshot for correction
-- **Output:** reference-ID ledger candidate
-- **Responsibility:** Initialize or advance monotonic
-  source/block/chunk/citation/claim/signal/conflict/feedback/conflict-decision/token/reconciliation-partition/reconciliation-summary/reconciliation-statement
-  allocators and the shared tombstone set.
-- Initial ingestion has no persisted ledger: it assigns positional ordinals within its fresh
-  state (`src/actions/reference/assign_reference_identities.zig`). The persisted ledger,
-  tombstones and no reuse across successor states remain the target for the feedback revision
-  path below, which no code implements.
+- **Owner:** [`src/actions/reference/validate_reference_selector.zig`](../../../src/actions/reference/validate_reference_selector.zig)
+- **Reads:** `normalized_reference_selector` · **Writes:** `relative_reference_selector` · **Side effect:** `none`
+- **Rejects:** errors of `reference_selector.Error`
 
-## `RetireReferenceAllocatedIdAction`
+## `InspectReferenceDirectoryAction` (`inspect-reference-directory`)
 
-- **Input:** one failed allocated reference ID, its namespace, and current successor ledger
-- **Output:** next reference ID ledger
-- **Responsibility:** Add the exact failed ID to the shared tombstone set without rewinding any
-  namespace ordinal.
+- **Owner:** [`src/actions/reference/inspect_reference_directory.zig`](../../../src/actions/reference/inspect_reference_directory.zig)
+- **Reads:** `relative_reference_selector` · **Writes:** `reference_directory` · **Side effect:** `filesystem_read`
+- **Rejects:** errors of `reference_directory_inspector.Error`
 
-## `ValidateReferenceIdLedgerAction`
+## `InventoryReferenceSourcesAction` (`inventory-reference-sources`)
 
-- **Input:** initial/final ledgers and every canonical/intermediate allocation or retirement in
-  the prospective snapshot
-- **Output:** reference-ID-ledger evidence
-- **Responsibility:** Prove each assigner advanced exactly its namespace, monotonic uniqueness,
-  no reuse, total tombstone accounting, and that the final ledger resolves every persisted
-  reference identity.
+- **Owner:** [`src/actions/reference/inventory_reference_sources.zig`](../../../src/actions/reference/inventory_reference_sources.zig)
+- **Reads:** `reference_directory` · **Writes:** `raw_reference_inventory` · **Side effect:** `filesystem_read`
+- **Rejects:** errors of `reference_corpus_source.Error`
 
-## Extraction-contract readback
+## `ValidateReferenceInventoryAction` (`validate-reference-inventory`)
 
-The existing snapshot writer and canonical-state validation actions use the shared
-[§12.7 extraction binding](../12-model-boundary.md#127-workflow-defined-model-operations).
-They derive comparison evidence from compiled metadata and resolve it against the
-current registry. No separate resolver action or historical-schema registry is needed.
+- **Owner:** [`src/actions/reference/validate_reference_inventory.zig`](../../../src/actions/reference/validate_reference_inventory.zig)
+- **Reads:** `raw_reference_inventory` · **Writes:** `reference_inventory` · **Side effect:** `none`
+- **Does:** Checks the raw entries against the entry-count, depth and duration limits, with Unicode normalization and case folding; any failure is `InvalidReferenceInventory`.
+- **Rejects:** `InvalidReferenceInventory` and the rest of `reference_ingestion.Error`
 
-## `ResolveReferenceRootAction`
+## `CaptureReferenceSourcesAction` (`capture-reference-sources`)
 
-- **Input:** canonical configured reference root and required non-empty relative descendant
-  selector
-- **Output:** lexical reference-root candidate
-- **Responsibility:** Join the required selector without treating it as an alternate root.
+- **Owner:** [`src/actions/reference/capture_reference_sources.zig`](../../../src/actions/reference/capture_reference_sources.zig)
+- **Reads:** `reference_inventory` · **Writes:** `captured_reference_corpus` · **Side effect:** `filesystem_read`
+- **Rejects:** errors of `reference_corpus_source.Error`
 
-## `ValidateReferenceRootContainmentAction`
+## `DecodeReferenceMarkdownAction` (`decode-reference-markdown`)
 
-- **Input:** lexical candidate, canonical configured reference root, and workspace
-- **Output:** contained reference root
-- **Responsibility:** Prove containment beneath both authorities and apply no-follow root
-  policy.
+- **Owner:** [`src/actions/reference/decode_reference_markdown.zig`](../../../src/actions/reference/decode_reference_markdown.zig)
+- **Reads:** `captured_reference_corpus` · **Writes:** `decoded_reference_corpus` · **Side effect:** `none`
+- **Does:** Decodes each captured entry, recording directories, blocked entries and decoder failures per entry, and totals the decoded bytes.
+- **Rejects:** only allocation failure. An unsupported, malformed or over-budget entry is not a
+  rejection: it is recorded as that entry's `blocked` result (`unsupported_media`,
+  `malformed_text`, `decoded_budget`), and the step still succeeds.
 
-## `ValidateReferenceRootDirectoryAction`
+## `ValidateReferenceAccountingAction` (`validate-reference-accounting`)
 
-- **Input:** one contained reference root
-- **Output:** directory evidence
-- **Responsibility:** Prove it exists, is a readable directory, and is not a special file.
+- **Owner:** [`src/actions/reference/validate_reference_accounting.zig`](../../../src/actions/reference/validate_reference_accounting.zig)
+- **Reads:** `decoded_reference_corpus` · **Writes:** `reference_inputs` · **Side effect:** `none`
+- **Does:** Requires the decoded and captured entries to match the inventory one for one within the entry limit, then totals source and decoded bytes into the accepted documents.
+- **Rejects:** `InvalidReferenceAccounting` and the rest of `reference_ingestion.Error`
 
-## `BuildReferencePreactivationSessionAction`
+## `AssignReferenceIdentitiesAction` (`assign-reference-identities`)
 
-- **Input:** trusted run ID, canonical selector, validated supplied feature directory, and
-  run-local session ordinal
-- **Output:** noncanonical reference-preactivation session
-- **Responsibility:** Create provisional source/block counters that may identify bounded
-  reader/decoder observations only; emit no canonical state ID and persist nothing.
+- **Owner:** [`src/actions/reference/assign_reference_identities.zig`](../../../src/actions/reference/assign_reference_identities.zig)
+- **Reads:** `reference_inputs`, `feature_directory` · **Writes:** `identified_reference_corpus` · **Side effect:** `none`
+- **Does:** Numbers sources in document order and maps each provisional source and block to its canonical ID under a fresh reference-state ID.
+- **Rejects:** errors of `reference_evidence.Error`, `reference_state_identity.Error`
 
-## `BuildReferenceTraversalBudgetAction`
+## `BuildReferenceChunksAction` (`build-reference-chunks`)
 
-- **Input:** validated reference limits
-- **Output:** traversal budget capability
-- **Responsibility:** Bind entry, depth, and enumeration time/memory ceilings for one traversal.
+- **Owner:** [`src/actions/reference/build_reference_chunks.zig`](../../../src/actions/reference/build_reference_chunks.zig)
+- **Reads:** `identified_reference_corpus` · **Writes:** `reference_chunks` · **Side effect:** `none`
+- **Does:** Makes one chunk per source block, numbered in source and block order, under the `source_blocks_v1` partition.
+- **Rejects:** errors of `reference_evidence.Error`
 
-## `EnumerateReferenceFilesAction`
+## `ValidateReferenceChunksAction` (`validate-reference-chunks`)
 
-- **Input:** contained root and traversal budget capability
-- **Output:** bounded unordered raw inventory and traversal telemetry
-- **Responsibility:** Enumerate without decoding/ordering and terminate before a hard traversal
-  bound is exceeded.
+- **Owner:** [`src/actions/reference/validate_reference_chunks.zig`](../../../src/actions/reference/validate_reference_chunks.zig)
+- **Reads:** `reference_inputs`, `feature_directory`, `identified_reference_corpus`, `reference_chunks` · **Writes:** `citable_reference_inputs` · **Side effect:** `none`
+- **Does:** Checks the chunks against the corpus: the same feature and state, one source and mapping per document, and one chunk per block mapping.
+- **Rejects:** `InvalidReferenceChunks` and the rest of `reference_evidence.Error`
 
-## `ValidateReferenceEntryCountAction`
+## `BuildSupersetPathTokenGrammarAction` (`build-superset-path-token-grammar`)
 
-- **Input:** bounded raw inventory telemetry and entry limit
-- **Output:** entry-count evidence
-- **Responsibility:** Apply the corpus entry ceiling once.
+- **Owner:** [`src/actions/reference/build_superset_path_token_grammar.zig`](../../../src/actions/reference/build_superset_path_token_grammar.zig)
+- **Reads:** `compiled_naming_policy`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `path_token_grammar` · **Side effect:** `none`
+- **Rejects:** errors of `path_token_grammar.Error`
 
-## `BuildReferencePreactivationBranchAction`
+## `ScanReferencePassiveLiteralsAction` (`scan-reference-passive-literals`)
 
-- **Input:** one identified source and exactly one accepted exclusion, successful empty/nonempty
-  decode, unsupported, failed, or blocked deterministic outcome with its budget/reader/resource
-  bindings
-- **Output:** one provisional preactivation branch
-- **Responsibility:** Project the closed outcome without constructing a canonical
-  `ReferenceEntry` or semantic block status.
+- **Owner:** [`src/actions/reference/scan_reference_passive_literals.zig`](../../../src/actions/reference/scan_reference_passive_literals.zig)
+- **Reads:** `path_token_grammar`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `passive_literal_candidates` · **Side effect:** `none`
+- **Does:** Collects passive-literal candidates from source bodies in source, block and byte order; source names stay citation metadata.
+- **Rejects:** errors of `passive_literals.Error`
 
-## `BuildReferencePreactivationBranchSetAction`
+## `AssignPassiveLiteralIdentitiesAction` (`assign-passive-literal-identities`)
 
-- **Input:** preactivation-session ID, sorted provisionally identified sources, and all
-  provisional branches
-- **Output:** ordered preactivation branch-set candidate
-- **Responsibility:** Join one branch to every provisional source in source order; perform no
-  acceptance decision.
+- **Owner:** [`src/actions/reference/assign_passive_literal_identities.zig`](../../../src/actions/reference/assign_passive_literal_identities.zig)
+- **Reads:** `passive_literal_candidates` · **Writes:** `passive_literal_identities` · **Side effect:** `none`
+- **Rejects:** errors of `passive_literals.Error`
 
-## `ValidateReferencePreactivationCoverageAction`
+## `ValidateReferencePassiveLiteralsAction` (`validate-reference-passive-literals`)
 
-- **Input:** branch-set candidate, sorted inventory, source blobs, both closed budget ledgers,
-  reader selections, identified nonempty blocks, and decoder telemetry
-- **Output:** branch-set evidence
-- **Responsibility:** Prove exact one-to-one source coverage and every branch's complete
-  identity/budget/read/decode joins before policy acceptance.
+- **Owner:** [`src/actions/reference/validate_reference_passive_literals.zig`](../../../src/actions/reference/validate_reference_passive_literals.zig)
+- **Reads:** `passive_literal_identities`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `reference_passive_literals` · **Side effect:** `none`
+- **Does:** Re-scans the captured inputs through the same detector, so candidate bytes or supplied IDs can neither add an occurrence nor drop source coverage.
+- **Rejects:** errors of `passive_literals.Error`
 
-## `ValidateReferencePreactivationAction`
+## `ExtractStructuredReferenceFactsAction` (`extract-structured-reference-facts`)
 
-- **Input:** validated provisional branch set, complete deterministic inventory, provisional
-  source/decoded budget ledgers, and mandatory-reference policy
-- **Output:** preactivation authorization
-- **Responsibility:** Require a nonempty corpus, one accepted deterministic branch per source,
-  closed budgets, and no unsupported/failed/blocked branch; all IDs remain run-local and
-  noncanonical, and source-map materialization, chunks, canonical entries, and semantic
-  dispositions are intentionally later.
+- **Owner:** [`src/actions/reference/extract_structured_reference_facts.zig`](../../../src/actions/reference/extract_structured_reference_facts.zig)
+- **Reads:** `citable_reference_inputs` · **Writes:** `structured_reference_facts` · **Side effect:** `none`
+- **Does:** Runs the registered extractors over the captured inputs; only an extractor decides eligibility, with no filesystem access or model-authored value.
+- **Rejects:** errors of `structured_tokens.Error`
 
-## `ValidateReferenceDirectoryDepthAction`
+## `AssignStructuredTokenCandidateIdentitiesAction` (`assign-structured-token-candidate-identities`)
 
-- **Input:** one raw inventory entry and depth limit
-- **Output:** depth evidence
-- **Responsibility:** Apply one traversal-depth ceiling.
+- **Owner:** [`src/actions/reference/assign_structured_token_candidate_identities.zig`](../../../src/actions/reference/assign_structured_token_candidate_identities.zig)
+- **Reads:** `citable_reference_inputs`, `structured_reference_facts` · **Writes:** `structured_token_candidates` · **Side effect:** `none`
+- **Rejects:** errors of `structured_tokens.Error`
 
-## `ValidateReferenceInventoryPathAction`
+## `InitializeReferenceExtractionAction` (`initialize-reference-extraction`)
 
-- **Input:** one raw directory entry and reference policy
-- **Output:** canonical inventory path
-- **Responsibility:** Validate UTF-8, NFC form, containment, and platform names.
+- **Owner:** [`src/actions/reference/initialize_reference_extraction.zig`](../../../src/actions/reference/initialize_reference_extraction.zig)
+- **Reads:** `citable_reference_inputs` · **Writes:** `reference_extraction_progress` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction.Error`
 
-## `DetectReferenceInventoryCollisionAction`
+## `CheckReferenceExtractionProgressAction` (`check-reference-extraction-progress`)
 
-- **Input:** canonical inventory paths and compiled portability-policy set
-- **Output:** collision evidence
-- **Responsibility:** Reject one NFC/case-fold-equivalent entry set under host or target rules.
+- **Owner:** [`src/actions/reference/check_reference_extraction_progress.zig`](../../../src/actions/reference/check_reference_extraction_progress.zig)
+- **Reads:** `reference_extraction_progress` · **Writes:** nothing · **Side effect:** `none`
+- **Does:** Returns `more` while a chunk remains to extract, otherwise `ok`.
+- **Rejects:** none; returns a workflow outcome
 
-## `SortReferenceInventoryAction`
+## `BuildReferenceExtractionModelInputAction` (`build-reference-extraction-model-input`)
 
-- **Input:** collision-free canonical inventory
-- **Output:** ordered inventory
-- **Responsibility:** Sort once by normalized Unicode-scalar relative path.
+- **Owner:** [`src/actions/reference/build_reference_extraction_model_input.zig`](../../../src/actions/reference/build_reference_extraction_model_input.zig)
+- **Reads:** `citable_reference_inputs`, `reference_passive_literals`, `structured_token_candidates`, `reference_extraction_progress` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the extraction request for the current chunk from the shared evidence, passive literals and token candidates, with the claim-citation bound.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_model_input.Error`
 
-## `AssignReferencePreactivationSourceIdAction`
+## `ConstructForcedTokenClassificationsAction` (`construct-forced-token-classifications`)
 
-- **Input:** one ordered inventory entry and current preactivation session
-- **Output:** provisional source identity plus successor session
-- **Responsibility:** Allocate one run-local source ordinal for bounded capture/decoder joins
-  only; never persist, render, log as canonical, or send it to a model.
+- **Owner:** [`src/actions/reference/construct_forced_token_classifications.zig`](../../../src/actions/reference/construct_forced_token_classifications.zig)
+- **Parameters:** required `source-part` and `native-composition-part` (the composition parts it reads and fills).
+- **Reads:** `json_composition`, `structured_token_candidates`, `citable_reference_inputs` · **Writes:** replaces `json_composition` · **Side effect:** `none`
+- **Does:** Construct only decisions forced by the admitted extraction outcome.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `json_composition_runtime.Error`, `reference_extraction.Error`
 
-## `AssignReferenceSourceIdAction`
+## `BuildReferenceExtractionResultsAction` (`build-reference-extraction-results`)
 
-- **Input:** one ordered provisional source, the execution-local candidate reference-state
-  identity, and current reference ID ledger
-- **Output:** canonical source mapping plus successor ledger
-- **Responsibility:** Allocate one monotonic source ID and return the exact ledger with
-  `nextSourceOrdinal` advanced.
+- **Owner:** [`src/actions/reference/build_reference_extraction_results.zig`](../../../src/actions/reference/build_reference_extraction_results.zig)
+- **Reads:** `reference_extraction_progress` · **Writes:** `raw_reference_extraction` · **Side effect:** `none`
+- **Does:** Closes the per-chunk iteration into the raw extraction result.
+- **Rejects:** errors of `reference_extraction.Error`
 
-## `ClassifyReferenceEntryPolicyAction`
+## `ParseReferenceExtractionResultsAction` (`parse-reference-extraction-results`)
 
-- **Input:** one identified inventory entry and hidden/symlink policy
-- **Output:** include/exclude decision candidate
-- **Responsibility:** Apply one entry-class policy without accepting it.
+- **Owner:** [`src/actions/reference/parse_reference_extraction_results.zig`](../../../src/actions/reference/parse_reference_extraction_results.zig)
+- **Reads:** `raw_reference_extraction` · **Writes:** `parsed_reference_extraction` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction.Error`
 
-## `ValidateReferenceExclusionAcceptanceAction`
+## `ValidateReferenceExtractionTextAction` (`validate-reference-extraction-text`)
 
-- **Input:** one exclusion candidate and exact compiled configuration-policy rule
-- **Output:** exclusion-acceptance evidence
-- **Responsibility:** In v1, accept only a durable preconfigured policy decision and bind its
-  rule/evidence ID; preactivation cannot use a not-yet-existing feature actor registry, so a
-  user-authored exclusion is unrepresentable and requires policy update plus rerun.
+- **Owner:** [`src/actions/reference/validate_reference_extraction_text.zig`](../../../src/actions/reference/validate_reference_extraction_text.zig)
+- **Reads:** `parsed_reference_extraction`, `reference_passive_literals`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `text_validated_reference_extraction` · **Side effect:** `none`
+- **Does:** Validates each parsed claim's text against the toolchain, the passive-literal registry and the captured inputs.
+- **Rejects:** errors of `reference_extraction.Error`
 
-## `BuildReferencePreactivationSourceBudgetLedgerAction`
+## `MergeSourceExtractionRepairAction` (`merge-source-extraction-repair`)
 
-- **Input:** preactivation-session identity and validated source-corpus limit
-- **Output:** empty provisional source-byte ledger
-- **Responsibility:** Create the run-local reservation/debit authority used during bounded
-  capture.
+- **Owner:** [`src/actions/reference/merge_source_extraction_repair.zig`](../../../src/actions/reference/merge_source_extraction_repair.zig)
+- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
+- **Reads:** the merge context (`citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review`, `source_omission_repair`), `structured_token_candidates`, `text_validated_reference_extraction` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** replaces `text_validated_reference_extraction`; invalidates every key derived from it, through `source_omission_repair` (`source_omission.extraction_dependents`) · **Side effect:** `none`
+- **Does:** In the repair phase only, merges a source-omission extraction replacement over the text-validated extraction; another authorization or a missing response is `InvalidAtomicRepair`.
+- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_extraction_repair.Error`
 
-## `ValidateReferenceEntryReadabilityAction`
+## `AuthorizeReferenceTextRepairAction` (`authorize-reference-text-repair`)
 
-- **Input:** one included regular-file entry and no-follow adapter
-- **Output:** descriptor-bound readability evidence
-- **Responsibility:** Open one regular file without following links and retain the exact bounded
-  descriptor capability; do not reopen it by path.
+- **Owner:** [`src/actions/reference/authorize_reference_text_repair.zig`](../../../src/actions/reference/authorize_reference_text_repair.zig)
+- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `text_validated_reference_extraction` · **Writes:** `reference_text_repair_authorization` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_text_repair.Error`
 
-## `ValidateReferenceFileSizeAction`
+## `BuildReferenceTextRepairInputAction` (`build-reference-text-repair-input`)
 
-- **Input:** descriptor-bound readability evidence and per-file limit
-- **Output:** file-size evidence
-- **Responsibility:** Apply one per-file byte ceiling to the descriptor metadata.
+- **Owner:** [`src/actions/reference/build_reference_text_repair_input.zig`](../../../src/actions/reference/build_reference_text_repair_input.zig)
+- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `structured_token_candidates`, `reference_text_repair_authorization` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_text_repair.Error`
 
-## `ReserveReferenceSourceBytesAction`
+## `CollectReferenceExtractionResultAction` (`collect-reference-extraction-result`)
 
-- **Input:** current provisional source-byte ledger, preactivation-session ID, provisional
-  source ID, source/file-size evidence, and ledger revision
-- **Output:** tuple-identified source-byte reservation and next ledger revision
-- **Responsibility:** Construct the closed `(sessionId, source_bytes, provisionalSourceId)`
-  run-local identity, prove it is unique in the ledger, and reserve the descriptor-reported
-  bytes before capture or fail without reading.
+- **Owner:** [`src/actions/reference/collect_reference_extraction_result.zig`](../../../src/actions/reference/collect_reference_extraction_result.zig)
+- **Reads:** `reference_extraction_progress`, `assembled_json`, `validated_assembled_json` · **Writes:** replaces `reference_extraction_progress`; invalidates `assembled_json`, `validated_assembled_json` · **Side effect:** `none`
+- **Does:** Appends one chunk's response to the extraction progress, rejecting a packet whose unit isn't a reference chunk or whose purpose isn't initial generation.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `CaptureReferenceSourceBlobAction`
+## `ValidateReferenceSelectionsAction` (`validate-reference-selections`)
 
-- **Input:** exact no-follow descriptor, provisional source-byte reservation, and
-  preactivation-session identity
-- **Output:** immutable provisional blob handle and capture telemetry
-- **Responsibility:** Read that descriptor once into a private run-local store, reject
-  length/identity mutation or a reservation overrun, and never reopen by path.
+- **Owner:** [`src/actions/reference/validate_reference_selections.zig`](../../../src/actions/reference/validate_reference_selections.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction` · **Writes:** `validated_reference_selections` · **Side effect:** `none`
+- **Does:** Validates the token classifications against the structured token candidates.
+- **Rejects:** errors of `reference_extraction.Error`
 
-## `CommitReferenceSourceBudgetDebitAction`
+## `AuthorizeReferenceExtractionRepairAction` (`authorize-reference-extraction-repair`)
 
-- **Input:** matching source-byte reservation, immutable blob length, and current ledger
-  revision
-- **Output:** committed debit and next ledger revision
-- **Responsibility:** Convert one reservation to actual source-byte use exactly once.
+- **Owner:** [`src/actions/reference/authorize_reference_extraction_repair.zig`](../../../src/actions/reference/authorize_reference_extraction_repair.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `validated_reference_selections` · **Writes:** `reference_extraction_repair_authorization` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_repair.Error`
 
-## `ReleaseReferenceSourceBudgetReservationAction`
+## `BuildReferenceExtractionRepairInputAction` (`build-reference-extraction-repair-input`)
 
-- **Input:** failed/abandoned capture and matching current reservation
-- **Output:** released reservation and next ledger revision
-- **Responsibility:** Release one uncommitted source-byte reservation exactly once.
+- **Owner:** [`src/actions/reference/build_reference_extraction_repair_input.zig`](../../../src/actions/reference/build_reference_extraction_repair_input.zig)
+- **Reads:** `citable_reference_inputs`, `reference_passive_literals`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_repair.Error`
 
-## `AccumulateReferenceCorpusSizeAction`
+## `AssignPreservedTokenIdentitiesAction` (`assign-preserved-token-identities`)
 
-- **Input:** ordered captured source blobs, final source-byte ledger, and total limit
-- **Output:** corpus-size evidence
-- **Responsibility:** Verify blob lengths equal committed debits and the total ceiling was never
-  exceeded.
+- **Owner:** [`src/actions/reference/assign_preserved_token_identities.zig`](../../../src/actions/reference/assign_preserved_token_identities.zig)
+- **Reads:** `validated_reference_selections` · **Writes:** `preserved_token_identities` · **Side effect:** `none`
+- **Does:** Numbers each `preserve` selection in order; `irrelevant` and `blocked` selections get no ID.
+- **Rejects:** `InvalidStructuredTokens` and the rest of `reference_extraction.Error`
 
-## `BuildReferencePreactivationDecodedBudgetLedgerAction`
+## `BuildPreservedTokenClaimsAction` (`build-preserved-token-claims`)
 
-- **Input:** preactivation-session identity and validated decoded-corpus limit
-- **Output:** empty provisional decoded-byte ledger
-- **Responsibility:** Create the run-local reservation/debit authority for decoded output bytes.
+- **Owner:** [`src/actions/reference/build_preserved_token_claims.zig`](../../../src/actions/reference/build_preserved_token_claims.zig)
+- **Reads:** `preserved_token_identities` · **Writes:** `prepared_reference_claims` · **Side effect:** `none`
+- **Does:** Turns each preserved token into a claim in source-candidate order, independent of the model's classification order, so token and model claims share one citation and identity path.
+- **Rejects:** `InvalidStructuredTokens` and the rest of `reference_extraction.Error`
 
-## `ReserveReferenceDecodedBytesAction`
+## `ValidateReferenceClaimsAction` (`validate-reference-claims`)
 
-- **Input:** current provisional decoded-byte ledger, preactivation-session ID, provisional
-  source/reader IDs, per-file decoded limit, and ledger revision
-- **Output:** tuple-identified decoded-byte reservation and next ledger revision
-- **Responsibility:** Construct the closed `(sessionId, decoded_bytes, provisionalSourceId,
-  readerId)` run-local identity, prove it is unique in the ledger, and reserve at most the
-  lesser of the per-file ceiling and remaining corpus allowance before decode.
+- **Owner:** [`src/actions/reference/validate_reference_claims.zig`](../../../src/actions/reference/validate_reference_claims.zig)
+- **Reads:** `citable_reference_inputs`, `prepared_reference_claims` · **Writes:** `validated_reference_claims` · **Side effect:** `none`
+- **Does:** Requires one parsed result per chunk, each scoped to the current state and its own chunk, then checks its claims.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `BuildReferenceDecoderBudgetAction`
+## `AssignReferenceClaimIdentitiesAction` (`assign-reference-claim-identities`)
 
-- **Input:** validated config, exact reader descriptor, and decoded-byte reservation
-- **Output:** decoder budget capability
-- **Responsibility:** Bind the reservation plus time, memory, block, page, cell, archive, and
-  expansion ceilings for one decode.
+- **Owner:** [`src/actions/reference/assign_reference_claim_identities.zig`](../../../src/actions/reference/assign_reference_claim_identities.zig)
+- **Reads:** `validated_reference_claims` · **Writes:** `reference_claim_identities` · **Side effect:** `none`
+- **Does:** Numbers claims and their citations in chunk order.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `BuildExcludedReferenceEntryAction`
+## `BuildReferenceExtractionLedgerAction` (`build-reference-extraction-ledger`)
 
-- **Input:** one accepted exclusion and identified entry
-- **Output:** excluded-entry candidate
-- **Responsibility:** Build one union variant without a decoder/blocks.
+- **Owner:** [`src/actions/reference/build_reference_extraction_ledger.zig`](../../../src/actions/reference/build_reference_extraction_ledger.zig)
+- **Reads:** `reference_claim_identities` · **Writes:** `reference_extraction_ledger` · **Side effect:** `none`
+- **Does:** Assembles each chunk's outcome, token classifications, claims and citations into one extraction ledger.
+- **Rejects:** `InvalidReferenceExtraction` and the rest of `reference_extraction.Error`
 
-## `SniffReferenceMediaTypeAction`
+## `ValidateReferenceExtractionAccountingAction` (`validate-reference-extraction-accounting`)
 
-- **Input:** one immutable source blob
-- **Output:** media-type result
-- **Responsibility:** Determine content type using registered sniffers without reopening the
-  inventory path.
+- **Owner:** [`src/actions/reference/validate_reference_extraction_accounting.zig`](../../../src/actions/reference/validate_reference_extraction_accounting.zig)
+- **Reads:** `citable_reference_inputs`, `preserved_token_identities`, `reference_extraction_ledger` · **Writes:** `accounted_reference_extraction` · **Side effect:** `none`
+- **Does:** Checks that the ledger covers every chunk of the current state once, with its claims, citations, tokens and selections accounted for.
+- **Rejects:** `InvalidReferenceExtraction`, `InvalidStructuredTokens` and the rest of `reference_extraction.Error`
 
-## `ProbeReferenceReaderAction`
+## `BuildReferenceReconciliationItemsAction` (`build-reference-reconciliation-items`)
 
-- **Input:** one immutable source blob and exact reader descriptor
-- **Output:** bounded integer probe score
-- **Responsibility:** Probe one reader only against the captured bytes.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_items.zig`](../../../src/actions/reference/build_reference_reconciliation_items.zig)
+- **Reads:** `citable_reference_inputs`, `accounted_reference_extraction` · **Writes:** `reference_reconciliation_items` · **Side effect:** `none`
+- **Does:** Requires a complete extraction ledger of the current state, then builds the reconciliation items from its claims.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `FilterReferenceReaderThresholdAction`
+## `PartitionReferenceReconciliationItemsAction` (`partition-reference-reconciliation-items`)
 
-- **Input:** one reader/score/media tuple
-- **Output:** eligible or rejected candidate
-- **Responsibility:** Apply one descriptor's threshold only.
+- **Owner:** [`src/actions/reference/partition_reference_reconciliation_items.zig`](../../../src/actions/reference/partition_reference_reconciliation_items.zig)
+- **Parameters:** required integer `group-size`, at least 2.
+- **Reads:** `reference_reconciliation_items` · **Writes:** `reference_reconciliation_layout` · **Side effect:** `none`
+- **Does:** Deterministically partition within source, across sources, or globally under the declared contract.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `SelectReferenceReaderTierAction`
+## `AssignReferenceReconciliationPartitionsAction` (`assign-reference-reconciliation-partitions`)
 
-- **Input:** eligible primary and fallback sets
-- **Output:** one candidate tier
-- **Responsibility:** Choose primaries when nonempty, otherwise fallbacks.
+- **Owner:** [`src/actions/reference/assign_reference_reconciliation_partitions.zig`](../../../src/actions/reference/assign_reference_reconciliation_partitions.zig)
+- **Reads:** `reference_reconciliation_layout` · **Writes:** `reference_reconciliation_plan` · **Side effect:** `none`
+- **Does:** Numbers the layout's groups as partitions, requiring every child to come before its parent.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `BuildReferenceReaderRankAction`
+## `ValidateReferenceReconciliationPartitionsAction` (`validate-reference-reconciliation-partitions`)
 
-- **Input:** one eligible candidate and detected media type
-- **Output:** rank tuple
-- **Responsibility:** Build one integer `(score, media-rank, priority)` tuple.
+- **Owner:** [`src/actions/reference/validate_reference_reconciliation_partitions.zig`](../../../src/actions/reference/validate_reference_reconciliation_partitions.zig)
+- **Reads:** `reference_reconciliation_plan` · **Writes:** `reference_reconciliation_progress` · **Side effect:** `none`
+- **Does:** Validates the partition plan and starts reconciliation progress at the first summary.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `SelectReferenceReaderAction`
+## `BuildReferenceReconciliationInputAction` (`build-reference-reconciliation-input`)
 
-- **Input:** one-tier candidate/rank set
-- **Output:** reader selection
-- **Responsibility:** Select the unique maximum or diagnose a tie.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_input.zig`](../../../src/actions/reference/build_reference_reconciliation_input.zig)
+- **Reads:** `reference_reconciliation_progress` · **Writes:** `reference_reconciliation_input` · **Side effect:** `none`
+- **Does:** Builds the next partition's input: its claim items and its children's summaries.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `DecodeReferenceAction`
+## `BuildReferenceReconciliationModelInputAction` (`build-reference-reconciliation-model-input`)
 
-- **Input:** one immutable source blob, exact reader, and decoder budget capability
-- **Output:** bounded decode result and resource telemetry
-- **Responsibility:** Decode one captured file only; the sandboxed reader must terminate before
-  a bound is exceeded and cannot reopen its path.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_model_input.zig`](../../../src/actions/reference/build_reference_reconciliation_model_input.zig)
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the reconciliation request packet, adding the workflow's summary purpose.
+- **Rejects:** errors of `reference_model_input.ReconciliationError`
 
-## `ValidateReferenceDecodedFileSizeAction`
+## `CheckReferenceReconciliationPurposeAction` (`check-reference-reconciliation-purpose`)
 
-- **Input:** one decode result and per-file decoded-byte limit
-- **Output:** decoded-size evidence
-- **Responsibility:** Apply one decoded-output ceiling.
+- **Owner:** [`src/actions/reference/check_reference_reconciliation_purpose.zig`](../../../src/actions/reference/check_reference_reconciliation_purpose.zig)
+- **Reads:** `reference_reconciliation_input` · **Writes:** nothing · **Side effect:** `none`
+- **Does:** Returns `more` for a summary input and `ok` for the global one.
+- **Rejects:** none; returns a workflow outcome
 
-## `CommitReferenceDecodedBudgetDebitAction`
+## `CheckReferenceSummaryReuseAction` (`check-reference-summary-reuse`)
 
-- **Input:** matching decoded-byte reservation, validated decoded length, and current ledger
-  revision
-- **Output:** committed debit and next ledger revision
-- **Responsibility:** Convert one reservation to actual decoded-byte use exactly once.
+- **Owner:** [`src/actions/reference/check_reference_summary_reuse.zig`](../../../src/actions/reference/check_reference_summary_reuse.zig)
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** nothing · **Side effect:** `none`
+- **Does:** Prove that a non-final, nonempty partition contains exactly one current validated child with unchanged membership and dependencies under §16.4.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `ReleaseReferenceDecodedBudgetReservationAction`
+## `ReuseReferenceReconciliationSummaryAction` (`reuse-reference-reconciliation-summary`)
 
-- **Input:** failed/empty/abandoned decode and matching current reservation
-- **Output:** released reservation and next ledger revision
-- **Responsibility:** Release one uncommitted decoded-byte reservation exactly once.
+- **Owner:** [`src/actions/reference/reuse_reference_reconciliation_summary.zig`](../../../src/actions/reference/reuse_reference_reconciliation_summary.zig)
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Recheck reuse eligibility and carry the child's ordered content into the existing summary validation path.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `AccumulateReferenceDecodedCorpusSizeAction`
+## `BuildReferenceDispositionsAssignmentAction` (`build-reference-dispositions-assignment`)
 
-- **Input:** ordered successful decoded lengths, final decoded-byte ledger, and total limit
-- **Output:** decoded-corpus evidence
-- **Responsibility:** Verify output lengths equal committed debits and the total ceiling was
-  never exceeded.
+- **Owner:** [`src/actions/reference/build_reference_dispositions_assignment.zig`](../../../src/actions/reference/build_reference_dispositions_assignment.zig)
+- **Reads:** `reference_reconciliation_input`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the dispositions request packet; a prior phase other than dispositions is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_model_input.ReconciliationError`
 
-## `ValidateReferenceBlockCountAction`
+## `CollectReferenceReconciliationResultAction` (`collect-reference-reconciliation-result`)
 
-- **Input:** one decode result and block limit
-- **Output:** block-count evidence
-- **Responsibility:** Apply one decoded-block ceiling.
+- **Owner:** [`src/actions/reference/collect_reference_reconciliation_result.zig`](../../../src/actions/reference/collect_reference_reconciliation_result.zig)
+- **Reads:** `reference_reconciliation_input`, `assembled_json`, `validated_assembled_json` · **Writes:** `raw_reference_reconciliation`; invalidates `assembled_json`, `validated_assembled_json` · **Side effect:** `none`
+- **Does:** Takes a summary partition's initial-generation response, checking that it belongs to the current reference state.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `ValidateReferencePageCountAction`
+## `ParseReferenceReconciliationResultAction` (`parse-reference-reconciliation-result`)
 
-- **Input:** one document decode and page limit
-- **Output:** page-count evidence
-- **Responsibility:** Apply one document-page ceiling.
+- **Owner:** [`src/actions/reference/parse_reference_reconciliation_result.zig`](../../../src/actions/reference/parse_reference_reconciliation_result.zig)
+- **Reads:** `raw_reference_reconciliation` · **Writes:** `parsed_reference_reconciliation`; invalidates `raw_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Decodes the response and projects it into a summary or global proposal according to the input's purpose.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `ValidateReferenceCellCountAction`
+## `RenderReferenceContextAction` (`render-reference-context`)
 
-- **Input:** one tabular decode and cell limit
-- **Output:** cell-count evidence
-- **Responsibility:** Apply one table-cell ceiling.
+- **Owner:** [`src/actions/reference/render_reference_context.zig`](../../../src/actions/reference/render_reference_context.zig)
+- **Reads:** `specification_publication_state` · **Writes:** `rendered_reference_context` · **Side effect:** `none`
+- **Does:** Render the sidecar using snapshot-owned source labels/locations and inert registered display literals only.
+- **Rejects:** errors of `reference_context.Error`, `specification_projection.Error`
 
-## `ValidateReferenceDecoderResourceUseAction`
+## `ScanPathTokensAction` (`scan-path-tokens`)
 
-- **Input:** one decoder telemetry record and time/memory limits
-- **Output:** resource-use evidence
-- **Responsibility:** Prove the sandbox terminated within its time and memory envelope.
+- **Owner:** [`src/actions/reference/scan_path_tokens.zig`](../../../src/actions/reference/scan_path_tokens.zig)
+- **Parameters:** required `text` ([`path_token_workflow.zig`](../../../src/application/path_token_workflow.zig)).
+- **Reads:** `path_token_grammar`, `valid_toolchain`, `citable_reference_inputs` · **Writes:** `path_token_scan` · **Side effect:** `none`
+- **Does:** Checks the grammar is still bound to the current policy and toolchain, then lexes path tokens over the raw bytes, never NFC offsets.
+- **Rejects:** errors of `path_token_scan.Error`
 
-## `BuildUnsupportedReferenceEntryAction`
+## `ValidateSourceCitationsAction` (`validate-source-citations`)
 
-- **Input:** one no-reader result and identified entry
-- **Output:** unsupported-entry candidate
-- **Responsibility:** Build one unsupported union variant.
+- **Owner:** [`src/actions/reference/validate_source_citations.zig`](../../../src/actions/reference/validate_source_citations.zig)
+- **Reads:** `citable_reference_inputs`, `reference_citation_proposals` · **Writes:** `validated_source_citations` · **Side effect:** `none`
+- **Does:** Checks each proposed citation against the captured sources: structural support only, not semantic proof.
+- **Rejects:** errors of `reference_evidence.Error`
 
-## `BuildFailedReferenceEntryAction`
+## `ValidateReferenceReconciliationCompletenessAction` (`validate-reference-reconciliation-completeness`)
 
-- **Input:** one decode failure and attempted reader IDs
-- **Output:** failed-entry candidate
-- **Responsibility:** Build one failed union variant.
+- **Owner:** [`src/actions/reference/validate_reference_reconciliation_completeness.zig`](../../../src/actions/reference/validate_reference_reconciliation_completeness.zig)
+- **Reads:** `reference_reconciliation_records` · **Writes:** `accounted_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Revalidates the partition history and requires the global result to follow the last partition with one disposition per item.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `BuildBlockedReferenceEntryAction`
+## `BuildReferenceSnapshotAction` (`build-reference-snapshot`)
 
-- **Input:** one readability/source-size/source-capture/reader-selection/decode-budget failure
-  and identified entry
-- **Output:** blocked-entry candidate
-- **Responsibility:** Build one phase-exact blocking union variant without fabricating captured
-  or decoded content.
+- **Owner:** [`src/actions/reference/build_reference_snapshot.zig`](../../../src/actions/reference/build_reference_snapshot.zig)
+- **Reads:** `reference_directory`, `citable_reference_inputs`, `accounted_reference_extraction`, `accounted_reference_reconciliation`, `reference_passive_literals` · **Writes:** `reference_snapshot` · **Side effect:** `none`
+- **Does:** Captures the extraction-contract binding and assembles the snapshot from the accepted extraction and reconciliation records, keeping every source.
+- **Rejects:** errors of `reference_extraction_contract.Error`, `reference_snapshot.Error`
 
-## `BuildEmptyReferenceEntryAction`
+## `AuthorizeSourceOmissionRepairAction` (`authorize-source-omission-repair`)
 
-- **Input:** one successful empty decode and decoder identity
-- **Output:** empty-entry candidate
-- **Responsibility:** Build one empty union variant.
+- **Owner:** [`src/actions/reference/authorize_source_omission_repair.zig`](../../../src/actions/reference/authorize_source_omission_repair.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** `source_omission_repair` · **Side effect:** `none`
+- **Does:** In the repair phase, localizes the omission and authorizes an extraction or reconciliation repair there; an unlocalized, candidate or association location is `InvalidAtomicRepair`.
+- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
 
-## `BuildDecodedReferenceEntryAction`
+## `MergeSourceReconciliationRepairAction` (`merge-source-reconciliation-repair`)
 
-- **Input:** one successful nonempty decode and accounted content blocks
-- **Output:** decoded-entry candidate
-- **Responsibility:** Build one decoded union variant only after every block has a final status.
+- **Owner:** [`src/actions/reference/merge_source_reconciliation_repair.zig`](../../../src/actions/reference/merge_source_reconciliation_repair.zig)
+- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
+- **Reads:** the merge context (as for `merge-source-extraction-repair`), `parsed_reference_reconciliation` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** replaces `parsed_reference_reconciliation`; invalidates every key derived from it, through `source_omission_repair` (`source_omission.reconciliation_dependents`) · **Side effect:** `none`
+- **Does:** In the repair phase only, merges a source-omission reconciliation replacement over the parsed reconciliation; another authorization or a missing response is `InvalidAtomicRepair`.
+- **Rejects:** `InvalidAtomicRepair` and the rest of `reference_reconciliation_repair.Error`
 
-## `AssignReferencePreactivationBlockIdAction`
+## `ParseReferenceTextRepairAction` (`parse-reference-text-repair`)
 
-- **Input:** one decoder block proposal and current preactivation session
-- **Output:** provisional block observation plus successor session
-- **Responsibility:** Allocate one run-local block ordinal for decoder/source-map joins only and
-  claim no canonical identity.
+- **Owner:** [`src/actions/reference/parse_reference_text_repair.zig`](../../../src/actions/reference/parse_reference_text_repair.zig)
+- **Reads:** `reference_text_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** `reference_text_repair_result` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_text_repair.Error`
 
-## `AssignReferenceBlockIdAction`
+## `MergeReferenceTextRepairAction` (`merge-reference-text-repair`)
 
-- **Input:** one ordered provisional block, the execution-local candidate reference-state
-  identity, and current reference ID ledger
-- **Output:** canonical block mapping plus successor ledger
-- **Responsibility:** Allocate one reference-state-global block ID, advance only
-  `nextBlockOrdinal`, and claim no accounting.
+- **Owner:** [`src/actions/reference/merge_reference_text_repair.zig`](../../../src/actions/reference/merge_reference_text_repair.zig)
+- **Reads:** `valid_toolchain`, `citable_reference_inputs`, `reference_passive_literals`, `parsed_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` · **Writes:** replaces `parsed_reference_extraction`; invalidates `text_validated_reference_extraction`, `reference_text_repair_authorization`, `reference_text_repair_result` · **Side effect:** `none`
+- **Does:** Merges the authorized replacement into the parsed extraction over the canonical captured text.
+- **Rejects:** errors of `reference_extraction_text_repair.Error`
 
-## `AssignReferenceBudgetReservationIdAction`
+## `ParseReferenceExtractionRepairAction` (`parse-reference-extraction-repair`)
 
-- **Input:** canonical reference-state ID, one mapped canonical source ID, and closed budget
-  kind `source_bytes | decoded_bytes`
-- **Output:** owner-local canonical budget-reservation identity
-- **Responsibility:** Construct `(referenceStateId, sourceId, budgetKind)`; require at most one
-  terminal reservation per source/kind and consume no `ReferenceIdLedger` namespace.
+- **Owner:** [`src/actions/reference/parse_reference_extraction_repair.zig`](../../../src/actions/reference/parse_reference_extraction_repair.zig)
+- **Reads:** `reference_extraction_repair_authorization`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** `reference_extraction_repair_result` · **Side effect:** `none`
+- **Rejects:** errors of `reference_extraction_repair.Error`
 
-## `ValidateReferenceBudgetReservationIdentityCoverageAction`
+## `MergeReferenceExtractionRepairAction` (`merge-reference-extraction-repair`)
 
-- **Input:** canonical source set, complete source/decoded reservation sets, and preactivation
-  identity-map candidate
-- **Output:** reservation-identity coverage evidence
-- **Responsibility:** Require exactly one unique source-byte and one decoded-byte terminal
-  identity for every applicable source, no duplicate tuple, and total provisional mapping.
+- **Owner:** [`src/actions/reference/merge_reference_extraction_repair.zig`](../../../src/actions/reference/merge_reference_extraction_repair.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` · **Writes:** replaces `text_validated_reference_extraction`; invalidates `validated_reference_selections`, `reference_extraction_repair_authorization`, `reference_extraction_repair_result` · **Side effect:** `none`
+- **Does:** Merges the authorized replacement into the text-validated extraction over the canonical captured text.
+- **Rejects:** errors of `reference_extraction_repair.Error`
 
-## `ClonePreactivationBlobIntoReferenceStateAction`
+## `CollectReferenceDispositionsCandidateAction` (`collect-reference-dispositions-candidate`)
 
-- **Input:** one validated provisional blob handle, canonical reference-state ID, and exact
-  provisional source/canonical-source mapping
-- **Output:** reference-state-owned immutable blob plus one blob mapping
-- **Responsibility:** Copy exact bytes into the write-once canonical namespace without reopening
-  the reference path.
+- **Owner:** [`src/actions/reference/collect_reference_dispositions_candidate.zig`](../../../src/actions/reference/collect_reference_dispositions_candidate.zig)
+- **Reads:** `reference_reconciliation_input`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** `parsed_reference_reconciliation` · **Side effect:** `none`
+- **Does:** Collects the dispositions response; a prior phase other than dispositions is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `BuildReferencePreactivationIdentityMapAction`
+## `ValidateReferenceReconciliationSummaryAction` (`validate-reference-reconciliation-summary`)
 
-- **Input:** preactivation session, canonical reference-state ID, complete ordered
-  source/block/blob/reservation mappings
-- **Output:** reference-preactivation identity map candidate
-- **Responsibility:** Assemble the total provisional-to-canonical translation without assigning
-  or copying anything.
+- **Owner:** [`src/actions/reference/validate_reference_reconciliation_summary.zig`](../../../src/actions/reference/validate_reference_reconciliation_summary.zig)
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_summary` · **Side effect:** `none`
+- **Does:** Checks the summary; an invalid result records the defect's relations and dependency snapshot for the repair authorizer.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `ValidateReferencePreactivationIdentityMapAction`
+## `AssignReferenceSummaryIdentitiesAction` (`assign-reference-summary-identities`)
 
-- **Input:** map candidate, validated branch set, canonical reference-ID ledger, cloned blobs,
-  and both provisional/canonical budget ledgers
-- **Output:** identity-map evidence
-- **Responsibility:** Prove total one-to-one source/block/blob/reservation coverage, order
-  preservation, no provisional ID survives in canonical state, and every canonical ID belongs
-  to the current candidate state and its validated ledger. The candidate state ID must be
-  allocated before any canonical local ID, citation or blob binding; no durable write is required.
+- **Owner:** [`src/actions/reference/assign_reference_summary_identities.zig`](../../../src/actions/reference/assign_reference_summary_identities.zig)
+- **Reads:** `validated_reference_summary` · **Writes:** `reference_summary_identities` · **Side effect:** `none`
+- **Does:** Numbers the summary after its partition, and its statements from the next statement ordinal.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `MaterializeReferenceSourceBudgetLedgerAction`
+## `BuildReferenceReconciliationSummaryAction` (`build-reference-reconciliation-summary`)
 
-- **Input:** closed provisional source budget, identity-map candidate, exact source/reservation
-  mappings, and canonical reference-state ID
-- **Output:** canonical source-budget ledger candidate
-- **Responsibility:** Translate every reservation/debit/release exactly once without changing
-  limits or totals; validation occurs only after both ledgers exist.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_summary.zig`](../../../src/actions/reference/build_reference_reconciliation_summary.zig)
+- **Reads:** `reference_summary_identities`, `reference_reconciliation_plan`, `reference_reconciliation_progress` · **Writes:** replaces `reference_reconciliation_progress`; invalidates `reference_reconciliation_input`, `parsed_reference_reconciliation`, `validated_reference_summary`, `reference_summary_identities` · **Side effect:** `none`
+- **Does:** Attach native IDs while preserving normalized statements, complete partition membership, validated child-summary lineage and validation proof.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `MaterializeReferenceDecodedBudgetLedgerAction`
+## `AuthorizeReferenceSummaryRepairAction` (`authorize-reference-summary-repair`)
 
-- **Input:** closed provisional decoded budget, identity-map candidate, exact source/reservation
-  mappings, and canonical reference-state ID
-- **Output:** canonical decoded-budget ledger candidate
-- **Responsibility:** Translate every reservation/debit/release exactly once without changing
-  limits or totals; validation occurs only after both ledgers exist.
+- **Owner:** [`src/actions/reference/authorize_reference_summary_repair.zig`](../../../src/actions/reference/authorize_reference_summary_repair.zig)
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_summary` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_summary` · **Side effect:** `none`
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `ValidateReferenceSourceMapProposalAction`
+## `ValidateReferenceClaimDispositionsAction` (`validate-reference-claim-dispositions`)
 
-- **Input:** decoder source-map proposal, source bytes/metadata, and identified block set
-- **Output:** source-map evidence
-- **Responsibility:** Validate coordinate ordering/bounds, handle containment, media-specific
-  required mappings, and source/block joins.
+- **Owner:** [`src/actions/reference/validate_reference_claim_dispositions.zig`](../../../src/actions/reference/validate_reference_claim_dispositions.zig)
+- **Reads:** `parsed_reference_reconciliation` · **Writes:** `validated_reference_dispositions` · **Side effect:** `none`
+- **Does:** Requires a global input and proposal, revalidates the partition history, then validates the dispositions; an invalid result keeps its dependency snapshot.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `BuildReferenceSourceMapAction`
+## `CheckReferenceReconciliationPhaseAction` (`check-reference-reconciliation-phase`)
 
-- **Input:** source-map evidence and exact decoder identity
-- **Output:** canonical reference source map
-- **Responsibility:** Materialize one source-keyed map without changing coordinates.
+- **Owner:** [`src/actions/reference/check_reference_reconciliation_phase.zig`](../../../src/actions/reference/check_reference_reconciliation_phase.zig)
+- **Parameters:** required `phase`: `dispositions`, `signals` or `complete`.
+- **Reads:** `parsed_reference_reconciliation` · **Writes:** nothing · **Side effect:** `none`
+- **Does:** Returns `ok` when the parsed result is in the expected phase, otherwise `more`.
+- **Rejects:** none; returns a workflow outcome
 
-## `ValidateReferenceSourceMapCompletenessAction`
+## `BuildReferenceSignalsAssignmentAction` (`build-reference-signals-assignment`)
 
-- **Input:** manifest decoded entries, block set, and canonical source maps
-- **Output:** source-map completeness evidence
-- **Responsibility:** Prove exactly one sufficient map per decoded source and every mapped block
-  resolves once.
+- **Owner:** [`src/actions/reference/build_reference_signals_assignment.zig`](../../../src/actions/reference/build_reference_signals_assignment.zig)
+- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the signals request packet; a prior phase other than signals is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_model_input.ReconciliationError`
 
-## `ExtractStructuredFactsAction`
+## `ValidateReferenceSignalProposalsAction` (`validate-reference-signal-proposals`)
 
-- **Input:** decoded structured content
-- **Output:** exact machine facts/tokens
-- **Responsibility:** Parse values mechanically where supported.
+- **Owner:** [`src/actions/reference/validate_reference_signal_proposals.zig`](../../../src/actions/reference/validate_reference_signal_proposals.zig)
+- **Reads:** `validated_reference_dispositions`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_signals` · **Side effect:** `none`
+- **Does:** Checks the signals; an invalid result records the defect's relations and dependency snapshot.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `AssignStructuredTokenCandidateIdAction`
+## `BuildReferenceConflictsAssignmentAction` (`build-reference-conflicts-assignment`)
 
-- **Input:** one source-ordered deterministic fact whose typed extractor marks it
-  preservation-eligible, its extractor ID, source ID, and source-local ordinal
-- **Output:** owner-local structured-token candidate identity
-- **Responsibility:** Construct `(sourceId, extractorId, ordinal)` before model classification;
-  this transient candidate consumes no canonical reference-ID namespace.
+- **Owner:** [`src/actions/reference/build_reference_conflicts_assignment.zig`](../../../src/actions/reference/build_reference_conflicts_assignment.zig)
+- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the conflicts request packet; a prior phase other than conflicts is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_model_input.ReconciliationError`
 
-## `ValidatePreservedTokenClassificationProposalAction`
+## `ValidateReferenceConflictProposalsAction` (`validate-reference-conflict-proposals`)
 
-- **Input:** one model classification, allowed candidate IDs, closed token kinds, and current
-  source map
-- **Output:** token-classification evidence
-- **Responsibility:** Resolve one engine candidate, require the preserve/irrelevant shape, and
-  forbid model-authored bytes/citations/IDs.
+- **Owner:** [`src/actions/reference/validate_reference_conflict_proposals.zig`](../../../src/actions/reference/validate_reference_conflict_proposals.zig)
+- **Reads:** `validated_reference_signals`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** `validated_reference_conflicts` · **Side effect:** `none`
+- **Does:** Requires a complete prior phase, checks the conflicts, and records relations and dependencies for an invalid result.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `ValidateStructuredTokenClassificationCompletenessAction`
+## `AuthorizeReferenceDispositionsRepairAction` (`authorize-reference-dispositions-repair`)
 
-- **Input:** exact chunk-local candidate set and all validated classifications
-- **Output:** token-accounting evidence
-- **Responsibility:** Prove every candidate has exactly one preserve/irrelevant disposition and
-  no unknown/duplicate candidate appears.
+- **Owner:** [`src/actions/reference/authorize_reference_dispositions_repair.zig`](../../../src/actions/reference/authorize_reference_dispositions_repair.zig)
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_dispositions` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions` · **Side effect:** `none`
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `AssignPreservedTokenIdAction`
+## `AuthorizeReferenceSignalsRepairAction` (`authorize-reference-signals-repair`)
 
-- **Input:** one preserve-valid structured-token candidate and current reference ID ledger
-- **Output:** token identity plus successor ledger
-- **Responsibility:** Allocate one reference-state-local token ID and advance only
-  `nextTokenOrdinal`.
+- **Owner:** [`src/actions/reference/authorize_reference_signals_repair.zig`](../../../src/actions/reference/authorize_reference_signals_repair.zig)
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_signals` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals` · **Side effect:** `none`
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `BuildPreservedTokenAction`
+## `AuthorizeReferenceConflictsRepairAction` (`authorize-reference-conflicts-repair`)
 
-- **Input:** token identity, structured-token candidate, canonical citation, and deterministic
-  obligation namespace
-- **Output:** canonical preserved token
-- **Responsibility:** Copy exact captured bytes and derive the downstream obligation ID from the
-  token identity.
+- **Owner:** [`src/actions/reference/authorize_reference_conflicts_repair.zig`](../../../src/actions/reference/authorize_reference_conflicts_repair.zig)
+- **Reads:** `parsed_reference_reconciliation`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `validated_reference_conflicts` · **Writes:** `reference_reconciliation_repair`; invalidates `validated_reference_dispositions`, `validated_reference_signals`, `validated_reference_conflicts` · **Side effect:** `none`
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `BuildPreservedTokenClaimAction`
+## `MergeReferenceReconciliationRepairAction` (`merge-reference-reconciliation-repair`)
 
-- **Input:** canonical preserved token, its canonical citation, and current block/chunk
-- **Output:** preserved-token claim candidate
-- **Responsibility:** Construct one citation-bound deterministic claim candidate for normal
-  claim-ID assignment/accounting.
+- **Owner:** [`src/actions/reference/merge_reference_reconciliation_repair.zig`](../../../src/actions/reference/merge_reference_reconciliation_repair.zig)
+- **Parameters:** required integer `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)).
+- **Reads:** `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `reference_reconciliation_repair` · **Side effect:** `none`
+- **Does:** Merges the authorized replacement into the parsed reconciliation over the canonical captured text.
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `ChunkReferenceAction`
+## `AssignReferenceReconciliationIdentitiesAction` (`assign-reference-reconciliation-identities`)
 
-- **Input:** one identified content block and workflow-declared chunking contract
-- **Output:** ordered bounded chunk proposals
-- **Responsibility:** Partition one block while preserving exact source ranges.
+- **Owner:** [`src/actions/reference/assign_reference_reconciliation_identities.zig`](../../../src/actions/reference/assign_reference_reconciliation_identities.zig)
+- **Reads:** `validated_reference_conflicts` · **Writes:** `reference_reconciliation_identities` · **Side effect:** `none`
+- **Does:** Numbers the checked signals and conflicts.
+- **Rejects:** errors of `reference_reconciliation.Error`
 
-## `AssignReferenceChunkIdAction`
+## `BuildReferenceReconciliationRecordsAction` (`build-reference-reconciliation-records`)
 
-- **Input:** one ordered chunk proposal and current reference ID ledger
-- **Output:** identified reference chunk plus successor ledger
-- **Responsibility:** Allocate one reference-state-global chunk ID and advance only
-  `nextChunkOrdinal`.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_records.zig`](../../../src/actions/reference/build_reference_reconciliation_records.zig)
+- **Reads:** `reference_reconciliation_identities` · **Writes:** `reference_reconciliation_records` · **Side effect:** `none`
+- **Does:** Pairs each signal and conflict with its ID into the reconciliation records, rejecting a count mismatch.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `RecordChunkDispositionAction`
+## `BuildReferenceReconciliationRepairInputAction` (`build-reference-reconciliation-repair-input`)
 
-- **Input:** one identified chunk and validated extraction result
-- **Output:** accounted reference chunk
-- **Responsibility:** Attach exactly one claims, positive no-feature-claim, or blocked outcome.
+- **Owner:** [`src/actions/reference/build_reference_reconciliation_repair_input.zig`](../../../src/actions/reference/build_reference_reconciliation_repair_input.zig)
+- **Reads:** `parsed_reference_reconciliation`, `reference_reconciliation_repair`, `citable_reference_inputs`, `reference_passive_literals`, `valid_toolchain`, `packet_guidance` · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** Builds the reconciliation repair packet; only a summary input carries the workflow's summary purpose.
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `ValidateChunkAccountingAction`
+## `BuildSourceOmissionRepairInputAction` (`build-source-omission-repair-input`)
 
-- **Input:** one block's expected chunks and accounted chunk set
-- **Output:** chunk-accounting evidence
-- **Responsibility:** Prove every chunk appears exactly once and every referenced claim
-  resolves.
+- **Owner:** [`src/actions/reference/build_source_omission_repair_input.zig`](../../../src/actions/reference/build_source_omission_repair_input.zig)
+- **Reads:** `citable_reference_inputs`, `structured_token_candidates`, `text_validated_reference_extraction`, `parsed_reference_reconciliation`, `reference_passive_literals`, `valid_toolchain`, `required_authority_inputs`, `required_authority_observations`, `required_authority_result`, `specification_support_review`, `source_omission_repair`, `packet_guidance` (optional: `specification_generation_session`, `identified_specification_content`) · **Writes:** `model_input_packet` · **Side effect:** `none`
+- **Does:** In the repair phase, builds the extraction or reconciliation repair packet that the source-omission authorization selected.
+- **Rejects:** errors of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
 
-## `DeriveBlockDispositionAction`
+## `CollectReferenceSignalsCandidateAction` (`collect-reference-signals-candidate`)
 
-- **Input:** one identified block and complete chunk-accounting evidence
-- **Output:** canonical accounted content block
-- **Responsibility:** Derive blocked if any chunk blocked, no-feature-claim if all are
-  positive-empty, otherwise extracted.
+- **Owner:** [`src/actions/reference/collect_reference_signals_candidate.zig`](../../../src/actions/reference/collect_reference_signals_candidate.zig)
+- **Reads:** `validated_reference_dispositions`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `validated_reference_dispositions` · **Side effect:** `none`
+- **Does:** Collects the signals response; a prior phase other than signals is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `ValidateSourceCitationAction`
+## `CollectReferenceConflictsCandidateAction` (`collect-reference-conflicts-candidate`)
 
-- **Input:** one `SourceCitationProposal`, current `ReferenceChunk`, captured source blob, and
-  validated source map
-- **Output:** validated citation proposal
-- **Responsibility:** Prove the source/block/location tuple exists and lies inside the exact
-  chunk range supplied to this unit, with any exact scalar (an extractor-owned token
-  citation's) copied from the captured source; accept no model-owned quotation or canonical ID.
+- **Owner:** [`src/actions/reference/collect_reference_conflicts_candidate.zig`](../../../src/actions/reference/collect_reference_conflicts_candidate.zig)
+- **Reads:** `validated_reference_signals`, `model_request_identity_ledger`, `prepared_model_request`, `model_input_packet`, `model_payload_schema_result` · **Writes:** replaces `parsed_reference_reconciliation`; invalidates `validated_reference_dispositions`, `validated_reference_signals` · **Side effect:** `none`
+- **Does:** Collects the conflicts response; a prior phase other than conflicts is `InvalidReferenceReconciliation`.
+- **Rejects:** `InvalidReferenceReconciliation` and the rest of `reference_reconciliation.Error`
 
-## `AssignSourceCitationIdAction`
+## `ParseReferenceReconciliationRepairAction` (`parse-reference-reconciliation-repair`)
 
-- **Input:** one validated citation proposal and current reference ID ledger
-- **Output:** citation identity plus successor ledger
-- **Responsibility:** Allocate one reference-state-local citation ID, advance only
-  `nextCitationOrdinal`, and leave the proposal unchanged.
+- **Owner:** [`src/actions/reference/parse_reference_reconciliation_repair.zig`](../../../src/actions/reference/parse_reference_reconciliation_repair.zig)
+- **Reads:** `reference_reconciliation_repair`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `reference_reconciliation_repair` · **Side effect:** `none`
+- **Rejects:** errors of `reference_reconciliation_repair.Error`
 
-## `BuildSourceCitationAction`
+## `ParseSourceOmissionRepairAction` (`parse-source-omission-repair`)
 
-- **Input:** citation identity, prospective reference-state identity, and validated citation
-  proposal
-- **Output:** canonical source citation
-- **Responsibility:** Bind engine identity/state to the unchanged validated location and
-  optional exact scalar.
+- **Owner:** [`src/actions/reference/parse_source_omission_repair.zig`](../../../src/actions/reference/parse_source_omission_repair.zig)
+- **Reads:** `source_omission_repair`, `model_input_packet`, `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `source_omission_repair` · **Side effect:** `none`
+- **Does:** Parses the response as the extraction or reconciliation replacement its authorization names, keeping the response origin.
+- **Rejects:** errors of `reference_extraction_repair.Error`, `reference_reconciliation_repair.Error`
 
-## `ValidateReferenceClaimProposalAction`
+## Proposed, no code
 
-- **Input:** one `ReferenceClaimProposal` (a category and supplied line IDs), current chunk,
-  canonical citations, passive-literal registry, and closed claim schema
-- **Output:** validated claims quoted from their cited lines, one per top-level list item when
-  the lines span several, with a claim already held by the chunk in the same category and
-  lines kept once ([ADR 0036](../../decisions/0036-source-quoted-claims.md),
-  [ADR 0038](../../decisions/0038-record-claims-and-scenario-coverage.md))
-- **Responsibility:** Require every cited line to be supplied, citable and chunk-local; quote
-  the cited lines as written, split them by the reader's list structure, and validate the
-  wording with the shared text policy; accept no wording, disposition or model-owned ID.
-
-## `AssignReferenceClaimIdAction`
-
-- **Input:** one validated model claim proposal or deterministic preserved-token claim candidate
-  and current reference ID ledger
-- **Output:** claim identity plus successor ledger
-- **Responsibility:** Allocate one reference-state-local claim ID, advance only
-  `nextClaimOrdinal`, and choose no disposition.
-
-## `BuildIdentifiedReferenceClaimAction`
-
-- **Input:** claim identity, validated model/token claim candidate, canonical citations, and
-  current chunk
-- **Output:** identified reference claim
-- **Responsibility:** Derive source/block/chunk/citation joins and bind the unchanged validated
-  content.
-
-## `AssignReferenceReconciliationStateIdAction`
-
-- **Input:** prospective reference-state identity and reconciliation contract version
-- **Output:** owner-local reconciliation-state identity
-- **Responsibility:** Construct the closed tuple `(referenceStateId,
-  reconciliationContractVersion)`; consume no hidden allocator.
-
-## `BuildReferenceReconciliationItemAction`
-
-- **Input:** one identified claim, canonical citations, and source ordering
-- **Output:** compact reconciliation item
-- **Responsibility:** Project the bounded content/IDs needed for conflict/disposition decisions
-  without losing claim meaning.
-
-## `PartitionReferenceReconciliationItemsAction`
-
-- **Input:** reconciliation items, level, workflow-declared partition contract, and stable
-  source/claim ordering
-- **Output:** bounded reconciliation partitions
-- **Responsibility:** Deterministically partition within source, across sources, or globally
-  under the declared contract; infer no API-size ceiling.
-
-## `AssignReferenceReconciliationPartitionIdsAction`
-
-- **Input:** ordered unidentified partitions and current reference ID ledger
-- **Output:** identified partitions plus successor ledger
-- **Responsibility:** Allocate one partition ID per canonical order and advance only
-  `nextReconciliationPartitionOrdinal`.
-
-## `ValidateReferenceReconciliationPartitionCoverageAction`
-
-- **Input:** partitions and exact input item/summary set
-- **Output:** partition-coverage evidence
-- **Responsibility:** Prove every input member appears exactly once at that level and IDs/order
-  are unique; perform no model-request size estimation.
-
-## `CheckReferenceSummaryReuseAction`
-
-- **Input:** current reconciliation assignment, canonical summary history and current
-  source/text-validation dependencies
-- **Output:** reusable or semantic outcome; no state change
-- **Responsibility:** Prove that a non-final, nonempty partition contains exactly one
-  current validated child with unchanged membership and dependencies under §16.4.
-  Stale or altered authority fails rather than requesting another model response.
-
-## `ReuseReferenceReconciliationSummaryAction`
-
-- **Input:** the same current assignment and validation dependencies
-- **Output:** native summary candidate linked to its validated child
-- **Responsibility:** Recheck reuse eligibility and carry the child's ordered content
-  into the existing summary validation path. Preserve lineage; create no provider
-  origin, copied repair receipt or canonical identity.
-- **Execution bound:** The shared finite-iteration contract under §6.3 binds each
-  pass to its validated partition population. Accepted summary construction
-  advances the current cursor once; reuse declares no retry parameter and grants
-  no model retries or repair authority.
-
-## `ValidateReferenceReconciliationSummaryProposalAction`
-
-- **Input:** one summary proposal, exact partition, and claim/summary allowlists
-- **Output:** validated summary projection with raw-to-surviving occurrence mapping
-- **Responsibility:** Validate every raw statement's authorized unique selection and
-  typed content, require complete represented-claim coverage by union, and normalize
-  proven duplicates under §16.4 while preserving raw candidates and repair identities.
-  Partition membership is native; model canonical IDs and member-ID echoes reject.
-  Native carried candidates also revalidate child eligibility and content; retain
-  a proof bound to the accepted projection and current source/text dependencies.
-
-## `AssignReferenceReconciliationSummaryIdsAction`
-
-- **Input:** one validated normalized summary projection and current reference ID ledger
-- **Output:** summary/statement ID map plus successor ledger
-- **Responsibility:** Allocate summary and statement IDs in surviving response order,
-  followed by native token order, and advance only their two reconciliation ordinals.
-
-## `BuildReferenceReconciliationSummaryAction`
-
-- **Input:** validated normalized projection and ID map
-- **Output:** canonical summary
-- **Responsibility:** Attach native IDs while preserving normalized statements, complete
-  partition membership, validated child-summary lineage and validation proof.
-
-## `BuildCrossSourceReconciliationInputAction`
-
-- **Input:** validated lower-level summaries and exact represented-claim evidence
-- **Output:** next-level item set
-- **Responsibility:** Project the next bounded level and preserve a total claim-membership map.
-
-## `ValidateGlobalReferenceReconciliationProposalAction`
-
-- **Input:** final global proposal, global partition, all summaries/identified claims, and
-  registries
-- **Output:** global reconciliation evidence
-- **Responsibility:** Prove exactly one disposition per original claim, complete signal/conflict
-  joins, and no summary/member loss.
-
-## `BuildHierarchicalReferenceReconciliationStateAction`
-
-- **Input:** state identity, all validated partitions/summaries, operation/partition contract,
-  and final proposal
-- **Output:** hierarchical reconciliation state
-- **Responsibility:** Assemble the complete reconciliation authority without assigning IDs.
-
-## `ValidateHierarchicalReferenceReconciliationCompletenessAction`
-
-- **Input:** hierarchical state and complete identified-claim registry
-- **Output:** reconciliation-completeness evidence
-- **Responsibility:** Prove level lineage, exact partition membership at every level,
-  complete summary coverage by union, and exactly one final disposition per claim.
-
-## `ValidateClaimDispositionProposalAction`
-
-- **Input:** one `ClaimDispositionProposal` and current identified-claim set
-- **Output:** disposition evidence
-- **Responsibility:** Validate closed disposition shape, allowed related IDs, and self/cycle
-  constraints without changing a claim.
-
-## `ValidateReferenceSignalProposalAction`
-
-- **Input:** one `ReferenceSignalProposal` and current claim/citation/token registries
-- **Output:** signal-projection evidence
-- **Responsibility:** Validate the kind-to-content variant and every claim/citation/token join
-  without accepting a signal ID.
-
-## `AssignReferenceSignalIdAction`
-
-- **Input:** one validated signal proposal and current reference ID ledger
-- **Output:** signal identity plus successor ledger
-- **Responsibility:** Allocate one reference-state-local signal ID and advance only
-  `nextSignalOrdinal`.
-
-## `BuildReferenceSignalAction`
-
-- **Input:** signal identity and validated signal proposal
-- **Output:** canonical reference signal
-- **Responsibility:** Bind identity to the unchanged validated projection.
-
-## `ValidateSourceConflictCandidateAction`
-
-- **Input:** one `SourceConflictProposal`, current claim/citation/source/block/chunk registries,
-  and compiled precedence rules
-- **Output:** conflict-candidate evidence
-- **Responsibility:** Validate kind, mutually relevant claim set, citations, typed summary, and
-  any selected precedence rule without accepting an ID or user decision.
-
-## `BuildReferenceAuthorityLocusAction`
-
-- **Input:** one current citation, manifest entry, source map, decoder contract, and directly
-  captured source location
-- **Output:** snapshot-independent authority locus
-- **Responsibility:** Project normalized relative path plus versioned structural decoder
-  selector; omit every reference-state/source/block/chunk/citation ID and perform no fuzzy
-  matching.
-
-## `BuildReferenceConflictSubjectCoordinateAction`
-
-- **Input:** validated conflict kind, required decision slot, and complete canonically ordered
-  authority loci
-- **Output:** structural conflict-subject coordinate
-- **Responsibility:** Build a non-hash tuple whose equality is decidable across independently
-  captured snapshots.
-
-## `BuildReferenceConflictOptionContinuityKeyAction`
-
-- **Input:** conflict-subject coordinate, one exact identified claim, its canonical typed
-  content, citations, authority loci, and captured scalar spans
-- **Output:** structural option-continuity key
-- **Responsibility:** Bind claim meaning and direct source coordinates without including a
-  snapshot-local claim/citation ID.
-
-## `ValidateReferenceConflictContinuityKeySetAction`
-
-- **Input:** conflict proposal, subject coordinate, option-continuity keys, current
-  claims/citations/source maps, and direct capture evidence
-- **Output:** continuity-key evidence
-- **Responsibility:** Prove complete one-to-one claim coverage, unique keys, canonical ordering,
-  exact content/location equality, and no hash/prose/fuzzy correspondence.
-
-## `AssignReferenceConflictIdAction`
-
-- **Input:** one validated conflict proposal and current reference ID ledger
-- **Output:** conflict identity plus successor ledger
-- **Responsibility:** Allocate one reference-state-local conflict ID and advance only
-  `nextConflictOrdinal`.
-
-## `BuildSourceConflictAction`
-
-- **Input:** conflict identity, validated conflict proposal, subject coordinate, and complete
-  continuity-key set
-- **Output:** canonical source conflict
-- **Responsibility:** Bind identity and materialize only an unresolved or validated
-  source-precedence resolution while retaining restart-safe subject/option continuity.
-
-## `DeriveReferencedSourceIdsAction`
-
-- **Input:** validated signals/conflicts/open questions and citation ledger
-- **Output:** ordered referenced source IDs
-- **Responsibility:** Derive the exact manifest-source projection once.
-
-## `BuildReferenceContextIRAction`
-
-- **Input:** referenced source IDs and validated identified signals/conflicts/open questions
-- **Output:** reference-context candidate
-- **Responsibility:** Place each typed record into exactly one closed context collection.
-
-## `ValidateReferenceContextCompletenessAction`
-
-- **Input:** reference-context candidate and claim/citation/token/conflict registries
-- **Output:** context evidence
-- **Responsibility:** Prove unique IDs, complete joins, collection-kind correctness, and no
-  orphan context record.
-
-## `BuildPriorReferenceConflictClarificationSubjectSetAction`
-
-- **Input:** validated prior clarification registry and optional prior reference-state identity
-- **Output:** prior subject-set candidate `P`
-- **Responsibility:** Project the latest active revision of every clarification binding owned by
-  the prior reference state, including its exact structural key, ID, binding, and
-  usable-response disposition, in canonical complete-key order; for initial ingestion build the
-  explicitly empty set with no prior pointer, and make no current-subject comparison.
-
-## `ValidatePriorReferenceConflictClarificationSubjectSetAction`
-
-- **Input:** prior subject-set candidate, prior clarification registry, and optional prior
-  reference state
-- **Output:** prior-set evidence
-- **Responsibility:** Prove complete latest-record coverage, exact binding/reference ownership,
-  valid response disposition, canonical order, and unique full structural keys; permit an absent
-  prior pointer only for initial ingestion and then require zero subjects.
-
-## `BuildCurrentUnresolvedReferenceConflictSubjectSetAction`
-
-- **Input:** fully validated freshly recaptured snapshot and complete current conflict registry
-- **Output:** current subject-set candidate `C`
-- **Responsibility:** Project every unresolved behavior-changing current conflict to its exact
-  structural clarification key and binding in canonical complete-key order; make no
-  prior-subject comparison.
-
-## `ValidateCurrentUnresolvedReferenceConflictSubjectSetAction`
-
-- **Input:** current subject-set candidate, fully validated fresh snapshot, complete conflict
-  registry, and continuity contract
-- **Output:** current-set evidence
-- **Responsibility:** Prove complete unresolved behavior-conflict coverage, exact
-  conflict/binding joins, canonical order, and one unique full structural key per current
-  conflict.
+Named by [§16](../16-reference-ingestion.md); no operation implements them yet.
 
 ## `ReconcileReferenceConflictSubjectSetsAction`
 
-- **Input:** complete canonical `P` and `C`
-- **Output:** structural subject-set reconciliation candidate
-- **Responsibility:** Deterministically merge-join the full keys into `P ∩ C`, `P ∖ C`, and `C ∖
-  P`; retain each intersection entry's prior answer disposition and produce exhaustive
-  current-set absence evidence for each obsolete prior key without relating it to an introduced
-  key.
-
-## `ValidateReferenceConflictSubjectSetReconciliationAction`
-
-- **Input:** reconciliation candidate, prior clarification registry, fresh snapshot, and
-  complete conflict registry
-- **Output:** set-reconciliation evidence
-- **Responsibility:** Prove the three partitions are pairwise disjoint and exhaustive: every `P`
-  key occurs exactly once in the intersection or `P ∖ C`, every `C` key exactly once in the
-  intersection or `C ∖ P`, intersection keys are directly equal, and difference keys have no
-  equal counterpart.
-- No cardinality, ordering proximity, wording, hash, or semantic similarity may pair subjects.
+Proposed, no code: Deterministically merge-join the full keys into `P ∩ C`, `P ∖ C`, and `C ∖ P`. ([§16](../16-reference-ingestion.md)).
 
 ## `BuildFreshReferenceConflictCorrespondenceAction`
 
-- **Input:** one validated `P ∩ C` entry with a usable closed response, its exact equal-key
-  prior/current bindings, current continuity-key registry, and direct typed fresh-capture
-  comparisons
-- **Output:** `current` or `stale_same_subject` correspondence candidate
-- **Responsibility:** Compare options only inside the already established equal-key pair.
-- Return `current` for a total unique selected-option map or `stale_same_subject` for a nonempty
-  exact-mapping failure.
-- There is no absent or unequal-subject variant, and the action may not search for a nearest,
-  first, or unrelated current conflict.
-- Read no retained parent blob as refresh input.
-
-## `ValidateFreshReferenceConflictCorrespondenceAction`
-
-- **Input:** correspondence candidate, exact intersection entry/prior response, fresh
-  manifest/source blobs/source maps/claims, equal-key current conflict, and direct fresh-capture
-  descriptor/range/scalar evidence
-- **Output:** variant-specific correspondence evidence
-- **Responsibility:** Prove the prior, intersection, and current subject keys are directly
-  equal.
-- For `current`, require a total one-to-one mapping of every selected option by structural
-  coordinates, typed content, and directly recaptured bytes.
-- For `stale_same_subject`, require at least one selected prior option with a typed
-  missing-or-mismatched exact mapping.
-- Reject unequal-key pairing, ID equality as continuity, hashes, summaries, old blobs, model
-  prose, and fuzzy similarity.
-
-## `AssignReferenceConflictDecisionIdAction`
-
-- **Input:** validated `current` fresh-reference correspondence, authenticated response binding,
-  and current refreshed reference ID ledger's conflict-decision allocator
-- **Output:** conflict-decision identity and successor ledger
-- **Responsibility:** Advance only `nextConflictDecisionOrdinal` after exact correspondence is
-  proven; perform no decision build or retirement.
-
-## `BuildReferenceConflictResolutionDecisionAction`
-
-- **Input:** decision identity, authenticated user event or validated current correspondence,
-  target state/conflict, selected current claims, and rationale
-- **Output:** conflict-decision candidate
-- **Responsibility:** Bind trusted actor/time metadata and only revision-current selected claim
-  IDs without minting identity.
-
-## `ValidateReferenceConflictResolutionDecisionAction`
-
-- **Input:** one authenticated decision and current unresolved conflict
-- **Output:** conflict-decision evidence
-- **Responsibility:** Resolve the target state/conflict/claims and validate the selected subset.
+Proposed, no code: Compare options only inside the already established equal-key pair. ([§16](../16-reference-ingestion.md)).
 
 ## `BuildResolvedSourceConflictAction`
 
-- **Input:** one decision-valid conflict
-- **Output:** resolved conflict candidate
-- **Responsibility:** Apply one user decision while retaining its decision ID.
-
-## `ValidateCitationLedgerAction`
-
-- **Input:** citation ledger, claims, signals, provenance, and manifest
-- **Output:** citation-join evidence
-- **Responsibility:** Prove unique IDs and resolve every citation/source join.
-
-## `ValidateSpecificationClaimJoinAction`
-
-- **Input:** one specification record's claim/citation IDs and claim ledger
-- **Output:** claim-to-spec evidence
-- **Responsibility:** Resolve claims and prove citation consistency for one record.
-
-## `BuildReferenceClaimLedgerAction`
-
-- **Input:** identified claims and validated reconciliation disposition proposals
-- **Output:** claim-ledger candidate
-- **Responsibility:** Join one engine-owned claim record to exactly one disposition and
-  related-claim set without minting IDs.
-
-## `ValidateReferenceClaimLedgerAction`
-
-- **Input:** claim-ledger candidate and identified-claim registry
-- **Output:** extraction-ledger evidence
-- **Responsibility:** Prove every extracted claim has one valid
-  retained/superseded/duplicate/conflicting disposition and all related claim IDs resolve.
-
-## `ValidateReferenceEntryAccountingAction`
-
-- **Input:** one inventory entry and block ledger
-- **Output:** entry accounting evidence
-- **Responsibility:** Prove one file and all of its blocks have dispositions.
-
-## `BuildReferenceManifestAction`
-
-- **Input:** identified inventory, exactly one final entry candidate per source, accepted
-  exclusions, and blocking diagnostics
-- **Output:** reference manifest candidate
-- **Responsibility:** Join the ordered inventory to final entry variants without inventing or
-  dropping a source.
-
-## `ValidateReferenceManifestCompletenessAction`
-
-- **Input:** manifest candidate, ordered inventory, source/decode budget ledgers, and blocking
-  policy
-- **Output:** manifest evidence
-- **Responsibility:** Prove one-to-one source accounting, ledger closure, and the derived
-  `allEntriesAccountedFor` value.
-
-## `CaptureReferenceFeedbackSubmissionAction`
-
-- **Input:** raw feedback event and runner-held submission/authentication-lease table
-- **Output:** immutable run-local feedback handle/candidate
-- **Responsibility:** Capture expected reference revision, closed change proposal, and bounded
-  feedback bytes without authenticating or assigning a durable ID.
-
-## `ValidateReferenceFeedbackSubmissionAction`
-
-- **Input:** captured feedback candidate, current reference state, target schema, and
-  business-text policy
-- **Output:** validated reference-feedback submission or stale/structural diagnostic
-- **Responsibility:** Before authentication, prove closed intent/target shape, exact current
-  revision, target existence/kind compatibility, and canonicalize feedback bytes to durable
-  `BusinessText`.
-
-## `BindAuthenticatedReferenceFeedbackSubmissionAction`
-
-- **Input:** validated feedback submission and validated fresh actor evidence for
-  `reference_feedback`
-- **Output:** authenticated feedback binding
-- **Responsibility:** Bind the exact run-local submission handle/change/text to actor evidence
-  after static freshness validation; assign no reference ID.
-
-## `AssignReferenceFeedbackIdAction`
-
-- **Input:** authenticated feedback binding and current reference ID ledger's feedback allocator
-- **Output:** feedback identity and next ledger
-- **Responsibility:** Assign one monotonic engine-owned feedback ID and retire failed
-  allocations.
-
-## `BuildReferenceFeedbackAction`
-
-- **Input:** feedback identity, authenticated binding, validated submission with durable
-  `BusinessText`, unchanged target/change, and trusted clock
-- **Output:** canonical reference-feedback event
-- **Responsibility:** Bind public actor/time/evidence metadata and canonical text without
-  credentials or invocation-owned handles and without performing correction.
+Proposed, no code: Apply one user decision while retaining its decision ID. ([§16](../16-reference-ingestion.md)).
 
 ## `ValidateReferenceFeedbackTargetAction`
 
-- **Input:** one canonical feedback event and current snapshot
-- **Output:** target evidence
-- **Responsibility:** Validate its exactly-one target and intent-compatible block/chunk, claim,
-  classification, token, and replacement-citation join.
-
-## `CloneReferenceBlobIntoRevisionAction`
-
-- **Input:** one current snapshot-owned immutable blob and newly assigned prospective
-  reference-state identity
-- **Output:** new state-owned immutable blob handle
-- **Responsibility:** Copy exact stored bytes into the successor's write-once namespace without
-  reopening an original reference path or hashing.
-
-## `BuildSuccessorReferenceIdLedgerAction`
-
-- **Input:** validated prior ID ledger, prospective reference-state identity, and one typed
-  feedback/decision allocation delta
-- **Output:** successor ID-ledger candidate
-- **Responsibility:** Preserve monotonic allocators/tombstones and apply only the explicitly
-  authorized identity transition.
-
-## `RebindRetainedReferenceManifestEntryAction`
-
-- **Input:** one retained manifest entry, prospective state identity, and exact
-  cloned-blob/source mapping
-- **Output:** successor manifest entry
-- **Responsibility:** Rebind one unchanged entry without rebuilding a manifest or reading its
-  path.
-
-## `RebindRetainedReferenceChunkAction`
-
-- **Input:** one retained accounted chunk, prospective state identity, and exact
-  cloned-blob/block mapping
-- **Output:** successor accounted chunk
-- **Responsibility:** Rebind one unchanged chunk and disposition without extracting or
-  reconciling it.
-
-## `RebindRetainedReferenceSourceMapAction`
-
-- **Input:** one retained source map and exact successor source/block/blob mapping
-- **Output:** successor source map
-- **Responsibility:** Rebind one source map while preserving all source ranges.
-
-## `RebindRetainedReferenceBudgetEntryAction`
-
-- **Input:** one closed source/decoded budget entry and prospective ledger identity
-- **Output:** successor budget entry
-- **Responsibility:** Copy one immutable reservation/debit/release outcome without changing its
-  byte accounting.
-
-## `RebindRetainedSourceCitationAction`
-
-- **Input:** one retained citation and exact successor state/source/block/chunk mapping
-- **Output:** successor citation
-- **Responsibility:** Rebind one citation while preserving its validated location/content.
-
-## `RebindRetainedReferenceClaimAction`
-
-- **Input:** one retained identified claim and successor citation/token mappings
-- **Output:** successor identified claim
-- **Responsibility:** Rebind one unchanged claim; it assigns no disposition or identity.
-
-## `RebindRetainedConflictDecisionAction`
-
-- **Input:** one retained authenticated decision and successor state/conflict mapping
-- **Output:** successor conflict decision
-- **Responsibility:** Rebind one decision only after its selected claim IDs remain valid.
-
-## `ValidateReferenceRevisionProjectionAction`
-
-- **Input:** prior snapshot, typed feedback/decision, and complete per-record retained/changed
-  projections
-- **Output:** revision-projection evidence
-- **Responsibility:** Prove every prior record is retained, explicitly replaced, or tombstoned
-  exactly once before normal manifest/reconciliation/context assembly.
-
-## `AssembleReferenceSnapshotAction`
-
-- **Input:** prospective state identity, exact extraction-operation contract, final ID ledger,
-  validated passive-literal registry, manifest/budget ledgers/entries/chunks/source
-  maps/citations/reconciliation/claims/feedback events/conflict-resolution
-  decisions/context/blobs
-- **Output:** reference-snapshot candidate
-- **Responsibility:** Copy the exact passive-registry/reconciliation state IDs and assemble one
-  complete snapshot without assigning identity or hashing content.
-
-## `ValidateReferenceSnapshotAction`
-
-- **Input:** reference-snapshot candidate and every bound ledger/registry/route/blob authority
-- **Output:** whole-snapshot evidence
-- **Responsibility:** Prove state-ID ownership, ledger closure,
-  citation/chunk/source/context/reconciliation/claim/conflict joins, total accounting, immutable
-  blob ownership, and no orphan or duplicate record.
-
-## `SerializeCanonicalReferenceStateAction`
-
-- **Input:** validated reference snapshot
-- **Output:** canonical reference-state bytes
-- **Responsibility:** Serialize one authoritative reference snapshot.
-
-## `RenderReferenceContextAction`
-
-- **Input:** validated reference snapshot, its exact passive-literal registry state, and
-  renderer contract
-- **Output:** Markdown candidate
-- **Responsibility:** Render the sidecar using snapshot-owned source labels/locations and inert
-  registered display literals only.
-
-
-Semantic extraction and reconciliation use the common LLM actions; there is no special reader that also calls a model.
+Proposed, no code: Validate its exactly-one target and intent-compatible block/chunk, claim, classification, token, and replacement-citation join. ([§16](../16-reference-ingestion.md)).

@@ -397,11 +397,13 @@ implemented), one model request's lifecycle stages run inside one `request-model
 
 ## 13. Action catalogue
 
-Action names define responsibility boundaries. Each entry specifies its input, output,
-and single responsibility. Under [ADR 0031](decisions/0031-stage-actions.md) (not yet
-implemented), the entries a stage action absorbs become one stage-action entry that lists its
-internal steps, each keeping its former entry's rules. The detailed catalogues are part of this baseline;
-all actions follow [§6](#6-common-action-and-orchestrator-contract) and
+The catalogue has one entry per registered operation: its code owner, what it reads and
+writes, its single responsibility and its rejections. An entry marked "Proposed, no code"
+names a responsibility no code registers yet; Plan, Tasks and Implement design rewrites those
+when it starts (user decision, 9 November 2026). Under
+[ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the entries a stage action
+absorbs become one stage-action entry that lists its internal steps, each keeping its former
+entry's rules. All actions follow [§6](#6-common-action-and-orchestrator-contract) and
 [§25](#25-atomic-workflow-execution-and-output).
 
 - <a id="131-bootstrap-and-configuration-actions"></a>[13.1 Bootstrap and configuration actions](contracts/actions/13-01-bootstrap-configuration.md)

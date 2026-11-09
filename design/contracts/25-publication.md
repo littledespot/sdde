@@ -16,7 +16,7 @@ Part of the [proposed design](../design.md#25-atomic-workflow-execution-and-outp
 
 - There is no project-, feature-, task- or provider-level transaction subsystem: no WAL,
   transaction-ID ledger, durable checkpoint, commit-marker protocol, rollback/roll-forward
-  recovery, result-handoff marker or recovery directory.
+  recovery, result-handoff marker, recovery directory, provider-effect scan or recovery lock.
 - Whole-execution validation is not a filesystem transaction or permission to introduce that
   machinery, and moving or renaming that machinery does not satisfy this rule.
 - Provider calls never need an active feature merely to obtain storage.
@@ -35,16 +35,10 @@ create intermediate publication or restart checkpoints.
 - Every compiled successor of a publication operation is the corresponding terminal
   outcome. No later node may perform work, emit telemetry or fail after publication.
   Preparation selects a closed `ok` or `needs_user` outcome from validated state; the
-  publisher returns it only after all writes succeed. Under
-  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-  since 30 October 2026; not implemented), preparation may also select an incomplete
-  (`failed` or `blocked`) outcome. That incomplete publication runs only as the
-  definition's declared failure output, in the runner's failure-output mode, the one
-  mode in which filesystem steps may run while failures are pending. Its prepared output
-  must carry every pending failure subject, and its terminal is the recorded failure, so
-  it still ends the workflow `failed` or `blocked` and records no successful completion.
-  A blocked clarification refresh is rejected before writing. Pure progress checks also
-  precede publication.
+  publisher returns it only after all writes succeed
+  ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
+  since 30 October 2026 and not implemented, owns the failure output it would add). A
+  blocked clarification refresh is rejected before writing. Pure progress checks also precede publication.
 - Write successful completion state only after all required outputs have been written.
 - Existing files alone do not prove the current run succeeded.
 - This explicit failure rule does not relax protected clarification checks or authorize
@@ -54,10 +48,8 @@ create intermediate publication or restart checkpoints.
 
 - Failure, blocking, cancellation or interruption abandons the execution and its unpublished
   candidate output; files already replaced during publication may remain under Section 25.1.
-  Under [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on
-  hold since 30 October 2026; not implemented), an eligible failed or blocked Specify run
-  publishes only its validated content, through its declared failure output; unvalidated
-  candidates are still abandoned.
+  ADR 0041's failure output (§25.1; on hold, not implemented) would publish only validated
+  content; unvalidated candidates are still abandoned.
 - A subsequent invocation starts at `start`, revalidates current inputs and gates, and executes
   the whole selected workflow again.
 - It never restores a saved task, step, model response or provider operation.
@@ -70,7 +62,8 @@ create intermediate publication or restart checkpoints.
   clarification publication to a validated incomplete `spec.md`, current reference
   context and explicit pending state. The full pending set is validated before writes,
   and its state is written last. It grants no completed-stage or downstream authority.
-- Outstanding spec, plan or tasks clarifications prevent `implement` from executing.
+- Open clarifications gate later stages under §24.2's matrix
+  ([§24.2](24-workflow-state.md#242-stage-transition-state-machine)).
 
 ### 25.3 External effects and observations
 
@@ -79,7 +72,8 @@ create intermediate publication or restart checkpoints.
 - There is no cross-execution exactly-once provider-call guarantee, lost-response recovery or
   replay-approval gate.
 - Within one execution, retries remain explicit YAML transitions with the owning operation's
-  declared `retry-limit`.
+  declared `retry-limit` ([§22.7](22-repair.md#227-repair-retry-limit-and-escalation), which
+  also states the ADR 0030 change, not yet implemented).
 
 Logs are observations, never completion or continuation authority. This does not
 authorize additional external effects or weaken command

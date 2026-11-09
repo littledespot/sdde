@@ -4,555 +4,121 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
-
-## `ParseWorkflowInvocationAction`
-
-- **Input:** captured CLI/API arguments and the operation-registry evidence of
-  `validate-workflow-operation-registry`
-- **Output:** validated invocation `WorkflowId` plus unchanged remaining arguments
-- **Responsibility:** Take exactly one explicit leading workflow selector and validate the
-  closed workflow-ID syntax; reject a missing or malformed ID and more than 64 workflow
-  arguments. Choose no default, apply no filename inference, registry lookup or
-  normalization fallback, and parse no workflow-specific argument
-  (`src/actions/workflow/parse_workflow_invocation.zig`).
-
 > **ADR 0032 (not yet implemented).** The two `specify` invocation actions below become the
-> internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action with
-> side effect `none`: parse, then validate. Each keeps its rules. The stage action is still
-> named by the definition's `invoke:` field and run by the engine through its binding before
-> the graph starts ([ADR 0032](../../decisions/0032-engine-routines.md)).
-
-## `ParseSpecifyInvocationAction`
-
-- **Input:** remaining workflow arguments
-- **Output:** parsed specify invocation
-- **Responsibility:** Parse the `--feature` and `--reference` flag/value pairs without resolving
-  paths or reading files; reject a duplicate flag, a positional or unknown input, and a flag
-  with no value (`src/actions/specify/parse_specify_invocation.zig`).
-
-## `ValidateSpecifyArgumentsAction`
-
-- **Input:** parsed invocation
-- **Output:** validated specify invocation context
-- **Responsibility:** Require both `--feature` and `--reference`, each non-empty, within the
-  relative-path byte limit and not starting with `-`.
-
-## `NormalizeReferenceSelectorAction`
-
-- **Input:** validated raw `--reference` value
-- **Output:** normalized selector candidate
-- **Responsibility:** Decode strict UTF-8 once, normalize NFC and literal separators, and remove
-  only literal `.` segments; do not join a root.
-
-## `ValidateReferenceSelectorLexicalSafetyAction`
-
-- **Input:** normalized selector candidate and selector policy
-- **Output:** `RelativeReferenceSelector`
-- **Responsibility:** Reject empty/dot-only, absolute/drive/UNC/URI/control/NUL, `..`, encoded
-  dot/separator, invalid segment, length, and trailing-separator ambiguity before identity or
-  root resolution.
-
-## `NormalizeFeatureDirectoryAction`
-
-- **Input:** raw supplied feature directory
-- **Output:** normalized `paths.specs`-relative path candidate
-- **Responsibility:** Reuse shared path normalization; no slug, transliteration, truncation or
-  suffix.
-
-## `ValidateFeatureDirectoryAction`
-
-- **Input:** normalized directory candidate, configured specs/archive roots and shared path
-  policy
-- **Output:** validated feature-directory selector
-- **Responsibility:** Resolve against the configured specs root and enforce lexical safety,
-  containment and archive exclusion; no filesystem access or ownership lookup.
-
-## `InspectFeatureDirectoryAction`
-
-- **Input:** validated selector and narrow no-follow filesystem port
-- **Output:** absent or directory observation, or typed rejection
-- **Responsibility:** Inspect only the selected path and ancestors; reject aliases/unsafe nodes
-  without scanning other features.
-
-## `ValidateFeatureBriefProposalAction`
-
-- **Input:** one operation-result-valid feature brief and complete reference
-  claim/citation/passive/clarification registries
-- **Output:** feature-brief evidence
-- **Responsibility:** Prove all reference or resolved-response grounding joins, business-only
-  fields, completeness, and current bindings for every explicit passive/exact reference.
-
-## `AssignFeatureRequestIdAction`
-
-- **Input:** durable canonical reference-state ID and compiler-locked singleton `feature_brief`
-  request slot
-- **Output:** owner-local feature-request identity
-- **Responsibility:** Construct `(referenceStateId, feature_brief)` without a run-local
-  allocator, model scalar, content, or fingerprint; exactly one exists per reference revision.
-
-## `BuildFeatureRequestAction`
-
-- **Input:** feature-request identity, validated feature brief, validated supplied feature
-  directory, exact required selector/snapshot, and validated clarification-response joins
-- **Output:** identified reference-derived feature request
-- **Responsibility:** Bind title/description/goal and source authorities without minting any
-  identity or accepting a model-owned feature/path.
-
-## `AssignFeatureRequestStateIdAction`
-
-- **Input:** feature ID, validated current feature `StateIdLedger`, and matching single-use
-  namespace capability
-- **Output:** feature-request-state reservation plus successor ledger
-- **Responsibility:** Reserve one immutable request-state ID.
-
-## `BuildFeatureRequestStateAction`
-
-- **Input:** state identity, identified request, validated supplied feature directory, exact
-  reference snapshot, and exact current clarification registry ID/revision
-- **Output:** feature-request state candidate
-- **Responsibility:** Bind the validated derived brief/request ID to its immutable
-  reference/clarification authorities without minting IDs.
-
-## `AssignWorkflowArtifactRegistryStateIdAction`
-
-- **Input:** feature identity, validated current feature `StateIdLedger`, and matching
-  single-use namespace capability
-- **Output:** workflow-artifact-registry reservation plus successor ledger
-- **Responsibility:** Reserve the immutable artifact-authority state ID before resolving paths.
-
-## `ResolveWorkflowArtifactPathsAction`
-
-- **Input:** registry identity, feature identity, validated config roots, and closed
-  selector/path table
-- **Output:** workflow-artifact-registry candidate
-- **Responsibility:** Calculate every canonical workflow/view/state/log collection path; the
-  model supplies none.
-
-## `ValidateWorkflowArtifactRegistryAction`
-
-- **Input:** registry candidate, canonical root-access registry, portability policy, and closed
-  required-selector table
-- **Output:** workflow-artifact-registry evidence
-- **Responsibility:** Prove exact singleton/collection coverage, selector-specific
-  `rootAuthority`, root-relative containment, editability/access class, non-overlap, and
-  host/target collision safety.
-- Require views/forms/logs under `specs_feature`, published-state selectors under their declared
-  engine root, and reject interpreting one entry against two bases.
-
-## `SerializeWorkflowArtifactRegistryAction`
-
-- **Input:** validated workflow-artifact registry
-- **Output:** canonical registry bytes
-- **Responsibility:** Serialize the exact path authority used by restart and rendering.
-
-## `ParseWorkflowArtifactRegistryAction`
-
-- **Input:** raw canonical registry bytes
-- **Output:** unvalidated workflow-artifact registry
-- **Responsibility:** Parse one persisted artifact authority only.
-
-## `BuildActiveFeatureDirectoryCapabilityAction`
-
-- **Input:** validated supplied feature directory, exact registered artifact/state roots, fresh
-  no-follow observations and declared operations
-- **Output:** run-local feature-directory capability
-- **Responsibility:** Bind only the selected target and authorized operations; no ownership
-  record, activation transaction, or successful-output claim.
-
-Under [ADR 0018](../../decisions/0018-debug-model-exchange-logging.md), current-run
-activation uses the immutable bootstrap observation plus this fresh capability;
-it may create observed-absent paths but never changes a bootstrap observation or
-reuses an earlier run. Its identities are the ones `BuildFeatureLogPolicyIdAction` and
-`BuildFeatureLogBindingIdAction` below describe. Today no registered action builds them: one
-adapter builds the policy, run and binding IDs together
-(`src/adapters/system/feature_log_identity.zig`), and nothing recomputes the policy ID.
-
-The historical maintenance catalogue below is deferred source material. Its saved
-bootstrap-policy-lineage and restart prerequisites were withdrawn by
-[ADR 0009](../../decisions/0009-atomic-workflow-execution.md); they are not
-requirements to activate or capture the current execution.
-
-## `ScanFeatureLogRunInventoryAction`
-
-- **Input:** validated feature log collection paths, active-feature capability, bounded
-  no-follow descriptor, and hard segment/heading/control-row limits
-- **Output:** raw feature-log run/binding/stream inventory
-- **Responsibility:** Enumerate and capture bounded pipe-delimited headings plus
-  `segment_header`/`segment_trailer` control rows grouped by their declared run/binding/stream
-  without closing, truncating, trusting, or acquiring a stream lock.
-
-## `ValidateHistoricalFeatureLogRunInventoryAction`
-
-- **Input:** raw inventory, fresh current run ID, workflow-artifact/bootstrap-authority lineage,
-  segment schemas, and hard limits
-- **Output:** ordered historical run-group inventory or diagnostic
-- **Responsibility:** Exclude the fresh run, validate every historical binding/policy ID against
-  a readable authority in the current lineage, classify each group as active-tail or
-  closed-only, and block unknown/corrupt/aliased groups; this does not authorize close.
-
-## `ResolveHistoricalFeatureLogAuthorityAction`
-
-- **Input:** one validated historical group, its log-policy ID, and current bootstrap
-  lineage/authority collection
-- **Output:** exact historical bootstrap authority and compiled logging fragment
-- **Responsibility:** Resolve the policy tuple's bootstrap state, validate its lineage
-  reachability and persisted fragment, and never consult current config or choose a path.
-
-## `BuildHistoricalFeatureLogPolicyAction`
-
-- **Input:** validated historical group, resolved historical authority/fragment, feature ID, and
-  workflow-artifact registry
-- **Output:** historical feature-log-policy candidate
-- **Responsibility:** Reconstruct only the exact closed policy tuple recorded in headers;
-  perform no binding construction, segment I/O, or current-config lookup.
-- The ordinary policy validator then validates it.
-
-## `CloseRecoveredHistoricalFeatureLogStreamAction`
-
-- **Input:** locked active-tail inspection, recovered historical stream state, validated
-  historical policy/binding, and matching ordinary single-binding stream-lock capability
-- **Output:** `HistoricalFeatureLogTailCloseObservation`
-- **Responsibility:** Invoke the typed historical-close port once, fsync a crash-finalization
-  trailer, and close exactly one prior-run active tail; create no successor segment.
-
-## `ValidateAlreadyClosedHistoricalFeatureLogStreamAction`
-
-- **Input:** locked closed-only inspection, validated historical policy/binding, and matching
-  ordinary stream-lock capability
-- **Output:** `AlreadyClosedHistoricalFeatureLogTailObservation`
-- **Responsibility:** Validate existing trailers/sequence bounds and prove the prior-run group
-  already needs no write; reject an active, missing, or corrupt tail and record `bytesWritten:
-  0`.
-
-## `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction`
-
-- **Input:** one exact validated historical inventory group, its matching
-  close-or-already-closed observation, and the terminal ordinary stream-lock release observation
-- **Output:** one discriminated `HistoricalFeatureLogStreamFinalizationEvidence`
-- **Responsibility:** Join the group's ordinal/run/binding/stream/disposition to exactly one
-  terminal tail observation and its exact released lock; perform no I/O, validation, or policy
-  reconstruction.
-
-## `ValidateHistoricalFeatureLogRunFinalizationAction`
-
-- **Input:** validated historical inventory and the ordered
-  `HistoricalFeatureLogStreamFinalizationEvidence` set
-- **Output:** `HistoricalFeatureLogRunFinalizationEvidence` or diagnostic
-- **Responsibility:** Prove one-to-one ordered group coverage, disposition/observation equality,
-  exact binding/run/stream joins, one successful release per acquired prior-run lock, no
-  duplicate/orphan evidence, and no remaining prior-run active tail before current-run
-  policy/binding construction or sink initialization.
-
-## `BuildFeatureLogPolicyIdAction`
-
-- **Input:** the current execution's validated compiled logging policy
-- **Output:** feature-log-policy identity `LOGPOL-<SHA-256 of the policy's serialization>`
-- **Responsibility:** Fingerprint only that policy, so an equal policy yields an equal ID; read
-  no bootstrap authority, path, clock, user/model scalar or run-local capability.
-
-## `BuildFeatureLogPolicyAction`
-
-- **Input:** assigned feature-log-policy identity, the validated compiled logging policy,
-  event-definition registry, feature ID, and workflow-artifact registry
-- **Output:** feature-log-policy candidate
-- **Responsibility:** Bind the policy's threshold and safety/rotation/retention constants to
-  that ID and the engine-derived event/prompt collection IDs. No persisted bootstrap-policy
-  fragment or lineage is read ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)).
-
-## `ValidateFeatureLogPolicyAction`
-
-- **Input:** log-policy candidate and the validated compiled logging policy and
-  workflow-artifact registry
-- **Output:** feature-log-policy evidence
-- **Responsibility:** Recompute and prove the fingerprint ID, level rank/aliases, console
-  boolean, level-owned prompt-capture selection, compiler-fixed redaction/limits, and fixed
-  per-feature destinations.
-
-## `BuildFeatureLogBindingIdAction`
-
-- **Input:** validated log-policy ID, a fresh engine-generated random run ID
-  (`RUN-<128-bit hex>`), and the binding ordinal
-- **Output:** feature-log-binding identity
-- **Responsibility:** Construct the tuple without a path, clock, or active-directory capability
-  token. The run ID identifies observations, never workflow state, and an existing run ID
-  rejects rather than reusing an earlier run.
-
-## `ResolveFeatureLogBindingAction`
-
-- **Input:** assigned feature-log-binding identity, validated feature-log policy, activated
-  feature-directory capability, run metadata, and workflow-artifact registry
-- **Output:** feature-log binding
-- **Responsibility:** Bind one run only to the fixed event/prompt collections beneath
-  `canonicalSpecsFeatureRoot/logs`; accept no engine-state-root, config child path, user path,
-  or model path.
-
-## `ValidateFeatureLogBindingAction`
-
-- **Input:** binding, root registry, no-follow metadata, and workflow-artifact registry
-- **Output:** log-binding evidence
-- **Responsibility:** Prove the policy/binding/run/feature tuple
-  (`src/domain/feature_log_binding.zig`), containment beneath the active feature, append-only
-  access class, owner-only mode, and regular-file/ancestor safety.
-
-## `BuildFeatureLogPolicyTransitionAction`
-
-- **Input:** current/successor validated bootstrap authorities, exact change plan/materialized
-  evidence whose logging-transition obligation is true, current/successor validated log policies
-  and bindings, run metadata, and enabled streams
-- **Output:** closed feature-log-policy transition candidate
-- **Responsibility:** Bind one same-run old-to-new logging authority switch after any
-  compatible/Spec/Plan owning publication; perform no stream I/O and reject absent logging
-  impact or administrative changes.
-
-## `ValidateFeatureLogPolicyTransitionAction`
-
-- **Input:** transition candidate, locked impact registry, both policies/bindings, current
-  workflow/bootstrap pointer, and successor committed-bootstrap evidence
-- **Output:** log-policy-transition evidence
-- **Responsibility:** Validate the logging-impact subset and exact old/new fragments while
-  accepting other already-validated plan assignments; require `transitionFeatureLogging=true`,
-  reject administrative plans, require the same-run segment/record hard caps and format/safety
-  fields to remain equal (cap/format changes require a new run or migration), prove
-  historical/successor IDs match their authorities, prove the bootstrap successor is durable,
-  and represent every enabled stream exactly once.
-
-## `CloseFeatureLogStreamForPolicyTransitionAction`
-
-- **Input:** one validated transition, recovered current stream/sink state, current
-  binding/policy, and validated dual-binding transition-stream-lock capability
-- **Output:** durable historical-stream trailer/close evidence
-- **Responsibility:** Fsync and close exactly one old-binding active segment without creating
-  its successor or changing another stream.
-
-## `ValidateClosedHistoricalFeatureLogStreamAction`
-
-- **Input:** old-binding closed-only inspection, historical policy/binding, validated
-  transition, and dual-binding transition-stream-lock capability
-- **Output:** reconstructed historical-stream close evidence
-- **Responsibility:** Validate the already durable `segment_trailer` control row and reproduce
-  the same close-boundary observation after a crash; perform no write and reject an active,
-  missing, or corrupt tail.
-
-## `BuildTransitionSuccessorFeatureLogStreamStateAction`
-
-- **Input:** historical close evidence, successor-binding ordinal-one segment creation/recovery
-  evidence, exact total same-run/all-binding segment count, and successor policy
-- **Output:** successor stream-state candidate
-- **Responsibility:** Continue sequence at historical final plus one, initialize the successor
-  binding's local segment ordinal, and carry the remaining run/stream lifetime segment budget
-  without inspecting or writing a segment.
-
-## `ValidateTransitionSuccessorFeatureLogStreamStateAction`
-
-- **Input:** successor stream candidate, transition, old/new segment inventories, policy, and
-  dual-binding lock evidence
-- **Output:** successor stream evidence
-- **Responsibility:** Prove sequence continuity, binding-local ordinal rules, total all-binding
-  segment cap, exact old closure/new active tail, and no segment/path/identity reuse.
-
-## `ValidateFeatureLogPolicyTransitionStreamAction`
-
-- **Input:** one historical close evidence, one initialized/recovered successor-binding stream
-  state, transition, and the same dual-binding transition-stream-lock capability
-- **Output:** one stream-transition evidence
-- **Responsibility:** Prove the old binding has no active tail, the new binding has exactly one
-  active tail with valid sequence/ordinal origin, and both belong to the exact authorized
-  feature/run/stream/binding pair.
-
-## `BuildTransitionSuccessorFeatureLogSinkStateAction`
-
-- **Input:** assigned successor sink-state ID, successor policy/binding, and exactly one
-  initialized-or-recovered successor stream state plus inventory for each enabled stream
-- **Output:** successor transition sink-state candidate
-- **Responsibility:** Assemble the mixed post-crash/new-stream set into one complete successor
-  sink without inspecting, closing, creating, or recovering a segment.
-
-## `ValidateTransitionSuccessorFeatureLogSinkStateAction`
-
-- **Input:** successor sink candidate, validated transition, complete stream-transition
-  evidence, successor policy/binding, and segment inventories
-- **Output:** successor transition sink evidence
-- **Responsibility:** Prove total enabled-stream coverage, exact new binding/policy, unique
-  active tails, sequence/ordinal rules, and equality to every per-stream transition result.
+> internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action
+> (parse, then validate, side effect `none`), named by the definition's `invoke:` field and run
+> by the engine before the graph starts ([ADR 0032](../../decisions/0032-engine-routines.md)).
+
+## Core operations
+
+[`core_workflow_operations.zig`](../../../src/composition/core_workflow_operations.zig) registers
+two capability-free operations any workflow may use; neither reads or writes data.
+
+- **`core.empty-invocation`:** an invocation operation that accepts no arguments; any argument,
+  or use as a step, fails. Outcome `ok`.
+- **`core.noop`:** a step that does nothing; use as an invocation fails. Outcome `ok`.
+
+## `specify_invocation_runner.Invocation` (`specify-invocation`)
+
+- **Owner:** [`src/application/specify_invocation_runner.zig`](../../../src/application/specify_invocation_runner.zig)
+- **Reads:** none (the workflow arguments) · **Writes:** `specify_invocation` · **Side effect:** `none`
+- **Does:** The Spec workflow's registered invocation operation: runs `parse-specify-invocation`
+  then `validate-specify-arguments` through its capability-free orchestrator and publishes only
+  the validated invocation; the parsed arguments stay private.
+- **Rejects:** the two actions' `InvalidSpecifyArguments`.
+
+## `ParseSpecifyInvocationAction` (`parse-specify-invocation`)
+
+- **Owner:** [`src/actions/specify/parse_specify_invocation.zig`](../../../src/actions/specify/parse_specify_invocation.zig)
+- **Reads:** none (the remaining workflow arguments) · **Writes:** `parsed_specify_invocation` · **Side effect:** `none`
+- **Does:** Parse `--feature` and `--reference` flag/value pairs without resolving paths or
+  reading files.
+- **Rejects:** `InvalidSpecifyArguments` for a flag with no value, a repeated flag, or a
+  positional or unknown input.
+
+## `ValidateSpecifyArgumentsAction` (`validate-specify-arguments`)
+
+- **Owner:** [`src/actions/specify/validate_specify_arguments.zig`](../../../src/actions/specify/validate_specify_arguments.zig)
+- **Reads:** `parsed_specify_invocation` · **Writes:** `specify_invocation` · **Side effect:** `none`
+- **Does:** Require both values, each non-empty, within the relative-path byte limit and not
+  starting with `-`.
+- **Rejects:** `InvalidSpecifyArguments`.
+
+## `NormalizeFeatureDirectoryAction` (`normalize-feature-directory`)
+
+- **Owner:** [`src/actions/specify/normalize_feature_directory.zig`](../../../src/actions/specify/normalize_feature_directory.zig)
+- **Reads:** `specify_invocation` · **Writes:** `normalized_feature_directory` · **Side effect:** `none`
+- **Does:** Normalize the raw `--feature` value to NFC through the Unicode port, then apply the
+  shared relative-path normalization; it adds no slug, truncation or suffix.
+- **Rejects:** the Unicode port's `InvalidUtf8`, `NormalizationLimitExceeded` and
+  `NormalizationFailed`.
+
+## `ValidateFeatureDirectoryAction` (`validate-feature-directory`)
+
+- **Owner:** [`src/actions/specify/validate_feature_directory.zig`](../../../src/actions/specify/validate_feature_directory.zig)
+- **Reads:** `normalized_feature_directory` · **Writes:** `relative_feature_directory` · **Side effect:** `none`
+- **Does:** Parse the feature ID and join it to the configured specs root; require lexical path
+  safety, containment in the specs root and exclusion from the archive root. No filesystem
+  access or ownership lookup.
+- **Rejects:** `InvalidFeatureDirectory`, also when no roots are bound.
+
+## `InspectFeatureDirectoryAction` (`inspect-feature-directory`)
+
+- **Owner:** [`src/actions/specify/inspect_feature_directory.zig`](../../../src/actions/specify/inspect_feature_directory.zig)
+  (adapter [`feature_directory_inspector.zig`](../../../src/adapters/filesystem/feature_directory_inspector.zig))
+- **Reads:** `relative_feature_directory` · **Writes:** `feature_directory` · **Side effect:** `filesystem_read`
+- **Does:** Through the bound read capability, observe only the selected directory and its
+  specs root: absent, or a readable directory with its identity. No other feature is scanned.
+- **Rejects:** `FeatureDirectoryUnavailable` for a missing capability, a selector that no
+  longer revalidates, or an unreadable or unsafe node.
+
+## `ResolveFeatureArtifactPathsAction` (`resolve-feature-artifact-paths`)
+
+- **Owner:** [`src/actions/specify/resolve_feature_artifact_paths.zig`](../../../src/actions/specify/resolve_feature_artifact_paths.zig)
+- **Reads:** `feature_directory` · **Writes:** `feature_artifact_paths` · **Side effect:** `none`
+- **Does:** Derive every registered artifact path for the feature (specification, reference
+  context, clarification forms and state, workflow state, event and prompt logs) from the
+  configured roots; no model or user supplies a path.
+- **Rejects:** `InvalidFeatureArtifactPath` when roots are unbound or the selector no longer
+  revalidates against them.
+
+Feature-log identities ([ADR 0018](../../decisions/0018-debug-model-exchange-logging.md)): one
+adapter builds the policy ID (`LOGPOL-` and the SHA-256 of the compiled policy), a fresh random
+`RUN-` ID and the binding ID together
+([`feature_log_identity.zig`](../../../src/adapters/system/feature_log_identity.zig)); no
+registered action builds them, and nothing recomputes the policy ID. Feature-log operations are
+in [13.9](13-09-logging.md).
 
 ## `ActivateFeatureLogPolicyTransitionAction`
 
-- **Input:** validated transition, complete ordered stream-transition evidence, validated
-  successor sink state/evidence, and runner logging coordinator
-- **Output:** active successor-sink capability
-- **Responsibility:** Atomically swap only the run-local logging observer pointer after every
-  enabled stream is safe; consume no filesystem port and emit no event itself.
+Proposed, no code: swap the run-local logging observer to the validated successor sink once
+every enabled stream is safe ([§14.10](../14-orchestration.md#1410-featurelogpolicytransitionorchestrator)).
 
-## `InspectFeatureLogStreamAction`
+## `BuildHistoricalFeatureLogStreamFinalizationEvidenceAction`
 
-- **Input:** validated binding, one enabled stream, and a matching held operation-lock
-  capability (single-binding normally; exact old/new side of a validated transition capability
-  during switch)
-- **Output:** no-existing, existing-active-tail, or existing-closed-only result
-- **Responsibility:** Determine one binding/stream startup or transition-recovery branch from
-  validated pipe-delimited headings and segment control rows without creating, truncating,
-  recovering, or inventing an active tail.
+Proposed, no code (deferred by [ADR 0009](../../decisions/0009-atomic-workflow-execution.md)):
+join one historical log group to its terminal close observation and released lock
+([§14](../14-orchestration.md)).
 
-## `AssignFeatureLogSinkStateIdAction`
+## `ValidateHistoricalFeatureLogRunFinalizationAction`
 
-- **Input:** feature/run/binding identity and run-local sink allocator
-- **Output:** log-sink-state identity
-- **Responsibility:** Assign the one run-local sink ID without inspecting files.
-
-## `AssignFeatureLogSegmentIdAction`
-
-- **Input:** binding, stream, exact ordinal, and per-run segment allocator
-- **Output:** segment identity
-- **Responsibility:** Assign one segment ID for initialization or rotation without creating a
-  file.
-
-## `CreateInitialFeatureLogSegmentAction`
-
-- **Input:** no-existing evidence, ordinal-one segment identity, validated binding/policy, exact
-  `feature-log/v2` stream-column schema, matching held operation-lock capability, and trusted
-  clock
-- **Output:** exclusive-create/header evidence
-- **Responsibility:** Under the exact binding/stream authorization—including only the successor
-  side of a dual-binding transition—create exactly one owner-only no-follow regular `.log`
-  segment whose first row is the canonical pipe-delimited column heading and whose second row is
-  one durable `segment_header` control row under that heading; fail on a race, pre-existing
-  alias, or header/control-row write/flush failure.
-
-## `BuildInitialFeatureLogStreamStateAction`
-
-- **Input:** enabled stream and ordinal-one segment creation evidence
-- **Output:** revision-zero stream state
-- **Responsibility:** Initialize sequence one, active ordinal one, zero body bytes, and no
-  durable event sequence.
-
-## `BuildInitialFeatureLogSegmentRecordAction`
-
-- **Input:** segment identity and creation/header evidence
-- **Output:** active ordinal-one segment record
-- **Responsibility:** Project one created segment into inventory metadata.
-
-## `BuildInitialFeatureLogSinkStateAction`
-
-- **Input:** sink identity, binding/policy, all enabled initial stream states, and initial
-  segment records
-- **Output:** initialized log-sink state
-- **Responsibility:** Assemble one new-run sink state; create or recover no files.
-
-## `RecoverFeatureLogTailAction`
-
-- **Input:** existing-segments result, validated binding/policy, exact `feature-log/v2`
-  stream-column schema, and one matching held operation-lock capability
-- **Output:** recovered stream state and segment records
-- **Responsibility:** Validate the exact first pipe-delimited column-header row, one matching
-  durable `segment_header` control row, every complete event/prompt row, and any final
-  `segment_trailer` control row for one binding/stream (the old or successor side when
-  transition-authorized); truncate only an incomplete final event/prompt row, while a
-  missing/duplicate/mismatched heading/control row, wrong column count, malformed interior row,
-  or other interior corruption blocks new work.
-
-## `BuildRecoveredFeatureLogSinkStateAction`
-
-- **Input:** sink identity, binding/policy, and every recovered enabled stream/inventory
-- **Output:** recovered log-sink state
-- **Responsibility:** Assemble one restart sink state without touching a segment.
-
-## `BuildFeatureLogRetentionAuthorizationAction`
-
-- **Input:** recovered closed segments, trusted clock, and validated policy
-- **Output:** single-use retention authorization
-- **Responsibility:** Select oldest eligible closed segments deterministically and exclude every
-  active segment.
-- **Amendment:** for a prior run,
-  [ADR 0026](../../decisions/0026-header-identity-log-retention.md) changes the input. It is
-  the current and historical bindings, one stream and the trusted clock. The retention
-  runner builds the authorization as its first child step, and the prune re-validates the
-  group under the lock.
-
-## `PruneFeatureLogSegmentAction`
-
-- **Input:** one retention authorization, matching feature-log binding, and matching held
-  stream-lock capability
-- **Output:** prune evidence
-- **Responsibility:** Under the exact binding/stream lock, delete only the authorized closed
-  segments; this is the sole log-retention deletion action.
-
-## `ReadWorkflowStateAction`
-
-- **Input:** feature ID
-- **Output:** persisted stage metadata or none
-- **Responsibility:** Read state only.
-
-## `AssignWorkflowStateIdAction`
-
-- **Input:** feature ID, optional prior workflow state, validated current feature
-  `StateIdLedger`, and matching single-use namespace capability
-- **Output:** workflow-state reservation plus successor ledger
-- **Responsibility:** Reserve one immutable workflow-state revision ID.
-
-## `BuildInitialWorkflowStateAction`
-
-- **Input:** the selected Specify workflow's `WorkflowId` and compiled-graph evidence, new
-  feature/artifact/bootstrap/principle/actor/review-decision/workflow-control-event/passive/clarification
-  authorities, and empty open-clarification/active-approval projections
-- **Output:** pre-snapshot `specifying` workflow-state candidate
-- **Responsibility:** Construct the feature's first workflow state with the selected workflow as
-  its sole bound workflow ID and no `currentReferenceStateId`; no other state may omit that
-  pointer.
-
-## `ValidateStageOrderAction`
-
-- **Input:** requested stage and state
-- **Output:** stage authorization
-- **Responsibility:** Enforce predecessor order.
-
-## `ValidateRequiredArtifactPresenceAction`
-
-- **Input:** one required artifact identity
-- **Output:** presence evidence
-- **Responsibility:** Check one required artifact exists.
-
-## `ValidateRequiredArtifactReadabilityAction`
-
-- **Input:** one required artifact identity
-- **Output:** readability evidence
-- **Responsibility:** Check one required artifact is readable.
+Proposed, no code (deferred by ADR 0009): prove every prior-run log group is finalized before
+the current run's sink starts ([§14](../14-orchestration.md)).
 
 ## `ValidateWorkflowMetadataAction`
 
-- **Input:** one stage metadata invariant
-- **Output:** metadata evidence
-- **Responsibility:** Validate one reference/state/artifact expectation.
-
-## `BuildNextStageStateAction`
-
-- **Input:** next workflow identity, validated stage result, current state, and exact current
-  authority/open-clarification/active-approval/control-event projections
-- **Output:** next-state payload
-- **Responsibility:** Build one state transition for inclusion in the complete workflow output;
-  never synthesize an approval or active final/rework pointer.
+Proposed, no code: validate one reference, state or artifact expectation of a stage gate
+([§14](../14-orchestration.md), [§24](../24-workflow-state.md)).
 
 ## `ValidateWorkflowStateAction`
 
-- **Input:** workflow-state candidate, prior revision if any, selected compiled workflow,
-  artifact/bootstrap/principle/actor/review-decision/workflow-control-event/passive/clarification/plan-input/stage
-  authorities, and transition table
-- **Output:** workflow-state evidence
-- **Responsibility:** Prove monotonic revision, legal transition, sorted unique bound workflow
-  IDs, exact retention plus addition of the selected workflow ID when it first participates,
-  direct resolution of every bound ID in the current bootstrap registry, exact current IDs/open
-  sets/active approvals/final-rework pointers, stage-valid plan-input presence/absence, and no
-  dangling authority.
-- A missing reference pointer is valid only for the feature's initial `specifying` revision with
-  empty clarification history and no feature request/specification.
+Proposed, no code: prove monotonic revision, a legal transition, sorted unique bound workflow
+IDs (the selected one added when it first participates, each resolving in the current
+bootstrap registry), exact current pointers, open sets and approvals, and no dangling authority.
+Only a feature's initial `specifying` revision, with no clarification history, request or
+specification, may lack its reference pointer ([§24](../24-workflow-state.md)).
 
-## `ParseWorkflowStateAction`
-
-- **Input:** raw workflow-state bytes
-- **Output:** unvalidated workflow state
-- **Responsibility:** Parse one persisted revision only.
-
-## `SerializeWorkflowStateAction`
-
-- **Input:** validated workflow state
-- **Output:** canonical workflow bytes
-- **Responsibility:** Serialize one restart authority.
+Proposed, no code: the SDD stage gates and persisted workflow state that Plan, Tasks and
+Implement need: predecessor order, required-artifact presence and readability, and building,
+parsing and serializing the next workflow-state revision ([§14](../14-orchestration.md),
+[§21.1](../21-validation.md#211-cross-stage-validators), [§24](../24-workflow-state.md)).

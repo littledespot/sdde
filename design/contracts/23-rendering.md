@@ -181,11 +181,9 @@ Renderers own:
   acknowledgement, or blocked when reference support is mandatory; the next
   passive-registry/provenance/acknowledgement revisions are committed with the normalized
   spec/plan input.
-- If the spec is edited after downstream canonical state exists, the next gate invokes
-  `CompareSpecificationIRAction` against the exact specification stored in canonical
-  `PlanState`.
-- A difference invalidates plan/task approvals and requires regeneration from `specified`; this
-  is direct typed-state comparison, not fingerprinting.
+- An edit after downstream canonical state exists is caught at the next gate by typed comparison
+  with the specification stored in `PlanState`
+  ([§24.3](24-workflow-state.md#243-gate-behavior)).
 
 - `reference-context.md`, `plan.md`, `research.md`, `data-model.md`, contract views,
   `quickstart.md`, and `tasks.md` are never parsed as authoritative execution input.
@@ -226,17 +224,14 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
 - Specify therefore overwrites `spec.md` and `reference-context.md`, including prior user edits
   to `spec.md`; it does not delete and recreate the feature directory.
 - Validation and predecessor/review gates still apply before commit. Today a failed,
-  blocked or invalid execution publishes nothing. Under
-  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-  since 30 October 2026; not implemented), a Specify run that fails because model work
-  couldn't be completed, or ends `blocked`, would publish an incomplete specification of
-  its validated content, marked and logged as
+  blocked or invalid execution publishes nothing
+  ([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)),
+  and a clarification pause publishes ADR 0017's validated incomplete projection, never as a
+  completed specification ([§25.2](25-publication.md#252-abandonment-and-reruns)).
+  [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold; not
+  implemented) would publish a failed incomplete specification marked as
   [F0100 §5.5](../features/F0100-SpecWorkflow.md#55-incomplete-specification-and-controlled-clarifications)
-  specifies. Other failed executions would still publish nothing. A clarification pause
-  (`needs_user`) publishes the validated incomplete projection authorized by
-  [ADR 0017](../decisions/0017-incomplete-specification-publication.md), together with
-  current reference context, forms/registry and pending state. It cannot publish
-  incomplete content as a completed specification.
+  specifies.
 
 - Unresolved-form replacement includes the complete question/schema/revision projection and
   controlled editable regions; an unsubmitted draft answer is not protected from replacement.
@@ -290,8 +285,5 @@ Golden tests ensure byte-stable output for the same canonical IR. Where supporte
 - References, principles/configuration, application code, other workflows' outputs,
   selected-feature bindings, record identities, approvals, and immutable history retain their
   own authorization/lifecycle rules.
-- Section 25 owns whole-workflow atomic output.
-- Interrupted executions are abandoned, not recovered; the next invocation regenerates from the
-  beginning and replaces the selected outputs.
-- If publication itself fails or is interrupted, already-replaced files may remain under Section
-  25.1; no new successful completion is recorded.
+- Section 25 owns whole-workflow atomic output, abandonment, and a failed or interrupted
+  publication.

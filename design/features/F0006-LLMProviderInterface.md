@@ -243,7 +243,10 @@ ProviderModelDefinition {
   runner binds it to every provider operation of a request that selects the entry,
   including protocol corrections.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
-  No slot, binding or request carries an output allowance below the model's own maximum; every provider's catalogue entry records that documented maximum, and every inference request sends it ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output), [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
+  `maxOutputTokens` records the model's documented maximum, which every inference
+  request sends
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output),
+  [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
 - The provider catalogue may declare only a known provider, a model its provider
   admits (any Bedrock model or inference-profile ID with a compiled family, ADR 0029;
   a registered Anthropic model, ADR 0028), explicit `json` selection, and the fields
@@ -373,17 +376,13 @@ LLMProviderDispatch = union(enum) {
 
 - Response support admits `unavailable | prompt_only | native_json_schema`, one
   native JSON-schema capability for every provider (ADR 0028).
-- Only the registered native profile permits native mode.
-- Its projection preserves closed fields, required members, types, enums and disjoint
-  tagged alternatives.
-- Each provider receives supported structural constraints; the complete schema,
-  including all bounds, remains in guidance and deterministic validation.
-- Unsupported modes reject without fallback.
-- Provider grammar never establishes candidate validity.
+- Only the registered native profile permits native mode; its structural projection
+  and the complete schema's guidance and validation follow
+  [§12.3](../contracts/12-model-boundary.md#123-provider-neutral-response-envelope) and
+  [ADR 0006](../decisions/0006-minimal-model-response.md).
+  Unsupported modes reject without fallback.
 - The compiled Bedrock family owns its verified wire fields, independently of those
-  neutral capabilities (ADR 0029; [F0007](F0007-AWSBedrockProvider.md)). Live-test
-  model selection is the separate development cost policy, which grants no production
-  catalogue authority.
+  neutral capabilities (ADR 0029; [F0007](F0007-AWSBedrockProvider.md)).
 
 - The shared implementation conforms directly to `LLMProviderInterface`; its
   per-family dispatch forwards exactly one operation and introduces no second port.
@@ -482,63 +481,44 @@ outcome through runner-owned child bindings:
 5. the request retains the complete compiled result schema under ADR 0006;
    native generation constraints derive from it through the registered profile.
 
-Request-origin contracts declare one repository slot. Its catalogue model’s required
-`json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`)
-(ADR 0012). Unsupported native selection rejects the complete catalogue; workflow
-`response-mode` overrides reject. Temperature is configuration-owned (§12.5,
-[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)): binding
-selects the configured `temperature` when the registered model supports it, otherwise
-omission. Workflow `temperature` parameters reject; neither request consumers nor
-corrections can override the binding. Only a runaway re-send changes it, to the
-configured `temperatureRunawayRetry`.
-Resources and outcomes remain in the existing concise workflow structure.
+Request-origin contracts declare one repository slot. Response mode
+([§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)) and
+temperature ([§12.5](../contracts/12-model-boundary.md#125-low-capability-model-operating-rules),
+[ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)) come from
+the bound catalogue entry and configuration, never from the workflow. An entry selecting
+native-schema output (`json: true`) that its contract does not support rejects the
+complete catalogue.
 
 - The originating step's typed slot requirements compile into the
   existing model-binding projection. Binding resolves that validated slot; graph
-  cloning rebuilds the projection from its owned parameters. Response mode is derived
-  directly from the retained catalogue entry. Requests, leases and capture records
-  retain observations of that choice for validation, not another selection authority.
-- Registered request consumers use the prepared request's typed data dependencies and
-  cannot select a replacement.
-- They grant immutable binding data, not a provider port.
+  cloning rebuilds the projection from its owned parameters. Requests, leases and
+  capture records retain observations of the binding's response mode for validation,
+  not another selection authority.
+- Request consumers grant immutable binding data, not a provider port.
 - Provider-call capabilities remain independently derived from narrow ports and
   constrained by the selected policy.
 - No capacity fact, second flag or registry is needed to derive binding requirements.
 
 **Provider-owned size limits**
 
-- Under ADR 0011, registration, compilation and preparation require no byte ceilings or
-  size estimates.
-- Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
-  reject; do not replace them with another engine capacity limit.
-- No request carries an output allowance below the model's own maximum; every
-  inference request sends the catalogue's documented maximum (Bedrock
-  `inferenceConfig.maxTokens`, Anthropic `max_tokens`; ADR 0028). A provider stop at that maximum,
-  or for any other non-candidate reason, is logged as `model.provider_stopped` with
-  its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output)).
-  An `output_limit` stop is re-sent once by the runner's request flow, never by the
-  provider adapter ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- [ADR 0011](../decisions/0011-provider-owned-request-limits.md) owns the provider-owned
+  size limits, the retired size parameters, the model-maximum output rule and the
+  `model.provider_stopped` log; [§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
+  applies them to model operations. ADR 0039's one `output_limit` re-send is made by the
+  runner's request flow, never by the provider adapter.
 - The runner checks identity, slot, schema, response mode and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
-- Providers report oversized requests, output stops and context errors through the
-  ordinary typed observation path.
 
 **Actual token accounting**
 
-- The project configuration contributes one `workflowTokenBudget` to each workflow
-  execution ([ADR 0037](../decisions/0037-configured-workflow-token-budget.md)).
-- Its sole accounting authority records actual API-reported input plus output tokens.
-- A pre-call check reads the current total without changing it; total usage at or above
-  the budget rejects further model calls.
-- Reconciliation records each inference operation once, including retries and stopped
-  responses.
-- Usage above budget remains recorded and returns `WorkflowTokenBudgetExceeded`; exact
-  equality allows the current result only.
-- No input count, maximum-output estimate, reservation, release or retained worst-case
-  charge participates in workflow budgeting.
+- [ADR 0037](../decisions/0037-configured-workflow-token-budget.md) owns the
+  per-execution `workflowTokenBudget`, and
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting)
+  owns actual-usage accounting: once-only recording, overshoot retention, exact
+  equality, no estimate or reservation, and unavailable usage
+  (`ProviderTokenUsageUnavailable`) blocking further calls.
+- The pre-call check reads the current total without changing it.
 - Proven non-delivery adds no charge.
-- Unavailable usage blocks further model calls with `ProviderTokenUsageUnavailable`,
-  never a fabricated zero or estimate.
 - Ordinary non-model cleanup is not prohibited by an exhausted budget.
 
 **Transport and response integrity**
@@ -557,9 +537,7 @@ Resources and outcomes remain in the existing concise workflow structure.
 - Reported usage remains accounted even when content fails validation.
 
 There is no implicit default, nearest match, first entry, provider-owned
-selection, or silent fallback. Only the compiled YAML `on` mapping may choose
-an explicit retry or fallback operation from typed outcomes. The runner only
-validates and applies the resulting attempt/lifecycle/accounting deltas.
+selection, or silent fallback; retry and fallback selection follow §8.
 
 ## 7. Operation identity, lifecycle, and interface
 
@@ -610,32 +588,22 @@ An unfinished operation must close before another operation or attempt.
 - Assignment owns immutable binding and input-identity facts.
 - The action emits one declared runner transition, and only the runner publishes the
   successor.
-- Request terminalization and a later attempt are rejected while an operation remains
-  assigned or invoked.
-
-- The native assignment binding accepts only the inference assignment command.
-- It takes no parameter; the registry/compiler require its prepared-request/
-  applied-attempt dependencies.
-- The runner supplies read-only lifecycle authority, checks the proposal against the
-  retained request, and publishes the successor and evidence together only after
-  envelope validation.
-- Removing evidence cannot erase an open operation or reset an attempt.
-- Assignment is not invocation or a lease: authorization preparation, logical-request
-  and provider-operation invocation state, the explicit `invoke-model` call, observed
-  inference completion, evidence-derived request closure and authorization-derived
-  termination are separate YAML operations.
+- Assignment is not invocation or a lease. The assignment step and each later lifecycle
+  step (authorization, invocation state, `invoke-model`, completion, closure and
+  termination) are separate operations whose integration rules are in
+  [model-request-operations.md](../contracts/model-request-operations.md#operation-assignment-integration).
 - Execution cleanup discards its in-memory records, never resumes or persists them.
 
-The applied invocation record belongs only to the current execution. No
-persisted send marker or result-consumption record is required. The runner's
-binding, single-use authorization, budget and deadline checks remain required;
-an invocation record alone does not grant a provider capability.
+The applied invocation record belongs only to the current execution (§8). The
+runner's binding, single-use authorization, budget and deadline checks remain
+required; an invocation record alone does not grant a provider capability.
 
 **Inference action**
 
-- `InvokeModelAction` forwards the exact prepared request, binding, single-use
-  authorization reference and applied invocation record through the existing
-  `LLMProviderInterface.invoke` port once.
+- `InvokeModelAction` ([§13.4](../contracts/actions/13-04-model.md#invokemodelaction-invoke-model);
+  [inference integration](../contracts/model-request-operations.md#inference-integration))
+  forwards the exact prepared request, binding, single-use authorization reference and
+  applied invocation record through the existing `LLMProviderInterface.invoke` port once.
 - The port owns lease consumption and call checks; the action adds no retry, fallback,
   response parsing, validation or accounting.
 - Complete/stopped observations and failure facts pass through unchanged, as do
@@ -645,8 +613,6 @@ an invocation record alone does not grant a provider capability.
   capability derivation still uses the injected port.
 - Fake-provider tests exercise the action through observation validation, decoding and
   payload schema validation.
-- Native YAML registration invokes this same action through an explicitly bound provider
-  implementation.
 
 - Authorization failure before the first provider call leaves the logical request
   `assigned`; a typed terminal outcome uses an amended `assigned ->
@@ -656,9 +622,6 @@ an invocation record alone does not grant a provider capability.
   explicit YAML selects further permitted work; otherwise a terminal action closes it.
 - Cancellation before the first call closes the assigned operation as not sent, then
   closes the request as cancelled.
-
-- Retry requires the YAML-selected instance's explicit `retry-limit` and a new ordinal;
-  no inference, fallback or retry is hidden inside an adapter.
 
 - `PrepareProviderOperationAuthorizationAction` depends only on the provider-neutral
   `ProviderOperationAuthorizationPort`.
@@ -687,17 +650,12 @@ an invocation record alone does not grant a provider capability.
   slot-bound reference publication.
 - The YAML binding retains that reference in the closed `provider_authorization_result`;
   the runner validates/applies its normal `NodeDelta`.
-- The backing capability never enters a pipeline value.
 - Reference tokens contain no payload, retain identity through immutable value copies,
   and remain distinct while any owner retains them.
 - Consumption joins the current invoked ledger record, exact binding/input/provider and
   deadline, then transfers ownership once.
-- Preparation failure, expiration, cancellation and operation terminalization release
-  unused backing; consumed backing is destroyed by the adapter.
 - The lifecycle runner destroys its table before its ledger and canonical request
   identities.
-- Leases are execution-local and never restored by a later invocation.
-- There is no provider-recovery storage contract.
 
 - The minimum v1 authorization path uses already loaded, non-refreshing material and
   performs no filesystem, process, metadata, STS, or refresh I/O.
@@ -745,9 +703,9 @@ port LLMProviderInterface {
 
 ## 8. Closed request, observation, and failure algebra
 
-**Protocol correction:** Retain the original task input and latest rejection;
-use the owning attempt-accounting step's explicit retry limit. Strict decoding
-and schema validation remain mandatory; schema-valid output is only a candidate.
+**Protocol correction** follows [§22.6](../contracts/22-repair.md#226-unparseable-output)
+and the [accounting integration](../contracts/model-request-operations.md#accounting-integration)'s
+attempt limit.
 
 - `IdentifiedProviderNeutralModelRequest` contains only engine-assigned request,
   workflow-operation identity, binding, request-schema, result-schema, and
@@ -757,13 +715,10 @@ and schema validation remain mandatory; schema-valid output is only a candidate.
   command, logger, state writer, transaction, or tool definition.
 
 - Those identities belong to the internal request, not automatic model-visible fields.
-- [ADR 0006](../decisions/0006-minimal-model-response.md) defines the complete response
-  as the workflow's compact result object: no outer result/payload wrapper, echoed
-  identity or version.
-- Only a multi-variant result requires a root `kind`.
-- The runner carries the exact association from request through validated observation,
-  decode and candidate consumption; necessary domain selections and citations remain in
-  model content.
+- The response shape and the runner's retained association follow
+  [§12.3](../contracts/12-model-boundary.md#123-provider-neutral-response-envelope) and
+  [ADR 0006](../decisions/0006-minimal-model-response.md); necessary domain selections
+  and citations remain in model content.
 
 - Request preparation consumes existing request-binding evidence, the validated model
   binding, runner-supplied request-schema/input IDs, the selected compiled result-schema
@@ -864,21 +819,13 @@ content exists.
 - These classifications support diagnostics and current-execution control, not restart
   recovery.
 
-- The whole workflow execution is atomic under ADR 0009.
-- Provider attempts, operations, observations and leases remain in memory for that
-  execution.
-- Failure, cancellation or interruption abandons it; a later invocation starts at the
-  compiled `start` step with fresh lifecycle and token accounting.
-- It never restores a provider response, resumes an operation or consults a durable
-  send/result marker.
-- A full rerun may repeat API calls and incur cost again.
-
-- There is no provider-effect journal service, persisted attempt/operation record
-  schema, recovery action, storage-ownership decision or durable-result handoff.
-- Do not introduce the same machinery beneath feature transaction storage.
-- A model-capable workflow has no active-feature prerequisite solely for provider
-  storage.
-- Its declared domain gates and provider capabilities still apply.
+- Provider attempts, operations, observations and leases are execution-local under
+  [ADR 0009](../decisions/0009-atomic-workflow-execution.md#execution-local-state): no
+  provider response is restored, no operation resumed, and no provider-effect journal,
+  recovery action or durable send/result marker exists, beneath feature transaction
+  storage or anywhere else. A model-capable workflow has no active-feature prerequisite
+  solely for provider storage; its declared domain gates and provider capabilities
+  still apply.
 
 Every terminal lifecycle fact retains delivery disposition, including
 cancellation outside `ProviderFailure`. An API request already sent cannot be
@@ -940,11 +887,9 @@ undone; it does not make any candidate workflow output successful.
 - Usage is available independently for the existing accounting action; evidence does not
   prove budget reconciliation or candidate schema validity.
 
-- `DecodeModelEnvelopeAction` accepts only that sealed complete branch.
-- It reuses the strict JSON syntax boundary with result-schema transport, accepts one
-  object with optional JSON whitespace, and rejects duplicate decoded keys at every
-  depth, malformed JSON, non-object roots, fences and trailing content, subject only
-  to the [§22.6 normalization](../contracts/22-repair.md#226-unparseable-output).
+- `DecodeModelEnvelopeAction` accepts only that sealed complete branch and applies
+  [ADR 0006 strict decoding](../decisions/0006-minimal-model-response.md#strict-decoding),
+  subject only to the [§22.6 normalization](../contracts/22-repair.md#226-unparseable-output).
 - Parsing uses the schema profile's 64-level JSON nesting guard, not an output-byte
   ceiling.
 - Numeric lexemes remain exact; no rounding, coercion, JSON extraction, wrapper
@@ -957,26 +902,22 @@ undone; it does not make any candidate workflow output successful.
 - Rejection and allocation failure free partial trees without consuming that evidence or
   its response bytes.
 
-- `ValidateModelPayloadSchemaAction` validates the complete supported profile against
-  that retained compiled schema without reparsing or rechecking call association.
-- It checks required/unknown properties, scalar types and bounds, all array items,
-  constants, enumerations and the exact declared alternative.
-- Optional fields remain absent; no defaults, coercion, field dropping or schema
-  selection from model content occurs.
-- String lengths count Unicode scalars.
+- `ValidateModelPayloadSchemaAction` validates the complete
+  [`model-result-schema/v1` profile](../decisions/0006-minimal-model-response.md#closed-result-schema-profile)
+  against that retained compiled schema without reparsing or rechecking call
+  association; no defaults, coercion, field dropping or schema selection from model
+  content occurs.
 - Following the profile's [JSON Schema numeric
   semantics](https://json-schema.org/understanding-json-schema/reference/numeric),
   integer candidates are checked by exact value, including decimal/exponent spellings
   such as `1.0` and `1e0`; no floating-point rounding or conversion of numeric strings
   is permitted.
-- Schema bounds/constants retain their existing signed-64-bit literal contract.
 
 - Validation returns either an opaque, allocation-free view of the same decoded
   candidate or one closed rejection reason.
 - One invalid member rejects the whole result; no partial proof is published.
 - The proof borrows its existing owners and changes no candidate, usage, lifecycle or
   execution state.
-- Schema validity proves neither semantic correctness nor permission to commit.
 - The native YAML binding retains the candidate's existing owner and preserves
   non-decoded outcomes without invoking this validator.
 
@@ -1011,19 +952,7 @@ undone; it does not make any candidate workflow output successful.
 | `ResolveProviderModelBindingAction` | Resolve one compiled workflow operation's YAML-declared slot through `ValidatedRepositoryModelAllowlist` to its registry entry and supported controls; never accept a raw provider/model tuple or hidden route as authority. |
 | `BuildImmutableUnitOwnerIdAction` | Validate a generic compiled-step owner or the required closed SDD unit-owner tuple; generic ownership never supplies SDD repair/review/clarification authority. |
 | `BuildInitialModelRequestIdentityLedgerAction` | Create a fresh process-local execution epoch and the sole empty immutable request ledger for its closed purpose registry. |
-| `AssignModelRequestIdAction` | Allocate one purpose-bound ordinal from the current ledger revision and return an immutable successor; never mutate the current ledger or reassign a protocol retry. |
-| `ValidateModelRequestBindingAction` | Prove exact ledger membership and epoch/unit/workflow-operation/purpose/ordinal binding without changing the ledger. |
-| `BuildModelRequestAction` | Build one identified provider-neutral request; keep execution identity internal and project only needed guidance/evidence and the exact compact result schema. |
-| `AdvanceModelAttemptAccountingAction` | Reserve the initial complete provider-attempt ordinal, or a later ordinal only under the YAML-selected operation instance's explicit compiler-validated `retry-limit` or for ADR 0039's single runaway re-send of an `output_limit` attempt, outside `retry-limit`; it applies no workflow-global attempt ceiling. |
-| `CheckWorkflowTokenBudgetAction` | Read the execution's actual-usage ledger and reject further provider calls when the total is at or above budget or usage is unavailable; reserve nothing. |
-| `ReconcileWorkflowTokenUsageAction` | Propose once-only recording of validated API input/output usage or a proven not-sent/unavailable disposition; the runner retains an overshoot before returning the budget error. |
-| `AdvanceModelRequestLifecycleAction` | Propose the amended logical request compare-and-swap transition. |
-| `AdvanceProviderOperationLifecycleAction` | Propose one execution-local inference lifecycle compare-and-swap transition; perform no I/O. |
-| `PrepareProviderOperationAuthorizationAction` | Fill one runner-private operation-bound lease slot through the provider-neutral preparation port and return only validated opaque lease-reference evidence. |
-| `InvokeModelAction` | Make exactly one interface inference call for an already invoked inference operation. |
-| `ValidateProviderInvocationObservationAction` | Validate the exact runner-bound operation/request/input/schema/model association, delivery, stop, usage, UTF-8 content, and complete-candidate eligibility before decoding. |
-| `DecodeModelEnvelopeAction` | Parse one complete compact JSON object and retain its bound schema and validated invocation association; never invoke a provider or recover IDs from model content. |
-| `ValidateModelPayloadSchemaAction` | Validate the decoded result against only its bound closed schema; do not repeat parsing or trusted call-association checks. |
+| Request identity, accounting, lifecycle, invocation and admission actions | `AssignModelRequestIdAction`, `ValidateModelRequestBindingAction`, `BuildModelRequestAction`, `AdvanceModelAttemptAccountingAction`, `CheckWorkflowTokenBudgetAction`, `ReconcileWorkflowTokenUsageAction`, `AdvanceModelRequestLifecycleAction`, `AdvanceProviderOperationLifecycleAction`, `PrepareProviderOperationAuthorizationAction`, `InvokeModelAction`, `ValidateProviderInvocationObservationAction`, `DecodeModelEnvelopeAction` and `ValidateModelPayloadSchemaAction`: each one's responsibility is its [§13.4](../contracts/actions/13-04-model.md) entry, with the F0006 rules in §§6–8. |
 | Pipeline runner | Invoke bound children; own the per-execution token ledger, private authorization-lease table; validate/apply deltas, lifecycle compare-and-swap transitions, explicit operation-local retry accounting, actual token-usage reconciliation and pre-call budget guards, deadlines, and cleanup; choose no workflow branch. |
 
 - `ModelProviderBootstrapOrchestrator` coordinates only the requirement and
@@ -1066,15 +995,11 @@ the common port and typed values. A provider adapter has no filesystem,
 command, project-state, workflow, transaction, log-sink, or child-node
 capability.
 
-Ordinary metadata logs never contain raw provider bodies. Under
-[ADR 0018](../decisions/0018-debug-model-exchange-logging.md), debug/trace captures
-complete serialized model-facing requests and available raw provider bodies through
-a composition-injected narrow observation port. The common runner owns attribution
-and lifetime; the capture runner and active logging lifecycle own redaction, bounded
-lossless fragments and persistence. Providers receive no sink, child bindings or
-business graph control. A typed body variant distinguishes provider bytes from
-engine-authored no-response transport diagnostics. Higher thresholds emit metadata
-only. Logs have no retry, validation, provider, or workflow authority.
+Ordinary metadata logs never contain raw provider bodies.
+[ADR 0018](../decisions/0018-debug-model-exchange-logging.md) owns debug/trace capture
+of complete model exchanges, its narrow observation port into the provider adapter and
+its ownership; providers receive no sink, child bindings or business graph control.
+Logs have no retry, validation, provider, or workflow authority.
 
 - Every raw/configured/validated request buffer, response buffer, binding, transport
   handle, authorization table slot/capability, lease reference and observation has
