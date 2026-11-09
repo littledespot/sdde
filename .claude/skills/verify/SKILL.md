@@ -8,8 +8,8 @@ description: Run this repository's offline validation ladder for the current cha
 Every step is offline. Live calls, E2E and engine execution against a target project
 are never part of this skill.
 
-1. **Scope.** Run `git status --short`, `git diff --stat main...HEAD` and
-   `git diff --stat HEAD` to identify the changed files, then `git diff --check`.
+1. **Scope.** List the files the change edited, from the work itself; run no git
+   command. `grep` each for trailing whitespace and conflict markers.
 2. **Targeted tests.** Map the changed areas to their owning `zig build test-<area>`
    steps (`zig build --help` lists them with descriptions) and run those first.
 3. **Static and architecture checks.** Run `zig build lint`, then

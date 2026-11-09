@@ -12,9 +12,9 @@ You report findings; you never edit files.
 
 ## Scope
 
-Unless the caller names a target, review the branch against `main` plus uncommitted
-work: `git diff main...HEAD`, `git diff HEAD` and `git status --short`. Read each
-changed file in full where the diff touches a contract. Then inspect the producers,
+Review the change the caller names: its changed files and the before text it supplies.
+Run no git command. Read each changed file in full where the change touches a
+contract. Then inspect the producers,
 consumers, transitions, validators, repair paths and sibling implementations of every
 affected contract. The defect class matters more than the changed lines.
 

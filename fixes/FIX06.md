@@ -722,18 +722,42 @@ Requests stay byte-identical.
 
 ### E14. Forced irrelevance for every extractor
 
-**Defect:** a chunk with a fenced-code or link-destination token candidate fails its run when
-extraction admits `no_feature_claim` (successful completion); not yet seen live. Not started.
-`construct-forced-token-classifications` makes every candidate `irrelevant`
-(`construct_forced_token_classifications.zig:33-39`), as ADR 0022:136 requires, and
-`retainNative` checks that against the extraction schema (`json_composition_runtime.zig:164-172`).
-The schema's `irrelevant` variant admits only `markdown_inline_code_v1`
-(`extraction.schema.json:178-205`), while `token_candidate_id` admits all three extractors
-(`:49-74`; `structured_tokens.zig:7`), so a fenced or link candidate rejects as
-`InvalidAssembledCandidate`. **Owner:** the extraction schema. **Next:** the `irrelevant`
-variant takes the candidate identity by `$ref` to `token_candidate_id`, with an offline
-regression for each extractor; the schema is model-facing, so check the request projection
-(§2 rule 10).
+**Defect:** successful completion: a `no_feature_claim` chunk holding a fenced-code or
+link-destination candidate failed its run, and a `claims` answer could only preserve such a
+candidate. **Owner:** `extraction.schema.json`. **Status:** implemented 9 November 2026
+([Z_FIX06](Z_FIX06.md) E14); keep decision open. It changes model input: 108 of the scripted
+matrix's 1,656 requests differ, each only by the `irrelevant` variant's extractor list
+(`evaluations/request-projection/e14-before` and `e14-after`), so it is its own change set (§2
+rule 1).
+
+**Recorded before the set (§2 rule 6):**
+- target: none measurable here. Neither development case's reference has a fenced block or a
+  link, so the defect cannot occur in them ("benefit not demonstrated" is the expected
+  finding);
+- guards: lost source requirement per publication and the publication rate per case;
+- watch items: each accuracy defect class and a critical criterion below its minimum, blocking
+  only on a class absent from the reference with an `established` trace to extraction
+  classification; preserved exact-value tokens per publication, blocking if any reference token
+  is classified `irrelevant` (both cases' tokens are inline code a requirement quotes, which
+  ADR 0024 keeps);
+- run maximum: three per case (user, 9 November 2026: "once implement i approve 3 runs per e2e
+  test case").
+
+**Set (10 November 2026):** `2026-11-09T19-51-5*`, one build (source `4d7b5de0…`, recorded
+`modified: true`), skill `185b9bc6…`. Published 6 of 6 and every run adjudicated passed, against
+the HEAD set's 6 of 6.
+
+| Case | Pass | Defects (lost / weakened / addition / contradiction) | Advisory score, mean |
+| --- | --- | --- | --- |
+| Hello-world | 3 of 3 | 0 / 0 / 0 / 0 (HEAD set 0 / 0 / 0 / 0) | 92.9 (HEAD 94.0) |
+| Loan-renewal | 3 of 3 | 0 / 0 / 1 / 0, AC-001's minor "records the loan as renewed" (HEAD 0 / 0 / 4 / 0) | 95.2 (HEAD 90.5) |
+
+Guards held: no lost source requirement, publication rate unchanged. Watch items: no token
+was classified `irrelevant` in any run; no new class appeared. One protocol correction on the
+changed call kind (`19-51-56Z` call 2, a nested `token_classifications` wrapper ending early;
+the re-request returned the same classifications), not attributed to the change. Target: benefit
+not demonstrated, as recorded. **Next:** the keep decision, the user's (§2 rule 6); the default
+recommendation is keep.
 
 ### E15. Streamed provider replies (proposal; no ADR)
 

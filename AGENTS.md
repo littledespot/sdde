@@ -56,7 +56,6 @@ source, copy or edit `.env.e2e`; the launchers load it.
 - `design/harness/`: the E2E harness, evaluator and R8 acceptance contracts.
 - `design/workflows/`: the Spec workflow definition with its prompts, schemas and
   context files, which E2E cases install into a target's `paths.workflows` root.
-- [fixes/README.md](fixes/README.md) names the active fix record.
 
 ## Current project state
 
@@ -124,14 +123,16 @@ Section *N* is detailed in `design/contracts/NN-*.md`; the §13 catalogue is in
 ## Work authorization
 
 - Answer, review, explain, diagnose and plan requests are read-only, except that
-  E2E run analysis is written under the Git-ignored `evaluations/`.
+  E2E run analysis is written under `evaluations/`.
 - Build, change, implement and fix requests authorize in-scope local edits and
   non-destructive validation.
 - Change the design, accepted ADRs, invariants, agent-instruction files, CI or
   security policy only when the request explicitly includes it.
 - Get explicit approval before publishing, writing externally, acting destructively
   or materially expanding scope.
-- Never stage, commit or push unless the user asks.
+- Run no git command, read-only included; the user alone manages version control.
+  Never advise on commits or make commit state a condition of approved work. A run's
+  recorded build state is reported as a fact.
 - Preserve existing user changes; make no unrelated edits in a dirty worktree.
 
 ## Before editing
@@ -165,12 +166,11 @@ A small non-semantic documentation fix needs none of this.
   deprecated entry points or fallbacks.
 - Create or update a file only if it supports LLM coding: code, tests and the data
   they read; a model-facing workflow asset the engine sends; or the one governing
-  record (an ADR, contract clause or fix record) a coding agent reads when generating
-  or deciding on code. State each fact once, in its owner; add no README, index,
-  diagram, summary, changelog, status narrative or traceability that only documents.
-  Extend an existing file; create one only when no existing file can hold it.
-  Delete closed work and superseded evidence; git history keeps it. Fix records follow
-  [fixes/README.md](fixes/README.md).
+  record (an ADR, contract clause or open-work record) a coding agent reads when
+  generating or deciding on code. State each fact once, in its owner; add no README,
+  index, diagram, summary, changelog, status narrative or traceability that only
+  documents. Extend an existing file; create one only when no existing file can hold
+  it. Delete closed work and superseded evidence instead of keeping history in files.
 
 ## Anti-overfitting rule
 
@@ -207,9 +207,12 @@ A small non-semantic documentation fix needs none of this.
   published specifications against the case rubrics and comparing them with the
   previous build. Cost is reported, never the reason for a change: no cost-only
   change without that output-quality assessment.
+- Never propose a limit that can discard useful output (output tokens, record counts,
+  truncation) as a quality fix; prefer checks that detect missing or unsupported
+  content.
 - Decide a rule, prompt or contract change on both development cases, hello-world
-  and loan-renewal, with repeated runs on one committed build; a single run never
-  decides it. Never tune on the sixteen reserved qualification features
+  and loan-renewal, with repeated runs on one build (one recorded source hash); a
+  single run never decides it. Never tune on the sixteen reserved qualification features
   ([ADR 0034](design/decisions/0034-spec-quality-gate.md)). Count budget-stopped,
   malformed and exhausted runs as attempted workloads.
 - Report separately: implementation complete, mechanical checks passed, semantic
@@ -308,6 +311,11 @@ Beyond the rules above, do not introduce:
   Orchestrators: spy child-binding tests. Routines: fake-port tests plus each step.
 - Contracts: accepted and rejected fixtures, unknown fields and version mismatch.
   Every policy needs accepted and rejected cases; coverage alone proves nothing.
+- Never test model output with fixed strings or rows of hand-written malformed
+  variants. Test the derivation or rule that can be wrong with a few typed accepted and
+  rejected cases.
+- E2E case principle files are project standards. They never restate or anticipate a
+  story's requirements (values, messages, limits, refusal rules).
 - Properties and fault injection: paths, DAGs, transitions, repairs, rendering,
   publication writes, interruption, stale approval and retry exhaustion.
 - Unit and integration tests are not E2E evidence, and the harnesses stay separate.
@@ -316,14 +324,13 @@ Beyond the rules above, do not introduce:
 - The E2E harness makes no judge call. Acceptance comes only from a
   `spec-adjudication-record/v1` applied with `zig build adjudicate-spec`; the
   `/evaluate-e2e` skill writes and applies it, scoring under the case rubric and the
-  user's rulings in that skill (user decision, 3 November 2026). Start that skill only
-  when the user triggers it or explicitly approves it for named runs (user decision, 7
-  November 2026), and never write or apply that record outside it. Run directories under
-  `zig-out/` are immutable evidence.
+  user's rulings in that skill. Start that skill only when the user triggers it or
+  explicitly approves it for named runs, and never write or apply that record outside
+  it. Run directories under `zig-out/` are immutable evidence.
 
 ## Validation
 
-1. `git diff --check` on changed text.
+1. No trailing whitespace or conflict markers in each changed file (a `grep`).
 2. Targeted `zig build test-<area>` while iterating.
 3. `zig build lint` and `zig build test-architecture`.
 4. `zig build verify` on the final tree, after the last edit. It includes the
@@ -361,3 +368,8 @@ approved deviations.
 Keep this file short and repository-wide; enforce what you can in types, tests and
 CI. Change it only for a durable requirement or a measured repeated failure, state
 each rule once, and start a new agent session after editing it.
+
+Instruction files (this file, tool-specific files such as `CLAUDE.md`, agent and skill
+definitions, and agent memory) hold durable rules only. They never cite transient
+work records, dated history or incident narratives: a work record lives only for the
+life of its fix.
