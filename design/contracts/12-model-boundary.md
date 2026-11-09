@@ -238,16 +238,11 @@ output projects the existing compiled schema into `outputConfig.textFormat`;
 `structure.jsonSchema.schema` is a JSON string. Prompt-only models still receive
 the exact closed schema as guidance and pass the same native candidate validators.
 
-The compiled Bedrock family named by the catalogue entry owns the typed
-additional-control policy: no additional fields (`converse`), GPT-OSS reasoning effort
-(`gpt-oss`), Luna strict native JSON (`luna`) or Claude `output_config.effort`
-(`claude`) ([ADR 0029](../decisions/0029-bedrock-model-families.md)). The external
-catalogue selects a family but cannot supply a serializer or control policy. Unknown
-Regions, families, controls and unsupported schema modes reject at the existing binding
-boundary. Any Bedrock model or inference-profile ID is accepted and never interpreted;
-Bedrock's rejection of a wrong one is a typed provider failure, never retried with
-another family or model. Model switching is therefore a catalogue change; a new
-request shape needs a new compiled family, never a model-name branch or fallback.
+The compiled Bedrock family named by the catalogue entry owns the typed additional-control
+policy; [ADR 0029](../decisions/0029-bedrock-model-families.md) owns the families, Regions
+and model-ID rules (any model ID is accepted and never interpreted; a wrong one is a typed
+provider failure, never retried with another family or model). Unknown Regions, families,
+controls and unsupported schema modes reject at the existing binding boundary.
 
 Only an `end_turn` response with valid assistant text is candidate-eligible. Join
 text fragments in order without inserting characters. Provider-supplied reasoning
@@ -280,19 +275,11 @@ provider port. Only the endpoint, request encoder and response decoder are
 Anthropic-specific. ADR 0028 owns the dated wire contract: the models, endpoint and
 headers, request and response mapping, stop reasons, usage and error classification.
 
-- Provider `anthropic` joins its models by exact model. Each needs its own approved
-  compatibility probe before live use.
-- `config` is exactly `maxOutputTokens`, the documented maximum sent unchanged as
-  `max_tokens`, and `requestTimeoutMs`
-  ([ADR 0030](../decisions/0030-engine-owned-model-request.md#request-deadline)).
-- Production reads exactly `ANTHROPIC_API_KEY`, once after binding validation and only
-  for a family bound to the selected workflow's slots; a missing key fails that
-  family's authorization as `authentication_failed`.
-- `temperature` is never sent, so the configured temperatures (§12.5) are omitted.
-- Only `end_turn` yields a candidate; `max_tokens` is `output_limit`, so ADR 0039's
-  one re-send applies. Thinking blocks are provider reasoning, never candidate text.
-- Each call keeps its slot's binding through retries and protocol corrections; there
-  is no cross-provider fallback or model-name branching.
+ADR 0028 also owns the provider's exact-model join and per-model compatibility probe, its
+`config` (`maxOutputTokens`, `requestTimeoutMs`), credential reading and the rule that each
+call keeps its slot's binding with no cross-provider fallback. Two consequences for this
+section: `temperature` is never sent, so §12.5's configured temperatures are omitted; and a
+`max_tokens` stop is `output_limit`, so ADR 0039's one re-send applies.
 
 ### 12.4 Context requests
 
@@ -320,9 +307,8 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - the project configuration's `temperature` whenever the selected registered model
   supports temperature, and `temperatureRunawayRetry` on a runaway re-send; omit the
   control only when unsupported, without relying on it for correctness (workflow
-  definitions cannot select or override it; prepared requests, retries and provider
-  authorization retain and validate it; the standalone evaluator sets its own value;
-  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md));
+  definitions cannot set or override it; prepared requests, retries and provider authorization retain
+  and validate it; [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md));
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
   nested alternatives and constraints, without synthetic candidate examples;
@@ -427,25 +413,11 @@ findings. Only complete native collection validation permits authority advanceme
   Anthropic `max_tokens`; [ADR 0028](../decisions/0028-anthropic-messages-provider.md)).
   A provider-applied stop is logged with its reason
   under [ADR 0011](../decisions/0011-provider-owned-request-limits.md#model-maximum-output).
-- A runaway, a provider `output_limit` stop, discards its partial text as a candidate
-  (at `debug` it is logged in full, §27) and re-sends the
-  identical request once, changing only the temperature to the configured
-  `temperatureRunawayRetry`
-  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). The
-  re-send is not a protocol correction: it carries no diagnostic, uses no `retry-limit`
-  and is bounded at one per attempt, including a correction attempt. Admission takes a
-  first runaway as `invalid` with no candidate; `check-model-runaway` routes it to
-  `build-model-runaway-resend`, a route the compiler requires wherever admission's
-  `invalid` continues. The re-send must equal its attempt in every field except
-  sampling. Requests and provider operations record their sampling
-  (`configured` or `runaway_resend`), and `model-request-debug/v16` records both
-  configured temperatures and the sampling. A runaway on the
-  re-send ends the request with `RunawayRepeated` and the work fails.
-- Every retry response, a re-send or a protocol correction, passes exactly the checks a
-  first response does, in the same order: observation and usage validation, decoding,
-  payload-schema validation, native admission constraints, domain validation, the
-  evidence and repair rules and every publication check. None is skipped, relaxed or
-  reordered for a retry. Each re-send is logged as `model.runaway_resent` (§27).
+- A runaway, a provider `output_limit` stop, never yields a candidate (at `debug` its
+  partial text is logged in full, §27).
+  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md) owns its one
+  re-send, and the [operation catalogue](model-request-operations.md) owns runaway admission
+  and routing. Each re-send is logged as `model.runaway_resent` (§27).
 
 - Model-operation identity is the compiled `(workflowId, workflowVersion,
   originatingWorkflowStepId)` tuple retained across consumer steps.

@@ -1,424 +1,238 @@
 # Z_FIX06 — Implemented FIX06 items
 
-Implemented FIX06 items ([convention](README.md)), moved here from 31 October 2026 by the
-user's instruction. Earlier completed FIX06 work (Q1, Q2, Q3, Q4's first attempt in full, Q6,
-D7.1, D11.1/.2/.4/.5, DE6, T1, T5's measures) is `fixes/Z_FIX06.md` at git `194e29a`; Q10b
-D10.2, reverted in full with D13.1 (ADR 0023:25-28), is here at git `388438e`.
+Implemented FIX06 items ([convention](README.md)): what each changed, its owner, its keep
+decision and any rule a later change must follow. Measurements, run-by-run evidence and
+earlier versions of these records are in git history. Earlier completed FIX06 work (Q1, Q2,
+Q3, Q4's first attempt, Q6, D7.1, D11.1/.2/.4/.5, DE6, T1, T5's measures) is
+`fixes/Z_FIX06.md` at git `194e29a`; Q10b D10.2, reverted in full with D13.1 (ADR 0023:25-28),
+is there at git `388438e`.
 
 ## Q2b D2.3. Dispositions complete at response admission (ADR 0046)
 
-**Implemented 31 October 2026; committed in `194e29a`. Kept 1 November 2026 (user: "apply best
-recommendations").** ADR 0046 records the decision to implement it and the mechanism:
-admission rejects a dispositions answer that omits or repeats an assigned claim
-(`missing_member`, `duplicate_member`) under the request's retry limit, and the request the
-model receives is unchanged.
-
-- **Defect targeted:** lost source requirement: hello-world's UTC claim was lost when the
-  dispositions insert repair answered `duplicate` of claim 1, the only requirement losses in
-  20 hello-world publications 26–31 October.
-- **Measurement** (12 runs, `evaluations/d23-12/measures-set.json`): 12 of 12 published; every
-  first dispositions answer was complete, so the correction never fired; target "not enough
-  evidence". No hello-world spec lost the UTC requirement (0 of 9 on D2.3 trees).
+**Committed in `194e29a`; kept 1 November 2026** (user: "apply best recommendations"). ADR 0046
+records the decision and mechanism: admission rejects a dispositions answer that omits or
+repeats an assigned claim (`missing_member`, `duplicate_member`) under the request's retry
+limit; the request the model receives is unchanged. Defect class: lost source requirement
+(hello-world's UTC claim, lost when the dispositions insert repair answered `duplicate`).
+Evidence: `evaluations/d23-12/measures-set.json` (12 of 12 published; the correction never
+fired, so "not enough evidence"). Open follow-ups: FIX06 Q2b.
 
 ## Q4 D4.1. `uncovered_member` correction names the covering kinds
 
-**Decided, implemented and kept 30 October 2026.** The correction names the covering kinds
-from the compiled coverage rule, never hard-coded (`model_schema_diagnostic.zig`,
-`model_protocol_retry.zig`); `required_preserve` unchanged. Evidence
-`evaluations/e2e/d41-measures-set.json` (6 runs; correction never fired). Its live firings
-since are in FIX06 Q14. The extension decided 3 November 2026 is open in FIX06 Q4.
+**Kept 30 October 2026.** The correction names the covering kinds from the compiled coverage
+rule, never hard-coded (`model_schema_diagnostic.zig`, `model_protocol_retry.zig`);
+`required_preserve` unchanged. Evidence `evaluations/e2e/d41-measures-set.json` (correction
+never fired). Its live firings are in FIX06 Q14; the extension decided 3 November 2026 is open
+in FIX06 Q4.
 
 ## Q13 D13.1. Post-generation reviews removed
 
-**Implemented 1 November 2026; committed in `2b3dc8b`.** Decided 1 November 2026 (user: "apply
-best recommendations"); the decision and what it removed are ADR 0023's removal amendment
-(0023:25-42). Effects: FIX06 §3's robustness track (runaways, re-sends, budget) and H4 (sends
-and tokens).
+**Committed in `2b3dc8b`** (user, 1 November 2026: "apply best recommendations"). The
+decision and what it removed are ADR 0023's removal amendment (0023:25-42).
 
 ## Q7 D7.4. No engine code span where the text already delimits an exact value
 
-**Implemented 1 November 2026 on `2b3dc8b`; committed in `340261e`.** Decided 1 November 2026,
-then "implement Q7 D7.4." (ADR 0036's decision authority); the user's ruling that D7.4 is not
-a punctuation rule stays in FIX06 Q7. `delimitedByText` (`specification_projection.zig`)
-gives an exact copy no code span when only literal text touches it and that text is directly
-one balanced pair from the closed wrapper table (`exact_value_boundary.zig`), unless the copy
-ends in terminal punctuation; passive values keep their span (ADR 0036 Decision 6;
-23-rendering.md §23.1). No request carries the projection's spans (freeze `2b3dc8b-d74`
-against `2b3dc8b`: `diff -r` empty). Every artefact-A occurrence so far is on a
-development-case value that ends in punctuation, so none of them changes (FIX06 Q7). No
-scripted scenario quotes an exact copy, so the freeze doesn't reach the new path.
+**Committed in `340261e`** (user, 1 November 2026: "implement Q7 D7.4."; ADR 0036 records the
+authority); the user's ruling that D7.4 is not a punctuation rule stays in FIX06 Q7.
+`delimitedByText` (`specification_projection.zig`) gives an exact copy no code span when only
+literal text touches it and that text is directly one balanced pair from the closed wrapper
+table (`exact_value_boundary.zig`), unless the copy ends in terminal punctuation; passive values
+keep their span (ADR 0036 Decision 6; 23-rendering.md §23.1). No request carries the
+projection's spans. Every development-case value ends in punctuation, so no artefact-A
+occurrence changes (FIX06 Q7); no scripted scenario quotes an exact copy (FIX06 T3).
 
 ## Q7 D7.2. ADR 0045 withdrawn
 
-**Implemented 3 November 2026; docs only.** Decided 3 November 2026 (user: "apply
-recommendations"; ADR 0036's decision authority records it): ADR 0036 Decision 6 stays, and
-ADR 0045, accepted but on hold and never implemented, is withdrawn; its file is deleted (git
-`388438e` keeps it). Plain values in entity meanings (rendering artefact B, FIX06 Q7) stay
-plain.
+**Docs only, 3 November 2026** (user: "apply recommendations"; ADR 0036 records it): ADR 0036
+Decision 6 stays; ADR 0045, accepted but on hold and never implemented, is withdrawn and its
+file deleted (git `388438e` keeps it).
 
 ## Q13. Inline source lines
 
-**Implemented 1 November 2026 on `340261e`; committed in `6e543e6` with the D12.1 + D16.2 change
-set (Q13 changes no request). Every publication since D12.1 shows the lines.**
-- **User decisions, 1 November 2026:**
-  - "the claims associate with the AC, FR and EN should be placed after each AC, FR and EN";
-  - format: file and lines only, one line per item with the source file and merged line
-    ranges, computed from the item's claims and their citations; several files join with "; ";
-  - then "implement Q13,".
-- **Change:** each AC, FR and EN record in `spec.md` shows those lines, for example
-  `` - Source: `references/hello-world/stories.md` lines 5–7 ``; a single line reads
-  `line N`, ranges join with ", ", and a record citing no source line shows none. The live
-  projection and the reference-context snapshot share one trace (`traceRequirements`,
-  `specification_projection.zig`); `source_coordinates.lines` turns a citation span into its
-  lines, and `specification_markdown.zig` renders and parses the line (23-rendering.md §23.1,
-  F0100 §5.6). An AC or FR line follows a blank line, because a two-space line directly under
-  a field continues that field. No state or report version changes. The lines reduce no
-  scored defect class; they make each record's links visible to the human reviewer (H1).
-- **Proof:** codec, span-owner, projection and integration tests; freeze `340261e-q13`
-  against `2b3dc8b` shows `diff -r` empty (129 scenarios, 1,702 calls).
+**Committed in `6e543e6`** with the D12.1 + D16.2 change set (Q13 changes no request). User
+decisions, 1 November 2026: "the claims associate with the AC, FR and EN should be placed after
+each AC, FR and EN"; file and lines only, one line per item, with the source file and merged
+line ranges computed from the item's claims and their citations; several files join with "; ".
+- **Change:** each AC, FR and EN record in `spec.md` shows those lines (23-rendering.md §23.1,
+  F0100 §5.6). The live projection and the reference-context snapshot share one trace
+  (`traceRequirements`, `specification_projection.zig`); `source_coordinates.lines` turns a
+  citation span into its lines, and `specification_markdown.zig` renders and parses the line.
+  An AC or FR line follows a blank line, because a two-space line directly under a field
+  continues that field.
+- The lines reduce no scored defect class; they make each record's links visible to the human
+  reviewer (FIX06 H1). Proof limit: FIX06 T3.
 
 ## Q12 D12.1. Records requests receive no unpublished drafts
 
-**Implemented 1 November 2026 on `340261e`; committed in `6e543e6`; approved 1 November 2026
-as the first model-input change. Not kept alone (decided 2 November 2026, user: "the above
-recommendations are approved"); its code is part of the D12.1 + Q16 change set, kept with
-D16.2 on 2 November 2026 (Q16).**
-- **Change:** only the entities unit receives an earlier draft (the brief); records authoring
-  and repair packets receive neither the brief nor the entity decision
-  (`specification_session.zig`); `records.prompt.md:1` no longer names the brief, and
-  `generation.context.json`'s `sources` guidance drops "and prior drafts". No state, report or
-  schema change.
-- **Measurement, D12.1 alone** (`evaluations/d121-measures-set.json`, six runs): unsupported
-  addition 10 → 11 and restatement 7 → 12 rose, as the loan-renewal records call wrote
-  assumption, non-goal, prohibition and edge-case records that invented content or restated
-  FRs (3 of 3 runs).
-- **Copy route removed:** FR equal to an unpublished draft fell from 9 of 18 publications of
-  31 October to 0 of 15 across the D12.1, D16.1 and D16.2 sets (p = 0.004).
+**Committed in `6e543e6`; kept with D16.2 on 2 November 2026** as part of the D12.1 + Q16
+change set (user: "keep D12.1 + D16.2"; not kept alone, user: "the above recommendations are
+approved"). Only the entities unit receives an earlier draft (the brief); records authoring and
+repair packets receive neither the brief nor the entity decision (`specification_session.zig`;
+17-specify.md §17.3). Effect: FR equal to an unpublished draft fell from 9 of 18 publications
+to 0 of 15 (p = 0.004); alone, it raised unsupported addition and restatement
+(`evaluations/d121-measures-set.json`).
 
 ## Q12 D12.2. Generated fields take obligation strength from one owner
 
-**Implemented 2 November 2026 on the `b38628c` tree; committed in `388438e`; approved 1
-November 2026. Kept 3 November 2026 (user: "apply recommendations") under AGENTS.md's one owner
-per instruction, although its Keep if wasn't met as written; its watch items closed with Q12
-(Q12 D12.3 below).**
-- **Change:** `generation.context.json`'s `business_value`, bound to every generation and
-  specification-unit repair request, owns "preserve source-backed conditions, obligations and
-  obligation strength."; the story and functional-requirement purposes and
-  `records.prompt.md` drop their copies. No code, state, report or schema change.
-- **Set** (approved 2 November 2026, user: "approved"; ten runs `2026-11-02T09-15-27Z` to
-  `09-33-46Z`, five per case after one approved extension; FIX06 §1's previous reference):
-  story weakening 8 of 15 → 1 of 9 (p = 0.093; 9 events, at the evidence floor); against the
-  D16.2 set, unsupported addition 6 → 19 and restatement 3 → 5, neither significant (pooled
-  p = 0.16), and FR weakening 0 → 0. The loan-renewal story still fell in three modes: "may
-  renew" (`09-15-30Z`), the five source lines joined with no separator (`09-15-27Z-d2ee…`,
-  `09-15-32Z`) and invented steps (`09-33-44Z`, `09-33-46Z`).
+**Committed in `388438e`; kept 3 November 2026** (user: "apply recommendations") under
+AGENTS.md's one owner per instruction, although its Keep if wasn't met as written.
+`generation.context.json`'s `business_value`, bound to every generation and specification-unit
+repair request, owns "preserve source-backed conditions, obligations and obligation strength.";
+the record purposes and `records.prompt.md` carry no copy. Story weakening fell 8 of 15 → 1 of
+9 (p = 0.093); the story's remaining modes motivated ADR 0047.
 
 ## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
 
-**D16.1 implemented and measured 2 November 2026 on `340261e`; committed with D16.2 in
-`6e543e6`. Its set failed the publication guard; D16.2 amended it the same day instead of
-reverting it (FIX06 §2 rule 1's recorded exception), and the change set is kept (decided 2
-November 2026, user: "keep D12.1 + D16.2") without the recommended three-run extension.** ADR
-0038 (Decisions 2, 3 and 5, with the user's D16.1 and D16.2 decisions) and ADR 0035 record the
-rule.
-- **Defect targeted:** restatement, 5 of 18 publications of 31 October (7 defects): business
-  rules paraphrasing the FR or the source, AC and edge-case repeats, the story repeating the
-  FR. ADR 0035's exact equality catches none of them.
-- **Change:** requirements (FR) own their claims and are never deleted or rejected by the
-  rule; admission rejects a business rule, outcome, assumption, non-goal or prohibition that
-  names both taken and untaken claims as `shared_member`, with a correction listing every
-  taken naming; the session deletes a wholly taken one natively (`repeated_statement`),
-  keeping a record that holds the batch's only copy of an exact value; FR, BR, UO and PB need
-  a scenario; ADR 0035's in-batch record-versus-record deletion is deleted. Versions:
-  `model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`.
-- **D16.1 set** (`evaluations/q16-measures-set.json`): loan-renewal published 1 of 3 against
-  D2.3's 6 of 6 (p = 0.083); both failures exhausted the records retry limit on
-  `shared_member`.
-- **D16.2 set** (six runs `2026-11-02T02-27-46Z` to `02-29-15Z`,
-  `evaluations/d162-measures-set.json`): its **Keep if** was not met: restatement 4 → 3 didn't
-  fall (7 events, "not enough evidence"), and unsupported addition 6 → 6 (0.5 → 1.2 per
-  publication) was undecided after three runs; FR equal to an unpublished draft 0 of 5.
-  `02-29-06Z` exhausted reconciliation dispositions on `missing_member`, from a request
-  byte-identical across D2.3, D16.1 and D16.2. No first records attempt in this set or the
-  D12.2 set had a statement record, so the native delete first fired on 3 November
-  (`2026-11-03T04-12-37Z`, seven deletes; since then `2026-11-06T22-45-22Z` and `22-45-46Z`,
-  two each; the reports list one, one and none, FIX06 T8); the records prompt's "at most one" sentence (`records.prompt.md:9-11`), added
-  with D16.1, coincides with the drop.
+**Committed with D16.2 in `6e543e6`; kept 2 November 2026** (user: "keep D12.1 + D16.2"),
+D16.2 amending D16.1 after its set failed the publication guard (FIX06 §2 rule 1's recorded
+exception). ADR 0038 (Decisions 2, 3 and 5) and ADR 0035 record the rule: requirements own
+their claims; a partly taken statement is `shared_member`, a wholly taken one a native
+`repeated_statement` delete; FR, BR, UO and PB need a scenario. Versions:
+`model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`. Evidence:
+`evaluations/q16-measures-set.json`, `evaluations/d162-measures-set.json` (Keep if not met:
+restatement 4 → 3, "not enough evidence"). The native delete first fired on 3 November; the
+report lists only some deletes (FIX06 T8).
 
 ## Q19 D19.2. The engine composes the story (ADR 0047)
 
-**Implemented 3 November 2026; committed in `f6ef0f6`. Kept 7 November 2026 with D12.3 (FIX06
-§2 rule 3's recorded exception) on the 12 adjudicated runs since ADR 0047: no story defect
-against 7 in the D12.2 reference's 9 publications; the other results are in FIX06 §1.**
-- **Change:** ADR 0047. `compose-specification-story` (`src/domain/specification_story.zig`)
-  quotes the catalogue's business claims in source order, the quotes joined into one paragraph
-  (Decision 1); no story model call. A story with nothing to quote or failing unit validation
-  blocks with `no_story_requirements` or `story_not_admissible`. The story prompt, the generation schema's story variant, the
-  `authoring-guidance` corpus and the old authoring-associations `scorecard.json` are deleted
-  (user: "YES"). `zig build verify` passed and the contract review found no remaining
-  violation (3 November 2026).
-- **Runs:** three per case on `28213a7` modified (`2026-11-03T04-1*`, skill `af394020…`) and
-  three per case with D12.3 on `f6ef0f6` modified (`2026-11-06T22-4*`, report v15, skill
-  `0b552067…`): no story defect in any, the story byte-identical per case. The D12.3 runs made
-  9–10 first attempts each with no correction or re-send, and four native
-  `repeated_statement` deletes (`22-45-22Z` two, one reported; `22-45-46Z` two, none
-  reported; FIX06 T8).
-- **Motivation** (moved from FIX06 Q19): before ADR 0047, 26 of 30 weakenings since 29 October
-  were in the story; every loan-renewal story fell in one of three modes ("A borrower may
-  renew…", the source lines joined with no separator, invented login and selection steps), all
-  three in the D12.2 set; hello-world's story added timing, a display surface or an order in 4
-  of 8 publications since D12.1.
+**Committed in `f6ef0f6`; kept 7 November 2026** with D12.3 (FIX06 §2 rule 3's recorded
+exception): no story defect in the 12 adjudicated runs since, against 7 in the D12.2 reference's
+9 publications. ADR 0047 records the decision and mechanism (`compose-specification-story`,
+`src/domain/specification_story.zig`; no story model call; `no_story_requirements` and
+`story_not_admissible` block). The story prompt, the generation schema's story variant, the
+`authoring-guidance` corpus and the old authoring-associations `scorecard.json` are deleted
+(user: "YES"). Motivation: before ADR 0047, 26 of 30 weakenings since 29 October were in the
+story.
 
 ## Q12 D12.3. The story leaves pre-generation source review
 
 **Implemented 7 November 2026** (user: "apply recommendations", then "yes, advance both"; ADR
-0047 Decision 5, amended that day). Kept with ADR 0047 (FIX06 §2 rule 3). Not yet exercised
-live: none of the 12 runs since ADR 0047 reached source review.
-- **Defect:** `2026-11-02T09-15-31Z` ended `workflow_invalid` after 34 calls: the second
-  readiness pass filed the story purpose itself as a `candidate_omission`, which loss
-  comparison couldn't localize. The engine composes the story, so a support review of it
-  checks nothing that the quoted claims' provenance doesn't already establish.
-- **Change:** `specification_authority.projectRecords` no longer seeds the story; the story's
-  required-authority policy, slot and clarification question and its packet-guidance purpose
-  are deleted; `packet-guidance/v3` and required-authority contract 2 (old versions reject).
-  The `captured-story` case leaves the read source-loss corpus.
-- **Q12 closed 7 November 2026.** Its last check, the story's invented-steps mode, didn't recur
-  in the 12 runs since ADR 0047. Q12's leftover restatements stay: the one-owner hygiene
-  change that removed them was reverted (FIX06 §3). Not recommended: a typed obligation-strength field (07-domain-representations.md:158
-  forbids a duplicate modality field; making it matter needs a word check or engine-rendered
-  modal text).
+0047 Decision 5); kept with ADR 0047 (FIX06 §2 rule 3). Not yet exercised live: no run since
+ADR 0047 has reached source review. `specification_authority.projectRecords` no longer seeds the
+story; the story's required-authority policy, slot, clarification question and packet-guidance
+purpose are deleted. Defect: `2026-11-02T09-15-31Z` ended `workflow_invalid` when readiness
+filed the story purpose as a `candidate_omission`. **Q12 closed 7 November 2026.** Not
+recommended: a typed obligation-strength field (07-domain-representations.md:158 forbids a
+duplicate modality field; making it matter needs a word check or engine-rendered modal text).
 
 ## Q8 D8.3. One piece of evidence is one claim
 
-**Decided and implemented 7 November 2026** (user: "i accept recommendation", then "implement
-D8.3", accepting the preflight's resolutions a–f; then "fix the issues", making an insertion
-that adds no claim an unchanged merge).
-- **Defect:** `2026-11-07T06-11-33Z-6897…`'s extraction returned five identical
-  `{"category":"business","citations":[5,6,7,8,9]}` claims; the list-item split made 25, the
-  story repeated every sentence five times (organization 2), and reconciliation made five
-  summary calls and two `missing_member` corrections (about 26k tokens).
-- **Change:** the rule is ADR 0036 Decisions 3 and 4 (16-reference-ingestion.md §16.3; the
-  13-03 action text). Owner: `reference_extraction_text.appendDistinct`, used by extraction
-  text validation and `reference_extraction_repair.Omission.merge`; the merge reports
-  `changed = false` when its insertion adds no claim.
-- **Tests:** accepted (identical proposals; duplicates per item after the split; a
-  repair-inserted duplicate as an unchanged merge; a list-spanning insertion adding only its
-  new item, with the repair's origin; duplicate claims keeping one exact-value duty) and
-  rejected (same lines in two categories; different and partly overlapping lines; a repair
-  insertion in another category). The generation fixture that built several claims by
-  copying one now gives each claim its own line after a blank line, and a technical claim
-  the first claim's lines.
-- **Proof:** `zig build test`, `lint`, `test-architecture` and `test-integration` pass; the
-  request projection is byte-identical to `entity-meaning-before`, since no offline scenario
-  duplicates a claim.
+**Implemented 7 November 2026** (user: "i accept recommendation", then "implement D8.3",
+accepting the preflight's resolutions a–f; then "fix the issues", making an insertion that adds
+no claim an unchanged merge). The rule is ADR 0036 Decisions 3 and 4 (16-reference-ingestion.md
+§16.3; the 13-03 action text). Owner: `reference_extraction_text.appendDistinct`, used by
+extraction text validation and `reference_extraction_repair.Omission.merge`; the merge reports
+`changed = false` when its insertion adds no claim. Defect: `2026-11-07T06-11-33Z-6897…`'s five
+identical extraction claims, which the story repeated five times. Every offline request is
+byte-identical, so the proof is the accepted and rejected owner tests.
 
 ## Bare-value `reference_only` correction
 
-**Implemented 7 November 2026** (user: "fix the bare-message failure"). First fired live on
-8 November (FIX06 Next item 1): it didn't change the model's output in that run.
-- **Defect:** loan-renewal `2026-11-07T06-12-34Z-f549…` and `07-38-56Z-2627…` published
-  nothing: the records call wrote user-visible outcomes as the bare messages
-  `"Loan renewed!"` and `"Renewal refused."`, three times each, until retry exhaustion. Two
-  of the last seven loan-renewal runs; independent of the reverted one-owner hygiene change.
-- **Cause:** native recognition makes text that is exactly a source value one exact-value
-  node, so a prose-required field holds no prose and rejects as `reference_only`
-  (ADR 0036:156-158, unchanged). Its correction said "Typed insertions may supplement that
-  prose but cannot replace it", which describes insertions the model never used, so the
-  model resent the same bytes.
-- **Change:** the field registry's explanation (`text_field_policy.referenceOnly`) is
-  derived from the exact-copy role: where recognition runs it says an exact source value or
-  supplied display reference may appear within the prose but cannot be the whole text;
-  elsewhere it names only the reference (text-field-composition.md amended). No new reason,
-  `Issue` member or report version; correction text only (D4.1 extension).
-- **Proof:** a field-policy test pins the role split (accepted: `visible_outcome`; rejected:
-  `entity_meaning`, extraction and reconciliation fields), and an admission test checks a
-  bare value is corrected through that explanation; every offline request is
-  byte-identical, since no scenario reaches this correction, so the sent correction bytes
-  are pinned only at the owner.
+**Implemented 7 November 2026** (user: "fix the bare-message failure"); kept or reverted per
+FIX06 §3 Next item 1. Native recognition makes text that is exactly a source value one
+exact-value node, so a prose-required field holding only it rejects as `reference_only` (ADR
+0036:156-158). The field registry's explanation (`text_field_policy.referenceOnly`) is derived
+from the exact-copy role: where recognition runs it says an exact source value or supplied
+display reference may appear within the prose but cannot be the whole text; elsewhere it names
+only the reference (text-field-composition.md amended). No new reason, `Issue` member or report
+version; correction text only (D4.1 extension). The sent correction bytes are pinned only at the
+owner, since no scenario reaches this correction.
 
 ## E10. Alias, string kind, dead code, principles section, stale comments and start rule
 
 **Implemented 8 November 2026** (user: "implement E10", "remove dead code", "apply best
-recommendation", "implement then"). Defect class reduced: none in published output (contract
-violations in the closed decoders, dead code and stale text). No request, report member or
-state change.
+recommendation", "implement then"). No published-output defect class (contract violations in
+the closed decoders, dead code and stale text). No request, report member or state change
+beyond those named.
 - **Alias:** `parseOutcome` (`validate_workflow_definition_schema.zig`) matches a closed
-  spelling table, `spelling`, an exhaustive switch over `OutcomeTag`, in place of the
-  `stringToEnum` fallback, so `needs_user` and `end.needs_user` reject as
-  `WorkflowDefinitionSchemaInvalid`. Two fixtures authored the alias and now use `needs-user`:
-  `required_authority_workflow_test.zig` and `test/packaging/smoke.zig`, whose pinned
-  `WORKFLOW_GRAPH_COMPILE_INVALID` would otherwise have come from the wrong stage. `end.more`
-  is unchanged: the compiler rejects it and `smoke.zig` pins that rejection
-  (14-orchestration.md:104).
-- **Explicit null:** `reasoningEffort` is a string when present and `null` rejects (F0001
-  states the contract; ADR 0039:84-86 is the precedent for the temperatures), through the
-  shared string-kind rule below.
-- **String kind** (found 8 November 2026): `std.json` reads a `[]const u8` from an array of
-  byte values, so `"provider": [112]` decoded though the schema allows only a string.
-  `strict_json` already rejected that for closed documents; the engine decoders that bypassed
-  it now use it. `decodeAuthored` is `decode` for a document a user writes: a member with a
-  default may be omitted, a present member keeps its wire kind, and a defaulted optional is
-  absent or a value and never `null`; in both modes a `std.json.ArrayHashMap` is an object of
-  its value kind. `decode_sddtoolkit_config.zig` calls `decodeAuthored`;
-  `decode_llm_provider_config.zig` (a user-written catalogue whose types have no defaults)
-  and the clarification-state parser (`adapters/parsers/clarification_inputs.zig`, the one
-  other typed `std.json` decode in `src/`) call `decode`, which requires every member. The
-  provider decoder keeps only its integer-only rule beside the shared transport checks.
-  `ModelSlotConfig`'s private wire struct and `jsonParse` are deleted, `WorkflowTokenBudget`
-  declares `ClosedJsonWire = u32`, and `max_engine_config_depth` (4) and `max_state_depth` (7)
-  bound the documents. An architecture rule (`architecture_test.zig`) now forbids a typed
-  `std.json` decode in the action, adapter, application and composition layers. The harness
-  and build tools that read their own reports (`test/harness/`, `build/code_heuristics/`) are
-  not engine inputs and were not swept. No code that builds or sends a model request changed;
-  no §2.10 projection comparison was taken, since the tree also holds the entity lever's
-  request change.
-- **Dead code:** `validateCitation`, `CitationDiagnostic` and `Citation` (they had only test
-  callers since D13.1); then the registry's `select`, `validateSelection` and `guidance`
-  (user: "delete select, validateSelection and guidance") with what only they used
-  (`sourceFor`, `chunkFor`, `Selection`, `Guidance`, `LineBounds`, `lineBounds`); then the
-  policy's `select`, `Scope` and `matches` (user: "clear up the unused code and tests"). The
-  tests that exercised them are removed; the byte-coverage test reads the registry's chunks
-  directly and `validate` keeps the omitted-chunk rejection. 22-repair.md:418-421 still
-  describes principle citation diagnostics (FIX06 §8).
-- **Principles section removed** (user: "if it unused and brings no value then remove it"):
-  nothing read the category policy once selection was gone (`Source.category` was read only
-  by the registry's own build and validate), and `capture-principle-registry` failed without
-  the section. Removed: the `principles` configuration section (`filenameHints`,
-  `selections`), `principle_policy.zig`, `Registry.policy`, `Source.category`,
-  `buildConfigured`, and the capture and build actions' config, normalizer and case-folder
-  fields. `specification-state` moved to v22, and a source ID no longer renews on a category
-  change. A `principles` member rejects as unknown
-  (`decode_sddtoolkit_config.zig`). Amended: ADRs 0015 (retitled), 0023 and 0041,
-  09-configuration.md §9.4, F0001, the schema, the example config, 24-workflow-state.md,
-  F0100, 17-specify.md, 28-testing.md, 12-model-boundary.md, design.md and code.md. The
-  hello-world case config, both baseline fixtures and the integration test config dropped
-  the section. Plan-stage text that still names it is in FIX06 §8. **Consequence:**
-  the tools that decode a retained run's copied config with the closed decoder
-  (`e2e-measures`, `test/harness/e2e/measures_cli.zig:145`; `e2e-call`,
-  `test/harness/call/capture.zig:44`; the baseline tools, `scoring.zig:392` and `:745`,
-  `freeze.zig:212`, `feasibility.zig:146`) no longer read the retained runs under
-  `zig-out/e2e-spec/`, `zig-out/baseline/` and `zig-out/provider-compatibility/`, whose
-  configs carry the section; their evaluations and measures under `evaluations/` stay.
-  `adjudicate-spec` decodes no config.
-- **Text:** five stale comments (ADR 0023's removal, ADR 0047) and the `/evaluate-e2e` start
-  rule in `cli.zig`, `report.zig` and `acceptance.zig` now match AGENTS.md "Testing
-  expectations". Text only; "The harness makes no judge call." is pinned and kept.
-- **Proof:** accepted and rejected outcome-spelling fixtures
-  (`validate_workflow_definition_schema.zig`); accepted and rejected effort fixtures, a byte
-  array in three string members and the rejected `principles` section
-  (`decode_sddtoolkit_config.zig`); a byte array in the provider and model names
-  (`decode_llm_provider_config.zig`) and in a state string
-  (`clarification_inputs_test.zig`); and the authored-mode rules at the owner
-  (`strict_json.zig`). With the clarification parser's old `std.json` decode reintroduced,
-  the state test failed: it read `"schema":[99]` as `"c"`.
+  spelling table, so `needs_user` and `end.needs_user` reject as
+  `WorkflowDefinitionSchemaInvalid`; fixtures author `needs-user`. `end.more` is rejected by the
+  compiler, which `smoke.zig` pins (14-orchestration.md:100).
+- **String kind:** a `[]const u8` member never decodes from an array of byte values. The engine
+  decoders use `strict_json`: `decodeAuthored` for a document a user writes (a member with a
+  default may be omitted, a present member keeps its wire kind, a defaulted optional is absent
+  or a value and never `null`) in `decode_sddtoolkit_config.zig`; `decode`, which requires every
+  member, for `decode_llm_provider_config.zig` and the clarification-state parser. So
+  `reasoningEffort` is a string when present and `null` rejects (F0001; ADR 0039:84-86 is the
+  precedent). An architecture rule (`architecture_test.zig`) forbids a typed `std.json` decode
+  in the action, adapter, application and composition layers. The harness and build tools that
+  read their own reports were not swept.
+- **Dead code:** the principle-citation validator and the principle registry's selection and
+  guidance functions, with their tests. 22-repair.md:417-419 still describes principle citation
+  diagnostics (FIX06 §8 "Design–code conflicts").
+- **Principles section removed** (user: "if it unused and brings no value then remove it"): the
+  `principles` configuration section, `principle_policy.zig` and the category fields;
+  `specification-state` moved to v22, and a `principles` member rejects as unknown. Amended:
+  ADRs 0015, 0023 and 0041, 09-configuration.md §9.4, F0001, the schema, the example config and
+  the dependent contracts. **Consequence:** the tools that decode a retained run's copied config
+  with the closed decoder (`e2e-measures`, `e2e-call` and the baseline tools) no longer read
+  runs whose configs carry the section; their evaluations and measures under `evaluations/`
+  stay. `adjudicate-spec` decodes no config.
+- **Text:** stale comments and the `/evaluate-e2e` start rule in `cli.zig`, `report.zig` and
+  `acceptance.zig` match AGENTS.md "Testing expectations"; "The harness makes no judge call." is
+  pinned and kept.
 
 ## Repeated statement text is not judged
 
-**Implemented 8 November 2026** (user: "yes as per recommendation"); offline only. This
-change moved no request, report or state version, and changed no prompt, schema or
-request-description code (`Kind.role()` replaces the session's identical role table). Defect
-class reduced: run completion (a loan-renewal run that publishes nothing); no scored output changes.
-- **Defect:** loan-renewal `2026-11-07T07-38-56Z-2627…` and `2026-11-07T20-44-15Z-9273…`
-  exhausted the records retry limit on `reference_only`. Each response held a
-  user-visible outcome that was only a source message ("Loan renewed!", "Renewal
-  refused."), whose claim a functional requirement or an earlier rule also named and whose
-  value that record held. ADR 0038 Decision 5 deletes such a repeat natively, but its
-  consequences had the text repaired first, so the correction was spent on a record that
-  never publishes. `06-12-34Z-f549…` is not of this class: its outcome is the only
-  non-scenario record naming its claim, so the rule keeps it and its text still counts.
-  Read against the rule, not replayed.
-- **Change:** `statement_ownership.zig` is the one rule for which statement a batch deletes.
-  Payload admission (`shared_member`), the session's delete, the records validator
-  (`inspectRecords`, `repeated_statement` in place of the text issue) and the composition
-  check use it. The composition check reads the covered array and rule from the request's
-  coverage, which replay restores, and takes the exact values a record holds from
-  recognized prose. A record with a value that can't be identified (ambiguous,
-  unrecognizable, text that is not a valid scalar in a field that can hold an exact copy,
-  and at admission any explicit insertion) is never deleted and holds no value for another.
-  The kept cases stay judged: a requirement, the only holder of an
-  exact value (of two, the last), a partly taken, untaken or unnamed record. ADR 0038
-  Decision 5 and its consequences and tests, ADR 0035 item 5, text-field-composition.md,
-  22-repair.md, 12-model-boundary.md, 17-specify.md and F0100 amended.
-- **Proof:** accepted and rejected cases at the rule and at payload admission (the
-  existing `shared_member` cases, now on the shared rule), at the composition check, at the
-  validator, in replay and in a scripted run (an outcome that is only another record's value
-  publishes with it deleted and no correction). A parity test sends the same batches through
-  the wire encoder and the validator: every exemption is a validator delete, over each
-  statement kind, over text that is not a valid scalar and over a field that forbids exact
-  copies; a pin keeps the validator's
-  roles equal to the coverage kinds. The composition, validator, replay and scripted-run
-  tests fail with their part removed. The first request's wire and typed recognition read
-  the same exact occurrences; a value- or group-bound repair carries no coverage choice, so
-  the composition check exempts nothing there.
+**Implemented 8 November 2026** (user: "yes as per recommendation"); offline only, no request,
+report or state version. Defect class: run completion (a loan-renewal run exhausting the
+records retry limit on `reference_only` for a bare outcome that repeated another record's
+value). `statement_ownership.zig` is the one rule for which statement a batch deletes; payload
+admission (`shared_member`), the session's delete, the records validator (`inspectRecords`,
+`repeated_statement`) and the composition check use it. A record whose value can't be
+identified is never deleted and holds no value for another; requirements, the only holder of an
+exact value, and partly taken, untaken or unnamed records stay judged. ADR 0038 Decision 5 and
+its consequences, ADR 0035 item 5, text-field-composition.md, 22-repair.md,
+12-model-boundary.md, 17-specify.md and F0100 record it. Proof: accepted and rejected cases at
+the rule, admission, composition check, validator, replay and a scripted run, and a parity test
+that every exemption at the wire is a validator delete.
 
 ## H1. Adjudication and `spec-e2e-report/v15`
 
-- **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…ec790`): the
-  D12.2 set's nine publications and the six ADR 0047 runs, each scored, recorded and applied
-  (`evaluations/e2e/<run>/`, `evaluations/adjudications/`; 15 applied decisions: 8 passed, 6
-  `critical_failed`, 1 `admission_evidence_invalid`, FIX06 §7 H1). The unpublished
-  `09-15-31Z` has a failure trace only.
+- **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…`): the D12.2
+  set's publications and the first six ADR 0047 runs (`evaluations/e2e/<run>/`,
+  `evaluations/adjudications/`). One applied decision is open (FIX06 §7 H1).
 - **v15, implemented 7 November 2026** (user: "implement items 1 and 2"): `spec-e2e-report/v15`
   and `baseline-acquisition/v12` carry ADR 0047's source-catalogue reasons and `issue`, the
-  publication reason renamed `adjudication_required`, and an admission audit that accepts no
-  story subject; design/harness/e2e.md's format history, deleted 7 November 2026, is in git
-  (`8aa7fb5`). Retained v12–v14 runs stay readable only by the build that made them. The
+  publication reason `adjudication_required`, and an admission audit that accepts no story
+  subject. Retained v12–v14 runs stay readable only by the build that made them. The
   supplied-spec evaluator's decision (`evaluation-report/v8`) and the baseline's
   useful-completion state (`baseline-score/v4`) keep their own `human_adjudication_required`.
-  `zig build verify` passed: 169 steps, 1,976 tests.
 
 ## T7. One evaluator version per comparison
 
-**Closed 7 November 2026:** skills `af394020…` and `0b552067…` count as one evaluator (user:
-"approved"; the edit between them changed no scoring rule), so the reference needs no re-score.
-- **Skill edit, 3 November 2026** (user: "yes start item 2"): `e2e-assistant-evaluation/v4`
-  records `skill_sha256` and gives each defect a `basis` (`link` or `content`), and the
-  `restatement` class excludes a faithful one-paragraph story (D19.1), with the user's rulings
-  (FIX06 §7 H1). Skill `5690d0f0…a8865`.
-- **Readings made rules, 3 November 2026** (user: "YES"; now in SKILL.md §2): a link defect
-  costs nothing beyond its content defect; a repeat that gives a requirement's value states it,
-  one that gives none is a summary; a weaker restatement in a checkable outcome also costs
-  `clarity-testability`; several minor additions stay minor; repeating the source's own
-  wording, or an outcome without its verb, isn't weakening. The re-score they came from was
-  superseded by H1's adjudication under `af394020…`.
-- **Skill edit, 7 November 2026** (user: "update the out of date items"): the measures note no
-  longer names a report version (SKILL.md:269-270); no scoring rule changed. Skill
-  `0b552067…0ca43`.
-- **Skill edit, 7 November 2026** (user: "yes"): citations of retired FIX06 IDs now point to
-  ADR 0047 and Z_FIX06 T7, and the T5(b) citation is dropped; then (user: "you can start
-  /evaluate-e2e if I give approval") the agent may start it on the user's approval for named
-  runs. No scoring rule changed. Skill `1d66d882…fa3c3`.
-- **Closed 8 November 2026** (user: "recommendations accepted for 1 to 6"): skill `1d66d882…`
-  counts as the same evaluator as `af394020…` and `0b552067…`, since its edits changed no
-  scoring rule; the one divergence (a missing refusal scenario, `fa03…` against `728d…`) is
-  treated as evaluator variance, so a keep or revert is decided only on a reference scored in
-  the same version.
-- **Skill edit, 8 November 2026** (user: "recommendations accepted for 1 to 6"): the title
-  ruling (FIX06 §3 Next 3): a title that gives a requirement's value or wording states it.
-  Skill `3c74781e…9f262`, a new scoring rule and so a new version; the re-score of the
-  reference it requires was done on 9 November 2026 (FIX06 §3 Next 3). No title in that
-  reference drops a value (hello-world's two value-bearing titles quote "Hello, World!" whole).
-- **Skill edit, 9 November 2026** (user: "Once, same evaluator, no re-score"): an edge case's
-  outcome is its linked criterion's Then (ADR 0038 Decision 7), so a defect in that Then is one
-  defect, filed on the criterion (FIX06 §3 Next 8). No reference run has an outcome link, so
-  skill `185b9bc6…fcfa1` counts as the same evaluator as `3c74781e…`, and the reference isn't
-  re-scored.
+**Rule:** a keep or revert is decided only on a reference scored in the same evaluator version
+(FIX06 §2 rule 5). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…`
+count as one evaluator:
+- `0b552067…` and `1d66d882…` changed no scoring rule (user, 7 November 2026: "approved"; 8
+  November 2026: "recommendations accepted for 1 to 6", which also treats the one divergence,
+  a missing refusal scenario scored in `728d…` but not `fa03…`, as evaluator variance);
+- `3c74781e…` added the title ruling (FIX06 §7 H1), a new scoring rule; the reference was
+  re-scored under it on 9 November 2026 (FIX06 §3 Next item 3), and no title in it drops a
+  value;
+- `185b9bc6…` (user, 9 November 2026: "Once, same evaluator, no re-score") files a defect in an
+  edge case's linked Then once, on the criterion (ADR 0038 Decision 7); no reference run has an
+  outcome link.
+
+**Readings made rules, 3 November 2026** (user: "YES"; in SKILL.md §2): a link defect costs
+nothing beyond its content defect; a repeat that gives a requirement's value states it, one that
+gives none is a summary; a weaker restatement in a checkable outcome also costs
+`clarity-testability`; several minor additions stay minor; repeating the source's own wording,
+or an outcome without its verb, isn't weakening. `e2e-assistant-evaluation/v4` records
+`skill_sha256` and gives each defect a `basis` (`link` or `content`).
 
 ## T3. A duplicate record is deleted in the scripted matrix
 
-**Implemented 8 November 2026** (user: "implement then"); test-only, so no request changes.
-Defect class reduced: none in published output (a coverage gap in the repair-harm class: a
-native delete must not need a correction). The scripted records fault `.duplicate_record` (`spec_generation_driver.zig`) repeats the first
-functional requirement exactly. The run publishes with no correction, because the faulted
-request is sent once (the driver rejects a second attempt), and no batch keeps two records of
-equal content (`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Its open
-parts stay in FIX06 T3.
+**Implemented 8 November 2026** (user: "implement then"); test-only. The scripted records fault
+`.duplicate_record` (`spec_generation_driver.zig`) repeats the first functional requirement
+exactly; the run publishes with no correction, and no batch keeps two records of equal content
+(`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Open parts: FIX06 T3.
 
 ## T5. Brittleness counts
 
-**Implemented and taken 1 November 2026, on `30e0d2f` (the D10.2 tree), before D13.1;
-committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
-`brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`).
+**Committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
+`brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`). Latest
+counts and when they are due: FIX06 T5.
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
   - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
@@ -440,136 +254,76 @@ committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes t
   - T5.1 counts an absence assertion only when A or M holds its literal.
   - T5.4 is counted by hand, because the compiled Spec graph needs the composition root's
     native assembly.
-- **Baseline** (freeze `q10b-2026-10-31`):
-
-| Count | Value |
-| --- | --- |
-| T5.1 | 25 |
-| T5.2 | 22 in 8 files, among them `specification_session.zig:253-256` (4), `reference_reconciliation_repair.zig:747-750` (4) and `specification_support.zig` (6); 118 test sites |
-| T5.3 | 7 maximal repeats at 16 sites; 3 are variants of "conditions, negation and obligation strength." |
-| T5.4 | 6, by hand: `spec.workflow.yaml:376`, `:413`, `:609`, `:814`, `:899`, `:913`, each binding `repair-prompt`; `:721` takes its review's prompt |
-| T5.5 | 0 |
-| T5.6 | 15 in 4 files: `model_schema_diagnostic.zig` 11, `strict_json.zig` 2, `model_controls.zig` 1, `model_protocol_retry.zig` 1 |
-
 - **Limits:** a comparison through a helper isn't a direct operand
   (`reference_reconciliation_stage.zig:87` compares `definition(stage)`). A name routed
   through a local before `.{ .bytes = name }` isn't counted
   (`reference_reconciliation_repair.zig:324-327`, `specification_repair.zig:267-269`).
-  Argument positions match functions by name only. Short absence
-  literals match A by substring (`"id"`, `"$defs"`). The "native code" diagnostic texts
-  reach requests only in `user` parts (2,832 in the freeze), so they aren't in M.
+  Argument positions match functions by name only. Short absence literals match A by
+  substring (`"id"`, `"$defs"`). The "native code" diagnostic texts reach requests only in
+  `user` parts, so they aren't in M.
 
 ## T6. Structural counts in the measures
 
-**Implemented 3 November 2026; committed in `f6ef0f6`.** Decided as FIX06 §2 rule 4 (H6.1) and
-widened the same day (user: "Yes, count them") to extraction outcomes, claim categories and
-fragments objects, so every scheduled screen has a count.
-- **Change:** `measures.structure` (`test/harness/e2e/measures.zig`) reads each response
-  through the production envelope parser and counts records by kind, the entities
-  `disposition` and entity count, a `claims` response's claims by `category` or
-  `no_feature_claim`, and every `{"fragments":[...]}` object, with those inserting no
-  reference apart; wire names come from their owning types, and an unknown kind or category
-  counts apart. Run measures keep every call (`e2e-measures/v2`), so a request whose last
-  attempt is unreadable is never measured by an earlier one; the set summary
-  (`e2e-measures-set/v2`) pools each request's last attempt; `e2e-call` trials record the same
-  structure (`call-diagnostic-report/v3`). No engine or request change.
-- **Baseline measured 3 November 2026** (offline, `evaluations/t6-baseline/`, one
-  `<set>-set.json` per set; v12/v13 reports are `unavailable`, so the D12.1 and D16.1 counts
-  come from call evidence only). Runs with the record kind or decision, loan-renewal (LR) and
-  hello-world (HW):
-
-  | Set | LR edge case | LR statement families (BR, AS, NG, PB) | LR outcome (UVO) | HW entities `required` | HW extraction `no_feature_claim` |
-  | --- | --- | --- | --- | --- | --- |
-  | D12.1 | 3 / 3 | 3 / 3 each | 1 / 3 | 3 / 3 | 0 / 3 |
-  | D16.1 | 2 / 3 | 0 / 3 | 2 / 3 | 3 / 3 | 0 / 3 |
-  | D16.2 | 1 / 3 | 0 / 3 | 0 / 3 | 1 / 2 | 1 / 3 |
-  | D12.2 | 4 / 5 | 0 / 5 | 0 / 5 | 2 / 4 | 1 / 5 |
-
-  Loan-renewal entities are `required` in every run of every set. Literal-only fragments:
-  D12.1 3 of 30 (HW) and 3 of 30 (LR) responses; D16.1 1 of 30 and 2 of 34; D16.2 0 of 50 and
-  2 of 30; D12.2 2 of 74 and 3 of 50.
+**Committed in `f6ef0f6`** (FIX06 §2 rule 4, H6.1; widened 3 November 2026, user: "Yes, count
+them"). `measures.structure` (`test/harness/e2e/measures.zig`) reads each response through the
+production envelope parser and counts records by kind, the entities `disposition` and entity
+count, a `claims` response's claims by `category` or `no_feature_claim`, and every
+`{"fragments":[...]}` object, with those inserting no reference apart; wire names come from
+their owning types, and an unknown kind or category counts apart. Run measures keep every call
+(`e2e-measures/v2`); the set summary (`e2e-measures-set/v2`) pools each request's last attempt;
+`e2e-call` trials record the same structure (`call-diagnostic-report/v3`). Baseline:
+`evaluations/t6-baseline/`.
 
 ## E6. Producerless rejection reported as a harness error
 
-**Implemented 31 October 2026; committed in `dac4c4c`.** Three Q4 hello-world runs ended
-`harness_error` `MissingProviderEvidence`: a source-omission repair turned a
-`no_feature_claim` chunk into a claim, and the missing `preserve` classification had by rule
-no origin, which the shared `attribution()` mapped to `missing_response`. Fix: the validator
-names the rule (`producerless`, missing entries only) and `attribution()` gives `candidate`
-(contract 27); a lost origin on a duplicate, unknown or forbidden entry still rejects.
-Request projection byte-identical. Open parts stay in FIX06 E6.
+**Committed in `dac4c4c`.** A `no_feature_claim` chunk that a source-omission repair turned into
+a claim had, by rule, no `preserve` classification origin, which the shared `attribution()`
+mapped to `missing_response` (`harness_error` `MissingProviderEvidence`). The validator names
+the rule (`producerless`, missing entries only) and `attribution()` gives `candidate`
+(contract 27); a lost origin on a duplicate, unknown or forbidden entry still rejects. Open
+parts: FIX06 E6.
 
 ## E6. Lock failures report their own code
 
-**Implemented 8 November 2026** (user: "recommendations accepted for 1 to 6"). Defect class
-reduced: none in published output (a wrong failure code in the feature log). No request,
-report or state change; no §2.10 projection comparison was taken, since the tree also holds
-the entity lever's request change. `acquire_feature_log_stream_lock.zig` reported
-`LOG_LOCK_TIMEOUT` for every sink error. It now fails with `LogLockTimeout` only for
+**Implemented 8 November 2026** (user: "recommendations accepted for 1 to 6"). No
+published-output defect class (a wrong failure code in the feature log); no request, report or
+state change. `acquire_feature_log_stream_lock.zig` fails with `LogLockTimeout` only for
 `LockUnavailable` and with `LogSinkFailure` for every other sink error (an exhaustive switch in
 `Action.execute`), and its `failureCode` gives each one's log code, `LOG_LOCK_TIMEOUT` or
-`LOG_SINK_FAILURE` (F0002:542, :553-554); the feature log runner and the retention runner
-call it. Three tests that pinned the blanket mapping (a symlinked lock file, two rejecting
-sinks) now expect `LOG_SINK_FAILURE`; a held lock and the lock fault still report the
-timeout. The cancellation half stays in FIX06 E6.
+`LOG_SINK_FAILURE` (F0002:545, :556-557); the feature log runner and the retention runner call
+it. The cancellation half stays in FIX06 E6.
 
 ## Next 6. An entity is a name and its groups (ADR 0038 Decision 6)
 
 **Implemented 8 November 2026** (user: "Entity lever … is yes and approved", then "yes to all
-decisions"); **kept 9 November 2026**, with item 8, on the HEAD set (user: "approved" to the
-keep rule below). Defect class reduced: entity-field defects, an entity meaning or relationship
-that restated a requirement and lost, weakened or added to it (5 in the 6 reference runs: three
-restatements, one `weakened_obligation`, one `unsupported_addition`). The engine renders the
-statements that share a group (§23.1); `specification-state/v23`, `specification/v4`.
-- **Keep rule** (stated 9 November 2026): lost requirements per loan-renewal publication no
-  higher than the reference's 3 over 3 publications, and all six runs publish.
-- **Measured, direction only** (uncommitted trees, accuracy counts as lost / weakened /
-  unsupported / contradiction): reference, re-scored, hello-world 0 / 0 / 1 / 0 and loan-renewal
-  3 / 1 / 1 / 0, 1 of 3 pass; with items 6 and 7 (`05-5*`), loan-renewal 5 / 0 / 0 / 0, four of
-  them in EC-001's outcome and one in the title, entity-field defects 0; with item 8
-  (`09-2*`), loan-renewal lost 0, 3 of 3 pass.
-- **Measured on a committed build** (HEAD set: `a3d083e`, `modified` false, source `5fb59f67…`,
-  3 runs per case, none retried, skill `185b9bc6…`, every run accepted by
-  `adjudicate-spec`): hello-world 0 / 0 / 0 / 0, 3 of 3 pass (92.9, 96.4, 92.9); loan-renewal
-  0 / 0 / 4 / 0, 3 of 3 pass (85.7, 92.9, 92.9). Three of the four unsupported additions are
-  AC-001's minor "records the loan as renewed" (ruled minor, §7 H1); the fourth is an invented
-  timing condition in one EC-001. Entity-field defects 0. Thirteen engine deletions of a
-  repeated statement (3, 6 and 4 in the loan-renewal runs), all graded helpful. Each run took
-  9 calls and 12,971 to 17,037 tokens. The no-data entity in hello-world
-  (`invented_or_restating_entity`, a minor scope defect the lever doesn't target) was in 2 of 3.
+decisions"); **kept 9 November 2026**, with Next 8, on the HEAD set (user: "approved" to the keep
+rule). Defect class: entity-field defects, a meaning or relationship that restated a requirement
+and lost, weakened or added to it (5 in the 6 reference runs). ADR 0038 Decision 6 records the
+mechanism and versions; the engine renders the statements that share a group (§23.1).
+- **Keep rule** (9 November 2026): lost requirements per loan-renewal publication no higher than
+  the reference's 3 over 3 publications, and all six runs publish.
+- **Result** (HEAD set, FIX06 §1): loan-renewal lost 0, all six runs published and passed,
+  entity-field defects 0; thirteen native repeated-statement deletes, all graded helpful. The
+  no-data entity in hello-world (`invented_or_restating_entity`, a minor scope defect the lever
+  doesn't target) was in 2 of 3.
 
 ## Next 7. The renderer escapes only the bytes Markdown reads as markup
 
-**Implemented 8 November 2026** (user: "apply recommendations"); **kept 9 November 2026** (user:
-"apply recommendations", after the recommendation to keep it). Defect class reduced:
-`rendering_artefact`, a backslash before ordinary punctuation (`renewed\.`, `Hello\, World\!`)
-that the renderer introduced and the evaluator scores against `organization`. The owner is
-`literal`/`escape` in `src/domain/specification_markdown.zig` (:366-389) and §23.1's closed
-table. No request changes (§2 rule 1), so no guard could move.
-- **Measured** (direction only, uncommitted trees, one evaluator `3c74781e…`): the escape
-  artefact was in all 6 reference runs (`2026-11-08T00-3*` to `00-4*`) and in none of the 12
-  later runs (`05-5*`, `09-2*`); the artefacts that remain are the model's quote marks beside
-  the engine's code span (ADR 0036 Decision 6), which this change doesn't touch. Total
-  `rendering_artefact` defects 6 against 1 in `05-5*`, one-sided conditional binomial
-  p = 0.062.
-- **Kept on guards and mechanism**, like a hygiene phase (§2 rule 6), because the seven events
-  are under its evidence floor of about ten and the change is deterministic.
+**Implemented 8 November 2026; kept 9 November 2026** (user: "apply recommendations"). Defect
+class: `rendering_artefact`, a backslash before ordinary punctuation (`renewed\.`,
+`Hello\, World\!`). The owner is `literal`/`escape` in `src/domain/specification_markdown.zig`
+(:370, :375) and §23.1's closed table. No request changes. Kept on guards and mechanism, like a
+hygiene phase (FIX06 §2 rule 6): the artefact was in all 6 reference runs and none of the 12
+later runs (p = 0.062, under the evidence floor); the change is deterministic.
 
 ## Next 8. An edge case's outcome is the Then of a linked criterion (ADR 0038 Decision 7)
 
 **Implemented 8 November 2026** (user: "go", after "apply recommendations" and "recommendations
-accepted for 1 to 6"). Defect class reduced: `lost_source_requirement` and `weakened_obligation`
-in an edge case's expected outcome, the free text that repeated an acceptance criterion's
-result and dropped part of it (EC-001 "extends the due date by fourteen days" without
-"calendar", "existing" or the new due date: `successful-renewal` failed in 4 of the 6 loan-renewal
-runs before 8 November and in 2 of the 3 of that day's set). The design, the candidate rule and
-the version changes are ADR 0038 Decision 7's. Owners: `scenario_link.zig` (candidates, links,
+accepted for 1 to 6"); **kept 9 November 2026** with Next 6 on the HEAD set: loan-renewal lost
+requirements 0 against 3 in the reference, 3 of 3 pass. Defect class: `lost_source_requirement`
+and `weakened_obligation` in an edge case's free-text outcome. ADR 0038 Decision 7 records the
+design, candidate rule and versions. Owners: `scenario_link.zig` (candidates, links,
 stored-link check), `scenario_link_request.zig` (the closed request and its admission), the
-`link-scenarios` subgraph of `spec.workflow.yaml` (`plan-scenario-links`,
-`check-scenario-link-progress`, `build-scenario-link-input`, a `model-request` on
-`links.prompt.md` and `links.schema.json`, `admit-scenario-link-choice`) and `assemble`, which
-resolves the links. Tests: the request, admission and rendering at the domain
-(`specification_generation_test.zig`, with three criteria in an unrelated domain), the wire
-(`model_candidate_json_test.zig`), three scripted scenarios with the requests' projection, and
-the state at v24. **Kept 9 November 2026** with item 6 on the HEAD set (Next 6): loan-renewal
-lost requirements 0 against 3 in the reference, 3 of 3 pass.
+`link-scenarios` subgraph of `spec.workflow.yaml` (on `links.prompt.md` and
+`links.schema.json`) and `assemble`, which resolves the links. Its limit and its identity
+prediction are open in FIX06 §3 Next item 8 and E11.

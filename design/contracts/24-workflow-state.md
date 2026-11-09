@@ -68,8 +68,6 @@ invalidates affected descendants through the stage rules below.
 
 It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
 
-Every fresh invocation starts at `start`.
-
 ### 24.2 Stage transition state machine
 
 [View the Stage transition state machine sample](../code.md#stage-transition-state-machine).
@@ -80,10 +78,8 @@ Every fresh invocation starts at `start`.
   specification
   ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold
   since 30 October 2026; not implemented). It is written
-  last, replaces any earlier completion authority, blocks Plan and later stages, and is
-  never resumed: the next run starts at `start`.
-- Prior published state remains subject to fresh gate validation; it cannot resume the abandoned
-  execution.
+  last, replaces any earlier completion authority and blocks Plan and later stages; its
+  execution is abandoned under [§25.2](25-publication.md#252-abandonment-and-reruns).
 - Generated definition state is committed before entering its review-pending state.
 - `planned` and `tasked` are entered only after approval tied to the exact current plan or
   task-definition ID.
@@ -95,7 +91,8 @@ Every fresh invocation starts at `start`.
   revision returns to `specifying`, `planning`, or `tasking`; the clarification response
   publication commits first, then every generation unit in the owning stage is regenerated from
   its current complete authority set.
-- No pre-clarification unit candidate, merge result, or partial stage checkpoint is reused.
+- Nothing from the paused execution is reused
+  ([§25.2](25-publication.md#252-abandonment-and-reruns)).
 - If the user explicitly chooses `defer` while the answer is required, the same record remains
   open; `cancel` is a separate terminal transition.
 - No default is invented, and a valid clarification pause consumes no operation-local retry.
@@ -117,9 +114,7 @@ State alone never authorizes a stage.
   required slot; execution IDs, regenerated authority IDs, wording and transient gap reasons do
   not define a new clarification.
 - Current applicability is validated separately; changed evidence may reopen only an unprotected
-  record.
-- Section 23.2 preserves user-closed forms and blocks a still-required subject whose protected
-  answer is no longer applicable; it never allocates a duplicate.
+  record, and §23.2 governs a protected one.
 - Ambiguous subject correspondence blocks rather than using fuzzy text matching.
 
 - The editable `spec.md` is reparsed and fully validated.
@@ -128,29 +123,18 @@ State alone never authorizes a stage.
 - Canonical reference, the published `PlanInputAuthorityState`, its bound `PlanState`, task-definition, and task-runtime IR are loaded from engine state and revalidated directly.
 - Current repository facts are rebuilt. Each gate-sensitive value is directly compared through `CompareRepositoryFactValueAction`; during implementation, only a `transition_requires_task_binding` fact with a matching approved `FactTransitionBinding`, transition rule, and validated named-task execution evidence may differ from the plan input. An unexplained difference triggers the relevant plan/task reconciliation path.
 - The complete authority-requirement and reconciliation projections are rebuilt from current canonical inputs. Any non-success entry blocks the requested stage and routes by its compiler-locked earliest owner; a downstream gate cannot treat predecessor success, an old approval, or existing code as a substitute resolution.
-- Read-only views are compared byte-for-byte with deterministic rendering from their canonical IR. A changed view is regenerated or blocks; it never changes execution state.
+- Read-only views are checked by exact re-rendering under [§23.1](23-rendering.md#231-canonical-byte-contract); an edited view never changes execution state.
 - The next stage requires an approval record whose `planStateId` or `taskDefinitionStateId` equals the current immutable definition state. Runtime-only task progress does not affect approval.
 
 No hashes or fingerprints are created. Direct typed-state/view comparison is possible because the workflow is ordered and the engine already owns canonical plan/task inputs. A future generalized out-of-band freshness system would be a separate design decision.
 
 ### 24.4 New execution after interruption or clarification
 
-- An interrupted execution is abandoned, not recovered or resumed.
-- A new invocation enters the selected compiled graph at `start` and revalidates current inputs,
-  predecessor state, approvals and ownership required by its declared operations.
-- Existing files, logs, partial candidates and model responses are not continuation authority.
-
-Clarification identity, protected forms and relevant validated answers survive
-under Section 23.2. A `needs_user` outcome ends the execution; answers become
-inputs to a new beginning-to-end execution, not a saved-step continuation.
-
-No transaction collection, WAL, checkpoint, provider-effect scan or recovery
-lock precedes execution. Provider lifecycle, leases and total token usage are
-fresh for each execution. A full rerun may repeat API calls; within-run retries
-still require explicit YAML transitions and operation-local retry authority. Under
-[ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), a model
-request's protocol correction runs inside its `request-model` step, under that step's
-`retry-limit`.
+An interrupted or `needs_user` execution is abandoned and rerun from `start` under
+[§25.1–§25.3](25-publication.md#251-one-execution-one-output-boundary); the rerun also
+revalidates the ownership its declared operations require. Clarification identity,
+protected forms and relevant validated answers survive under Section 23.2 as inputs to
+that rerun.
 
 ### 24.5 Upstream rework and invalidation
 
@@ -185,5 +169,5 @@ required clarifications or missing current approvals remain.
   invalidated IDs from active approvals and records exactly which runtime/evidence became stale.
 - Publish through §25, preserving §23.2's protected forms.
 - A rejected review produces a new definition ID; an older approval cannot authorize it.
-- No rework step introduces an independent transaction, task commit, rollback of accepted code
-  or saved continuation.
+- Rework follows [§25.1](25-publication.md#251-one-execution-one-output-boundary)'s
+  transaction bans and [§25.2](25-publication.md#252-abandonment-and-reruns).

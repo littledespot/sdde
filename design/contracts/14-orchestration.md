@@ -50,14 +50,10 @@ workflow without branching on workflow names:
    any later project, feature, toolchain, or other workflow-specific setup.
    After each applied child outcome, follow only the matching validated typed
    transition; and
-8. return the compiled terminal outcome. Under
-   [ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6
-   (accepted, on hold since 30 October 2026; not implemented), after an eligible failure
-   (a YAML `failed`, `blocked` or `invalid` terminal, or a `retry_limit` or
-   `token_budget` runner rejection, once a validated reference snapshot exists), the
-   engine first runs the definition's declared `failure-output` steps through the same
-   runner-owned invocation in failure-output mode, then returns the original failure,
-   which stands even if the failure output fails.
+8. return the compiled terminal outcome
+   ([ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6, accepted,
+   on hold since 30 October 2026 and not implemented, owns the failure-output run it would
+   add before an eligible failure returns).
 
 - It does not parse a workflow definition, compile a graph, construct a node or binding, invoke
   a node directly, inspect domain data, or receive any operation port.
@@ -194,16 +190,15 @@ The persisted stage status is advisory until these current artifacts pass. This 
 In non-interactive use, approval must arrive through an explicit API/CLI approval event or a deliberately selected policy profile. Merely invoking the next stage does not silently approve review output in the hardened default.
 
 - The complete review output binds actor evidence, the review record/registry, state identities
-  and the exact approved or rejected target.
-- Validate every join before publication under §25 and write canonical state last.
-- Failure cannot record a new successful approval transition; no review journal, rollback or
-  commit-marker protocol is introduced.
+  and the exact approved or rejected target; every join is validated before it publishes under
+  [§25.1](25-publication.md#251-one-execution-one-output-boundary), and a failure records no new
+  approval transition.
 
 ### 14.6 Protocol-retry operation
 
-> Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
-> protocol correction is an engine-run stage of the `request-model` step, not a YAML-selected
-> operation. The rules below apply to that stage, and the step's `retry-limit` bounds it.
+> [§22.7](22-repair.md#227-repair-retry-limit-and-escalation) states the
+> [ADR 0030](../decisions/0030-engine-owned-model-request.md) change (not yet implemented);
+> the rules below then apply to the `request-model` step's correction stage.
 
 - This YAML-selected operation handles decoding/schema rejection and the approved
   missing-final-answer case under [§22.6](22-repair.md#226-unparseable-output).
@@ -241,26 +236,25 @@ In non-interactive use, approval must arrive through an explicit API/CLI approva
 - Unequal keys never imply correspondence.
 
 - On a new invocation, capture controlled submissions before preparing replacement forms.
-- Validate revisions, authentication and current applicability; preserve user-closed bytes even
-  when stale or invalid.
+- Validate revisions, authentication and current applicability; §23.2 protects user-closed
+  bytes.
 - Accepted answers and validated resolutions persist under the clarification exception, then the
-  owning workflow regenerates from `start`.
+  owning workflow regenerates under
+  [§25.2](25-publication.md#252-abandonment-and-reruns).
 - A deferred/open need retains its subject ID and receives a complete replacement form; a
   consumed defer is recorded once, advances the revision and yields a blank open answer region.
 - Old submissions become stale.
 - Resolved/cancelled forms expose no submittable region.
 - A valid cancel remains `cancelled`; an unresolved need ends `needs_user`.
-- No partial stage IR or accepted unit checkpoint survives for continuation.
 
 The orchestrator branches only on typed child results; §23.2 owns write-time
 protection and §25 owns publication failure.
 
 ### 14.8 Execution abandonment
 
-There is no transaction-recovery orchestrator. Failure, cancellation or
-interruption ends the execution without a saved continuation. Runner cleanup
-releases that execution's resources. A new invocation enters the selected
-compiled workflow at `start`, not at a recovered node.
+There is no transaction-recovery orchestrator; abandonment and reruns follow
+[§25.2](25-publication.md#252-abandonment-and-reruns). Runner cleanup releases the
+abandoned execution's resources.
 
 ### 14.9 `FeatureLoggingFailureOrchestrator`
 
@@ -344,17 +338,17 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), th
   savepoint, validation, command/manual-evidence, and task-result operations and declares their
   outcomes.
 - Registered contracts prevent any step from broadening the task's file/capability set.
-- Task completion is published only after the whole workflow output and its evidence pass
-  validation and all required writes succeed, never from model prose or a checklist claim.
+- Task completion is published only with the whole workflow output (§25.1), never from model
+  prose or a checklist claim.
 
 ### 14.13 Task execution lifetime
 
 - Task work belongs to the containing workflow execution.
-- No adapter boundary, promotion receipt or cleanup checkpoint is persisted as restart
+- [§25.1](25-publication.md#251-one-execution-one-output-boundary) bans persisted restart
   authority.
 - Current-execution ownership and cleanup remain runner responsibilities.
-- Interruption abandons the entire execution; a later invocation starts at the workflow's
-  `start` step and revalidates all current gates.
+- Interruption abandons the entire execution
+  ([§25.2](25-publication.md#252-abandonment-and-reruns)).
 
 ### 14.14 `AuthorityReconciliationOrchestrator`
 

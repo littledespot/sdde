@@ -132,14 +132,10 @@ AppliedChildOutcome {
 
 ## 2. Capability-free node runtime
 
-```text
-NodeRuntime {
-  cancellationToken,
-  deadline,
-  correlationContext,
-  traceContext
-}
-```
+Implemented as `NodeRuntime` in [pipeline.zig](../src/domain/pipeline.zig): one
+`status()` reporting `active`, `cancelled` or `deadline_exhausted`, which carries
+the sample's cancellation token and deadline. Kept here, flagged: the native type
+has no `correlationContext` or `traceContext`.
 
 - The runtime carries no operation capabilities.
 - Orchestrators receive runner-owned child bindings; actions receive narrow ports.
@@ -159,45 +155,20 @@ Owners: [Design §6](design.md#6-common-action-and-orchestrator-contract),
 
 ## 3. Node contract and typed data keys
 
+Implemented as `NodeContract` in [pipeline.zig](../src/domain/pipeline.zig) and,
+for a registered operation, `Contract` in
+[workflow_operation.zig](../src/domain/workflow_operation.zig), whose `retry_limit`
+(maximum and scope) is the retry-limit contract. The [§13 catalogue](design.md#13-action-catalogue)
+gives each operation's runner accounting transition and the writers of
+`model_request_identity_ledger`. Kept here, flagged, because the native types lack them:
+
+- side effect `command`, for proposed Implement commands ([§26](design.md#26-security-and-safety));
+- runner accounting `consume_no_invention_replacement`, emitted only by the proposed
+  `ValidateRepairScopeAction` when its authorization purpose is
+  `no_invention_to_clarification` ([§14.4](contracts/14-orchestration.md#144-atomic-repair-operation));
+- `orderingBarriers[]` ([§6.3](contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules)).
+
 ```text
-NodeContract {
-  id,                 // one unversioned operation ID (ADR 0005)
-  kind: action | orchestrator,
-  requires: DataKey[],
-  optional: DataKey[],
-  produces: DataKey[],
-  replaces: DataKey[],
-  invalidates: DataKey[],
-  sideEffect: none | filesystem_read | filesystem_write | model_call |
-              workflow_publication | command,  // command: proposed Implement (§26)
-  runnerAccountingCapability:
-    | { kind: none }
-    | { kind: emit_exactly_one,
-        transitionKind: increment_model_attempt |
-                        reconcile_workflow_tokens |
-                        advance_provider_operation |
-                        consume_no_invention_replacement },
-  retryLimitContract?: { parameterId, operationLocalMaximum,
-                         scope: operation | repair | model_request },
-  repairRole: none | authorize | merge | validate | merge_validate,
-  orderingBarriers[]
-}
-
-Runner accounting capability registry:
-  AdvanceModelAttemptAccountingAction -> increment_model_attempt
-  ReconcileWorkflowTokenUsageAction -> reconcile_workflow_tokens
-  AdvanceProviderOperationLifecycleAction -> advance_provider_operation
-  ValidateRepairScopeAction -> consume_no_invention_replacement only when its
-    authorization purpose is no_invention_to_clarification
-  every other action/orchestrator -> none
-
-Compiler-locked model-request ledger DataKey ownership:
-  BuildInitialModelRequestIdentityLedgerAction -> produces
-    DataKey<ModelRequestIdentityLedger>(model_request_identity_ledger, 1)
-  AssignModelRequestIdAction -> replaces that key by exact revision CAS
-  AdvanceModelRequestLifecycleAction -> replaces that key by exact revision CAS
-  every other action/orchestrator -> cannot produce or replace that key
-
 DataKey<T> {
   id,                 // closed key name, e.g. model_request_identity_ledger
   schemaVersion,      // integer, e.g. 1
@@ -280,6 +251,34 @@ PipelineEnvelope {
 
 ## 5. Pipeline outcome
 
+Native owners:
+
+- `NodeDelta` in [pipeline.zig](../src/domain/pipeline.zig): data writes,
+  replacements and invalidations, `WorkflowTelemetryFact` values, an optional runner
+  accounting transition and an optional repair transition.
+- Runner accounting transitions: `Transition` in
+  [runner_accounting.zig](../src/domain/runner_accounting.zig)
+  (`increment_model_attempt`, `reconcile_workflow_tokens`,
+  `advance_provider_operation`). The runner accepts one only from the registered
+  accounting operation; [model-request-operations.md](contracts/model-request-operations.md)
+  owns each lifecycle step's inputs, transitions and publication.
+- Native repair progress: `Transition` in
+  [workflow_retry.zig](../src/domain/workflow_retry.zig) (`authorized`, `merged`,
+  `validated`, `merged_validated`); bindings supply facts and only the runner counts
+  ([§22.7](contracts/22-repair.md#227-repair-retry-limit-and-escalation)).
+- Provider authorization result: `Result` and `Outcome` in
+  [provider_authorization_result.zig](../src/domain/provider_authorization_result.zig)
+  (`prepared` lease reference, `failed`, `cancelled`); the lease capability stays in
+  the runner's private table.
+- Telemetry facts: one variant per event in the
+  [F0002 §6.2](features/F0002-LogService.md#62-levels-and-content-safety) registry,
+  whose payload is exactly that row's fields; F0002 §4 owns the fact shape and what
+  a fact may not contain. `model.prompt_fragment` is not a fact. The native
+  `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) doesn't meet that
+  shape yet (FIX06 "F0002 event registry").
+
+Kept here, flagged, because the native types lack them:
+
 ```text
 Outcome {
   status: PipelineOutcomeStatus,
@@ -287,202 +286,18 @@ Outcome {
   candidateDelta?        // retained off the committed data path for repair
 }
 
-NodeDelta {
-  dataWrites[],
-  dataReplacements[],
-  dataInvalidations[],
-  evidenceAdded: Evidence[],
-  diagnosticsAdded: Diagnostic[],
-  telemetryFactsAdded: WorkflowTelemetryFact[],
-  runnerAccountingTransition?: RepairAccountingTransition,
-  repairProgress?: NativeRepairProgress
+// NodeDelta fields with no native counterpart:
+evidenceAdded: Evidence[]
+diagnosticsAdded: Diagnostic[]
+
+// Proposed fourth runner accounting transition, for the no-invention
+// replacement in §14.4:
+ConsumeNoInventionReplacement {
+  stageRunEpochId,
+  immutableUnitOwnerId,
+  expectedAbsent: true,
+  nextPresent: true
 }
-
-// Native registered bindings supply facts; only the runner counts attempts.
-// Permit binds a stable scope/target/family, authorization, revision and frozen
-// target population. See §22.7 for recurrence and dependent rebuilding.
-NativeRepairProgress =
-  | Authorized { permit }
-  | Merged { permit, revisionAfter, validation: native | dependent_review }
-  | Validated { permit, revision, result: resolved | recurring }
-  | MergedValidated { permit, revisionAfter, result: resolved | recurring }
-
-RepairAccountingTransition =
-  | IncrementModelAttempt {
-      stageRunEpochId, modelRequestId, expectedOrdinal, nextOrdinal,
-      initialOrRetry,
-      retryOperationInstanceId?, completedRetries?,
-      explicitRetryLimit?
-      // Retry facts borrow the runner's operation/defect count under §22.7.
-      // The request's originating step remains unchanged.
-    }
-  | ReconcileWorkflowTokens {
-      workflowExecutionId, providerOperationId,
-      expectedLedgerRevision,
-      recordActualInputAndOutput | provenNotSent | usageUnavailable
-    }
-  | AdvanceProviderOperation {
-      expectedLedger, expectedLedgerRevision,
-      providerOperationId, expectedOperationRevision?,
-      assignInference | invoke | terminate
-      // Assignment binds the request, model binding and exact input.
-      // Runner applies one immutable successor after validating request and
-      // attempt revisions. All operation state is execution-local; there is
-      // no journal projection or persisted result handoff.
-    }
-  | ConsumeNoInventionReplacement {
-      stageRunEpochId,
-      immutableUnitOwnerId,
-      expectedAbsent: true,
-      nextPresent: true
-    }
-
-// PipelineRunner accepts this field only from the compiler-registered accounting
-// action contract, validates compare-and-swap and the explicit local retry
-// authority against its operation/defect count, and constructs
-// the next envelope. It is not a general node-controlled runner mutation.
-// accounted_model_attempt is a sealed view of the applied canonical record.
-// Envelope publication and accounting installation succeed together or neither
-// becomes visible. The value retains its request and accounting owners.
-// Parameter-free assign-provider-operation assigns one inference operation and
-// calls AdvanceProviderOperationLifecycleAction for assignment. The runner
-// compares the proposal to the retained prepared request and applied attempt.
-// assigned_provider_operation is a sealed view of the canonical assigned Record;
-// the current lifecycle ledger, not envelope presence, owns operation status.
-// Publishing this view and its ledger successor is one runner application.
-// Its value retains operation/request owners; no lease or provider call occurs.
-
-// Parameter-free prepare-provider-operation-authorization requires that same
-// request, attempt and assignment. The runner binds the bound catalogue entry's
-// requestTimeoutMs as the one deadline, for every provider operation of the
-// request, and allocates one private slot; the action uses only its preloaded
-// no-I/O port.
-ProviderAuthorizationResult = opaque {
-  outcome: prepared(ValidatedProviderAuthorizationLeaseRef)
-         | failed(ProviderFailure)
-         | cancelled(ProviderOperationId)
-}
-// The runner validates exact slot/association before publishing this value.
-// Backing capabilities remain solely in its existing single-use lease table.
-// Expected failure carries typed data; unexpected binding errors terminate
-// without a delta or YAML transition. Execution cleanup releases unused leases.
-
-// advance-model-request-lifecycle with transition: invoked requires the same
-// prepared authorization. AdvanceModelRequestLifecycleAction creates exactly
-// the assigned -> invoked request-ledger successor. The runner validates its
-// direct parent and exact request before replacing the ledger; all prepared
-// request, attempt, operation and lease values remain unchanged. The provider
-// operation is still assigned. No API call or delivery claim is made here.
-
-// advance-provider-operation-lifecycle with transition: invoked consumes that
-// assignment under the already-invoked request. The runner supplies the original
-// prepared lease deadline, validates the proposal, and publishes a sealed view
-// of the canonical InvokedProviderOperation while invalidating assignment
-// evidence. Rejection publishes neither change. The lease is still unconsumed;
-// no API call, token charge, new timeout or persisted state is introduced.
-
-// validate-provider-invocation-observation consumes the retained raw result,
-// prepared request, applied attempt and invoked operation. Its pure action
-// validates the runner-bound association, usage and UTF-8 without another
-// token charge. Its read-only result retains the request/response owners;
-// only complete evidence exposes decoder input. Stops, failures, typed
-// rejections and cancellation remain distinct. No JSON decoding is implicit.
-
-// decode-model-envelope consumes that retained validation result and its original
-// prepared request. Only complete evidence enters the strict JSON decoder.
-// model_envelope_result owns the tree and retains the source evidence; malformed
-// JSON is protocol-invalid, not provider-failed. Non-complete observations pass
-// through unchanged. No schema check, token charge or retry is implicit.
-
-// validate-model-payload-schema consumes model_envelope_result and checks only
-// decoded candidates against their original request's compiled result schema.
-// model_payload_schema_result retains that owner and exposes valid evidence,
-// schema_rejected or unchanged not_validated source facts. No parsing, token
-// charge, semantic proof or commit authority is introduced.
-
-// complete-provider-operation consumes the validated observation and exact invoked
-// operation, applying one terminal transition through the existing lifecycle action.
-// Only the runner publishes terminal_provider_operation and removes invoked evidence.
-// Stops/failures/cancellation stay distinct; unknown delivery stays unknown. Response
-// owners and token usage are unchanged. This does not complete the logical request,
-// accept the payload or grant workflow success.
-
-// complete-model-request consumes that terminal operation, applied attempt and
-// retained payload-schema result. AdvanceModelRequestLifecycleAction closes only
-// this request after all its operations are terminal. Schema-valid -> accepted/ok;
-// protocol or schema rejection -> failed/invalid; provider stop/failure -> failed;
-// cancellation -> cancelled. Only the exact evidence-derived ledger successor is
-// published. Response owners and tokens stay unchanged; request acceptance is not
-// semantic validity, approval, workflow success or commit authority.
-
-// terminate-provider-operation consumes assigned operation and retained authorization
-// evidence: failure -> preparation_failed/failed; cancellation -> cancelled(not_sent).
-// Prepared results reject. The same lifecycle action/runner terminal publication
-// replaces assignment evidence, retaining original facts and sole lease cleanup.
-// No call, token charge, retry, persistence or logical-request transition occurs.
-
-// terminate-model-request consumes the matching terminal operation and authorization
-// result after all request operations are terminal. Authorization failure closes
-// assigned -> not_invoked_authorization_failure, invoked -> failed; cancellation
-// closes either -> cancelled. Prepared or inconsistent evidence rejects. The same
-// request lifecycle action and runner publish only the direct ledger successor.
-// No parameters, response evidence, live lease, token charge or new authority.
-
-TelemetryFact =
-  | RunStartedFact
-  | RunCompletedFact { outcome, durationMs? }
-  | RunBlockedFact { diagnosticCode, outcome }
-  | RunFailedFact { diagnosticCode, outcome }
-  | RunCancelledFact { outcome }
-  | PublicationPreparedFact { outcome }
-  | StageStartedFact
-  | StageCompletedFact { outcome, durationMs? }
-  | StageBlockedFact { diagnosticCode, outcome }
-  | StageFailedFact { diagnosticCode, outcome, durationMs? }
-  | StageClarificationPendingFact { outcome }
-  | ActionStartedFact
-  | ActionCompletedFact { outcome, durationMs? }
-  | ActionInvalidFact { diagnosticCode, outcome }
-  | ActionFailedFact { diagnosticCode, outcome, durationMs? }
-  | ModelRequestedFact { modelOperationId, modelSlotId }
-  | ModelCompletedFact { modelOperationId, modelSlotId, outcome,
-                         inputTokens?, outputTokens?, durationMs? }
-  | ModelProviderStoppedFact { modelOperationId, modelSlotId, diagnosticCode,
-                               outcome, inputTokens?, outputTokens? }
-  | ModelRunawayResentFact { modelOperationId, modelSlotId, diagnosticCode,
-                             inputTokens?, outputTokens? }
-  | ModelResponseNormalizedFact { modelOperationId, modelSlotId, diagnosticCode }
-  | ModelProtocolFailedFact { modelOperationId, modelSlotId,
-                              diagnosticCode, outcome }
-  | ModelSchemaFailedFact { modelOperationId, modelSlotId,
-                            diagnosticCode, outcome }
-  | ValidationCompletedFact { validatorId, outcome, count?, durationMs? }
-  | ValidationFailedFact { validatorId, diagnosticCode, outcome, count? }
-  | RepairRequestedFact { repairUnitKind }
-  | RepairAppliedFact { repairUnitKind, outcome }
-  | RepairRejectedFact { repairUnitKind, diagnosticCode, outcome }
-  | RepairExhaustedFact { repairUnitKind, diagnosticCode, outcome }
-  | RetryAdmittedFact { count }
-  | RetryExhaustedFact { count, diagnosticCode, outcome }
-  | ReviewRequestedFact
-  | ReviewApprovedFact { outcome }
-  | ReviewRejectedFact { outcome }
-  | CommandStartedFact { commandId }
-  | CommandCompletedFact { commandId, outcome, exitCode?, durationMs? }
-  | CommandFailedFact { commandId, diagnosticCode, outcome,
-                        exitCode?, durationMs? }
-  | TaskStartedFact { taskId }
-  | TaskCompletedFact { taskId, outcome, durationMs? }
-  | TaskBlockedFact { taskId, diagnosticCode, outcome }
-  | TaskFailedFact { taskId, diagnosticCode, outcome, durationMs? }
-  | SecurityDeniedFact { ruleId, diagnosticCode, outcome }
-
-// Each variant maps one-to-one, by lower-snake variant name to dotted event
-// type, to the exhaustive F0002 Section 6.2 registry. Its payload is exactly
-// that row's required/optional field set. model.prompt_fragment is not a
-// TelemetryFact; it is produced only by the separate sanitization pipeline.
-// Common identity/time/context is runner-supplied. Facts contain no body,
-// arbitrary message/map/list, shortcode, sensitivity, or level.
 ```
 
 ---
@@ -705,39 +520,15 @@ Exact segments select preserved-token occurrences; effective claims and citation
 derive from explicit selection plus exact segments. Fixed repairs preserve the
 association and return content only. Earlier shapes have no reader.
 
-```text
-InitialAuthoredValue { value: BusinessValue, signal_ids[] }
-InitialRecordProposal { content: RecordContent, claim_ids[] }  // non-entity records (ADR 0038)
-Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
-AttributedValue { value: BusinessValue, source_group_ids[], provenance: Provenance }
-RecordProposal { content: RecordContent, source_group_ids[], provenance: Provenance }
-
-ContentProposal {
-  display_name: AttributedValue,
-  primary_user_story: AttributedValue,
-  records: RecordProposal[],
-  entities: { disposition: required | not_applicable, basis: AttributedValue }
-}
-
-RecordContent =
-  | acceptance_criterion { given: BusinessValue, when: BusinessValue, then: BusinessValue }
-  | user_visible_outcome { text: BusinessValue }
-  | edge_case { condition: BusinessValue }  // its outcome is the linked criterion's Then (ADR 0038 Decision 7)
-  | functional_requirement { text: BusinessValue }
-  | business_rule { text: BusinessValue }
-  | assumption { text: BusinessValue }
-  | non_goal { text: BusinessValue }
-  | prohibited_behavior { text: BusinessValue }
-  | entity { name: BusinessValue }  // the engine derives its related statements (§23.1)
-
-IdentifiedRecord { id: { kind, ordinal }, proposal: RecordProposal }
-IdentifiedContent {
-  display_name: AttributedValue,
-  primary_user_story: AttributedValue,
-  records: IdentifiedRecord[],
-  entities: ContentProposal.entities
-}
-```
+Implemented in [specification.zig](../src/domain/specification.zig) as `Provenance`,
+`AttributedValue`, `RecordProposal`, `ContentProposal`, the `Content` record union,
+`IdentifiedRecord` (whose `outcome_of` links an edge case to the criterion whose
+Then it prints, ADR 0038 Decision 7) and `IdentifiedContent`; the initial-response
+forms are `AuthoringValue` (`signal_ids`), `AuthoringRecord` (`claim_ids`, non-entity
+records) and `AuthoringEntity` in
+[specification_generation.zig](../src/domain/specification_generation.zig). The
+engine derives an entity's related statements
+([§23.1](contracts/23-rendering.md#231-canonical-byte-contract)).
 
 Native [content contract](../src/domain/specification.zig) interpretation:
 
@@ -1479,30 +1270,12 @@ Diagnostic {
 [F0001](features/F0001-SDDToolKitConfigService.md) and the
 [configuration schema](schemas/sddtoolkit-config.schema.json) own the single
 unversioned contract; [examples/.sddtoolkit.json](examples/.sddtoolkit.json) is a
-complete example.
-
-```text
-SDDToolKitConfig {
-  logs: { level, console },
-  models: { slots: map<slotName, { provider, model, reasoningEffort? }> },
-  workflowTokenBudget: positive integer, // ADR 0037; no default
-  temperature: number >= 0,              // ADR 0039; no default
-  temperatureRunawayRetry: number >= 0,  // ADR 0039; no default
-  paths: {
-    specs, references, specsArchive, workflows,
-    toolchainPreset, principles, templates, providers
-  },
-  validation?: { sourcePreservationCheck?: boolean }
-}
-```
-
-- Fixed objects are closed; decoding yields immutable data.
-- Owning consumers validate path, model and logging authority.
-- Slots carry no output-token allowance
-  ([ADR 0011](decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
-- Read only the invocation directory's exact `.sddtoolkit.json`; no search or
-  example/default fallback.
-- The 1 MiB configuration-read guard is unrelated to provider-owned call limits.
+complete example. Implemented as `SDDToolKitConfig` in
+[config.zig](../src/domain/config.zig). [§9](contracts/09-configuration.md) owns
+its rules: closed immutable decoding, consumer-owned semantic validation, the exact
+invocation-directory file with no search or fallback, and slots without an
+output-token allowance. F0001's 1 MiB configuration-read guard is unrelated to
+provider-owned call limits.
 
 See [§9.1](contracts/09-configuration.md#91-required-configuration-shape) for
 configured roots and engine-derived children,
@@ -2540,40 +2313,13 @@ follow their own compiled gates and transitions.
 ## 34. Observability events
 
 [Design §26.5](contracts/26-security.md#265-secrets-and-logging) defines the canonical
-levels and aliases.
-
-```text
-Levels use the canonical levels defined in Design §26.5.
-Configured aliases = CRITICAL -> fatal | WARN -> warning
-Emission rule = eventDefinition.emission == always or rank(eventDefinition.level) >= rank(featureLogPolicy.threshold)
-
-publication.prepared
-run.started | run.completed | run.blocked | run.failed | run.cancelled
-stage.started | stage.completed | stage.blocked | stage.failed |
-stage.clarification_pending
-action.started | action.completed | action.invalid | action.failed
-model.requested | model.completed | model.provider_stopped |
-model.runaway_resent | // ADR 0039
-model.protocol_failed | model.schema_failed | model.response_normalized
-validation.completed | validation.failed
-repair.requested | repair.applied | repair.rejected | repair.exhausted
-retry.admitted | retry.exhausted
-review.requested | review.approved | review.rejected
-command.started | command.completed | command.failed
-task.started | task.completed | task.blocked | task.failed
-security.denied
-model.prompt_fragment // prompt stream only
-
-// This is the exhaustive proof-of-concept registry. Exact levels, required and
-// optional fields, and sensitivity are the F0002 Section 6.2 table. Each name
-// resolves to the immutable <event_type>/v1 template.
-// Producers supply typed facts only; they cannot choose the name's level or
-// message. No event carries arbitrary text, raw model/reference/code content,
-// command output, credentials, or diagnostic expected/actual values.
-// model.prompt_fragment.content is accepted only after sanitization. The
-// logging subsystem's own failure emits the exact bounded F0002 Section 6.4
-// emergency stderr line outside this registry and cannot observe itself.
-```
+levels, aliases and emission rule. The exhaustive event registry, with each event's
+level, emission, fields and sensitivity, is the
+[F0002 §6.2](features/F0002-LogService.md#62-levels-and-content-safety) table;
+F0002 §4 limits what a producer's fact may carry and §6.4 fixes the emergency line.
+It is implemented as `EventType` in [telemetry.zig](../src/domain/telemetry.zig)
+and [log_event_registry.zig](../src/domain/log_event_registry.zig), which don't meet that
+registry yet (FIX06 "F0002 event registry").
 
 ---
 

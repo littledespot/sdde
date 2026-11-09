@@ -97,10 +97,10 @@ The definition uses [F0005's closed root, step and subgraph contracts](F0005-Wor
 - Each YAML transition uses one of `ok`, `more`, `needs-user`, `invalid`, `blocked`, `failed`,
   or `cancelled`, and targets either another local step or the matching `end.*`
   terminal. `more` is non-terminal and must target another step.
-- The compiler rejects missing or duplicate outcome transitions, unbounded cycles,
-  unreachable steps, invalid typed data flow, gate weakening, and capability escalation.
-- A retry or repair cycle is accepted only when it crosses a registered monotonic budget
-  operation with a finite ceiling.
+- [F0005 §7](F0005-WorkflowDefinitionRegistryService.md#compilation-checks) owns the
+  compiler's graph rejections, and
+  [§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules) owns the
+  finite guard every retry or repair cycle needs.
 
 ## 3. Structural outline
 
@@ -119,7 +119,9 @@ authenticated answer application.
 ### 3.1 Explicit feature directory and reference preflight
 
 [ADR 0010](../decisions/0010-explicit-feature-directory.md) replaces generated
-feature names and ownership registration with the exact supplied directory:
+feature names and ownership registration with the exact supplied directory, and owns
+the `--feature`/`--reference` and API argument meaning, path validation and
+same-directory identity:
 
 ```text
 sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
@@ -128,22 +130,8 @@ sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
 - The definition's `id` selects the workflow; the supplied [Spec
   definition](../workflows/spec.workflow.yaml) uses `spec-generation`.
 - The registered invocation requires `featureDirectory` and `referenceSelector`.
-- `--feature` and the API's `featureDirectory` are relative to `.sddtoolkit.json`'s
-  `paths.specs`, not the project root.
-- For example, `--feature hello-world` writes `<paths.specs>/hello-world/spec.md`.
-- Do not repeat or hard-code the specs root; resolve from configuration and exclude
-  `paths.specsArchive`.
-
-`--reference` independently selects the source directory beneath `paths.references`.
-Missing, duplicate, empty, unknown and positional inputs fail. Unrelated workflows
-keep their own registered invocation contracts; the generic engine has no Specify
-argument branch.
-
-- Use shared path normalization, containment, portability and no-follow validation for
-  the target.
-- Resolve its registered artifact paths directly and validate only the existing state
-  needed by the selected workflow.
-- The same directory is the same feature, including when reference input changes.
+  Missing, duplicate, empty, unknown and positional inputs fail.
+- Resolve the target's registered artifact paths directly.
 - No slug, `max-length`, identity seed, owner registry, active/archive ownership scan,
   or registration write is required.
 - An existing directory is not a collision requiring approval.
@@ -486,9 +474,10 @@ The closed model classifications are:
   their existing relevance/kind rules. Classification repair and stored
   validation enforce this same native predicate.
 
-Compiled graphs retain a fixed 1,024-step capacity, including expanded subgraph
-instances. Specify reuses model-request/release subgraphs and compact outcome
-maps for its repair routes. This capacity is independent of operation retry limits and the workflow token budget.
+Specify reuses model-request/release subgraphs and compact outcome maps for its
+repair routes within the compiler's 1,024-step ceiling
+([§14.1](../contracts/14-orchestration.md#141-model-operation-composition),
+[§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation)).
 The request subgraph uses ADR 0012's pure `prepare-model-request` operation;
 detailed assignment, binding validation and request construction remain available.
 Both paths use the same native owners and produce identical model-visible content.
@@ -574,15 +563,11 @@ All operations are pure and individually registered in the generic YAML registry
 - [§16.4](../contracts/16-reference-ingestion.md#164-semantic-extraction-flow) owns
   summary carry-forward, statement coverage, duplicate projection and carried-summary
   lineage.
-- Native summary iteration uses the shared registered finite-iteration contract.
-  Partition validation initializes the non-final partition count; summary
-  construction advances the current cursor exactly once and supplies current
-  immutable plan/progress evidence. The runner rejects stale, repeated, skipped
-  or exhausted progress and commits advancement with the delta. Initialization
-  cannot cycle without an independent retry guard; upstream repair may establish
-  a new validated plan. Each committed advancement adds one graph traversal to
-  the runner's retry-derived allowance. Reuse has no retry parameter; model/repair
-  retry limits and the workflow token budget remain unchanged.
+- Native summary iteration uses the shared finite-iteration contract
+  ([§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules) item 8,
+  [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md)): partition
+  validation initializes the non-final partition count, and summary construction
+  advances the current cursor. Reuse has no retry parameter.
 - A summary proposal contains only semantic `statements`, with selected `claim_ids`
   and typed model `content`. Native code appends each exact-token statement.
 - The engine constructs canonical `member_claim_ids` from that partition and
@@ -857,23 +842,16 @@ validators:
 - The request ledger is runner-validated execution control, not business authority.
 - All storage is execution-local.
 
-- `build-model-protocol-retry` retains the original request identity, schema, unit and
-  provider binding.
-- It uses the originating assignment's optional `protocol-prompt` and decoder/schema
-  diagnostic.
-- Schema corrections include the candidate JSON Pointer, parent/value scope,
-  exact locator in the complete selected schema and concise derived field/tag
-  guidance. Expected subtrees are not repeated; syntax uses the same schema.
-- No candidate example is generated.
-- It rebuilds from the retained original inputs and latest rejection, without
-  accumulating correction history.
+- `build-model-protocol-retry` prepares the response-level correction that
+  [§22.6](../contracts/22-repair.md#226-unparseable-output) defines, keeping the
+  original unit and provider binding and using the originating assignment's optional
+  `protocol-prompt`.
 - YAML checks the logical request phase before reusing the normal provider-operation
   lifecycle and accounting.
-- The accounting step's configured limit and total token budget own exhaustion; the
-  correction builder has no separate counter or limit (Design §22.6).
-- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented),
-  the phase check, accounting and correction are stages of the `request-model` step, and
-  that step's `retry-limit` owns exhaustion.
+- [§22.6–§22.7](../contracts/22-repair.md#227-repair-retry-limit-and-escalation) own
+  correction accounting and exhaustion, including the
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` form (not
+  yet implemented).
 
 - Workflow schemas and the shared `model_candidate_json.zig` decoder use ADR 0006's
   closed `kind` alternatives, including nested typed values.
@@ -920,10 +898,8 @@ validators:
   `build-incomplete-specification`, `render-incomplete-specification`,
   `prepare-incomplete-specification-output`, `publish-workflow-output` and
   `check-clarification-progress`.
-- The shared refresh retains subject IDs across invocations and replaces open drafts,
-  including when the question is unchanged.
-- New submitted answers remain blocked pending trusted authentication and applicability
-  validation; loading a response is not acceptance.
+- The shared refresh retains subject IDs and replaces open forms and drafts under
+  [§23.2](../contracts/23-rendering.md#232-workflow-reruns-and-protected-clarification-files).
 
 - Preparation joins the complete rendered form set to validated registry state, retains
   protected bytes and serializes canonical JSON.
@@ -932,8 +908,9 @@ validators:
 - It rechecks the complete captured clarification input set before replacement, uses
   no-follow file access, rejects hard links, truncates shorter output and verifies
   written bytes.
-- User-closed files are not replacement candidates.
-- No transaction directory, append/merge path or recovery subsystem is introduced.
+- [§23.2](../contracts/23-rendering.md#232-workflow-reruns-and-protected-clarification-files)
+  and [§25.1](../contracts/25-publication.md#251-one-execution-one-output-boundary) own
+  user-closed form protection and the absence of transaction or recovery machinery.
 
 - The YAML's successful content branch projects the assembled, coverage-validated typed
   content through the existing Markdown codec and reparses it.
@@ -943,10 +920,9 @@ validators:
 - `workflow.json` is written last.
 
 - Specify captures the current principle registry and runs no principle assessment
-  (ADR 0015). Canonical state keeps the captured registry
-  identity as `principle_registry`, which the next run's capture reads as its prior
-  registry. Specify creates no Plan form or obligation. Plan reassesses current
-  principles under its own input authority.
+  ([ADR 0015](../decisions/0015-specification-principle-review.md));
+  [§24](../contracts/24-workflow-state.md) owns the `principle_registry` state field.
+  Specify creates no Plan form or obligation.
 - The native closed, versioned `specification-state` contract distinguishes `specified` and
   `spec_clarification_pending`. The pending variant holds the current reference snapshot,
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
@@ -971,19 +947,18 @@ validators:
 
 - Publication checks exact captured workflow-state bytes as well as clarification
   inputs; stale captures reject.
-- Every write failure prevents new completion, and a fresh invocation starts from the
-  beginning.
+- Write failure, reruns and the pending publication's lack of completion authority
+  follow [§25](../contracts/25-publication.md#252-abandonment-and-reruns).
 - Authenticated answer application remains open
   ([FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
-- A clarification publication ending in `needs_user` still does not claim a completed
-  Specify workflow.
 
 ### 3.13 Actionable questions
 
 [§12.7](../contracts/12-model-boundary.md#127-workflow-defined-model-operations)
 owns shared question preparation. Reuse model/evidence contracts and existing
-clarification builders; no workflow-local loader or summary call. Unresolved SNN still blocks Plan and
-unresolved SNN/PNN still blocks Tasks. Answer authentication is separate:
+clarification builders; no workflow-local loader or summary call. Open forms gate later
+stages under [§24.2](../contracts/24-workflow-state.md#242-stage-transition-state-machine).
+Answer authentication is separate:
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) (FIX06 E7; not yet
 implemented).
 
@@ -1006,8 +981,7 @@ The compiled registered contracts collectively cover:
 8. render the exact Section 5 hierarchy and `reference-context.md`, reparse
    `spec.md`, and compare normalized IR; and
 9. validate the complete artifact/state set, publish it under Design §25, and enter
-   `specified` only after every required write succeeds. A write failure may leave
-   replaced files but cannot record new successful completion.
+   `specified` only after every required write succeeds.
 
 Exact grouping into definition-visible steps follows the registered operation
 contracts; this feature does not invent their IDs.
@@ -1171,17 +1145,13 @@ incomplete specification:
 4. the workflow still ends `failed` or `blocked` and exits nonzero; Plan stays blocked, and the
    next run starts at `start`.
 
-Eligible failures are a YAML `failed`, `blocked` or `invalid` terminal and the runner's
-`retry_limit` and `token_budget` rejections. The Specify definition declares the steps as
-its `failure-output` subgraph, which the engine runs through the runner with model calls
-refused (ADR 0041 Decision 6, `workflow/v2`; on hold, not implemented).
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) Decision 6 names the
+eligible failures; the Specify definition would declare these steps as its
+`failure-output` subgraph (`workflow/v2`; on hold, not implemented).
 
-- Reruns follow
-  [Design §23.2](../contracts/23-rendering.md#232-workflow-reruns-and-protected-clarification-files):
-  Specify completely overwrites `spec.md` (including prior edits), `reference-context.md`
-  and unresolved `clarify/SNN.md` forms at the same paths and subject IDs, including on a
-  `needs_user` publication, and retains user-closed forms byte-for-byte. It never
-  deletes the feature directory or its clarification history.
+- Reruns replace these outputs and unresolved forms, including on a `needs_user`
+  publication, and retain user-closed forms under
+  [Design §23.2](../contracts/23-rendering.md#232-workflow-reruns-and-protected-clarification-files).
 
 - There is no committed `Open Questions` section in `spec.md`.
 - Specification-owned unknowns use the clarification lifecycle above; reference-context
@@ -1324,16 +1294,12 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   stable diagnostic order.
 - Record-field locations are closed native targets.
 - Exact evidence-equivalent duplicates can be deleted, while competing records remain
-  blocked. Under [ADR 0035](../decisions/0035-cross-kind-restatement.md) a
-  single-statement record that restates the primary user story is deleted only when the
-  story covers its evidence. A functional requirement and the story are always kept,
-  an uncovered restatement is not flagged, and a record naming a claim that no other
-  record names is kept ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). Within one batch, a business rule, outcome,
-  assumption, non-goal or prohibition whose every claim a requirement or an earlier such
-  record names is deleted natively too (its text is not judged), unless it holds an exact
-  copy no other record holds; one naming such claims and others is an admission
-  defect; requirements are never deleted or rejected by this rule
-  ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5). Closed variant/schema correction handles malformed record shapes; there
+  blocked. Restatements of the primary user story follow
+  [ADR 0035](../decisions/0035-cross-kind-restatement.md) as amended by
+  [ADR 0047](../decisions/0047-engine-composed-primary-story.md); records whose claims a
+  requirement or an earlier record in the batch already names follow
+  [ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 5
+  ([§17.3](../contracts/17-specify.md#173-llm-work)). Closed variant/schema correction handles malformed record shapes; there
   is no whole-record kind replacement. Entity membership repair follows
   [§22.3](../contracts/22-repair.md#223-repair-authorization).
   One whole-record target remains bounded across field-level failures of that
@@ -1361,10 +1327,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   section order before assigning IDs and validating coverage. The retained
   candidate order, occurrence identities and field origins do not change; canonical
   ID lookup maps back to that order for downstream repairs.
-- All repair consumers use the same `atomic_repair.Contract`: immutable authorization
-  IDs bind owner, revision, operation, target, expected value, native rule and read
-  dependencies; response parsing verifies the exact repair packet, and merge checks the
-  old value before incrementing the revision.
+- All repair consumers use the same `atomic_repair.Contract`, which implements the
+  authorization, response and merge rules of
+  [§22.3–§22.5](../contracts/22-repair.md#223-repair-authorization); its immutable
+  authorization IDs also bind the repair owner.
 - Native domain actions select and apply their typed units.
 - Generation, reference and source-omission repairs use the shared repair prompt through
   `model-request` or `model-request-with-context`; source-review repairs reuse the

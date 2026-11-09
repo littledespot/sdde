@@ -4,410 +4,342 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
-Under [ADR 0030](../../decisions/0030-engine-owned-model-request.md) (not yet implemented),
-the request-lifecycle actions below keep their responsibilities but are no longer selected by
-YAML. A capability-free kernel orchestrator runs them as the stages ADR 0030 lists for one
-`request-model` step, through runner-owned child bindings. Where an entry says a later attempt
-follows "an explicit YAML retry transition", read the step's own bounded protocol correction.
+One entry per registered operation; reads and writes are its action's `NodeContract` data keys.
+Where the registered workflow step that wraps the action declares different keys or parameters,
+a **Registered step** line gives the step's, which is what a workflow definition must match.
+The request-preparation parameters are required `slot` and `prompt`, and optional `context`,
+`protocol-prompt`, `result-schema`, `composition-part`, `result-selection` and `input`
+([`model_request_workflow.zig`](../../../src/application/model_request_workflow.zig)); a
+definition supplies exactly one of `result-schema` or `composition-part`, and
+`composition-part` excludes `result-selection` and `input`
+([`workflow_model.zig`](../../../src/domain/workflow_model.zig)). Three entries are actions
+without a workflow step: `check-workflow-token-budget` and `reconcile-workflow-token-usage`
+are called inside the runner's token accounting, and `build-immutable-unit-owner-id` has no
+production caller.
+[§12](../12-model-boundary.md) owns the model boundary and
+[model-request-operations.md](../model-request-operations.md) the request lifecycle these
+operations implement. Under [ADR 0030](../../decisions/0030-engine-owned-model-request.md)
+(not yet implemented) the request-lifecycle operations become stages of one `request-model`
+step. Entries marked "Proposed, no code" are named elsewhere but have no registered operation.
 
+## Request identity and preparation
 
-## `SelectContextAction`
+## `BuildInitialModelRequestIdentityLedgerAction` (`build-initial-model-request-identity-ledger`)
 
-- **Input:** unit plus indexed facts
-- **Output:** bounded context set
-- **Responsibility:** Select relevant known context.
+- **Owner:** [`src/actions/model/build_initial_model_request_identity_ledger.zig`](../../../src/actions/model/build_initial_model_request_identity_ledger.zig)
+- **Reads:** none · **Writes:** `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Creates the run's empty request-identity ledger from the closed request-purpose registry; it is the key's sole producer.
+- **Rejects:** `InvalidRequestPurposeRegistry` and the other `model_request_identity.ValidationError` cases.
 
-## `BuildInitialGuidanceAction`
+## `BuildImmutableUnitOwnerIdAction` (`build-immutable-unit-owner-id`)
 
-- **Input:** unit, context, compiled policy
-- **Output:** guidance packet
-- **Responsibility:** Generate deterministic initial guidance.
+- **Owner:** [`src/actions/model/build_immutable_unit_owner_id.zig`](../../../src/actions/model/build_immutable_unit_owner_id.zig)
+- **Reads:** none · **Writes:** none (returns the owner) · **Side effect:** `none`
+- **Does:** Validates one immutable unit-owner descriptor and returns it unchanged.
+- **Rejects:** `InvalidImmutableUnitOwnerId`.
 
-## `BuildImmutableUnitOwnerIdAction`
+## `AssignModelRequestIdAction` (`assign-model-request-id`)
 
-- **Input:** one compiled-step descriptor or required SDD canonical owner tuple
-- **Output:** immutable unit-owner tuple
-- **Responsibility:** Validate the generic workflow-step owner or matching canonical SDD owner
-  variant; reject missing/extra fields.
-- Generic ownership supplies no SDD repair/review/clarification authority.
+- **Owner:** [`src/actions/model/assign_model_request_id.zig`](../../../src/actions/model/assign_model_request_id.zig)
+- **Reads:** `model_request_identity_ledger` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Allocates one logical request ordinal for a unit owner, model operation and purpose binding at the expected ledger revision; protocol retries reuse the identity.
+- **Registered step:** reads `model_request_identity_ledger` (optional: `model_input_packet`, `json_composition`), writes `assigned_model_request` and replaces the ledger, with the request-preparation parameters.
+- **Rejects:** `ModelRequestRevisionConflict`, `InvalidRequestPurposeBinding`, `RequestPurposeNotRegistered`, ordinal or revision exhaustion.
 
-## `BuildInitialModelRequestIdentityLedgerAction`
+## `ValidateModelRequestBindingAction` (`validate-model-request-binding`)
 
-- **Input:** closed request-purpose registry
-- **Output:** empty run-local `.model_request_identity_ledger` DataKey (schema version 1)
-- **Responsibility:** Create a fresh process-local execution epoch and initialize its
-  ordinal/accounting state without assigning a request; it is the sole producer of this
-  compiler-owned key.
+- **Owner:** [`src/actions/model/validate_model_request_binding.zig`](../../../src/actions/model/validate_model_request_binding.zig)
+- **Reads:** `model_request_identity_ledger` · **Writes:** none (returns binding evidence) · **Side effect:** `none`
+- **Does:** Proves a request ID's ledger membership, unit owner, model operation and purpose at the expected revision.
+- **Registered step:** reads `model_request_identity_ledger`, `assigned_model_request` and writes `validated_model_request`.
+- **Rejects:** `ModelRequestBindingInvalid`, `ModelRequestNotFound`, `ModelRequestRevisionConflict`.
 
-## `AssignModelRequestIdAction`
+## `BuildModelRequestAction` (`build-model-request`)
 
-- **Input:** immutable unit owner, exact compiled model-operation identity, one closed
-  discriminated purpose binding, and current model-request identity-ledger DataKey revision
-- **Output:** one typed model-request ID plus successor-ledger DataKey replacement
-- **Responsibility:** Allocate one logical request ordinal and enforce the purpose variant's
-  required owner fields; protocol retries do not invoke this action, and runner CAS is the only
-  mutation.
+- **Owner:** [`src/actions/model/build_model_request.zig`](../../../src/actions/model/build_model_request.zig)
+- **Reads:** `model_request_identity_ledger`, `validated_provider_model_binding` · **Writes:** none (returns the prepared request) · **Side effect:** `none`
+- **Does:** Builds one identified provider-neutral request from a validated source and its model-visible content.
+- **Registered step:** reads `model_request_identity_ledger`, `validated_model_request` and writes `prepared_model_request`.
+- **Rejects:** `InvalidModelRequestSource`, `ModelRequestAssociationInvalid`, `ModelRequestBindingInvalid`.
 
-## `AdvanceModelRequestLifecycleAction`
+## `PrepareModelRequestAction` (`prepare-model-request`)
 
-- **Input:** exact request ID, expected status, typed invocation/terminal fact, and current
-  model-request identity-ledger DataKey revision
-- **Output:** successor-ledger DataKey replacement
-- **Responsibility:** Apply one runner-enforced compare-and-swap `assigned -> invoked`, `invoked
-  -> terminal`, or the approved `assigned -> terminal` not-invoked transition for authorization
-  failure or pre-call cancellation; protocol retries remain invoked and never reassign identity.
+- **Owner:** [`src/actions/model/prepare_model_request.zig`](../../../src/actions/model/prepare_model_request.zig)
+- **Reads:** `model_request_identity_ledger` (optional: `model_input_packet`, `json_composition`) · **Writes:** `assigned_model_request`, `validated_model_request`, `prepared_model_request`; replaces `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Assigns, validates and prepares one request in a single runner delta through the identity, binding and request-construction owners ([ADR 0012](../../decisions/0012-workflow-owned-model-request.md)); no authorization, call, retry or accounting.
+- **Registered step:** the same keys, with the request-preparation parameters.
+- **Rejects:** the request-handoff and identity errors (`ModelRequestRevisionConflict`, `InvalidModelRequestSource`, packet errors).
 
-## `ValidateModelRequestBindingAction`
+## `CheckModelRequestPhaseAction` (`check-model-request-phase`)
 
-- **Input:** request ID, immutable unit, compiled workflow model-operation declaration,
-  discriminated purpose authority, and current request ledger
-- **Output:** model-request binding evidence
-- **Responsibility:** Prove epoch/unit/workflow-operation/purpose/ordinal and ledger membership,
-  including required/forbidden purpose-owner fields.
+- **Owner:** [`src/actions/model/check_model_request_phase.zig`](../../../src/actions/model/check_model_request_phase.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request` · **Writes:** none · **Side effect:** `none`
+- **Does:** Routes on the request's status: `ok` when assigned, `more` when invoked.
+- **Rejects:** `failed` when the request is terminal or absent.
 
-## `BuildModelRequestAction`
+## `AdvanceModelRequestLifecycleAction` (`advance-model-request-lifecycle`)
 
-- **Input:** validated request binding, guidance and exact YAML-declared result schema
-- **Output:** internally identified provider-neutral request
-- **Responsibility:** Project only needed guidance, evidence and compact result schema into
-  model content; retain engine-only identity in the bound request.
-
-## `PrepareModelRequestAction`
-
-- **Input:** current request ledger/revision, compiled model binding and selected
-  prompt, optional static context, schema and input resources or native input packet.
-- **Output:** one successor ledger and its assigned, validated and prepared request
-  values, published atomically by the runner.
-- **Responsibility:** Prepare one request using the existing identity, binding and
-  request-construction owners. This pure consolidated entrypoint performs no
-  authorization, model call, retry, accounting or continuation. Detailed preparation
-  operations remain available under ADR 0012.
-
-## `InvokeModelAction`
-
-- **Input:** identified provider-neutral request, binding evidence, already-applied runner
-  attempt transition, and a non-exhausted workflow-execution actual-usage ledger
-- **Output:** raw provider result
-- **Responsibility:** Make one model call only after identity, operation-local retry accounting,
-  and workflow actual-usage budget checks succeed.
-
-## `AdmitModelResponseAction`
-
-- **Input:** complete validated provider evidence with its retained selected schema.
-- **Output:** one decoded candidate and its schema-validation result. The binding
-  retains the existing envelope/payload owners and forwards non-complete outcomes.
-- **Responsibility:** Admit response syntax and shape through the existing decoder
-  and validator. Detailed operations remain available; no action invokes another
-  action. No semantic review, provider call, retry or accounting occurs.
-- A first runaway (an `output_limit` stop with valid usage, on an attempt that isn't a
-  re-send) admits as `invalid` with no candidate, like a missing final answer; a
-  runaway on a re-send admits as `failed` with `RunawayRepeated`
-  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
-
-## Configured JSON composition responsibilities
-
-[ADR 0016](../../decisions/0016-configured-json-response-composition.md) owns these
-operations: its §2 table registers them and
-[§3](../../decisions/0016-configured-json-response-composition.md#3-responsibilities-and-execution)
-assigns their part-selection, retention and assembly responsibilities.
-
-- `initialize-json-composition` binds the `composition` resource to the current packet
-  and execution epoch.
-- Request preparation selects a part through its `composition-part` parameter.
-- `retain-json-part` retains one schema-admitted, terminal-accepted part result and its
-  prerequisite placements.
-- `assemble-json` retires staging and installs the complete, unvalidated candidate in
-  one runner delta.
-- `validate-assembled-json` reuses complete schema validation for that candidate.
+- **Owner:** [`src/actions/model/advance_model_request_lifecycle.zig`](../../../src/actions/model/advance_model_request_lifecycle.zig)
+- **Reads:** `model_request_identity_ledger` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Applies one compare-and-swap request transition: `assigned`→`invoked`, `invoked`→`terminal`, or the approved `assigned`→`terminal` closure of a request never invoked ([model-request-operations.md](../model-request-operations.md)); a terminal transition first requires every provider operation of the request to be closed.
+- **Registered step:** [`model_request_lifecycle_workflow.zig`](../../../src/application/model_request_lifecycle_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `assigned_provider_operation`, `provider_authorization_result`, takes the required `transition` parameter whose only value is `invoked`, and has outcomes `ok` and `failed`: as a step it applies only `assigned`→`invoked`. The two terminal transitions run through `complete-model-request` and `terminate-model-request` (Lifecycle steps).
+- **Rejects:** `ModelRequestStatusConflict`, `InvalidModelRequestLifecycleTransition`, `ModelRequestNotFound`, `ProviderOperationStillOpen`.
 
 ## `CapturePacketGuidanceAction` (`capture-packet-guidance`)
 
-- **Input:** the workflow's compiled `packet-guidance` resource, bound through the
-  step's one required `guidance` resource parameter.
-- **Output:** the run-local `.packet_guidance` DataKey holding the validated guidance.
-- **Responsibility:** Publish the compiler-validated guidance for the run, so
-  consuming operations read it from run data rather than the resource
-  ([ADR 0016](../../decisions/0016-configured-json-response-composition.md)
-  packet-guidance amendment). It parses, selects, places or rewrites no text and
-  makes no model call.
+- **Owner:** [`src/actions/model/capture_packet_guidance.zig`](../../../src/actions/model/capture_packet_guidance.zig)
+- **Parameters:** required `guidance` resource (the workflow's `packet-guidance`).
+- **Reads:** none (the compiled `packet-guidance` resource) · **Writes:** `packet_guidance` · **Side effect:** `none`
+- **Does:** Publishes the compiler-validated packet guidance as run data, so consumers never read the resource ([ADR 0016](../../decisions/0016-configured-json-response-composition.md)).
+- **Rejects:** none.
 
-## `BuildPromptBodyFragmentManifestAction`
+## Attempt accounting and invocation
 
-- **Input:** assembled model-facing request or available raw provider body, exact
-  workflow-declared schemas, effective capture policy and fragment-classification registry
-- **Output:** complete prompt-body fragment manifest
-- **Responsibility:** Bind every loggable typed body field to one `ordinary`,
-  `reference_body`, or `code_body` fragment and prove complete coverage.
-  The shared production capture runner additionally supplies ADR 0018 `complete_body`
-  candidates from complete model-facing serialized bytes, including malformed returned
-  content, without parsing them into business authority or adding credential material.
-  Capture follows `logs.level` alone; there is no direction or class selector.
+## `AdvanceModelAttemptAccountingAction` (`advance-model-attempt-accounting`)
 
-## `BuildPromptLogCandidateAction`
+- **Owner:** [`src/actions/model/advance_model_attempt_accounting.zig`](../../../src/actions/model/advance_model_attempt_accounting.zig)
+- **Reads:** `model_request_identity_ledger` · **Writes:** runner accounting transition `increment_model_attempt` · **Side effect:** `none`
+- **Does:** Proposes the next model attempt for a live request: the initial attempt once, a correction only within the step's `retry-limit` ([§22.7](../22-repair.md#227-repair-retry-limit-and-escalation)), and a runaway re-send without counting against it ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- **Registered step:** [`model_attempt_workflow.zig`](../../../src/application/model_attempt_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, writes `accounted_model_attempt` and takes the required `retry-limit` parameter.
+- **Rejects:** `ModelRetryLimitExhausted`, `InvalidAttemptClassification`, `ModelAttemptAccountingRevisionConflict`, `ModelRequestUnavailableForAttempt`, `ModelRequestLedgerRevisionConflict`.
 
-- **Input:** complete fragment manifest, provider metadata, exact model operation/slot, and
-  enabled feature-log policy
-- **Output:** prompt-exchange candidate
-- **Responsibility:** Apply the shared effective level selection; debug/trace selects every
-  direction and body class under ADR 0018 and higher levels select no body content.
-  Retain the exact request/operation/slot/attempt association on every branch.
-- Do not redact, split, or emit.
+## `CheckWorkflowTokenBudgetAction` (`check-workflow-token-budget`)
 
-## `RedactPromptLogContentAction`
+- **Owner:** [`src/actions/model/check_workflow_token_budget.zig`](../../../src/actions/model/check_workflow_token_budget.zig)
+- **Reads:** none (the runner's token ledger) · **Writes:** none · **Side effect:** `none`
+- **Does:** Blocks a further provider call when accounted usage has reached `workflowTokenBudget` ([ADR 0037](../../decisions/0037-configured-workflow-token-budget.md)); reserves nothing.
+- **Rejects:** `WorkflowTokenBudgetExceeded`, `ProviderTokenUsageUnavailable`.
 
-- **Input:** one complete selected classified prompt candidate, structured secret-field
-  registry and mandatory credential detectors
-- **Output:** redacted prompt candidate and evidence
-- **Responsibility:** Remove secrets before chunking and never retain an original
-  value/length in the replacement.
+## `PrepareProviderOperationAuthorizationAction` (`prepare-provider-operation-authorization`)
 
-Production `complete_body` capture follows
-[ADR 0018](../../decisions/0018-debug-model-exchange-logging.md#content-and-storage):
-credential redaction before splitting, 5,000-byte scalar-boundary fragments, base64 for
-invalid UTF-8, stable fragment identities and no truncation. It adds no workflow
-operation; existing prompt validation and logging actions receive each bounded fragment.
+- **Owner:** [`src/actions/model/prepare_provider_operation_authorization.zig`](../../../src/actions/model/prepare_provider_operation_authorization.zig)
+- **Reads:** `validated_provider_model_binding` · **Writes:** `validated_provider_authorization` · **Side effect:** `none`
+- **Does:** Prepares the single-use credential lease for one provider operation through the authorization port.
+- **Registered step:** [`provider_authorization_workflow.zig`](../../../src/application/provider_authorization_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `assigned_provider_operation` and writes `provider_authorization_result`.
+- **Rejects:** a `not_sent`, never-retried provider failure: `timeout` (deadline or expiry), `authorization_denied`, `authentication_failed`; cancellation returns `cancelled`.
 
-## `ValidatePromptLogContentAction`
+## `AdvanceProviderOperationLifecycleAction` (`advance-provider-operation-lifecycle`)
 
-- **Input:** bounded redacted prompt candidate, feature-log policy, fragment manifest,
-  event/field registry, and record-byte ceiling
-- **Output:** transient logging-internal `SanitizedPromptExchangeLogRecord`
-- **Responsibility:** Prove complete fragment accounting, effective level selection,
-  field schemas, redaction-before-splitting evidence, per-fragment/final byte limits, and canonical
-  `promptBodyFragmentId` order.
-- Retain scalar sanitized fragments and internal evidence separately; no metadata/evidence
-  vector is a delimited cell.
-- Return it only through a compiler-locked transient logging `DataKey`; it is never added to the
-  business envelope or model context.
+- **Owner:** [`src/actions/model/advance_provider_operation_lifecycle.zig`](../../../src/actions/model/advance_provider_operation_lifecycle.zig)
+- **Reads:** `model_request_identity_ledger` · **Writes:** runner accounting transition `advance_provider_operation` · **Side effect:** `none`
+- **Does:** Proposes one compare-and-swap transition of a provider operation's lifecycle.
+- **Registered step:** [`provider_operation_lifecycle_workflow.zig`](../../../src/application/provider_operation_lifecycle_workflow.zig) reads the authorization step's keys plus `provider_authorization_result`, writes `invoked_provider_operation`, invalidates `assigned_provider_operation` and takes the required `transition` parameter whose only value is `invoked`.
+- **Rejects:** `provider_operation_lifecycle.ValidationError` (`ProviderOperationRevisionConflict`, `InvalidProviderOperationTransition`, `ProviderOperationNotFound` and the rest).
 
-## `ValidateProviderInvocationObservationAction`
+## `InvokeModelAction` (`invoke-model`)
 
-- **Input:** provider observation and exact runner-owned invoked-operation binding
-- **Output:** validated observation or provider diagnostic
-- **Responsibility:** Prove call association, delivery, stop, usage and UTF-8 safety before any
-  candidate decode.
+- **Owner:** [`src/actions/model/invoke_model.zig`](../../../src/actions/model/invoke_model.zig)
+- **Reads:** `model_request_identity_ledger`, `validated_provider_model_binding`, `validated_provider_authorization` · **Writes:** none (returns the provider observation) · **Side effect:** `model_call`
+- **Does:** Makes the one provider call for an applied invocation record through the provider port, which consumes the lease.
+- **Registered step:** [`model_invocation_workflow.zig`](../../../src/application/model_invocation_workflow.zig) reads `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `invoked_provider_operation`, `provider_authorization_result`, writes `provider_invocation_result`, with outcomes `ok`, `failed` and `cancelled`.
+- **Rejects:** the provider port's `LlmProviderInterface` errors; provider failures arrive as a `failed` observation.
 
-## `DecodeModelEnvelopeAction`
+## `ReconcileWorkflowTokenUsageAction` (`reconcile-workflow-token-usage`)
 
-- **Input:** validated complete provider observation with exact request/schema binding
-- **Output:** parsed compact result or protocol diagnostic
-- **Responsibility:** Parse the complete JSON object only, preserving its trusted association.
+- **Owner:** [`src/actions/model/reconcile_workflow_token_usage.zig`](../../../src/actions/model/reconcile_workflow_token_usage.zig)
+- **Reads:** none (the runner's token ledger) · **Writes:** runner accounting transition `reconcile_workflow_tokens` · **Side effect:** `none`
+- **Does:** Accounts one inference operation's reported usage exactly once.
+- **Rejects:** `TokenUsageAlreadyAccounted`, `InvalidProviderTokenUsage`, `InvalidTokenAccountingOperation`, `TokenAccountingRevisionConflict`.
 
-## `BuildModelProtocolRetryAction` (`build-model-protocol-retry`)
+## Lifecycle steps
 
-- **Input:** current typed decoder/schema/missing-answer rejection, associated
-  provider evidence and retained original assignment/input/selected schema.
-- **Output:** prepared correction request under the same logical request identity.
-- **Responsibility:** Build model-visible correction content through the existing
-  diagnostic, schema-projection and request-preparation owners, following
-  [§22.6](../22-repair.md#226-unparseable-output).
-- The [explicit-error guidance](../22-repair.md#2262-explicit-error-guidance)
-  adds concise explanations and a confirmed repetition fact from existing evidence
-  ownership. It adds no history, retry accounting, model invocation, validation or
-  successor selection to this action.
+These steps bind the two lifecycle actions above to fixed transitions; their rules are in
+[model-request-operations.md](../model-request-operations.md). Each has side effect `none`.
+
+## `provider_operation_workflow.Assign` (`assign-provider-operation`)
+
+- **Owner:** [`src/application/provider_operation_workflow.zig`](../../../src/application/provider_operation_workflow.zig) (wraps `advance-provider-operation-lifecycle`)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt` · **Writes:** `assigned_provider_operation` · **Side effect:** `none`
+- **Does:** Opens the provider operation for the accounted attempt.
+- **Rejects:** outcome `failed`.
+
+## `provider_operation_completion_workflow.Complete` (`complete-provider-operation`)
+
+- **Owner:** [`src/application/provider_operation_completion_workflow.zig`](../../../src/application/provider_operation_completion_workflow.zig) (wraps `advance-provider-operation-lifecycle`)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `invoked_provider_operation`, `provider_invocation_validation_result` · **Writes:** `terminal_provider_operation`; invalidates `invoked_provider_operation` · **Side effect:** `none`
+- **Does:** Closes an invoked provider operation from its validated observation, keeping the request association.
+- **Rejects:** outcomes `failed`, `cancelled`.
+
+## `provider_operation_termination_workflow.Terminate` (`terminate-provider-operation`)
+
+- **Owner:** [`src/application/provider_operation_termination_workflow.zig`](../../../src/application/provider_operation_termination_workflow.zig) (wraps `advance-provider-operation-lifecycle`)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `assigned_provider_operation`, `provider_authorization_result` · **Writes:** `terminal_provider_operation`; invalidates `assigned_provider_operation` · **Side effect:** `none`
+- **Does:** Closes an assigned provider operation that was never invoked, after a failed or cancelled authorization.
+- **Rejects:** outcomes `failed`, `cancelled` only.
+
+## `model_request_completion_workflow.Complete` (`complete-model-request`)
+
+- **Owner:** [`src/application/model_request_completion_workflow.zig`](../../../src/application/model_request_completion_workflow.zig) (wraps `advance-model-request-lifecycle`)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Moves an invoked request to `terminal` from its admitted response, forwarding the admission outcome.
+- **Rejects:** forwards `invalid`, `failed` or `cancelled`.
+
+## `model_request_termination_workflow.Terminate` (`terminate-model-request`)
+
+- **Owner:** [`src/application/model_request_termination_workflow.zig`](../../../src/application/model_request_termination_workflow.zig) (wraps `advance-model-request-lifecycle`)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `provider_authorization_result` · **Writes:** replaces `model_request_identity_ledger` · **Side effect:** `none`
+- **Does:** Applies the approved `assigned`→`terminal` closure of a request never invoked.
+- **Rejects:** outcomes `failed`, `cancelled` only.
+
+## Response admission and correction
+
+## `ValidateProviderInvocationObservationAction` (`validate-provider-invocation-observation`)
+
+- **Owner:** [`src/actions/model/validate_provider_invocation_observation.zig`](../../../src/actions/model/validate_provider_invocation_observation.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `invoked_provider_operation`, `provider_invocation_result` · **Writes:** `provider_invocation_validation_result` · **Side effect:** `none`
+- **Does:** Proves call association, delivery, stop and usage before any decode.
+- **Rejects:** `InvalidProviderInvocationContext`, `ProviderInvocationAssociationInvalid`, `InvalidProviderTokenUsage`.
+
+## `DecodeModelEnvelopeAction` (`decode-model-envelope`)
+
+- **Owner:** [`src/actions/model/decode_model_envelope.zig`](../../../src/actions/model/decode_model_envelope.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `provider_invocation_validation_result` · **Writes:** `model_envelope_result` · **Side effect:** `none`
+- **Does:** Parses the complete candidate as one JSON object with its syntax diagnostic.
+- **Rejects:** `InvalidModelEnvelope`.
+
+## `ValidateModelPayloadSchemaAction` (`validate-model-payload-schema`)
+
+- **Owner:** [`src/actions/model/validate_model_payload_schema.zig`](../../../src/actions/model/validate_model_payload_schema.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `model_envelope_result` · **Writes:** `model_payload_schema_result` · **Side effect:** `none`
+- **Does:** Applies only the bound closed result schema; parsing and call association are earlier steps.
+- **Rejects:** a schema diagnostic in the result.
+
+## `AdmitModelResponseAction` (`admit-model-response`)
+
+- **Owner:** [`src/actions/model/admit_model_response.zig`](../../../src/actions/model/admit_model_response.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `provider_invocation_validation_result` · **Writes:** `model_envelope_result`, `model_payload_schema_result` · **Side effect:** `none`
+- **Does:** Decodes and schema-validates a complete candidate in one step, through the same envelope and schema owners. A first runaway admits as `invalid`; a runaway on a re-send fails with `RunawayRepeated` ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- **Rejects:** `InvalidModelEnvelope`; a schema diagnostic in the result.
 
 ## `CheckModelRunawayAction` (`check-model-runaway`)
 
-- **Input:** the current `invalid` admission and its sealed provider evidence.
-- **Output:** a typed route: re-send a first runaway, or correct the response.
-- **Responsibility:** Route only. It builds no request, adds no accounting, invocation
-  or validation, and never re-sends a re-send
-  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- **Owner:** [`src/actions/model/check_model_runaway.zig`](../../../src/actions/model/check_model_runaway.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `model_payload_schema_result` · **Writes:** none · **Side effect:** `none`
+- **Does:** Routes `more` when the rejected attempt is a first runaway of the current request (its one re-send), otherwise `ok` (the ordinary correction).
+- **Rejects:** none.
 
 ## `BuildModelRunawayResendAction` (`build-model-runaway-resend`)
 
-- **Input:** sealed provider evidence that the current attempt stopped with
-  `output_limit`, the attempt's retained prepared request, and the configured
-  `temperatureRunawayRetry`
-  ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
-- **Output:** the re-send request under the same logical request identity: the attempt's
-  prepared request with its sampling set to `runaway_resend`, so only its temperature
-  changes, or nothing changes when the registered model takes no temperature.
-- **Responsibility:** Build the one re-send of a runaway attempt. It adds no diagnostic,
-  no partial response text, no retry accounting, model invocation, validation or
-  successor selection. Evidence of any other stop, or of a stop on a re-send, rejects.
+- **Owner:** [`src/actions/model/build_model_runaway_resend.zig`](../../../src/actions/model/build_model_runaway_resend.zig)
+- **Reads:** `model_request_identity_ledger`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `prepared_model_request`; invalidates the attempt keys · **Side effect:** `none`
+- **Does:** Rebuilds the identical prepared request at the runaway-retry temperature, with no diagnostic and no partial text ([ADR 0039](../../decisions/0039-configured-temperatures-and-runaway-resend.md)).
+- **Rejects:** `ModelRequestAssociationInvalid` for any evidence that isn't a first runaway.
 
-## `AdvanceModelAttemptAccountingAction`
+## `BuildModelProtocolRetryAction` (`build-model-protocol-retry`)
 
-- **Input:** exact stage-run epoch/request/unit identity, current runner model-attempt
-  accounting, initial-or-retry classification, and the compiler-validated explicit `retry-limit`
-  of the YAML-selected retry-capable operation instance
-- **Output:** request-keyed compare-and-swap model-attempt transition
-- **Responsibility:** Reserve the initial attempt once.
-- Reserve a later attempt only after an explicit YAML retry transition and while the
-  runner's operation/defect count remains within its declared limit under
-  [§22.7](../22-repair.md#227-repair-retry-limit-and-escalation).
-- Reserve a runaway re-send (ADR 0039) only for an attempt that stopped with
-  `output_limit` and is not itself a re-send. It uses no `retry-limit` and leaves the
-  correction count unchanged.
-- Assign monotonic ordinals for execution-local identity; impose no workflow-global attempt
-  ceiling.
+- **Owner:** [`src/actions/model/build_model_protocol_retry.zig`](../../../src/actions/model/build_model_protocol_retry.zig)
+- **Reads:** `model_request_identity_ledger`, `validated_model_request`, `prepared_model_request`, `accounted_model_attempt`, `terminal_provider_operation`, `model_payload_schema_result` · **Writes:** replaces `prepared_model_request`; invalidates the attempt keys · **Side effect:** `none`
+- **Does:** Builds the correction request for a rejected response under the same request identity, with the diagnostic and repetition fact ([§22.6](../22-repair.md#226-unparseable-output)).
+- **Rejects:** the request-preparation errors (`ModelRequestAssociationInvalid`, `InvalidModelRequestSource`).
 
-## `CheckWorkflowTokenBudgetAction`
+## Retirement
 
-- **Input:** current workflow-execution actual-usage ledger
-- **Output:** read-only budget check
-- **Responsibility:** Reject a subsequent provider call when actual usage is at or above the
-  configured `workflowTokenBudget`
-  ([ADR 0037](../../decisions/0037-configured-workflow-token-budget.md)); reserve no tokens
-  and derive no output allowance.
+The three retirement operations read `model_request_identity_ledger`, `prepared_model_request`,
+`accounted_model_attempt`, `terminal_provider_operation` and `model_payload_schema_result`, have
+side effect `none`, write nothing but invalidations, and reject `InvalidTransportRetirement`
+unless the request is terminal. The **attempt keys** are `accounted_model_attempt`,
+`terminal_provider_operation`, `provider_authorization_result`, `provider_invocation_result`,
+`provider_invocation_validation_result`, `model_envelope_result` and
+`model_payload_schema_result`; the **request keys** are those plus `assigned_model_request`,
+`validated_model_request` and `prepared_model_request`
+([`model_transport.zig`](../../../src/domain/model_transport.zig)).
 
-## `ReconcileWorkflowTokenUsageAction`
+## `RetireModelInputAction` (`retire-model-input`)
 
-- **Input:** current execution token ledger, exact inference operation ID, validated reported
-  input/output usage or delivery disposition
-- **Output:** actual-usage compare-and-swap transition
-- **Responsibility:** Account the operation once.
-- Retain all reported usage before returning an overshoot error; exact equality blocks later
-  calls.
-- Unknown usage blocks without an estimate.
+- **Owner:** [`src/actions/model/retire_model_input.zig`](../../../src/actions/model/retire_model_input.zig)
+- **Reads:** as above · **Writes:** invalidates `model_input_packet` · **Side effect:** `none`
+- **Does:** Releases the model input packet of a terminal request.
+- **Rejects:** `InvalidTransportRetirement`.
 
-## `ValidateModelPayloadSchemaAction`
+## `RetireModelRequestAction` (`retire-model-request`)
 
-- **Input:** parsed compact result and its bound workflow-declared result schema
-- **Output:** schema-valid candidate result
-- **Responsibility:** Apply only the bound closed result schema; do not repeat parsing or
-  call-association validation.
+- **Owner:** [`src/actions/model/retire_model_request.zig`](../../../src/actions/model/retire_model_request.zig)
+- **Reads:** as above · **Writes:** invalidates the attempt keys and the assigned, validated and prepared request · **Side effect:** `none`
+- **Does:** Releases a terminal request's transport data.
+- **Rejects:** `InvalidTransportRetirement`.
 
-## `ValidateSemanticReviewResultAction`
+## `RetireModelTransportAction` (`retire-model-transport`)
 
-- **Input:** schema-valid payload from the workflow-declared semantic-review operation, exact
-  request/unit binding, and closed finding-kind/confidence/disposition policy
-- **Output:** validated semantic-finding proposals
-- **Responsibility:** Prove result cardinality and allowed kinds without treating a model
-  assertion as deterministic evidence.
+- **Owner:** [`src/actions/model/retire_model_transport.zig`](../../../src/actions/model/retire_model_transport.zig)
+- **Reads:** as above · **Writes:** invalidates the request keys and `model_input_packet` · **Side effect:** `none`
+- **Does:** Releases a terminal request's transport data and its input packet together.
+- **Rejects:** `InvalidTransportRetirement`.
 
-## `AssignSemanticFindingIdAction`
+## JSON composition
 
-- **Input:** exact semantic-review request ID and stable finding ordinal
-- **Output:** owner-local semantic-finding identity
-- **Responsibility:** Construct `{modelRequestId, findingOrdinal}`; accept no model-provided
-  identity.
+[ADR 0016](../../decisions/0016-configured-json-response-composition.md) owns composition;
+request preparation selects a part through its `composition-part` parameter.
 
-## `ResolveSemanticFindingCitationsAction`
+## `InitializeJsonCompositionAction` (`initialize-json-composition`)
 
-- **Input:** one finding proposal and the request's current authority/span allowlist
-- **Output:** exact citation bindings or diagnostic
-- **Responsibility:** Resolve every cited record/span against its state revision and reject
-  missing, stale, out-of-unit, or uncited findings.
+- **Owner:** [`src/actions/model/initialize_json_composition.zig`](../../../src/actions/model/initialize_json_composition.zig)
+- **Reads:** `model_input_packet`, `model_request_identity_ledger` · **Writes:** `json_composition` · **Side effect:** `none`
+- **Does:** Binds the `composition` plan to the current packet and execution epoch.
+- **Registered step:** the same keys, with the required `composition` resource parameter ([`json_composition_workflow.zig`](../../../src/application/json_composition_workflow.zig)).
+- **Rejects:** `json_composition_runtime.Error` (`InvalidCompositionBinding`).
 
-## `BuildSemanticFindingAction`
+## `RetainJsonPartAction` (`retain-json-part`)
 
-- **Input:** assigned identity, validated proposal, exact
-  `SemanticReviewOwner`/request/model-operation/slot metadata, citation bindings, confidence
-  policy, and configured disposition
-- **Output:** canonical `SemanticFinding`
-- **Responsibility:** Label the finding `model_assisted`, retain the typed semantic-review
-  owner, and copy provenance without promoting it to validator evidence.
+- **Owner:** [`src/actions/model/retain_json_part.zig`](../../../src/actions/model/retain_json_part.zig)
+- **Reads:** `json_composition`, `model_request_identity_ledger`, `prepared_model_request`, `model_payload_schema_result` · **Writes:** replaces `json_composition` · **Side effect:** `none`
+- **Does:** Retains one schema-admitted part result with its origin.
+- **Rejects:** `InvalidCompositionBinding`, `ConflictingCompositionPart`.
 
-## `ValidateSemanticFindingAction`
+## `AssembleJsonAction` (`assemble-json`)
 
-- **Input:** canonical finding, semantic-review request, parent content-unit owner, and current
-  workflow-operation/unit/authority/policy registries
-- **Output:** semantic-finding evidence
-- **Responsibility:** Reprove identity/request/result/schema/citations/confidence/disposition
-  and require `finding.immutableUnitOwnerId.parentUnitOwnerId` to equal the reviewed
-  content-unit owner.
+- **Owner:** [`src/actions/model/assemble_json.zig`](../../../src/actions/model/assemble_json.zig)
+- **Reads:** `json_composition` · **Writes:** `assembled_json`; invalidates `json_composition` · **Side effect:** `none`
+- **Does:** Assembles the complete, unvalidated candidate from the retained parts.
+- **Rejects:** `IncompleteComposition`.
 
-## `ProjectSemanticFindingDiagnosticAction`
+## `ValidateAssembledJsonAction` (`validate-assembled-json`)
 
-- **Input:** validated semantic finding and exact unit pointer
-- **Output:** model-assisted diagnostic
-- **Responsibility:** Embed the complete finding as the diagnostic's evidence class; never
-  attach a mechanical rule claim.
+- **Owner:** [`src/actions/model/validate_assembled_json.zig`](../../../src/actions/model/validate_assembled_json.zig)
+- **Reads:** `assembled_json` · **Writes:** `validated_assembled_json` · **Side effect:** `none`
+- **Rejects:** the complete schema's diagnostic for the assembled candidate.
 
-## `ValidateContextRequestSchemaAction`
+## Proposed, no code
 
-- **Input:** one context request and compiled workflow model-operation declaration
-- **Output:** schema evidence
-- **Responsibility:** Apply the one context-request schema explicitly selected by the workflow
-  operation.
+Named by other documents; no operation registers them.
 
-## `ValidateContextRequestScopeAction`
+## `SelectContextAction`
 
-- **Input:** schema-valid context request and current unit allowlists
-- **Output:** context-scope evidence
-- **Responsibility:** Validate one requested ID/query against local scope.
+Proposed, no code: select the bounded known context for a unit ([§12](../12-model-boundary.md)).
 
-## `ResolveContextRequestAction`
+## `BuildInitialGuidanceAction`
 
-- **Input:** scope-valid request and immutable fact/content registries
-- **Output:** bounded context result
-- **Responsibility:** Resolve one authorized context request only.
+Proposed, no code: build a unit's deterministic initial guidance packet ([§12](../12-model-boundary.md)).
 
-> **ADR 0033 (not yet implemented).** The repair entries below describe the domain
-> functions inside the four generic repair operations of
-> [ADR 0033](../../decisions/0033-generic-repair-operations.md): `authorize-repair`,
-> `build-repair-input`, `parse-repair` and `merge-repair`. Each owner contributes its own
-> rules, and the operations select them by a closed `owner`. These entries keep their rules.
-
-## `OrderRepairDiagnosticsAction`
-
-- **Input:** repairable diagnostics
-- **Output:** ordered diagnostic IDs
-- **Responsibility:** Sort repair diagnostics deterministically.
-
-## `SelectNextRepairDiagnosticAction`
-
-- **Input:** ordered diagnostics and attempt state
-- **Output:** selected diagnostic
-- **Responsibility:** Select one next diagnostic only.
+> **ADR 0033 (not yet implemented).** The repair entries below become domain functions of
+> [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations;
+> today each owner registers its own `authorize`/`parse`/`merge` operations. Whether the
+> no-invention and semantic-review branches stay is an open decision (FIX06 "Design–code
+> conflicts").
 
 ## `ClassifyRepairAuthorizationPurposeAction`
 
-- **Input:** selected diagnostic, optional validated embedded semantic finding, exact
-  content-unit owner, operation-result kind, and closed purpose table
-- **Output:** ordinary atomic or no-invention-replacement purpose
-- **Responsibility:** Select the dedicated no-invention branch only for `unsupported_behavior`
-  and exact semantic-review-parent/content-owner equality against a content-kind operation
-  result; otherwise select the ordinary builder or reject nonrepairable evidence.
+Proposed, no code: choose ordinary atomic repair or the no-invention replacement for a selected diagnostic ([§14](../14-orchestration.md), [§22](../22-repair.md)).
 
 ## `CreateRepairAuthorizationAction`
 
-- **Input:** selected diagnostic, candidate handle/revision, repair-unit descriptor, schema
-  registry, exact compiled-engine-policy identity, and complete cited rule bindings
-- **Output:** repair authorization
-- **Responsibility:** Bind one closed operation, current values, preconditions, and
-  self-contained versioned rules used by the diagnostic.
+Proposed, no code: bind one closed repair operation to current values, preconditions and cited rules ([§22](../22-repair.md)).
 
 ## `CreateNoInventionClarificationReplacementAuthorizationAction`
 
-- **Input:** one validated unsupported-content semantic finding, content-kind operation result,
-  exact parent content `ImmutableUnitOwnerId`, exact candidate revision, clarification-result
-  schema, and runner repair accounting
-- **Output:** one-shot no-invention replacement authorization
-- **Responsibility:** Require the finding's `SemanticReviewOwner.parentUnitOwnerId` to equal the
-  authorization/accounting owner; authorize only whole-result replacement from `content` to
-  schema-valid `clarification_needed` and reject a consumed unit one-shot.
+Proposed, no code: authorize the one-shot whole-result replacement of unsupported content by a clarification ([§14](../14-orchestration.md)).
 
 ## `BuildAtomicRepairGuidanceAction`
 
-- **Input:** immutable repair authorization, matching diagnostic, and authorization-bound
-  semantic guidance/finding
-- **Output:** repair guidance
-- **Responsibility:** Explain exactly the authorized change from bound rule values and reproduce
-  every bound principle raw span/citation as context; never use semantic guidance as mechanical
-  authority or perform ambient lookup.
+Proposed, no code: explain exactly the authorized change from bound rule values ([§12](../12-model-boundary.md)).
 
 ## `ValidateRepairEnvelopeAction`
 
-- **Input:** decoded repair candidate, bound repair authorization and current candidate
-- **Output:** authorization-valid repair payload
-- **Responsibility:** Check the retained authorization, diagnostic and current revision; do not
-  require model echoes or repeat generic call-association checks.
+Proposed, no code: check a repair candidate against its retained authorization and current revision ([ADR 0006](../../decisions/0006-minimal-model-response.md)).
 
 ## `ValidateRepairScopeAction`
 
-- **Input:** repair payload, authorization, source semantic finding, and runner repair
-  accounting
-- **Output:** scope-valid repair operation plus next accounting
-- **Responsibility:** Prove only authorized pointers/keys are present; for no-invention
-  replacement reprove semantic-review parent = authorization content owner = one-shot accounting
-  owner, require exactly `kind=clarification_needed`, consume that owner's flag, and do not
-  increment the ordinary counter.
+Proposed, no code: prove a repair touches only authorized pointers and update repair accounting ([§22](../22-repair.md)).
 
 ## `MergeAtomicRepairAction`
 
-- **Input:** candidate, repair authorization, scope-valid operation
-- **Output:** repaired in-memory candidate
-- **Responsibility:** Compare-and-swap one authorized operation.
+Proposed, no code: compare-and-swap one authorized repair into the candidate ([§12](../12-model-boundary.md), [§22](../22-repair.md)).

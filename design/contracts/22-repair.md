@@ -79,7 +79,9 @@ authoring still binds and validates its current source group.
 Initial attributed authoring selects complete accepted group occurrences together
 with content under ADR 0020. Fixed repairs retain required canonical
 `source_group_ids`; their wire responses stay value/content-only. Value-only repair
-cannot change group IDs, explicit `S`, effective evidence bounds or siblings.
+cannot change group IDs, explicit `S`, effective evidence bounds or siblings; changing
+authored group membership requires separately authorized authored-unit rebuilding, which does
+not exist.
 
 Under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition)
 there are no model-authored exact-copy selections. Fixed replacements type exact values
@@ -145,9 +147,9 @@ and dependencies remain in the retained assignment. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
 culprits or permission to expand the finding.
 
-Response admission first binds the assigned comparison IDs as an `exact_members`
-choice, so a missing, repeated or foreign comparison takes bounded protocol
-correction; exhaustion stays terminal under this required policy. Native admission
+Response admission applies the assigned comparison IDs' `exact_members` choice
+([§12.2](12-model-boundary.md#122-initial-guidance-packet)); exhaustion of its protocol
+correction stays terminal under this required policy. Native admission
 still rejects missing, duplicate, foreign or stale comparisons and
 invalid source joins or native collection identities, including a changed obligation
 binding. The closed response rejects the superseded `members` field; no reader,
@@ -329,15 +331,13 @@ The repair guidance contains:
 individually validated before the next native subject is requested. A
 source-preservation comparison returns every bound comparison in one call; exact
 complete native membership is checked before appending any member, and partial,
-duplicate, foreign or misbound responses cannot contribute coverage. Response
-admission first enforces the same membership through the packet's `exact_members`
-choice. A defect there uses the bounded protocol correction of the complete
-response, never insertion or deletion
-([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)).
-Reconciliation dispositions and the source-omission conflict-group repair bind their
-claims the same way, with a native count, so an omitted or repeated disposition is
-corrected with the whole assignment and is never a repair target
-([ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). Native ledger order owns canonical ordering.
+duplicate, foreign or misbound responses cannot contribute coverage. A membership defect
+found at response admission ([§12.2](12-model-boundary.md#122-initial-guidance-packet)'s
+`exact_members` choice, with a native count for reconciliation dispositions and the
+source-omission conflict-group repair) takes the bounded protocol correction of the complete
+response; it is never an insertion, deletion or repair target
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026),
+[ADR 0046](../decisions/0046-complete-dispositions-at-admission.md)). Native ledger order owns canonical ordering.
 A mechanically invalid finding may use the existing selected-value/field atomic
 repair while other subjects remain pending; valid produced siblings remain
 unchanged and future pending subjects do not produce missing-finding defects.
@@ -357,9 +357,9 @@ second obligation queue. Revalidate after every comparison or repair and do not
 request another review assignment while a current omission awaits localization.
 Complete membership, evidence and relationship
 validation run before reconciliation, publication or clarification. The existing
-runner owns request retirement, per-assignment and native-defect retry allowances,
-and global actual-token accounting; successful independent work does not reset an
-unresolved target or replenish the finite budget.
+runner owns request retirement and the §22.7 retry allowances, and
+[§12.7](12-model-boundary.md#127-workflow-defined-model-operations) owns token accounting;
+successful independent work does not reset an unresolved target or replenish the budget.
 
 Source-ID selection repairs project the diagnostic's native eligibility rule
 through the shared [§12.2 schema restrictions](12-model-boundary.md#122-initial-guidance-packet).
@@ -374,13 +374,11 @@ canonical `provenance.claim_ids` from the bound source group or selected
 diagnostic producer before old-value/revision and full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
 families; source-omission detail correction uses the coupled explanation and
-obligation shape in §22.1, and cannot change the verdict. The original source-group occurrence association, explicit `S`, effective evidence
-bound and siblings stay pinned by the existing atomic authorization. A value-only replacement cannot expand them;
-changing authored group membership requires separately authorized authored-unit
-rebuilding, which does not exist. Before generation, genuine evidenced
-upstream loss retains its existing producer repair path. After generation starts,
-the native phase guard rejects authorization, packet preparation and merge under
-[ADR 0023](../decisions/0023-advisory-post-generation-review.md#pre-generation-source-repair). Malformed or corrupt stored evidence is rejected before
+obligation shape in §22.1, and cannot change the verdict. Value-only replacements stay
+pinned as §22.1 states. Before generation, genuine evidenced
+upstream loss retains its existing producer repair path; after generation starts, §22.5's
+requirement that source repair run only before generation applies
+([ADR 0023](../decisions/0023-advisory-post-generation-review.md#pre-generation-source-repair)). Malformed or corrupt stored evidence is rejected before
 model-response reconstruction. Unbound authority is an engine block, not a
 model repair or user clarification.
 
@@ -558,11 +556,9 @@ defined response-level correction containing:
   a distinct JSON Pointer locating the exact expected node in the complete selected
   schema, and concise schema-derived immediate fields, required fields and allowed
   discriminator values. The single complete schema retains every alternative and
-  every constraint that schema syntax can express; `exact_members` uniqueness stays
-  native and is reported as `duplicate_member` with parent scope on the enclosing
-  array. A native-count member set's completeness (`missing_member`, at the array;
-  ADR 0046) and ADR 0038's coverage and exclusivity (`uncovered_member`,
-  `shared_member`) are native the same way.
+  every constraint that schema syntax can express; [§12.2](12-model-boundary.md#122-initial-guidance-packet)
+  owns the admission constraints that stay native, and `duplicate_member` is reported
+  with parent scope on the enclosing array.
   A `missing_member` correction also names the first omitted member (`member`).
   An `uncovered_member` correction also names the compiled rule's covering kinds
   (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
@@ -583,19 +579,16 @@ child-object descriptors only.
 - The builder owns no retry counter or limit.
 - Each correction returns through the existing `advance-model-attempt-accounting` step, whose
   compiler-validated local limit owns further attempts of that assignment (§22.7).
-- Under [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
-  builder and accounting are engine-run stages of one `request-model` step. The correction
-  returns to its accounting stage, and the step's `retry-limit` owns further attempts. The
-  correction content and its rules here are unchanged.
-- The execution's total-token budget continues across all requests and corrections.
-  Native finding-evidence validation and repair exhaustion remain terminal.
+- [§22.7](#227-repair-retry-limit-and-escalation) states the
+  [ADR 0030](../decisions/0030-engine-owned-model-request.md) `request-model` counting (not
+  yet implemented); the correction content and its rules here are unchanged.
+- The [§12.7](12-model-boundary.md#127-workflow-defined-model-operations) token budget
+  accounts every request and correction. Native finding-evidence validation and repair
+  exhaustion remain terminal.
 - Request IDs cannot reset either authority.
-- A runaway is not a malformed response. A provider `output_limit` stop gets no
-  correction: its partial text is discarded and the identical request is re-sent once at
-  the configured `temperatureRunawayRetry`, outside this allowance
-  ([ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md)). A
-  re-sent response that fails admission takes an ordinary correction at the configured
-  `temperature`. A runaway on the re-send is terminal.
+- A runaway is not a malformed response and gets no correction here;
+  [ADR 0039](../decisions/0039-configured-temperatures-and-runaway-resend.md) owns its
+  re-send outside this allowance and what follows it.
 - Every correction starts with the original retained task/schema/evidence inputs and the latest
   rejected response and diagnostic; previous correction prompts are not accumulated.
 - All attempts remain available as execution evidence.
@@ -607,22 +600,18 @@ an older response. The existing admission and retirement owners consume this sea
 evidence without decoding a nonexistent candidate. Provider-operation failure remains
 recorded; explicit request closure remains failed/invalid unless a later response
 passes ordinary admission. Missing answers, JSON and schema failures share one
-assignment allowance, including selected native-repair parents. Charge every exchange
-before continuation; unknown usage or an exhausted global budget prohibits a new
-call. All inference and corrections share the same `workflowTokenBudget` and
-aggregate usage ledger. Global-budget rejection is fatal.
+assignment allowance, including selected native-repair parents; each exchange is accounted
+before continuation under §12.7's budget.
 
 Ordinary runner retry exhaustion retains the owning compiled operation, declared
 limit and completed execution count alongside the last response diagnostic. It is
 a typed terminal rejection, never an ordinary YAML outcome that could continue
 to success or `needs_user`. If JSON decoding or schema validation still fails when correction is unavailable
-or exhausted, the workflow reports an error and exits nonzero; it cannot publish
-a completed specification or a clarification pause, and it publishes nothing. Under
-[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md) (accepted, on hold
-since 30 October 2026; not implemented), it would publish only the failed incomplete
-specification of its validated content, marked and logged. Native finding-evidence or repair
-exhaustion and global-budget rejection remain terminal. Existing open
-clarifications do not override that failure. A correction that passes admission
+or exhausted, the run reports an error, exits nonzero and publishes nothing
+([§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)'s
+precedence table, which also records what
+[ADR 0041](../decisions/0041-failed-run-incomplete-publication.md), accepted, on hold since 30
+October 2026 and not implemented, would change). A correction that passes admission
 may continue through the remaining domain validators; a recovered earlier rejection
 is not itself a publication veto. Whole-stage regeneration is not used.
 
@@ -712,7 +701,9 @@ Successful repair progress is independent of another target's retry allowance:
   [ADR 0030](../decisions/0030-engine-owned-model-request.md) (not yet implemented), the
   compiled operation for every model request, ordinary, atomic repair or dependent, is its
   `request-model` step. Each keeps its counting scope: assignment, native defect key, or the
-  pending native parent key.
+  pending native parent key. Protocol correction and its accounting become engine-run stages
+  of that step, not YAML-selected operations, and the step's declared `retry-limit` bounds
+  further attempts; repair stays explicit YAML.
 - An assignment is identified by execution, immutable unit, model operation and purpose, excluding request ordinal. Context followups
   retain their parent's assignment and native followup ordinal. Equal payload
   bytes do not merge unrelated units. Reassignment cannot reset history.
@@ -751,9 +742,8 @@ Successful repair progress is independent of another target's retry allowance:
   allowances to retain a finite execution guard, including pure loops. The compiler's
   1,024-step expansion ceiling does not change per-operation retry or token budgets.
 - Protocol corrections retain the same logical request and selected defect allowance.
-  A new authorization cannot erase earlier failures. Actual input/output token usage
-  remains cumulative across every target, correction and successful fix; no further
-  call is permitted at or above the workflow budget.
+  A new authorization cannot erase earlier failures, and no target, correction or fix
+  resets the §12.7 token budget.
 - Exhaustion blocks/fails without changing validation or broadening repair scope.
 
 Exhaustion returns:
