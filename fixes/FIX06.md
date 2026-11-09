@@ -210,8 +210,8 @@ exhaustion, never budget, in two modes, each reported with no lever:
   the model's variance under a coherent contract.
 
 **Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
-startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6, E8 and
-E11 in any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
+startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
+any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
 with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with E1, E4 or
 E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5, E9 and T8 land only under §2.12. E1–E4
 before the closing set is the user's call (ADR 0034:93-95). **Tests:** T2, T3 and T8 in any
@@ -469,7 +469,7 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
     admission and its repeated statement a native delete.
   - Amends ADR 0038 Decision 3 (:104-112, :287-289) and :150-152, :246-248;
     22-repair.md:270-274, :561-567 and :802-803; 12-model-boundary.md:105-108 and :846-847;
-    17-specify.md:200-203; F0100:1195-1198 and :1372-1377.
+    17-specify.md:200-203; F0100:1195-1198 and :1374-1379.
   - An inserted scenario still links without checking meaning.
 - **b4** (proposed 8 November 2026; not started, §3 Next item 4): claim-bound scenarios at
   first generation too: the engine fixes each scenario's `claim_ids` before the model writes
@@ -700,26 +700,6 @@ corrects a model-authored exact handle that models can't author since `dfae959` 
 `evaluations/request-projection/` carries `rejected_exact`, and no retained report does. Lands
 with E1, E4 or E5.
 
-### E11. One owner for record identity
-
-**Defect:** a latent wrong edge-case outcome if the copies drift; none observed. Not started.
-A record's ID is its family's next ledger ordinal plus the same-family records before it, in
-the order `assemble` builds (`specification_session.zig:618-652`).
-`specification_identity.assign` allocates it (`specification_identity.zig:13-41`); `positionId`
-predicts it from a records-unit position so `assemble` can hand `assign` the edge cases' links
-by ID (`specification_session.zig:671-681`, through `outcomeIds`, which checks each link's
-positions are candidates); `recordIndex` inverts it (`:682-697`). If that order or the
-allocation changes, a predicted criterion that names another candidate passes `assign`, which
-checks only that each edge case has a link (`specification_identity.zig:28-36`), and readback
-(`scenario_link.zig:81-90`), and prints that criterion's Then; only a domain test guards it
-(`specification_generation_test.zig:9361-9373`). **Owner:** `specification_identity`.
-**Next:** `assign` takes each link as positions in its own input and resolves the IDs while it
-allocates; `assemble` passes the positions it carried through its merge and sort, predicting
-nothing. Delete `positionId`, and `recordIndex`, which has no production caller, amending
-F0100:1328-1329's ID lookup "for downstream repairs"; its assertions
-(`specification_generation_test.zig:1836`, `:2151`, `:2161-2162`) move to `assemble`'s output.
-Requests stay byte-identical.
-
 ### E14. Forced irrelevance for every extractor
 
 **Defect:** successful completion: a `no_feature_claim` chunk holding a fenced-code or
@@ -845,7 +825,7 @@ is still 6 (`spec.workflow.yaml:371`, `:408`, `:605`, `:760`, `:864`, `:879`, ea
 ### T8. Report repairs cover every unit
 
 **Defect (measurement):** `report.json` `repairs` keeps only the last merge of each candidate
-still retained at run end (F0100:1366-1369, "These are retained merge snapshots"), so
+still retained at run end (F0100:1368-1371, "These are retained merge snapshots"), so
 `e2e-measures` and the evaluation miss earlier merges in a unit and every merge of an earlier
 unit. Retained `2026-11-08T09-23-55Z-149a…`: seven distinct deletes (revisions 1→2 to 7→8) in
 `events.jsonl`, 7→8 alone in `report.json`. §2 rule 5 grades every repair, and the harmful
@@ -854,7 +834,7 @@ repair watch item depends on it. Each step event already carries that step's mer
 state (`invoke.zig:118`, `observation.zig:130`). **Owner:** the E2E observer. **Next:** collect
 the distinct merges (by authorization) across the step captures, in sequence order, into the
 report (a report version, §2 rule 12), amending those F0100 lines and e2e.md:641-643 (which
-states the limit meanwhile); F0100:1364-1365, the engine's rule, stays. Each `Merge` already
+states the limit meanwhile); F0100:1366-1367, the engine's rule, stays. Each `Merge` already
 carries its `operation` and `origin` (`atomic_repair.zig:35`, `:39`). Proof: a scripted run with
 several merges in one unit and merges in two units reports each merge once, in order.
 
