@@ -328,7 +328,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   Per-field validation, atomic repair, request identities and total-token accounting
   retain their existing owners. Request grouping grants no semantic repair authority.
   Original candidate indices/origins survive canonical section-order projection;
-  native repair resolves canonical IDs back to those original indices.
+  native repair targets records by those candidate indices, never by canonical ID.
   A record clarification must name its closed `record_kind`; other generation
   units prohibit that field. The existing clarification builder uses that family
   as its subject, preserving identities across reruns instead of merging all record

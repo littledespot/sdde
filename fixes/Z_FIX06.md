@@ -325,8 +325,8 @@ and `weakened_obligation` in an edge case's free-text outcome. ADR 0038 Decision
 design, candidate rule and versions. Owners: `scenario_link.zig` (candidates, links,
 stored-link check), `scenario_link_request.zig` (the closed request and its admission), the
 `link-scenarios` subgraph of `spec.workflow.yaml` (on `links.prompt.md` and
-`links.schema.json`) and `assemble`, which resolves the links. Its limit and its identity
-prediction are open in FIX06 §3 Next item 8 and E11.
+`links.schema.json`) and `assemble`, which resolves the links. Its limit is open in FIX06 §3
+Next item 8; E11 removed its identity prediction.
 
 ## E14. Forced irrelevance for every extractor
 
@@ -343,3 +343,23 @@ retained its forced classifications (`InvalidAssembledCandidate`), and a model a
 answer through the real composition, an unknown extractor rejected, and ADR 0024's rule that a
 wholly quoted value of any extractor cannot be irrelevant); it fails on the old schema. Its live set and
 keep decision are open in FIX06 E14.
+
+## E11. One owner for record identity
+
+**Implemented 10 November 2026** (user: "implement E11, and yes delete recordIndex and
+associated test"). Defect class: a latent wrong edge-case outcome. `assemble` predicted each
+linked record's ID from its records-unit position (`positionId`) while `assign` allocated IDs in
+its own merged order, and neither `assign` nor readback could tell a wrong candidate from the
+right one. Now `specification_identity.assign` takes each link as indexes into the records it
+receives, checks it with `scenario_link.candidate` (the rule readback uses) and stores the IDs it
+allocates; `assemble` carries each records-unit record's position through its merge and sort.
+`positionId`, `outcomeIds` and `recordIndex` (no production caller) are deleted, with
+17-specify.md §17.3 and F0100 §5.7 amended to say repair targets records by candidate index.
+Test: `specification_generation_test.zig` "record assignment resolves edge-case links to the IDs
+it allocates and refuses any other link" (room booking, an advanced prior ledger, two batches;
+a missing, duplicate, out-of-range, non-edge-case and cross-batch link each rejected), and the
+two-batch `assemble` test rejects a link past the records unit and a cross-batch one. Requests
+and published bytes are unchanged. Live runs (user-approved, 10 November 2026):
+`2026-11-09T20-29-51Z` hello-world and `20-29-52Z` loan-renewal published and passed
+adjudication (92.86% each; accuracy 0/0/0/0 and 0/0/1/0, the known AC-001 recording clause);
+loan-renewal's EC-001 linked natively to AC-001, its sole candidate.

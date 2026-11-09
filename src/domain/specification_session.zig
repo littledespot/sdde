@@ -618,7 +618,8 @@ fn completedStory(current: Session) ?g.spec.AttributedValue {
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session, links: []const scenario_link.Link) Error!@import("specification_identity.zig").Assigned {
     if (current.completed != unit_count or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     try validateRecordAssignments(allocator, current, context);
-    var records: std.ArrayList(g.spec.RecordProposal) = .empty;
+    // Each record keeps its records-unit position, the index the edge-case links use.
+    var placed: std.ArrayList(Placed) = .empty;
     for (current.units, 0..) |entry, index| {
         const checked = entry orelse return error.InvalidSpecificationUnit;
         // Full-candidate revalidation uses the same owning unit validator.
@@ -631,66 +632,38 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
         if (g.recordCollection(.canonical, result.response.content)) |unit_records| {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.
-            for (std.enums.values(g.spec.Kind)) |kind| for (unit_records) |record| {
-                if (record.content == kind) try records.append(allocator, record);
+            for (std.enums.values(g.spec.Kind)) |kind| for (unit_records, 0..) |record, position| {
+                if (record.content == kind) try placed.append(allocator, .{ .record = record, .position = if (index == records_index) position else null });
             };
         }
     }
     // Canonical family order spans both native record owners. Stable sorting
     // preserves each family's authoring order and its local occurrence mapping.
-    std.mem.sort(g.spec.RecordProposal, records.items, {}, struct {
-        fn before(_: void, left: g.spec.RecordProposal, right: g.spec.RecordProposal) bool {
-            return @intFromEnum(std.meta.activeTag(left.content)) < @intFromEnum(std.meta.activeTag(right.content));
+    std.mem.sort(Placed, placed.items, {}, struct {
+        fn before(_: void, left: Placed, right: Placed) bool {
+            return @intFromEnum(std.meta.activeTag(left.record.content)) < @intFromEnum(std.meta.activeTag(right.record.content));
         }
     }.before);
-    const entities = current.units[2].?.response.content.entities.decision();
-    const unit_records = g.recordCollection(.canonical, (current.units[records_index] orelse return error.InvalidSpecificationUnit).response.content) orelse return error.InvalidSpecificationUnit;
-    const outcomes = try outcomeIds(allocator, current.starting_ledger, unit_records, links);
+    const records = try allocator.alloc(g.spec.RecordProposal, placed.items.len);
+    for (placed.items, records) |entry, *record| record.* = entry.record;
+    const outcomes = try allocator.alloc(@import("specification_identity.zig").Outcome, links.len);
+    for (links, outcomes) |link, *outcome| outcome.* = .{
+        .edge_case = try placedIndex(placed.items, link.edge_case),
+        .criterion = try placedIndex(placed.items, link.criterion),
+    };
     return @import("specification_identity.zig").assign(allocator, .{
         .display_name = current.units[0].?.response.content.brief.title,
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
-        .entities = entities,
-        .records = records.items,
+        .entities = current.units[2].?.response.content.entities.decision(),
+        .records = records,
     }, current.starting_ledger, outcomes);
 }
 
-/// The IDs `assign` gives the records of the completed records unit, in authoring order within
-/// each family, for the links the unit's edge cases resolved to (`scenario_link.zig`). A link
-/// that is not a candidate of its edge case is refused here, beside the owner that builds the
-/// IDs, whatever produced it.
-fn outcomeIds(allocator: std.mem.Allocator, ledger: @import("specification_identity.zig").Ledger, unit_records: []const g.spec.RecordProposal, links: []const scenario_link.Link) Error![]const @import("specification_identity.zig").Outcome {
-    const outcomes = try allocator.alloc(@import("specification_identity.zig").Outcome, links.len);
-    for (links, outcomes) |link, *outcome| {
-        if (link.edge_case >= unit_records.len or link.criterion >= unit_records.len) return error.InvalidSpecificationUnit;
-        if (!scenario_link.candidate(unit_records[link.edge_case], unit_records[link.criterion])) return error.InvalidSpecificationUnit;
-        outcome.* = .{ .edge_case = try positionId(ledger, unit_records, link.edge_case), .criterion = try positionId(ledger, unit_records, link.criterion) };
-    }
-    return outcomes;
-}
+/// A record of the assembled content and, for a records-unit record, its position in that unit.
+const Placed = struct { record: g.spec.RecordProposal, position: ?usize };
 
-/// The ID of the record at `position` of the records unit: the ledger's next ordinal of its
-/// family plus the records of that family before it, since assignment keeps authoring order.
-fn positionId(ledger: @import("specification_identity.zig").Ledger, unit_records: []const g.spec.RecordProposal, position: usize) Error!g.spec.Id {
-    const kind: g.spec.Kind = unit_records[position].content;
-    var ordinal = ledger.next[@intFromEnum(kind)];
-    for (unit_records[0..position]) |record| {
-        if (record.content == kind) ordinal = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecificationUnit;
-    }
-    return .{ .kind = kind, .ordinal = ordinal };
-}
-
-/// Locate a canonical ID in the retained request order, without reordering
-/// candidate values or their per-field repair origins.
-pub fn recordIndex(current: Session, id: g.spec.Id) Error!usize {
-    if (current.completed != unit_count) return error.InvalidSpecificationUnit;
-    const checked = current.units[if (id.kind == .entity) 2 else records_index] orelse return error.InvalidSpecificationUnit;
-    if (checked.response != .content) return error.InvalidSpecificationUnit;
-    const unit_records = g.recordCollection(.canonical, checked.response.content) orelse return error.InvalidSpecificationUnit;
-    var ordinal = current.starting_ledger.next[@intFromEnum(id.kind)];
-    for (unit_records, 0..) |record, index| {
-        if (record.content != id.kind) continue;
-        if (ordinal == id.ordinal) return index;
-        ordinal = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecificationUnit;
-    }
+/// The assembled index of the records-unit record at `position`.
+fn placedIndex(placed: []const Placed, position: usize) Error!usize {
+    for (placed, 0..) |entry, index| if (entry.position) |held| if (held == position) return index;
     return error.InvalidSpecificationUnit;
 }

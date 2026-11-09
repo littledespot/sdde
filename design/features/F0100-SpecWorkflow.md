@@ -1325,8 +1325,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   select definitions from the same generation schema.
 - Assembly revalidates all units and projects canonical
   section order before assigning IDs and validating coverage. The retained
-  candidate order, occurrence identities and field origins do not change; canonical
-  ID lookup maps back to that order for downstream repairs.
+  candidate order, occurrence identities and field origins do not change; repairs
+  target records by that order. Record assignment receives each edge-case link as
+  positions in its own input, checks it against the candidate rule readback uses, and
+  stores the IDs it allocates.
 - All repair consumers use the same `atomic_repair.Contract`, which implements the
   authorization, response and merge rules of
   [§22.3–§22.5](../contracts/22-repair.md#223-repair-authorization); its immutable

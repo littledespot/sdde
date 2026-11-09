@@ -1258,7 +1258,7 @@ test "reference-grounded projections round trip all record families and reject c
             .provenance = value.provenance,
         });
         // The edge case prints the Then of the criterion of its batch that shares its claims.
-        const outcomes = [_]identifiers.Outcome{.{ .edge_case = .{ .kind = .edge_case, .ordinal = 1 }, .criterion = .{ .kind = .acceptance_criterion, .ordinal = 1 } }};
+        const outcomes = [_]identifiers.Outcome{.{ .edge_case = @intFromEnum(spec.Kind.edge_case), .criterion = @intFromEnum(spec.Kind.acceptance_criterion) }};
         const content = (try identifiers.assign(a, .{ .display_name = value, .primary_user_story = value, .records = records.items, .entities = .{ .disposition = .required, .basis = value } }, .{}, &outcomes)).content;
         const document = try projection.project(a, fixture.context, test_directory, content);
         const bytes = try codec.render(a, document);
@@ -1269,6 +1269,60 @@ test "reference-grounded projections round trip all record families and reject c
         stale.inputs.corpus.state_id.bytes = "foreign";
         try std.testing.expectError(error.InvalidSpecification, projection.project(a, stale, test_directory, content));
     }
+}
+
+test "record assignment resolves edge-case links to the IDs it allocates and refuses any other link" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = "A guest books a meeting room for one hour.";
+    var fixture = try Fixture.init(a, source);
+    defer fixture.deinit();
+    const value = try fixture.value(source);
+    const Group = @typeInfo(@TypeOf(value.source_group_ids)).pointer.child;
+    const first_batch = value.source_group_ids[0].ordinal;
+    const second_batch = [_]Group{.{ .ordinal = first_batch + 1 }};
+    const Record = struct {
+        fn of(comptime kind: spec.Kind, attributed: spec.AttributedValue, groups: []const Group) spec.RecordProposal {
+            return .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), Fields(kind, attributed.value)), .source_group_ids = groups, .provenance = attributed.provenance };
+        }
+    };
+    // Two batches, each with one criterion and one edge case sharing its claim.
+    const records = [_]spec.RecordProposal{
+        Record.of(.acceptance_criterion, value, value.source_group_ids),
+        Record.of(.acceptance_criterion, value, &second_batch),
+        Record.of(.edge_case, value, value.source_group_ids),
+        Record.of(.edge_case, value, &second_batch),
+    };
+    // A prior ledger already past AC-004 and EC-002: the IDs come from allocation, not position.
+    var prior: identifiers.Ledger = .{};
+    prior.next[@intFromEnum(spec.Kind.acceptance_criterion)] = 5;
+    prior.next[@intFromEnum(spec.Kind.edge_case)] = 3;
+    const proposal: spec.ContentProposal = .{ .display_name = value, .primary_user_story = value, .records = &records, .entities = .{ .disposition = .required, .basis = value } };
+    const assigned = try identifiers.assign(a, proposal, prior, &.{ .{ .edge_case = 3, .criterion = 1 }, .{ .edge_case = 2, .criterion = 0 } });
+    const ids = [_]spec.Id{
+        .{ .kind = .acceptance_criterion, .ordinal = 5 },
+        .{ .kind = .acceptance_criterion, .ordinal = 6 },
+        .{ .kind = .edge_case, .ordinal = 3 },
+        .{ .kind = .edge_case, .ordinal = 4 },
+    };
+    for (assigned.content.records, ids) |record, id| try std.testing.expectEqualDeep(id, record.id);
+    try std.testing.expect(assigned.content.records[0].outcome_of == null);
+    try std.testing.expectEqualDeep(ids[0], assigned.content.records[2].outcome_of.?);
+    try std.testing.expectEqualDeep(ids[1], assigned.content.records[3].outcome_of.?);
+    for (assigned.content.records, 0..) |_, index| try std.testing.expect(@import("domain/scenario_link.zig").validStored(assigned.content.records, index));
+    for ([_][]const identifiers.Outcome{
+        // An edge case without a link.
+        &.{.{ .edge_case = 2, .criterion = 0 }},
+        // One edge case linked twice, the other not at all.
+        &.{ .{ .edge_case = 2, .criterion = 0 }, .{ .edge_case = 2, .criterion = 0 } },
+        // An index past the records.
+        &.{ .{ .edge_case = 2, .criterion = 9 }, .{ .edge_case = 3, .criterion = 1 } },
+        // A link from a record that is not an edge case.
+        &.{ .{ .edge_case = 0, .criterion = 1 }, .{ .edge_case = 3, .criterion = 1 } },
+        // Criteria of the other batch are not candidates.
+        &.{ .{ .edge_case = 2, .criterion = 1 }, .{ .edge_case = 3, .criterion = 0 } },
+    }) |outcomes| try std.testing.expectError(error.InvalidSpecification, identifiers.assign(a, proposal, prior, outcomes));
 }
 
 test "specification display resolves exact values without normalization and passive values as code" {
@@ -1833,7 +1887,6 @@ test "feature entities keep independent support and record batches reject every 
         for (assembled.content.records) |record| if (record.id.kind == .entity) {
             count += 1;
             try std.testing.expectEqualDeep(second.selection.claim_ids, record.proposal.provenance.claim_ids);
-            try std.testing.expectEqual(@as(usize, 0), try sessions.recordIndex(current, record.id));
         };
         try std.testing.expectEqual(@as(usize, 1), count);
         try std.testing.expectEqual(@as(usize, 2), current.record_batches.len);
@@ -2147,10 +2200,6 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
         current.starting_ledger.next[@intFromEnum(spec.Kind.functional_requirement)] = 7;
         const assembled = try sessions.assemble(a, text.validator, fixture.context, current, &.{});
         try std.testing.expectEqual(.acceptance_criterion, assembled.content.records[0].id.kind);
-        for (assembled.content.records) |record| {
-            const index = try sessions.recordIndex(current, record.id);
-            try std.testing.expectEqualDeep(record.proposal, checked.response.content.records[index]);
-        }
         var required_entities = current;
         required_entities.units[2].?.response.content.entities.disposition = .required;
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, required_entities, &.{}));
@@ -2158,8 +2207,6 @@ test "consolidated records preserve mixed siblings origins and competing-evidenc
         _ = try sessions.assemble(a, text.validator, fixture.context, required_entities, &.{});
         required_entities.units[2].?.response.content.entities.disposition = .not_applicable;
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, required_entities, &.{}));
-        try std.testing.expectEqual(@as(usize, 0), try sessions.recordIndex(current, .{ .kind = .functional_requirement, .ordinal = 7 }));
-        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.recordIndex(current, .{ .kind = .functional_requirement, .ordinal = 1 }));
         // R46: duplicate optional content with different valid claim evidence
         // remains unsafe; consolidation cannot silently delete or publish it.
         var misclassified = records[3];
@@ -9359,6 +9406,9 @@ test "ADR 0038 Decision 7 an edge case's link is native, one closed choice among
     try std.testing.expectEqualDeep(&[_]links.Link{ .{ .edge_case = 4, .criterion = 3 }, .{ .edge_case = 7, .criterion = 6 } }, resolved);
     try std.testing.expectError(error.InvalidScenarioLink, links.resolve(a, plan, &.{}));
     const assigned = try sessions.assemble(a, text.validator, fixture.context, current, resolved);
+    // Links name records-unit positions: one past the unit, or the other batch's criterion, is refused.
+    try std.testing.expectError(error.InvalidSpecificationUnit, sessions.assemble(a, text.validator, fixture.context, current, &.{ .{ .edge_case = 4, .criterion = 99 }, resolved[1] }));
+    try std.testing.expectError(error.InvalidSpecification, sessions.assemble(a, text.validator, fixture.context, current, &.{ .{ .edge_case = 4, .criterion = 6 }, resolved[1] }));
     var edge_cases: usize = 0;
     for (assigned.content.records) |record| {
         if (record.proposal.content != .edge_case) {
