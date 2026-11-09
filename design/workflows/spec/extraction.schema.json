@@ -46,6 +46,13 @@
         }
       ]
     },
+    "extractor_id": {
+      "enum": [
+        "markdown_inline_code_v1",
+        "markdown_fenced_code_v1",
+        "markdown_link_destination_v1"
+      ]
+    },
     "token_candidate_id": {
       "type": "object",
       "properties": {
@@ -53,11 +60,7 @@
           "$ref": "#/$defs/ordinal"
         },
         "extractor_id": {
-          "enum": [
-            "markdown_inline_code_v1",
-            "markdown_fenced_code_v1",
-            "markdown_link_destination_v1"
-          ]
+          "$ref": "#/$defs/extractor_id"
         },
         "ordinal": {
           "type": "integer",
@@ -185,9 +188,7 @@
               "$ref": "#/$defs/ordinal"
             },
             "extractor_id": {
-              "enum": [
-                "markdown_inline_code_v1"
-              ]
+              "$ref": "#/$defs/extractor_id"
             },
             "ordinal": {
               "type": "integer",

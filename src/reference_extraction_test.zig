@@ -971,3 +971,62 @@ test "forced classifications distinguish empty chunks, no-feature outcomes and p
         try std.testing.expectEqual(@as(usize, 0), (try forced.classifications(a, foreign, candidates, .claims)).?.len);
     }
 }
+
+test "irrelevant classifications satisfy the extraction schema for every registered extractor" {
+    const forced = @import("actions/reference/construct_forced_token_classifications.zig");
+    const runtime = @import("domain/json_composition_runtime.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const identity = @import("domain/model_request_identity.zig");
+    const token_classifications = @import("domain/token_classification_validation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const canonical = try adapter.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .limited(1_048_576)));
+    const plan = try adapter.compiler().compileComposition(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.composition.json", a, .limited(1_048_576)), canonical);
+    const ledger = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(ledger);
+    const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const initial = try runtime.State.init(a, plan, base, identity.ledger(ledger).stageRunEpochId());
+    var covered: std.EnumSet(extraction.tokens.ExtractorId) = .initEmpty();
+    // Unrelated domains: a library history, build notes and a deployment guide. Each
+    // quoting line cites the whole value, so a claim citing it must preserve it.
+    for ([_]struct { source: []const u8, extractor: extraction.tokens.ExtractorId, quoting: []const u8 }{
+        .{ .source = "Background: `Loan renewed!` was the old banner.\n", .extractor = .markdown_inline_code_v1, .quoting = "[1]" },
+        .{ .source = "Build notes:\n\n```sh\nmake release\n```\n", .extractor = .markdown_fenced_code_v1, .quoting = "[4]" },
+        .{ .source = "Deployment history is in [the archive](https://example.org/archive).\n", .extractor = .markdown_link_destination_v1, .quoting = "[1]" },
+    }) |case| {
+        covered.insert(case.extractor);
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "notes.md", case.source));
+        const candidates = try token_fixture.candidates(a, inputs);
+        try std.testing.expectEqual(@as(usize, 1), candidates.entries.len);
+        try std.testing.expectEqual(case.extractor, candidates.entries[0].id.extractor_id);
+        const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+        // The forced step's own wire for an admitted no-feature outcome.
+        const result = .{ .token_classifications = (try forced.classifications(a, scope, candidates, .no_feature_claim)).? };
+        const wire = try @import("domain/model_candidate_json.zig").encode(@TypeOf(result), a, result);
+        const unknown = try std.mem.replaceOwned(u8, a, wire, @tagName(case.extractor), "markdown_table_v1");
+        // The schema also admits irrelevant beside claims; whether it is allowed is the
+        // classification validator's decision.
+        for ([_][]const u8{
+            "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Background only.\"}}",
+            "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[1]}]}",
+        }) |content| {
+            const stated = try initial.retainNative(a, try initial.select(a, 0), (try std.json.parseFromSlice(std.json.Value, a, content, .{})).value);
+            const classified = try stated.retainNative(a, try stated.select(a, 1), (try std.json.parseFromSlice(std.json.Value, a, wire, .{})).value);
+            try std.testing.expect((try classified.assemble(a)).validate() == null);
+            try std.testing.expectError(error.InvalidAssembledCandidate, stated.retainNative(a, try stated.select(a, 1), (try std.json.parseFromSlice(std.json.Value, a, unknown, .{})).value));
+        }
+        // ADR 0024: a value a claim quotes whole cannot be irrelevant, whatever its extractor.
+        const id = candidates.entries[0].id;
+        const quoting = try std.fmt.allocPrint(a, "{{\"kind\":\"claims\",\"claims\":[{{\"category\":\"business\",\"citations\":{s}}}],\"token_classifications\":[]}}", .{case.quoting});
+        const dropped = try token_classifications.validate(a, inputs, candidates, try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try token_fixture.wire(a, quoting, &.{.{ .irrelevant = id }}))} })));
+        try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{id}, dropped.invalid.issues.forbidden);
+        const kept = try token_classifications.validate(a, inputs, candidates, try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try token_fixture.wire(a, quoting, &.{.{ .preserve = .{ .token_candidate_id = id, .kind = .exact_identifier } }}))} })));
+        try std.testing.expect(kept == .valid);
+    }
+    // The cases cover the registry, so a new extractor needs its own case.
+    try std.testing.expect(covered.eql(.initFull()));
+}

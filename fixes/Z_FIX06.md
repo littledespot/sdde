@@ -327,3 +327,19 @@ stored-link check), `scenario_link_request.zig` (the closed request and its admi
 `link-scenarios` subgraph of `spec.workflow.yaml` (on `links.prompt.md` and
 `links.schema.json`) and `assemble`, which resolves the links. Its limit and its identity
 prediction are open in FIX06 §3 Next item 8 and E11.
+
+## E14. Forced irrelevance for every extractor
+
+**Implemented 9 November 2026** (user: "implement 1. E14", then "go"). Defect class: successful
+completion, and unsupported exact values. The extraction schema's `irrelevant` variant admitted
+only `markdown_inline_code_v1`, so a `no_feature_claim` chunk holding a fenced-code or
+link-destination candidate failed its run when `construct-forced-token-classifications`
+retained its forced classifications (`InvalidAssembledCandidate`), and a model answering
+`claims` could only preserve such a candidate. Owner: `extraction.schema.json`, whose one
+`$defs/extractor_id` now serves both `token_candidate_id` and the flat `irrelevant` variant
+(F0100 §3.8's shape; ADR 0006 allows no `$ref` siblings). Test: `reference_extraction_test.zig`
+"irrelevant classifications satisfy the extraction schema for every registered extractor"
+(three unrelated-domain sources covering the extractor registry, the forced wire and a `claims`
+answer through the real composition, an unknown extractor rejected, and ADR 0024's rule that a
+wholly quoted value of any extractor cannot be irrelevant); it fails on the old schema. Its live set and
+keep decision are open in FIX06 E14.

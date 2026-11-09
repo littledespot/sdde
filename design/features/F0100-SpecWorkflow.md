@@ -1469,7 +1469,8 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   protected closed-clarification bytes, and clean packaged candidate extraction;
 - `zig build test-reference-ingestion test-reference-evidence test-reference-extraction` covers source
   accounting, deterministic identity mappings, complete chunks, Unicode/CRLF,
-  exact quotations, foreign scopes, closed extraction bodies, engine IDs,
+  exact quotations, foreign scopes, closed extraction bodies, irrelevant
+  classifications of every registered extractor against the extraction schema, engine IDs,
   total chunk/claim/citation joins, blocked results and allocation/ownership
   failures. `zig build verify` additionally covers native YAML dependencies,
   rejection before continuation, cancellation and the packaged read-only
