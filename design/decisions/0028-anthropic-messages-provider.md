@@ -116,9 +116,16 @@ implements the dated wire manifest, including the error table.
     tools, caching, `inference_geo` and `speed`. The registry declares
     `temperature: false`.
 - **Response:** decoding is closed against the dated manifest.
+  - **Presence** (amended 10 November 2026; user: "implement the necessary fixes",
+    after a live `claude-haiku-5-5` response omitted `usage.server_tool_use` and a text
+    block's `citations`): a field the manifest documents as nullable may be absent and
+    reads as null. A non-nullable documented field, at any depth, must be present: for
+    example the envelope's `id`, `type`, `role`, `model`, `content`, `stop_reason` and
+    `usage`, usage's `input_tokens` and `output_tokens`, and a thinking block's `signature`.
+    An undocumented field still rejects.
   - **Envelope:** `type` must be `message`, `role` must be `assistant`, and `model`
     must equal the selected model.
-  - **Content:** only `text` blocks with null `citations`, `thinking` blocks and
+  - **Content:** only `text` blocks with null or absent `citations`, `thinking` blocks and
     `redacted_thinking` blocks are accepted. Thinking blocks are kept as provider
     reasoning and never become candidate text.
   - **Stops:**

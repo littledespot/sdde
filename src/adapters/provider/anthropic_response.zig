@@ -13,10 +13,14 @@ const field = support.field;
 const string = support.string;
 const integer = support.integer;
 
-/// Every documented field is present on a non-streaming response; nullable
-/// ones are present as null. No other field is admitted.
+/// The documented fields. No other field is admitted. The required ones are
+/// always sent; a documented nullable field may be absent, and absent reads as
+/// null (ADR 0028 "Anthropic contract").
 const message_fields = [_][]const u8{ "id", "type", "role", "model", "content", "stop_reason", "stop_sequence", "stop_details", "usage", "container", "diagnostics" };
+const message_required = [_][]const u8{ "id", "type", "role", "model", "content", "stop_reason", "usage" };
 const usage_fields = [_][]const u8{ "input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens", "cache_creation", "output_tokens_details", "server_tool_use", "service_tier", "inference_geo", "speed" };
+const usage_required = [_][]const u8{ "input_tokens", "output_tokens" };
+const nullable = support.nullable;
 
 pub fn inference(allocator: std.mem.Allocator, response: transport.Response, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) std.mem.Allocator.Error!operation.ProviderInvocationObservation {
     return assembly.inference(allocator, response, selected, request, id, classifyResponse, decode);
@@ -38,7 +42,7 @@ pub fn decodeMessages(allocator: std.mem.Allocator, raw: std.json.Value, model: 
 
 fn decodeValue(allocator: std.mem.Allocator, raw: std.json.Value, model: []const u8, diagnostic: ?*?support.DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!assembly.Inference {
     try support.diagnosedFields(allocator, raw, &message_fields, &.{}, diagnostic);
-    try support.required(raw, &message_fields);
+    try support.required(raw, &message_required);
     if ((try string(try field(raw, "id"))).len == 0) return error.InvalidResponse;
     if (!std.mem.eql(u8, try string(try field(raw, "type")), "message")) return error.InvalidResponse;
     if (!std.mem.eql(u8, try string(try field(raw, "role")), "assistant")) return error.InvalidResponse;
@@ -46,7 +50,7 @@ fn decodeValue(allocator: std.mem.Allocator, raw: std.json.Value, model: []const
     // runner's own request association.
     if (!std.mem.eql(u8, try string(try field(raw, "model")), model)) return error.InvalidResponse;
     // No container tool and no cache diagnostics were requested.
-    if (try field(raw, "container") != .null or try field(raw, "diagnostics") != .null) return error.InvalidResponse;
+    if (try nullable(raw, "container") != .null or try nullable(raw, "diagnostics") != .null) return error.InvalidResponse;
     const usage = try decodeUsage(allocator, try field(raw, "usage"), diagnostic);
     var accumulated: assembly.Accumulator = .init(allocator);
     defer accumulated.deinit();
@@ -60,11 +64,11 @@ fn decodeValue(allocator: std.mem.Allocator, raw: std.json.Value, model: []const
 
 fn decodeUsage(allocator: std.mem.Allocator, usage: std.json.Value, diagnostic: ?*?support.DecodeDiagnostic) (Invalid || std.mem.Allocator.Error)!operation.ProviderUsage {
     try support.diagnosedFields(allocator, usage, &usage_fields, &.{.{ .property = "usage" }}, diagnostic);
-    try support.required(usage, &usage_fields);
+    try support.required(usage, &usage_required);
     const output_tokens = try integer(try field(usage, "output_tokens"));
-    const cache_write = try support.optionalInteger(try field(usage, "cache_creation_input_tokens"));
-    const cache_read = try support.optionalInteger(try field(usage, "cache_read_input_tokens"));
-    const breakdown = try field(usage, "cache_creation");
+    const cache_write = try support.optionalInteger(try nullable(usage, "cache_creation_input_tokens"));
+    const cache_read = try support.optionalInteger(try nullable(usage, "cache_read_input_tokens"));
+    const breakdown = try nullable(usage, "cache_creation");
     if (breakdown != .null) {
         try support.diagnosedFields(allocator, breakdown, &.{ "ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens" }, &.{ .{ .property = "usage" }, .{ .property = "cache_creation" } }, diagnostic);
         try support.required(breakdown, &.{ "ephemeral_1h_input_tokens", "ephemeral_5m_input_tokens" });
@@ -72,21 +76,21 @@ fn decodeUsage(allocator: std.mem.Allocator, usage: std.json.Value, diagnostic: 
         // The breakdown describes the cache-write counter; it is never added again.
         if (described != cache_write) return error.InvalidResponse;
     }
-    const details = try field(usage, "output_tokens_details");
+    const details = try nullable(usage, "output_tokens_details");
     if (details != .null) {
         try support.diagnosedFields(allocator, details, &.{"thinking_tokens"}, &.{ .{ .property = "usage" }, .{ .property = "output_tokens_details" } }, diagnostic);
         // Thinking is already inside output_tokens: checked, never added.
         if (try integer(try field(details, "thinking_tokens")) > output_tokens) return error.InvalidResponse;
     }
-    const tools = try field(usage, "server_tool_use");
+    const tools = try nullable(usage, "server_tool_use");
     if (tools != .null) {
         try support.diagnosedFields(allocator, tools, &.{ "web_fetch_requests", "web_search_requests" }, &.{ .{ .property = "usage" }, .{ .property = "server_tool_use" } }, diagnostic);
         // No server tool was offered, so only zero counts are consistent.
         if (try integer(try field(tools, "web_fetch_requests")) != 0 or try integer(try field(tools, "web_search_requests")) != 0) return error.InvalidResponse;
     }
-    try nullableEnumeration(try field(usage, "service_tier"), &.{ "standard", "priority", "batch" });
-    try nullableEnumeration(try field(usage, "speed"), &.{ "standard", "fast" });
-    const geography = try field(usage, "inference_geo");
+    try nullableEnumeration(try nullable(usage, "service_tier"), &.{ "standard", "priority", "batch" });
+    try nullableEnumeration(try nullable(usage, "speed"), &.{ "standard", "fast" });
+    const geography = try nullable(usage, "inference_geo");
     if (geography != .null) _ = try string(geography);
     const uncached_and_read = std.math.add(u64, try integer(try field(usage, "input_tokens")), cache_read) catch return error.InvalidResponse;
     const inclusive_input = std.math.add(u64, uncached_and_read, cache_write) catch return error.InvalidResponse;
@@ -104,11 +108,11 @@ fn decodeOutput(raw: std.json.Value, accumulated: *assembly.Accumulator) (Invali
     for (content.array.items) |block| try decodeBlock(block, accumulated);
     const Stop = enum { end_turn, max_tokens, stop_sequence, tool_use, pause_turn, refusal, model_context_window_exceeded };
     const stop = std.meta.stringToEnum(Stop, try string(try field(raw, "stop_reason"))) orelse return error.InvalidResponse;
-    const details = try field(raw, "stop_details");
+    const details = try nullable(raw, "stop_details");
     if (stop == .refusal) {
         if (details != .null) try refusalDetails(details);
     } else if (details != .null) return error.InvalidResponse;
-    const sequence = try field(raw, "stop_sequence");
+    const sequence = try nullable(raw, "stop_sequence");
     if ((sequence != .null) != (stop == .stop_sequence)) return error.InvalidResponse;
     if (sequence != .null) _ = try string(sequence);
     const stopped: ?operation.ProviderNonCandidateStopReason = switch (stop) {
@@ -135,8 +139,8 @@ fn decodeBlock(block: std.json.Value, accumulated: *assembly.Accumulator) std.me
         .text => {
             support.fields(block, &.{ "type", "text", "citations" }) catch return markInvalid(accumulated);
             const text = string(block.object.get("text") orelse return markInvalid(accumulated)) catch return markInvalid(accumulated);
-            // No citation source is ever sent.
-            if ((block.object.get("citations") orelse return markInvalid(accumulated)) != .null) return markInvalid(accumulated);
+            // No citation source is ever sent, so citations are absent or null.
+            if ((block.object.get("citations") orelse .null) != .null) return markInvalid(accumulated);
             try accumulated.appendText(text);
         },
         .thinking => {
@@ -159,10 +163,9 @@ fn markInvalid(accumulated: *assembly.Accumulator) void {
 
 fn refusalDetails(raw: std.json.Value) Invalid!void {
     try support.fields(raw, &.{ "type", "category", "explanation" });
-    try support.required(raw, &.{ "type", "category", "explanation" });
     if (!std.mem.eql(u8, try string(try field(raw, "type")), "refusal")) return error.InvalidResponse;
-    try nullableEnumeration(try field(raw, "category"), &.{ "cyber", "bio", "frontier_llm", "reasoning_extraction", "general_harms" });
-    const explanation = try field(raw, "explanation");
+    try nullableEnumeration(try nullable(raw, "category"), &.{ "cyber", "bio", "frontier_llm", "reasoning_extraction", "general_harms" });
+    const explanation = try nullable(raw, "explanation");
     if (explanation != .null) _ = try string(explanation);
 }
 

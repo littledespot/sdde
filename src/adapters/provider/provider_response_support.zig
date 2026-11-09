@@ -84,6 +84,13 @@ pub fn field(raw: std.json.Value, name: []const u8) Invalid!std.json.Value {
     return raw.object.get(name) orelse error.InvalidResponse;
 }
 
+/// A documented nullable field: absent reads as null. Unknown fields stay the
+/// caller's closed field check.
+pub fn nullable(raw: std.json.Value, name: []const u8) Invalid!std.json.Value {
+    if (raw != .object) return error.InvalidResponse;
+    return raw.object.get(name) orelse .null;
+}
+
 pub fn string(raw: std.json.Value) Invalid![]const u8 {
     return if (raw == .string) raw.string else error.InvalidResponse;
 }
