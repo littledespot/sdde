@@ -85,6 +85,41 @@ test "Messages decoding accepts every documented null and the redacted thinking 
     try std.testing.expectEqualStrings("opaque", decoded.reasoning[0].redacted.base64);
 }
 
+test "Messages decoding reads an absent documented nullable field as null" {
+    const a = std.testing.allocator;
+    // A live claude-haiku-5-5 response (10 November 2026) with only its opaque thinking
+    // signature shortened: the API sent no `usage.server_tool_use` and no `citations`.
+    const live = "{\"model\":\"claude-haiku-5-5\",\"id\":\"msg_011Cgt3bnzC2qckysnxW184q\",\"type\":\"message\",\"role\":\"assistant\"," ++
+        "\"content\":[{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"CAQS\"},{\"type\":\"text\",\"text\":\"{\\\"kind\\\":\\\"claims\\\",\\\"claims\\\":[]}\"}]," ++
+        "\"container\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null," ++
+        "\"usage\":{\"input_tokens\":1618,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0}," ++
+        "\"output_tokens\":381,\"output_tokens_details\":{\"thinking_tokens\":308},\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}";
+    var observed = try decode(a, live);
+    defer observed.deinit(a);
+    try std.testing.expectEqualStrings("{\"kind\":\"claims\",\"claims\":[]}", observed.output.text);
+    try std.testing.expectEqual(@as(u64, 1999), observed.usage.total_tokens);
+    try std.testing.expectEqual(@as(usize, 1), observed.reasoning.len);
+    // Every documented nullable field absent at once, at each level, reads as null.
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    for ([_][]const [2][]const u8{
+        &.{
+            .{ ",\"stop_sequence\":@@SEQUENCE,\"stop_details\":@@DETAILS", "" },
+            .{ ",\"container\":null,\"diagnostics\":null", "" },
+            .{ "@@USAGE", "{\"input_tokens\":4,\"output_tokens\":1}" },
+            .{ "@@CONTENT", "[{\"type\":\"text\",\"text\":\"{}\"}]" },
+        },
+        &.{ .{ "@@STOP", "\"refusal\"" }, .{ "@@DETAILS", "{\"type\":\"refusal\"}" } },
+    }) |replacements| {
+        var decoded = try decode(a, try message(arena.allocator(), replacements));
+        defer decoded.deinit(a);
+        if (decoded.output == .text) {
+            try std.testing.expectEqualStrings("{}", decoded.output.text);
+            try std.testing.expectEqual(@as(u64, 5), decoded.usage.total_tokens);
+        } else try std.testing.expectEqual(.content_filtered, decoded.output.stopped);
+    }
+}
+
 test "Messages stop reasons map to typed non-candidate stops" {
     const a = std.testing.allocator;
     const cases = [_]struct { stop: []const u8, sequence: []const u8 = "null", details: []const u8 = "null", expected: ?operation.ProviderNonCandidateStopReason }{
@@ -116,7 +151,7 @@ test "Messages content defects reject the candidate but keep trusted usage" {
     const cases = [_]struct { replacements: []const [2][]const u8, expected: operation.ProviderContentDiagnostic }{
         .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"tool_use\",\"id\":\"t\",\"name\":\"n\",\"input\":{}},{\"type\":\"text\",\"text\":\"{}\",\"citations\":null}]" }}, .expected = .invalid_content },
         .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"text\",\"text\":\"{}\",\"citations\":[]}]" }}, .expected = .invalid_content },
-        .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"text\",\"text\":\"{}\"}]" }}, .expected = .invalid_content },
+        .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"text\",\"citations\":null}]" }}, .expected = .invalid_content },
         .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"text\",\"text\":\"{}\",\"citations\":null,\"extra\":1}]" }}, .expected = .invalid_content },
         .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"thinking\",\"thinking\":\"\"},{\"type\":\"text\",\"text\":\"{}\",\"citations\":null}]" }}, .expected = .invalid_content },
         .{ .replacements = &.{.{ "@@CONTENT", "[{\"type\":\"Text\",\"text\":\"{}\",\"citations\":null}]" }}, .expected = .invalid_content },
@@ -130,7 +165,7 @@ test "Messages content defects reject the candidate but keep trusted usage" {
         .{ .replacements = &.{.{ "@@STOP", "\"End_turn\"" }}, .expected = .invalid_content },
         .{ .replacements = &.{.{ "@@STOP", "null" }}, .expected = .invalid_content },
         .{ .replacements = &.{ .{ "@@STOP", "\"refusal\"" }, .{ "@@DETAILS", "{\"type\":\"refusal\",\"category\":\"unlisted\",\"explanation\":null}" } }, .expected = .invalid_content },
-        .{ .replacements = &.{ .{ "@@STOP", "\"refusal\"" }, .{ "@@DETAILS", "{\"type\":\"refusal\",\"category\":null}" } }, .expected = .invalid_content },
+        .{ .replacements = &.{ .{ "@@STOP", "\"refusal\"" }, .{ "@@DETAILS", "{\"category\":null,\"explanation\":null}" } }, .expected = .invalid_content },
     };
     for (cases) |case| {
         var arena: std.heap.ArenaAllocator = .init(a);
@@ -146,8 +181,12 @@ test "Messages envelope and usage defects reject the whole response with a preci
     const a = std.testing.allocator;
     const cases = [_]struct { replacements: []const [2][]const u8, path: ?[]const u8 = null }{
         .{ .replacements = &.{.{ "\"diagnostics\":null}", "\"diagnostics\":null,\"extra\":1}" }}, .path = "/extra" },
-        .{ .replacements = &.{.{ ",\"diagnostics\":null}", "}" }} },
-        .{ .replacements = &.{.{ ",\"stop_details\":@@DETAILS", "" }} },
+        // Fields the API always sends must be present.
+        .{ .replacements = &.{.{ "\"stop_reason\":@@STOP,", "" }} },
+        .{ .replacements = &.{.{ "\"usage\":@@USAGE,", "" }} },
+        .{ .replacements = &.{.{ "\"content\":@@CONTENT,", "" }} },
+        .{ .replacements = &.{.{ "\"input_tokens\":10,", "" }} },
+        .{ .replacements = &.{.{ "\"output_tokens\":5,", "" }} },
         .{ .replacements = &.{.{ "\"type\":\"message\"", "\"type\":\"Message\"" }} },
         .{ .replacements = &.{.{ "\"role\":\"assistant\"", "\"role\":\"user\"" }} },
         .{ .replacements = &.{.{ "\"model\":\"claude-haiku-5-5\"", "\"model\":\"claude-opus-5-5\"" }} },
@@ -155,13 +194,14 @@ test "Messages envelope and usage defects reject the whole response with a preci
         .{ .replacements = &.{.{ "\"container\":null", "\"container\":{}" }} },
         .{ .replacements = &.{.{ "\"diagnostics\":null", "\"diagnostics\":{}" }} },
         .{ .replacements = &.{.{ "\"speed\":\"standard\"}", "\"speed\":\"standard\",\"unlisted\":0}" }}, .path = "/usage/unlisted" },
-        .{ .replacements = &.{.{ ",\"speed\":\"standard\"", "" }} },
         .{ .replacements = &.{.{ "\"input_tokens\":10", "\"input_tokens\":-1" }} },
         .{ .replacements = &.{.{ "\"input_tokens\":10", "\"input_tokens\":1.5" }} },
         .{ .replacements = &.{.{ "\"input_tokens\":10", "\"input_tokens\":\"10\"" }} },
         .{ .replacements = &.{.{ "\"input_tokens\":10", "\"input_tokens\":null" }} },
         .{ .replacements = &.{.{ "\"output_tokens\":5", "\"output_tokens\":18446744073709551616" }} },
         .{ .replacements = &.{.{ "\"ephemeral_5m_input_tokens\":2", "\"ephemeral_5m_input_tokens\":1" }} },
+        // An absent cache-write counter reads as zero, which a non-zero breakdown contradicts.
+        .{ .replacements = &.{.{ "\"cache_creation_input_tokens\":2,", "" }} },
         .{ .replacements = &.{.{ "\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":2}", "\"cache_creation\":{}" }} },
         .{ .replacements = &.{.{ "\"thinking_tokens\":3", "\"thinking_tokens\":6" }} },
         .{ .replacements = &.{.{ "\"output_tokens_details\":{\"thinking_tokens\":3}", "\"output_tokens_details\":{}" }} },
