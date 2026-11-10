@@ -194,7 +194,7 @@ pub const Reported = struct {
     /// Attempts the report marks as runaway re-sends.
     resends: u64 = 0,
     admission_escape: ?admission.Metric,
-    /// Each canonical repair merge: the identity a repair grade attaches to (T5(b)).
+    /// Each canonical repair merge: the identity a repair grade attaches to.
     repairs: []const Merge,
     /// Sends and tokens of each stage, from each sent attempt's request purpose and owner.
     stages: []const stages.Resources,

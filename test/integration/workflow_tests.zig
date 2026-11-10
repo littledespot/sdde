@@ -1362,7 +1362,7 @@ fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
     return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
 }
 
-/// `projection` collects the request projection (SPEC01 T5(e)); without one, a sink
+/// `projection` collects the request projection; without one, a sink
 /// that writes a freeze only when the environment names one.
 fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases, projection: ?*request_projection.Sink) !void {
     const io = std.testing.io;
@@ -2159,7 +2159,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
             }
             if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition or driver.reconciliation_fault == .duplicate_disposition) {
-                // SPEC01 D2.3: a repeated disposition record is corrected at admission,
+                // A repeated disposition record is corrected at admission,
                 // as one more attempt of the dispositions request, never repaired.
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
@@ -2669,7 +2669,7 @@ fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflo
     try std.testing.expectEqual(2 + groups, actual);
 }
 
-/// Spec publishes from generation and native checks alone (D13.1): spec.md has no
+/// Spec publishes from generation and native checks alone (ADR 0023 removal amendment): spec.md has no
 /// review status, reference-context has no review or principle section, and the
 /// canonical state carries the principle registry this run captured.
 fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, driver: *@import("../../src/test_fixtures/spec_generation_driver.zig").Driver, contracts: @import("../../src/ports/workflow_contract_source.zig").Source) !void {

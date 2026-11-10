@@ -192,7 +192,7 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
             }
             return .{ .blocked = .no_required_member };
         },
-        // Admission binds one disposition to every assigned claim (SPEC01 D2.3), so
+        // Admission binds one disposition to every assigned claim (ADR 0046), so
         // collection membership is never a repair target.
         .dispositions => return if (rejection.issue.rule == .relationship) .{ .blocked = .no_independent_target } else error.InvalidAtomicRepair,
         .disposition => |index| {

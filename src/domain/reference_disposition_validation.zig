@@ -1,5 +1,5 @@
 //! Native disposition membership, relationship and graph validation.
-//! Admission binds one disposition per assigned claim (SPEC01 D2.3); this
+//! Admission binds one disposition per assigned claim (ADR 0046); this
 //! readback remains the authority behind it.
 const std = @import("std");
 const r = @import("reference_reconciliation.zig");

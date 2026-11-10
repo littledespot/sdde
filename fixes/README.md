@@ -5,5 +5,8 @@
   evidence; a decision recorded in an ADR is cited, not restated.
 - [Z_SPEC01](Z_SPEC01.md) holds implemented SPEC01 items. Move an item there when it is
   implemented; its open parts and keep decision stay in SPEC01.
+- [PLAN01](PLAN01.md) holds the Plan workflow intent, its feasibility assessment and the
+  decisions Plan needs; [TASKS01](TASKS01.md) holds the Tasks workflow intent. Both point to
+  their owners.
 - Delete closed or reverted work; git history keeps it. No other files in `fixes/`.
-- Nothing in either file grants approval or establishes live acceptance.
+- Nothing in these files grants approval or establishes live acceptance.

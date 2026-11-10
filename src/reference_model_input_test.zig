@@ -382,7 +382,7 @@ test "a dispositions assignment binds every semantic claim natively and states n
         defer packets.release(packet);
         const semantic = try @import("domain/reference_reconciliation_projection.zig").semanticClaimIds(a, global.items);
         try std.testing.expect(semantic.len >= 2);
-        // SPEC01 D2.3: the packet carries one native exact-members choice over the
+        // The packet carries one native exact-members choice over the
         // semantic claims; a copy of the packet keeps it.
         var bound: ?schema.IntegerChoice = null;
         for (packet.integerChoices()) |choice| if (choice.collection == .exact_members) {

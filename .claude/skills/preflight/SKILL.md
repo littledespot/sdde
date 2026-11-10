@@ -1,51 +1,36 @@
 ---
 name: preflight
-description: Produce the AGENTS.md "Before editing" analysis for an SDDE engine change. It covers the outcome and non-goals, owning abstraction, governing authority, affected producers and consumers, impact on persistence, security, packaging and recovery, the causal defect, and expected files, tests and approvals. Use before any code, schema, configuration, test or architecture change in this repository.
+description: Produce the AGENTS.md "Before editing" analysis for an SDDE engine change, naming its owning abstraction, governing authority, causal defect, and expected files, tests and approvals. Use before any code, schema, configuration, test or architecture change in this repository.
 argument-hint: <task or defect description>
 ---
 
 # Preflight: $ARGUMENTS
 
-Produce the analysis AGENTS.md requires before editing. Make no edits during this
+Produce the analysis AGENTS.md "Before editing" requires. Make no edits during this
 skill.
 
 1. **Classify the request.**
-   - Engine development or engine execution? If it asks to run SDDE against a
-     project, stop unless the target project and workflow are named explicitly.
-   - Answer, review or plan only (read-only), or a change request?
-   - A small, non-semantic documentation correction needs only a proportional note.
-     Say so and stop.
-2. **Collect authority.** Delegate to the `design-router` agent with the task text
-   and any files or symptoms already known. Don't read whole contract files into this
-   conversation.
+   - A request to run SDDE against a project: stop unless it names the target project
+     and workflow.
+   - An answer, review or plan request is read-only; a change request needs the
+     analysis.
+   - A small non-semantic documentation fix needs none. Say so and stop.
+2. **Collect authority.** Give the `design-router` agent the task text and any files
+   or symptoms already known. Don't read whole contract files into this conversation.
 3. **Find the owning abstraction.** Search the code for the contract involved: its
    type, validator or normalizer, action or runner, and YAML operation entry. List its
    producers, consumers, transitions, repair and recovery paths, and sibling
-   implementations. State the general violated invariant, not only the symptom.
-4. **Check decisions.** Check the accepted ADRs and the user's recorded decisions for
-   any rule the change would break or that already covers this failure class. Apply
-   AGENTS.md's evidence rules to any contract change.
-5. **Report** under the AGENTS.md "Before editing" headings:
-   1. Observable outcome and explicit non-goals.
-   2. Owning abstraction: the narrowest shared contract that owns the whole failure
-      class.
-   3. Governing authority: sections, invariants and acceptance criteria, with
-      citations.
-   4. Producers, consumers, transitions and siblings inspected.
-   5. Persistence, security, packaging and recovery impact.
-   6. Causal defect or planned contract change.
-   7. Expected files; tests, with accepted and rejected cases and unrelated
-      representatives of the failure class; validation commands; required approvals.
-6. **Stop conditions.** If authority conflicts, a required decision is missing, or the
-   correct fix needs an unapproved architecture change, report what AGENTS.md
-   requires and stop:
-   - the conflicting or missing authority;
-   - the affected design sections and invariants;
-   - why a local interpretation would be unsafe;
-   - the smallest decision or scope change that would let work continue.
-
-   Don't choose a convenient interpretation.
-
-List the required approvals explicitly: production dependency changes, ADR or policy
-changes, material scope expansion, and any live or E2E run. If none apply, write
-"None".
+   implementations. State the general invariant that is violated, not only the
+   symptom.
+4. **Check decisions.** Check the accepted ADRs and the open-work records under
+   `fixes/` for a rule the change would break, or a decision that already covers this
+   failure class. Name the published-output defect class the change should reduce
+   (AGENTS.md "Model output, prompts and evidence").
+5. **Report** under the seven AGENTS.md "Before editing" headings, in order. Under
+   the seventh, list the tests with their accepted and rejected cases and an unrelated
+   member of the failure class, the validation commands, and each approval needed: a
+   production dependency change, an ADR or policy change, a material scope expansion,
+   or a live run. Write "None" if no approval is needed.
+6. **Stop conditions.** If authority conflicts, a decision is missing or the fix
+   needs an unapproved architecture change, stop and report what AGENTS.md "Project
+   authority" requires.

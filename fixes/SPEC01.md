@@ -1,6 +1,6 @@
 # SPEC01 — Open Spec work
 
-The only fix record: open work and user decisions not yet recorded in an ADR
+The fix record for open work and user decisions not yet recorded in an ADR
 ([convention](README.md)). Each phase needs the user's approval before its changes, and
 every live run needs its own approval. **Decision** marks a question only the user settles;
 a recommendation is not a decision. Implemented items are in [Z_SPEC01](Z_SPEC01.md); closed
@@ -274,7 +274,7 @@ or the user records it as a model limitation.
 
 **D2.3** is implemented and kept ([Z_SPEC01](Z_SPEC01.md)). Open follow-ups:
 
-- remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:159-161`);
+- remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:162`);
 - fold `member_count` into `collection`'s `exact_members` variant
   (`model_result_schema.zig:100-103`, `:197`), and ADR 0038 Decision 3's `coverage` into
   `unique_subset` (`:104-106`, `:206`);
@@ -739,7 +739,7 @@ checks on `protocol.prompt.md`), `reference_model_input_test.zig`,
 `model_text_field_test.zig:177` and `model_request_workflow_test.zig:4529`. Rename tests,
 fixtures and `measurement_prefix` dumps named after live runs: dumps r35, r36, r37, r40, r41
 and fix002 (`workflow_tests.zig:1633-1698`); tests R36 (`model_envelope_test.zig:381`), R42
-(`specification_generation_test.zig:6843`), FIX002 (`:7005`, `:7062`) and D1
+(`specification_generation_test.zig:6843`) and D1
 (`model_candidate_json_test.zig:285`); fixture headers R35 and R36
 (`summary_protocol_sequence.zig:1`, `global_protocol_sequence.zig:1`); and their
 `build/test_run_inputs.zig` entries (`:22`, `:33-38`), deleting its orphaned `d1-review`,
@@ -771,7 +771,10 @@ extending `spec_generation_responses.zig`.
 
 ### T5. Brittleness counts
 
-Definitions and decisions: [Z_SPEC01](Z_SPEC01.md). Each change set that a phase reports on
+Definitions and decisions: [Z_SPEC01](Z_SPEC01.md). The `code-heuristics` report names
+them by `report.json` member: T5.1 `tests_copying_model_text`, T5.2 `schema_name_branches`,
+T5.3 `repeated_instructions`, T5.5 `model_or_case_branches`, T5.6 `model_text_outside_owner`;
+T5.4 isn't in it. Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
 step whose prompt no non-repair step binds). Last taken 2 November 2026 on the `b38628c` tree
@@ -854,20 +857,16 @@ evaluate-e2e skill carries each as a scoring rule (SKILL.md §2, under the class
 
 ### H2. Review-label confirmation (B2)
 
-The scheme is `b2-review-label/v2` (`.claude/skills/evaluate-e2e/SKILL.md` §7). §7's "A
-defective subject with no finding of the expected type is `missed_defect`"
-(`SKILL.md:386-387`) is ambiguous: Q1b's labels mark a `supported` verdict on a defective
-subject `wrong_type`, `missed_defect` with a null predicted type (which inflates precision) or
-both. **Proposed convention:** one entry per returned verdict; a wrong verdict on a defective
-subject is `wrong_type` (counted in accuracy, and as a miss in recall); `missed_defect` only
-when a subject got no verdict at all; `defect_class` null whenever the expected type is
-`supported` (matches `SKILL.md:388-389`); path
-`evaluations/b2-review-accuracy/<set>/<case>/<run>/`. **Adopted 1 November 2026:** the
-convention goes into SKILL.md §7 when it is next edited; no edit since has carried it (the
-path at `:370` still has no `<run>/` level). Relabelling Q1b isn't needed: after D13.1 no
-post-generation review findings exist to label. §7 also governs required pre-generation
-source review (`:364-365`), so the convention applies when that review's verdicts are
-labelled.
+The scheme is `b2-review-label/v2` (`.claude/skills/evaluate-e2e/SKILL.md` §7). Since 10
+November 2026 §7 carries the convention adopted 1 November 2026: one entry per returned
+verdict; a wrong verdict on a defective subject is `wrong_type` (counted in accuracy, and as
+a miss in recall); `missed_defect` only when a subject got no verdict at all; `defect_class`
+null whenever the expected type is `supported`; path
+`evaluations/b2-review-accuracy/<set>/<case>/<run>/`. Q1b's labels predate it: they mark a
+`supported` verdict on a defective subject `wrong_type`, `missed_defect` with a null
+predicted type (which inflates precision) or both. Relabelling Q1b isn't needed: after D13.1
+no post-generation review findings exist to label. §7 also governs required pre-generation
+source review, so the convention applies when that review's verdicts are labelled.
 
 ### H3. Calibration panels (R8)
 
@@ -981,18 +980,7 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
 
 ### Retired SPEC01 IDs cited elsewhere
 
-These IDs are no longer in SPEC01 (their records are in git at `194e29a`, `fixes/Z_FIX06.md`);
-each citing file needs its reference rewritten, a docs edit needing approval for ADRs:
-"D3.1" (`src/domain/packet_guidance.zig:1`); "T5(b)"
-(`test/harness/e2e/measures.zig:197`); "T5(e)" (`src/test_fixtures/request_projection.zig:1`,
-`test/integration/workflow_tests.zig:1365`); "SPEC01 review measures"
-(`.claude/skills/evaluate-e2e/SKILL.md:395`; the measures are defined at e2e.md:608-610).
 "SPEC01 <ID>" citations of items now in [Z_SPEC01](Z_SPEC01.md) resolve there.
-
-The skill's aggregate formula (`SKILL.md:150-151`) puts each weight outside its sum; the
-canonical rule (evaluator.md "Score calculation", `test/harness/judgment.zig`) puts it inside.
-Correct it with the skill's next edit, as H2's convention does: any edit changes
-`skill_sha256`, and evaluations compare only under one value (§2 rule 5).
 
 ### Wider scope retained
 

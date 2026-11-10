@@ -109,7 +109,7 @@ fn keepStrings(a: std.mem.Allocator, seen: *std.StringArrayHashMapUnmanaged(void
     }
 }
 
-/// The names T5.5 looks for, with the case sources.
+/// The names the model- or case-specific branch count looks for, with the case sources.
 pub const Specifics = struct { models: []const []const u8, cases: []const []const u8, case_sources: []const []const u8 };
 
 /// Catalogue model IDs and families, the development cases' IDs and sources, and the

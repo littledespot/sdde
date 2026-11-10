@@ -1,14 +1,19 @@
 #!/bin/sh
-# PreToolUse (Bash): keep live provider credentials out of the conversation and
+# PreToolUse (Bash): keep live provider credentials out of the conversation,
 # route billed or engine-execution commands to an explicit user decision
-# (AGENTS.md "Commands"), and approve Python only when it makes no external
-# calls. The permission rules in .claude/settings.json are the declarative
-# baseline; this hook also matches forms those rules cannot express, such as a
-# live step named after an offline one in a single `zig build` invocation.
+# (AGENTS.md "Commands" owns that list), and approve Python only when it makes
+# no external calls. The permission rules in .claude/settings.json are the
+# declarative baseline and name the same steps; this hook also matches what
+# those rules miss, such as a live step inside `sh -c` or behind `env`.
 set -u
 
 input=$(cat)
-command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty') || exit 0
+if ! command=$(printf '%s' "$input" | jq -r '.tool_input.command // empty'); then
+    # A hook that fails lets the command run, so an input this hook can't read
+    # goes to the user. jq may be what is missing, so this doesn't use decide.
+    printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"guard-bash.sh could not read this command (is jq installed?), so its credential and live-step checks did not run."}}'
+    exit 0
+fi
 [ -n "$command" ] || exit 0
 
 decide() {
@@ -28,9 +33,10 @@ if matches '\.env\.e2e([^.[:alnum:]_-]|$)'; then
 fi
 
 # Steps and launchers that can make billed model calls, and execution of the
-# engine or harness binaries against a project.
+# engine or harness binaries against a project. A step counts wherever a
+# `zig build` invocation names it, quoted or not.
 live_step='(run|e2e-spec|e2e-call|evaluate-spec|provider-compatibility|baseline)'
-if matches "zig[[:space:]]+build([[:space:]]+[^[:space:];&|]+)*[[:space:]]+${live_step}([[:space:];&|)]|\$)" ||
+if matches "zig[[:space:]]+build([[:space:]]+[^[:space:];&|]+)*[[:space:]]+[\"']?${live_step}([^[:alnum:]_-]|\$)" ||
     matches 'scripts/(e2e-spec|e2e-call|provider-compatibility|baseline)\.sh' ||
     matches 'zig-out/bin/[^[:space:]/]+' ||
     matches '(^|[;&|(])[[:space:]]*sdde([[:space:]]|$)'; then

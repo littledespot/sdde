@@ -25,16 +25,6 @@
             "maxOutputTokens": 16384,
             "requestTimeoutMs": 180000
           }
-        },
-        {
-          "model": "au.anthropic.claude-haiku-5-5",
-          "json": true,
-          "config": {
-            "region": "ap-southeast-2",
-            "family": "claude",
-            "maxOutputTokens": 128000,
-            "requestTimeoutMs": 180000
-          }
         }
       ]
     }

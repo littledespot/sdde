@@ -201,7 +201,7 @@ test "an omitted or repeated disposition is an admission defect, never a repair 
         defer fixture.deinit();
         const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
         const good = try f.global(a, input);
-        // SPEC01 D2.3: admission binds one disposition to every assigned claim, so the
+        // Admission binds one disposition to every assigned claim, so the
         // canonical readback still rejects a gap or a repeat but nothing repairs it.
         var missing: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
         missing.proposal.global.claim_dispositions = good.claim_dispositions[1..];
@@ -505,7 +505,7 @@ test "global repair retains graph siblings and all dependent signal and conflict
     duplicate.proposal.global.signals = good.signals;
     duplicate.phase = .complete;
     duplicate.proposal.global.claim_dispositions = duplicate_choices;
-    // A repeated record, identical or competing, is an admission defect (SPEC01 D2.3).
+    // A repeated record, identical or competing, is an admission defect.
     const duplicate_rejection = (try f.validate_dispositions.execute(a, duplicate)).invalid;
     try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, duplicate, fixture.context(), duplicate_rejection));
     duplicate_choices[good.claim_dispositions.len].disposition = .{ .superseded = .{ .related_claim_ids = &.{good.claim_dispositions[1].claim_id} } };

@@ -7,7 +7,7 @@ const files = @import("../../src/adapters/filesystem/file_access.zig");
 
 const help =
     \\Usage: zig build code-heuristics -- --freeze <request-projection freeze>
-    \\Write an advisory repository-wide Zig code report, with the SPEC01 T5 brittleness counts, to zig-out/code-heuristics/report.md and report.json (under --prefix when supplied).
+    \\Write an advisory repository-wide Zig code report, with brittleness counts, to zig-out/code-heuristics/report.md and report.json (under --prefix when supplied).
     \\The development executable takes one output directory and --freeze <directory>; --help prints this text.
     \\
 ;

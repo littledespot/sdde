@@ -7,20 +7,19 @@ paths:
 
 # Source layers and test wiring
 
-`zig build test-architecture` (`src/architecture_test.zig`) enforces these
-boundaries mechanically; run it after changing imports or moving code. The governing
-rules are AGENTS.md "Actions, orchestrators, and runner" and
+`zig build test-architecture` (`src/architecture_test.zig`) enforces the constraints
+below; run it after changing imports or moving code. The same file pins many
+single-file authority boundaries, so search it for the file you are changing. The
+governing rules are AGENTS.md "Actions, orchestrators, and runner" and
 `design/contracts/29-package-structure.md`.
 
-| Location | Mechanical constraint |
+| Location | Enforced constraint |
 | --- | --- |
 | `src/domain/`, `src/ports/` | Import nothing from `actions/`, `application/` or `adapters/`. |
 | `src/actions/` | Import only `std`, `builtin`, `../../domain/...` and `../../ports/...`. Each file declares exactly one `pub const Action = struct` and one `pub const contract: pipeline.NodeContract`. |
-| `src/application/*_orchestrator.zig`, `*_coordinator.zig` | Capability-free: no `/actions/`, `/adapters/` or `/ports/` imports and no `std.Io`. |
+| `src/application/*_orchestrator.zig`, `*_coordinator.zig` | No `/actions/`, `/adapters/` or `/ports/` imports and no `std.Io`. |
 | `src/application/*_runner.zig` | No `/adapters/` imports and no `std.Io`. |
-| `src/application/*_routine.zig` | ADR 0032 engine routines (not yet implemented). Import only domain and port modules; no adapters, `std.Io` or `anyopaque`; each step takes at most one port parameter. |
-| `src/adapters/` | The only place for filesystem, process, network/HTTP and provider-client access. Native model HTTP goes through the test-disabled connection owner. |
-| `src/composition/` | The only place that constructs concrete adapters and binds registered node implementations. |
+| `src/adapters/provider/` | Native model HTTP goes through the test-disabled connection owner, `native_model_http.zig`. |
 
 Test wiring:
 
