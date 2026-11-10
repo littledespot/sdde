@@ -157,7 +157,8 @@ pub const Relations = struct {
     conflicting_pairs: []const struct { left: r.ClaimId, right: r.ClaimId } = &.{},
     redundant: ?usize = null,
     /// Never set since ADR 0046 (repeated dispositions are admission defects); kept
-    /// only because retained reports decode this member strictly (SPEC01 §2.12).
+    /// only because retained reports decode this member strictly, so removing it needs
+    /// a report version.
     competing: bool = false,
 };
 pub const Rejection = struct {

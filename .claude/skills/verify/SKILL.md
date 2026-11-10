@@ -5,35 +5,27 @@ description: Run this repository's offline validation ladder for the current cha
 
 # Verify the current change
 
-Every step is offline. Live calls, E2E and engine execution against a target project
-are never part of this skill.
+Every step is offline: this skill makes no live call and never runs the engine. If a
+step leads to an edit, start again from step 1, so that step 6 passes on the final
+tree.
 
-1. **Scope.** List the files the change edited, from the work itself; run no git
-   command. `grep` each for trailing whitespace and conflict markers.
+1. **Scope.** List the files the change edited, from the work itself. `grep` each for
+   trailing whitespace and conflict markers.
 2. **Targeted tests.** Map the changed areas to their owning `zig build test-<area>`
-   steps (`zig build --help` lists them with descriptions) and run those first.
+   steps (`zig build --help` describes them) and run those.
 3. **Static and architecture checks.** Run `zig build lint`, then
    `zig build test-architecture`.
-4. **Full offline suite.** Run `zig build verify`. It covers lint, all unit and
-   integration tests, architecture, test registration and the clean packaged-executable
-   smoke tests. It can take several minutes: use a long timeout, or run it in the
-   background and wait for completion. AGENTS.md requires it on the final tree for
-   every change that needs the "Before editing" analysis. It is also the packaging
-   smoke evidence for runtime, build,
-   asset, configuration, filesystem or process changes.
-5. **Diff review.** Ask the `contract-reviewer` agent to review the change. Resolve
-   or report every confirmed finding.
-6. **Generated artifacts.** If canonical rendering or a generated projection is
-   affected, regenerate it from its source and confirm the outputs match. Never edit
-   a projection directly.
-7. **Report**, following the AGENTS.md definition of done:
+4. **Review.** Ask the `contract-reviewer` agent to review the change. Fix or report
+   every confirmed finding.
+5. **Generated artifacts.** If the change affects canonical rendering or a generated
+   projection, regenerate it from its source and confirm the outputs match.
+6. **Full offline suite.** Run `zig build verify`. It can take several minutes: use a
+   long timeout, or run it in the background and wait for it.
+7. **Report**, as the AGENTS.md "Definition of done" requires:
    - changed contracts and files;
    - tests added or changed, with their accepted and rejected cases;
-   - every command run, verbatim, with its pass or fail result (quote failures);
+   - every command run, verbatim, with its pass or fail result, quoting failures;
    - governing ADR or contract updates, or why none were needed;
-   - unresolved uncertainty and approved deviations;
-   - evidence not produced: always state that no live E2E ran, and name any check
-     that could not run and why.
-
-Report a failing check as failing. Never weaken a test, schema, validator or
-architecture rule to make the ladder pass.
+   - open uncertainty and approved deviations;
+   - what was not shown: no live E2E ran, so the ladder demonstrates no semantic
+     benefit; name any check that could not run, and why.

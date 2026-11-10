@@ -178,17 +178,17 @@ pub fn markdown(a: std.mem.Allocator, report: Report) ![]const u8 {
 }
 
 fn brittlenessSection(w: *std.Io.Writer, counts: brittleness.Result) !void {
-    try w.writeAll("\n## Brittleness counts (SPEC01 T5)\n\nExact matches only. A is every prompt and JSON string value under `design/workflows/`, whitespace-collapsed. M is every production literal outside tests whose exact bytes the freeze sent in a `guidance` part, `protocol_prompt` or `schema` and whose collapsed bytes A lacks. Roles come from the tokens around a literal: a direct argument of `eql`, `startsWith` or `endsWith`; of `indexOf`, `lastIndexOf` or `indexOfPos`, an absence assertion when the call is compared `== null`; or the `.bytes` value of a `DefinitionId` initializer. T5.4 needs the compiled workflow graph and is counted by hand in the fix record.\n\n");
+    try w.writeAll("\n## Brittleness counts\n\nExact matches only. A is every prompt and JSON string value under `design/workflows/`, whitespace-collapsed. M is every production literal outside tests whose exact bytes the freeze sent in a `guidance` part, `protocol_prompt` or `schema` and whose collapsed bytes A lacks. Roles come from the tokens around a literal: a direct argument of `eql`, `startsWith` or `endsWith`; of `indexOf`, `lastIndexOf` or `indexOfPos`, an absence assertion when the call is compared `== null`; or the `.bytes` value of a `DefinitionId` initializer.\n\n");
     try w.writeAll("| Count | Total |\n| --- | ---: |\n");
-    try w.print("| T5.1 Model-facing text in tests | {d} |\n", .{counts.tests_copying_model_text.total});
-    try w.print("| T5.2 Raw-string schema-name branches | {d} (tests: {d}) |\n", .{ counts.schema_name_branches.total, counts.schema_name_branches_in_tests.total });
-    try w.print("| T5.3 Instructions with more than one site | {d} at {d} sites |\n", .{ counts.repeated_instructions.instructions, counts.repeated_instructions.sites });
-    try w.print("| T5.5 Model- or case-specific branches | {d} |\n", .{counts.model_or_case_branches.total});
-    try w.print("| T5.6 Model-facing English outside its owner | {d} in {d} files |\n", .{ counts.model_text_outside_owner.total, counts.model_text_outside_owner.files });
-    try sites(w, "T5.1 sites", counts.tests_copying_model_text.sites);
-    try sites(w, "T5.2 sites", counts.schema_name_branches.sites);
-    try sites(w, "T5.2 test sites", counts.schema_name_branches_in_tests.sites);
-    try w.writeAll("\n### T5.3 instructions\n\nMost sites first; every site is in JSON.\n");
+    try w.print("| Model-facing text in tests | {d} |\n", .{counts.tests_copying_model_text.total});
+    try w.print("| Raw-string schema-name branches | {d} (tests: {d}) |\n", .{ counts.schema_name_branches.total, counts.schema_name_branches_in_tests.total });
+    try w.print("| Instructions with more than one site | {d} at {d} sites |\n", .{ counts.repeated_instructions.instructions, counts.repeated_instructions.sites });
+    try w.print("| Model- or case-specific branches | {d} |\n", .{counts.model_or_case_branches.total});
+    try w.print("| Model-facing English outside its owner | {d} in {d} files |\n", .{ counts.model_text_outside_owner.total, counts.model_text_outside_owner.files });
+    try sites(w, "Model-facing text in tests", counts.tests_copying_model_text.sites);
+    try sites(w, "Raw-string schema-name branches", counts.schema_name_branches.sites);
+    try sites(w, "Raw-string schema-name branches in tests", counts.schema_name_branches_in_tests.sites);
+    try w.writeAll("\n### Instructions with more than one site\n\nMost sites first; every site is in JSON.\n");
     for (counts.repeated_instructions.items) |item| {
         try w.print("\n- {d} sites, {d} bytes: ", .{ item.sites.len, item.text.len });
         try cell(w, clipped(item.text, 120));
@@ -200,8 +200,8 @@ fn brittlenessSection(w: *std.Io.Writer, counts: brittleness.Result) !void {
             try w.writeAll("\n");
         }
     }
-    try sites(w, "T5.5 sites", counts.model_or_case_branches.sites);
-    try sites(w, "T5.6 sites", counts.model_text_outside_owner.sites);
+    try sites(w, "Model- or case-specific branches", counts.model_or_case_branches.sites);
+    try sites(w, "Model-facing English outside its owner", counts.model_text_outside_owner.sites);
 }
 
 fn sites(w: *std.Io.Writer, title: []const u8, items: []const brittleness.Site) !void {
@@ -307,7 +307,7 @@ test "brittleness counts render with their sites, and retained literals stay out
     const literal: model.Literal = .{ .line = 7, .value = "Keep each `value`.", .in_test = false, .role = .plain };
     const report = try build(a, &.{.{ .path = "src/domain/a.zig", .scope = .production, .bytes = 0, .lines = 0, .code_lines = 0, .test_blocks = 0, .functions = &.{}, .literals = &.{literal} }}, counts);
     const md = try markdown(a, report);
-    try std.testing.expect(std.mem.indexOf(u8, md, "| T5.6 Model-facing English outside its owner | 1 in 1 files |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, md, "| Model-facing English outside its owner | 1 in 1 files |") != null);
     try std.testing.expect(std.mem.indexOf(u8, md, "src/domain/a.zig:7 — Keep each \\`value\\`.") != null);
     const json = try std.json.Stringify.valueAlloc(a, report, .{});
     try std.testing.expect(std.mem.indexOf(u8, json, "\"model_text_outside_owner\":{\"total\":1") != null);

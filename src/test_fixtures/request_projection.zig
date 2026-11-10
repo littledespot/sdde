@@ -1,4 +1,4 @@
-//! SPEC01 T5(e): the request projection. Every request the fake provider receives is
+//! The request projection. Every request the fake provider receives is
 //! projected at the provider port, so an engine change that must leave model input
 //! unchanged is proved by a byte diff of two freezes. It is an observation, never
 //! asserted against expected content.

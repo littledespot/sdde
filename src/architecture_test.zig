@@ -603,7 +603,7 @@ test "model decoding consumes sealed complete evidence and exposes only immutabl
 
 test "typed JSON documents are decoded only by the shared strict decoder" {
     // `std.json` reads a string from an array of byte values and makes other conversions a
-    // closed document must reject (SPEC01 E10). A decode into `std.json.Value` is a dynamic tree.
+    // closed document must reject. A decode into `std.json.Value` is a dynamic tree.
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     inline for (.{ "src/actions", "src/adapters", "src/application", "src/composition" }) |directory_path| {

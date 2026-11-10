@@ -1,6 +1,5 @@
-//! SPEC01 T5 brittleness counts: exact matches only, never word lists. Pure; the
-//! inventory supplies every input. T5.4 needs the compiled workflow graph and is
-//! counted by hand in the fix record.
+//! Brittleness counts: exact matches only, never word lists. Pure; the inventory
+//! supplies every input.
 const std = @import("std");
 const model = @import("model.zig");
 const suffix = @import("suffix.zig");
@@ -26,18 +25,18 @@ pub const Count = struct { total: usize, sites: []const Site };
 pub const Instruction = struct { text: []const u8, sites: []const Site };
 
 pub const Result = struct {
-    /// T5.1: test literals of three or more whitespace-separated runs found in A or M,
+    /// Test literals of three or more whitespace-separated runs found in A or M,
     /// plus absence assertions whose literal A or M holds.
     tests_copying_model_text: Count,
-    /// T5.2: production `$defs` keys used as comparison operands or `DefinitionId`
+    /// Production `$defs` keys used as comparison operands or `DefinitionId`
     /// initializers; test sites are reported beside them.
     schema_name_branches: Count,
     schema_name_branches_in_tests: Count,
-    /// T5.3: maximal exact spans of at least 40 bytes at two or more sites of A ∪ M.
+    /// Maximal exact spans of at least 40 bytes at two or more sites of A ∪ M.
     repeated_instructions: struct { instructions: usize, sites: usize, items: []const Instruction },
-    /// T5.5.
+    /// Production decision literals that pass `specificTo`.
     model_or_case_branches: Count,
-    /// T5.6: M literals outside the owner (`design/workflows/**`), so every M literal.
+    /// M literals outside the owner (`design/workflows/**`), so every M literal.
     model_text_outside_owner: struct { total: usize, files: usize, sites: []const Site },
 };
 
@@ -156,7 +155,7 @@ fn effective(literal: model.Literal, parameters: []const model.Parameter) model.
     return .plain;
 }
 
-/// T5.5's operand test: a catalogue model ID or family outside the provider adapters,
+/// The model- or case-specific operand test: a catalogue model ID or family outside the provider adapters,
 /// a case, feature or reference ID, or a 40-byte span of case sources.
 fn specificTo(inputs: Inputs, case_index: suffix.Index, path: []const u8, value: []const u8) bool {
     if (!std.mem.startsWith(u8, path, provider_adapters)) for (inputs.models) |name| if (std.mem.eql(u8, name, value)) return true;
@@ -256,7 +255,7 @@ test "M is production text the freeze sent that no asset holds" {
     try std.testing.expectEqual(@as(usize, 1), result.model_text_outside_owner.sites[0].line);
 }
 
-test "T5.1 counts test copies of A or M with three runs, and absence assertions" {
+test "counts test copies of A or M with three runs, and absence assertions" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var inputs = inputs_template;
@@ -281,7 +280,7 @@ test "T5.1 counts test copies of A or M with three runs, and absence assertions"
     for (result.tests_copying_model_text.sites, lines) |site, line| try std.testing.expectEqual(line, site.line);
 }
 
-test "T5.2 counts schema definition names used as comparisons or definition IDs" {
+test "counts schema definition names used as comparisons or definition IDs" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var inputs = inputs_template;
@@ -310,7 +309,7 @@ test "T5.2 counts schema definition names used as comparisons or definition IDs"
     try std.testing.expectEqual(@as(usize, 2), result.schema_name_branches_in_tests.total);
 }
 
-test "T5.3 finds one instruction repeated across an asset and a schema" {
+test "finds one instruction repeated across an asset and a schema" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const result = try count(arena.allocator(), inputs_template);
@@ -337,7 +336,7 @@ test "T5.3 finds one instruction repeated across an asset and a schema" {
     try std.testing.expectEqual(@as(usize, 0), (try count(arena.allocator(), short)).repeated_instructions.instructions);
 }
 
-test "T5.5 counts model, case and source-specific decisions outside the provider adapters" {
+test "counts model, case and source-specific decisions outside the provider adapters" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var inputs = inputs_template;

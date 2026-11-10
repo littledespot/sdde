@@ -317,7 +317,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
             const packet = try sessions.packet(std.testing.allocator, current, fixture.context, &packet_guidance.marked);
             defer packets.release(packet);
             const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
-            // Only the entities request receives an earlier draft, the brief (SPEC01 D12.1).
+            // Only the entities request receives an earlier draft, the brief.
             try std.testing.expectEqual(index == sessions.entities_index, body.contains("brief"));
             try std.testing.expect(!body.contains("entities"));
             if (body.get("brief")) |brief| {
@@ -414,7 +414,7 @@ test "dependent authoring context resolves exact and passive values and follows 
             try std.testing.expect(!body.contains("entities"));
         }
         // Records requests and their repair packets receive neither draft, so the
-        // entity decision changes no byte of them (SPEC01 D12.1).
+        // entity decision changes no byte of them.
         var first_bodies: [2]?[]const u8 = .{ null, null };
         // The drafts' resolved wording, which no source line contains.
         const accepted_marker = try std.mem.concat(a, u8, &.{ " from ", filename.value });
@@ -567,8 +567,8 @@ test "the composed story skips heading and technical claims and blocks without a
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // A business claim and a technical claim cite the same lines, so both stay claims
-    // (SPEC01 D8.3); each quotes the heading and every list item as separate claims (ADR 0038).
+    // A business claim and a technical claim cite the same lines, so both stay claims;
+    // each quotes the heading and every list item as separate claims (ADR 0038).
     {
         var fixture = try Fixture.initContentKinds(a, "# Kiosk Greeting\n\n- The kiosk must greet each visitor.\n- The kiosk must show the time.\n", null, true, 2, true);
         defer fixture.deinit();
@@ -1588,7 +1588,7 @@ test "record generation and selected value repairs retain every family purpose w
                 const input = body.get("input").?.object;
                 try std.testing.expect(!input.contains("record_requirements"));
                 // A record repair carries no unpublished draft; an entity repair keeps
-                // the brief its unit receives (SPEC01 D12.1).
+                // the brief its unit receives.
                 try std.testing.expectEqual(kind == .entity, input.contains("brief"));
                 try std.testing.expect(!input.contains("entities"));
                 try std.testing.expectEqualStrings(try descriptions.recordTask(a, &packet_guidance.marked, kind, slot), try selectedNativeRepairTask(body.get("input").?));
@@ -2908,7 +2908,7 @@ const Fixture = struct {
     }
     /// The first model claim quotes every line of `bytes` (ADR 0036). Each further claim
     /// quotes its own appended line, so several claims are distinct evidence: identical
-    /// claims are one (SPEC01 D8.3).
+    /// claims are one.
     fn initContent(a: std.mem.Allocator, bytes: []const u8, kind: ?@import("domain/structured_tokens.zig").Kind, has_claims: bool, model_claim_count: usize) !Fixture {
         return initContentKinds(a, bytes, kind, has_claims, model_claim_count, false);
     }
@@ -2932,7 +2932,7 @@ const Fixture = struct {
             .selected => 1,
         };
         // A technical claim needs no line of its own: another category on the same lines is
-        // already distinct evidence (SPEC01 D8.3).
+        // already distinct evidence.
         const appended: usize = switch (supplied) {
             .repeated => |options| copies - 1 - @intFromBool(options.technical and copies > 1),
             .selected => 0,
@@ -4995,7 +4995,7 @@ test "source omission repair inserts every new claim a list-spanning proposal qu
         }
         try std.testing.expectEqual(@as(usize, 3), (try extraction.finishText(a, inputs, merged)).ledger.claims.len);
         try std.testing.expect(merged.last_repair.?.changed);
-        // SPEC01 D8.3: an inserted claim already present adds nothing. An insertion that adds
+        // An inserted claim already present adds nothing. An insertion that adds
         // no claim is an unchanged merge, which the shared retry state ends as
         // `unchanged_repair` (§22.4); the same lines in another category are new evidence.
         const existing = fixture.extracted_text.entries[0].outcome.claims;
@@ -5067,7 +5067,7 @@ test "source omission repair preserves sibling claims and rebuilds canonical ide
         unpresentable.preservation = unregistered;
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/model_presentation.zig").present(@TypeOf(auth.rule), a, &packet_guidance.marked, unpresentable));
         // The chunk already holds a business claim on these lines, so the inserted claim
-        // is new evidence only in another category (SPEC01 D8.3).
+        // is new evidence only in another category.
         const proposal: e.Proposal = .{ .category = .validation, .citations = try extraction.citableLines(a, inputs, chunk) };
         const wire = try @import("domain/model_candidate_json.zig").encode(e.Proposal, a, proposal);
         try checkPreparedExtractionOmission(a, packet, wire);
@@ -7049,7 +7049,7 @@ test "selected evidence repair schemas preserve native minima across findings an
     }
 }
 
-test "FIX002 false cross-kind conflict and eight question repairs cannot publish a clarification" {
+test "false cross-kind conflict and eight question repairs cannot publish a clarification" {
     const review = @import("domain/specification_support.zig").Source;
     const repair = @import("domain/specification_support_repair.zig").Source;
     const authority = @import("domain/required_authority.zig");
@@ -7106,7 +7106,7 @@ test "FIX002 false cross-kind conflict and eight question repairs cannot publish
     }
 }
 
-test "FIX002 generation inconclusive stays terminal and an inconclusive source finding invents no question" {
+test "generation inconclusive stays terminal and an inconclusive source finding invents no question" {
     const review = @import("domain/specification_support.zig").Source;
     const json = @import("domain/model_candidate_json.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
