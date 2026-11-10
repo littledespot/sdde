@@ -73,7 +73,7 @@
   request's correction stays a terminal runner rejection, not a YAML outcome, but after
   it (and after a `RepairNoProgress` or token-budget rejection) the engine may run the
   definition's declared, model-free failure output, then returns the original failure.
-- **Advisory variant withdrawn (FIX06 D13.1, 1 November 2026):** by the user's decision
+- **Advisory variant withdrawn (SPEC01 D13.1, 1 November 2026):** by the user's decision
   to remove both post-generation reviews and to delete the advisory request protocol
   they alone used ([ADR 0023](0023-advisory-post-generation-review.md) removal
   amendment). `request-model` has one contract with the outcomes `ok`, `invalid`,
@@ -375,7 +375,7 @@ for a proof of concept whose primary goal is the best outcome:
    lifetime, and stays a separate question.
 5. **4b. Advisory routing** was settled as a per-site `advisory: allowed` marking. It was
    withdrawn on 1 November 2026, when the advisory protocol it routed was removed with
-   post-generation review (FIX06 D13.1).
+   post-generation review (SPEC01 D13.1).
 
 ## Consequences
 

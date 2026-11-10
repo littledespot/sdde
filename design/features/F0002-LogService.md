@@ -218,7 +218,7 @@ maps to exactly one event in the closed proof-of-concept registry in Section
 6.2. The registry, rather than the caller, supplies its canonical level,
 message-template ID, fields, and sensitivity.
 
-The code doesn't meet this shape or the Section 6.2 registry yet (FIX06 "F0002 event
+The code doesn't meet this shape or the Section 6.2 registry yet (SPEC01 "F0002 event
 registry"); this section and Section 6.2 remain the target (user decision, 9 November 2026).
 
 A fact may contain registered typed IDs, enums, counts, durations, diagnostic

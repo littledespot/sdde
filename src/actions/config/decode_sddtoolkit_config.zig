@@ -107,7 +107,7 @@ test "a string member is a JSON string, never an array of byte values" {
 }
 
 test "the removed principles section is an unknown member" {
-    // Nothing read the principle category policy once its selection was removed (FIX06 E10).
+    // Nothing read the principle category policy once its selection was removed (SPEC01 E10).
     const a = std.testing.allocator;
     for ([_][]const u8{ "null", "{}", "{\"filenameHints\":{},\"selections\":[]}" }) |section| {
         const replacement = try std.fmt.allocPrint(a, "{{\"principles\":{s},\n  \"logs\"", .{section});

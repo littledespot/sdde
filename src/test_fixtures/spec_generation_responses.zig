@@ -282,7 +282,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     selected.claim_ids = try std.mem.concat(allocator, r.ClaimId, &.{ selected.claim_ids, &.{token} });
                     proposal.signals = signals;
                 }
-                // The first correction still omits claims (FIX06 D2.3): admission
+                // The first correction still omits claims (SPEC01 D2.3): admission
                 // corrects the whole assignment again, which recovers or exhausts.
                 if (options.attempt == 2 or (options.attempt > 2 and options.disposition_sequence == .exhaust)) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
@@ -326,7 +326,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         duplicate[dispositions.len] = duplicate[0];
                         const reversed = try allocator.dupe(r.ClaimId, &.{ related[1], related[0] });
                         if (fault == .permuted_conflict_disposition) duplicate[dispositions.len].disposition.conflicting.related_claim_ids = reversed else duplicate[dispositions.len].disposition.superseded.related_claim_ids = reversed;
-                        // A repeated record is an admission defect (FIX06 D2.3): the
+                        // A repeated record is an admission defect (SPEC01 D2.3): the
                         // correction returns the same meaning without the repeat.
                         proposal.claim_dispositions = if (options.attempt == 1) duplicate else duplicate[0..dispositions.len];
                     },

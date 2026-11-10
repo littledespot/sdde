@@ -7,13 +7,13 @@
 - **Amends:** Design §§9.4, 12.7–12.8, 17, 24.5 and 28, and their linked acceptance criteria
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md): semantic
   principle findings never become mandatory Plan obligations
-- **Amended (FIX06 D13.1, 1 November 2026):** by the user's approval to remove both
+- **Amended (SPEC01 D13.1, 1 November 2026):** by the user's approval to remove both
   post-generation reviews. Spec runs no principle consistency assessment. Principle
-  capture stays: FIX06 D17.1 will give the records call the captured principles as
+  capture stays: SPEC01 D17.1 will give the records call the captured principles as
   context. Principles are context and constraints, never a requirement's origin
   (D13.4), and the workflow never modifies principle files. Retitled 7 November 2026
   from "Review project principles during Specify" to match.
-- **Amended (FIX06 E10, 8 November 2026):** by the user's decision that unused code
+- **Amended (SPEC01 E10, 8 November 2026):** by the user's decision that unused code
   with no value is removed ("if it unused and brings no value then remove it"), after
   the registry's selection and guidance functions had no reader. The optional
   `principles` configuration section (filename category hints and selection rows), its

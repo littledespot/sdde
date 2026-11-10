@@ -22,7 +22,7 @@
   2026): the membership rule's scope extends to reconciliation dispositions and the
   source-omission conflict-group repair, with the member count native (the request
   states no count) and an omitted member reported as `missing_member`.
-- **Removal amendment (FIX06 D13.1, 1 November 2026):** by the user's decision to
+- **Removal amendment (SPEC01 D13.1, 1 November 2026):** by the user's decision to
   remove both post-generation reviews (source and principle) in one change, which also
   reverted the 31 October advisory verdict-set amendment (record: `fixes/Z_FIX06.md` at
   git `388438e`) in full, and the

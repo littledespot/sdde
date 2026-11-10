@@ -1,4 +1,4 @@
-//! Workflow-owned semantic packet guidance (FIX06 D3.1; ADR 0016 packet-guidance
+//! Workflow-owned semantic packet guidance (SPEC01 D3.1; ADR 0016 packet-guidance
 //! amendment). One closed resource supplies exactly one text per registered key;
 //! native packet builders place these texts and never author them.
 //! All allocations belong to the caller's arena, including on rejection.

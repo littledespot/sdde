@@ -160,7 +160,7 @@ decoding. A prose-required value containing only insertions is a typed
 Recognition can make the model's own typed text one exact value, so in a field whose
 exact-copy role isn't prohibited the issue's correction names an exact source value as
 well as a supplied display reference as what can't be the whole text; other fields admit
-a bare value as prose, and their correction names only the reference (FIX06,
+a bare value as prose, and their correction names only the reference (SPEC01,
 7 November 2026).
 
 Stored clarification state can undergo structural loading before reference

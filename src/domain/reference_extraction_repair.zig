@@ -206,7 +206,7 @@ pub const Omission = struct {
         const scope = try Omission.scopeOf(auth);
         const entry = try entryAt(facts.extraction.candidate, scope);
         var merged = try Atomic.checkMerge(a, canonical, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
-        // A claim insertion changes the candidate only if it adds a claim (FIX06 D8.3).
+        // A claim insertion changes the candidate only if it adds a claim (SPEC01 D8.3).
         var inserted = false;
         const entries = try a.dupe(extraction.TextValidatedResult, facts.extraction.candidate.entries);
         for (entries) |*changed| if (changed.scope.chunk_id.eql(scope.chunk_id)) {
@@ -227,7 +227,7 @@ pub const Omission = struct {
                 var claims: std.ArrayList(extraction.TextValidatedProposal) = .empty;
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
                 // A proposal spanning several list items quotes one claim per item (ADR 0036, ADR 0038).
-                // An inserted claim that is already present adds nothing (FIX06 D8.3).
+                // An inserted claim that is already present adds nothing (SPEC01 D8.3).
                 for (checked.valid.entries[0].outcome.claims) |claim_value| {
                     if (try @import("reference_extraction_text.zig").appendDistinct(a, &claims, claim_value)) inserted = true;
                 }

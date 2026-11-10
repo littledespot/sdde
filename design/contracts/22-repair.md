@@ -562,10 +562,10 @@ defined response-level correction containing:
   A `missing_member` correction also names the first omitted member (`member`).
   An `uncovered_member` correction also names the compiled rule's covering kinds
   (`covering`: its `kind_property` and `kinds`), so the model knows which kinds cover
-  (FIX06 D4.1, decided 30 October 2026), and a `shared_member` correction, located at
+  (SPEC01 D4.1, decided 30 October 2026), and a `shared_member` correction, located at
   the partly taken record and offering its shape, names its exclusive and owning kinds
   (`exclusive`: `kind_property`, `kinds` and `owning`) and lists every taken value's
-  naming in such records (`shared`; FIX06 D16.1 and D16.2, 2 November 2026); no other
+  naming in such records (`shared`; SPEC01 D16.1 and D16.2, 2 November 2026); no other
   correction changes. A wholly taken record is never corrected: the records validator deletes it natively
   (`repeated_statement`, ADR 0038 Decision 5), without judging its text, unless it holds
   the only copy of an exact value, which keeps it and its text under the usual rules. Correction does not repeat schema subtrees. Syntax correction uses that

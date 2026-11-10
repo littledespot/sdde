@@ -755,7 +755,7 @@ test "provider schema rejection proofs and protocol corrections retain every dia
     try fixture.initWithCompiledSchema(members.selected());
     defer fixture.deinit();
     try checkFixture(&fixture, .{ .bytes = "{\"value\":[{\"ordinal\":2},{\"ordinal\":4},{\"ordinal\":2}]}", .rejection = .duplicate_member, .path = "/value/2", .expected_path = "/value" });
-    // FIX06 D2.3: with the count native, the schema keeps its canonical bounds, so a
+    // SPEC01 D2.3: with the count native, the schema keeps its canonical bounds, so a
     // member no item names is reported at the array and named in the correction.
     const native = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, assignment, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
     defer native.release();
@@ -914,7 +914,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
                     try std.testing.expectError(error.ModelRequestAssociationInvalid, (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try foreign.requestSource(), foreign.prepared.request.content, observed.evidence, .{ .schema = result.invalid }, .unconfirmed, "Correct syntax only."));
                 }
             } else try std.testing.expect(!guidance.value.object.contains("shared"));
-            // FIX06 D2.3: only a missing member's correction names the member no item names.
+            // SPEC01 D2.3: only a missing member's correction names the member no item names.
             if (result.invalid.member) |member| {
                 try std.testing.expectEqual(member, guidance.value.object.get("member").?.integer);
             } else try std.testing.expect(!guidance.value.object.contains("member"));

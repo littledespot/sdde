@@ -235,7 +235,7 @@ pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packe
     try choices.appendSlice(scratch, packet.integerChoices());
     if (grouped) {
         const ordinals = try claimOrdinals(scratch, members);
-        // One disposition for every assigned claim (FIX06 D2.3): admission rejects an
+        // One disposition for every assigned claim (SPEC01 D2.3): admission rejects an
         // omitted or repeated claim and corrects the whole assignment. The schema
         // states no count, so the request is unchanged; an empty set admits only [].
         var dispositions: schema.IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } } }, .definition = packet.resultDefinition(), .allowed = ordinals };

@@ -14,18 +14,18 @@
   4. claims become one per requirement for list sources by bringing back the list-item
      split.
 
-  Amended 2 November 2026 (FIX06 D16.1; user: "the above recommendations are approved",
+  Amended 2 November 2026 (SPEC01 D16.1; user: "the above recommendations are approved",
   then "No, behaviour kinds only"): one statement record per claim (Decision 5), and
   coverage for every behaviour statement, not assumptions or non-goals (Decision 2).
-  Amended again on 2 November 2026 after the D16.1 set (FIX06 D16.2; user: "approved",
+  Amended again on 2 November 2026 after the D16.1 set (SPEC01 D16.2; user: "approved",
   then "Yes, exempt FRs"): Decision 5's repeats are deleted natively and requirements are
   exempt.
-  Amended on 8 November 2026 (FIX06 §3 Robustness track; user: "yes as per
+  Amended on 8 November 2026 (SPEC01 §3 Robustness track; user: "yes as per
   recommendation"): the text of a repeat the owner deletes is not judged (Decision 5);
   and, as the user then decided ("accept both as documented"), the delete order and
-  post-admission corner of that change below. The same day (FIX06 §3 Next item 6; user:
+  post-admission corner of that change below. The same day (SPEC01 §3 Next item 6; user:
   "Entity lever … is yes and approved", then "yes to all decisions"): an entity is a name
-  and its groups (Decision 6). Amended again on 8 November 2026 (FIX06 §3, the edge-case
+  and its groups (Decision 6). Amended again on 8 November 2026 (SPEC01 §3, the edge-case
   outcome lever; user: "apply recommendations", "recommendations accepted for 1 to 6", then
   "go"): an edge case's outcome is the Then of an acceptance criterion it links to
   (Decision 7).
@@ -161,11 +161,11 @@ only block.
    - It replaces ADR 0035's comparison between records in one batch (user: "Yes, Q16
      replaces it"). ADR 0035's same-kind delete runs first and is unchanged.
    - The records prompt keeps its "at most one" sentence, requirements included, as the
-     rule's first version (FIX06 D16.1) had it (user: "Yes, keep it").
+     rule's first version (SPEC01 D16.1) had it (user: "Yes, keep it").
 6. **An entity is a name and its groups** (8 November 2026; user: "Entity lever … is yes
    and approved", then "yes to all decisions"). The model writes an entity's name and
    selects the groups that support it; it writes no meaning or relationship text, which
-   restated, weakened or added to requirements wherever it stayed open (FIX06 §3). The
+   restated, weakened or added to requirements wherever it stayed open (SPEC01 §3). The
    engine renders a read-only related-statements line on each entity: the functional
    requirements, business rules, user-visible outcomes and prohibited behaviours that
    share one of its groups, in document order ([§23.1](../contracts/23-rendering.md)). It
@@ -183,7 +183,7 @@ only block.
    writes an edge case's condition and the claims it supports, and no outcome: the free
    text restated a criterion's result and dropped part of it wherever it stayed open (the
    loan-renewal edge case that extended the due date "by fourteen days", without
-   "calendar", "existing" or the new due date, in four of the last six runs; FIX06 §3).
+   "calendar", "existing" or the new due date, in four of the last six runs; SPEC01 §3).
    The engine prints the Then of an acceptance criterion the edge case links to as its
    `EXPECTED OUTCOME` line ([§23.1](../contracts/23-rendering.md)). Like the source line, it
    is a display, never provenance. The 7 November rejection of an engine-written outcome

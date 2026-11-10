@@ -367,7 +367,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
   amendment owns its keys, validation, placement and repair-tail composition. Native
   code keeps rules, mechanical diagnostics and composition frames, including
   clarification question frames that embed a subject's task. A moved entry still
-  restates some native rules, which FIX06 Q4 removes there. Retained evidence holds no
+  restates some native rules, which SPEC01 Q4 removes there. Retained evidence holds no
   guidance text: a retained evidence type whose request form shows guidance, such as a
   source-omission comparison, requires presentation, and model input encodes only its
   presented form. No native copy of an entry remains, so editing the resource entry

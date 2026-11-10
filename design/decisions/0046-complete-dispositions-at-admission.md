@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-31
 - **Decision authority:** The user's decision on 31 October 2026, "implement D2.3: the
-  requirement loss with recommendations". It approves FIX06 D2.3 option (b), rejecting an
+  requirement loss with recommendations". It approves SPEC01 D2.3 option (b), rejecting an
   incomplete dispositions answer at response admission instead of inserting each missing
   disposition by repair. It also approves the recommended variant, which leaves the first
   request unchanged.
@@ -36,7 +36,7 @@ as `cardinality`, and repair inserted each missing disposition with its own call
 - **What the insert lacks.** The insert request carries every claim and the current
   dispositions. It lacks the dispositions task, and it offers `duplicate` and
   `superseded` targets as valid choices.
-- **Adding definitions didn't help.** Binding definitions into repair requests (FIX06
+- **Adding definitions didn't help.** Binding definitions into repair requests (SPEC01
   Q2, `fixes/Z_FIX06.md` at git `194e29a`) left harm at 1 in 40 replays.
 - **Cost and completion.** On a reverted build, one run spent 104,288 tokens on 24
   inserts and then exceeded its token budget.
@@ -86,7 +86,7 @@ as `cardinality`, and repair inserted each missing disposition with its own call
   `member` value; no other correction changes.
 - **Report contract.** It gains one schema reason value, `missing_member`. The
   `competing` member of reconciliation `Relations` is no longer set. It stays in the
-  report contract until FIX06 §2.12 allows its removal. The dispositions occurrence set
+  report contract until SPEC01 §2.12 allows its removal. The dispositions occurrence set
   of the reconciliation source is deleted; it was never reported or persisted, and the
   request projection is unchanged by its removal.
 - **Risk.** Some omissions that an insert used to resolve will exhaust their corrections

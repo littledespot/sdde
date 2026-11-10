@@ -25,7 +25,7 @@
   stops on a repeated runaway, the run would publish its validated content as a failed
   incomplete specification, marked and logged.
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
-  amendment (FIX06 D13.1, 1 November 2026): advisory work no longer exists, so a
+  amendment (SPEC01 D13.1, 1 November 2026): advisory work no longer exists, so a
   runaway on the re-send always fails the work with `RunawayRepeated`. Decision 3 is
   withdrawn, with ADR 0040's amendment of it for advisory runaways (ADR 0040 last at git
   `8aa7fb5`).
@@ -70,7 +70,7 @@ fragment and restarts the JSON, and answers have ended `end_turn` inside an open
 On 1 November 2026 the user recorded §22.6 normalization (of the malformed opening) as a
 provider defect (Bedrock request IDs
 `ad3f7d58-3b6b-4e99-bb37-f6463a9eb6b5` and `e1840c2b-fb08-4af7-a2e5-2ae75582c8f2`;
-[FIX06](../../fixes/FIX06.md) §3, "Provider doesn't enforce the response schema").
+[SPEC01](../../fixes/SPEC01.md) §3, "Provider doesn't enforce the response schema").
 
 Under ADR 0011 one runaway failed the run, and the temperature was a compiled engine
 constant, so projects couldn't choose it.
@@ -130,7 +130,7 @@ constant, so projects couldn't choose it.
    - A re-send must equal the attempt it repeats in every request field except its
      sampling, and attempt accounting rejects a second re-send of one attempt.
 3. **An advisory runaway is re-sent before it can end advice.** Withdrawn on 1 November
-   2026 with post-generation review (FIX06 D13.1); no advisory work remains.
+   2026 with post-generation review (SPEC01 D13.1); no advisory work remains.
 4. **Accounting and evidence.**
    - Both attempts' actual usage counts once each against the one workflow budget
      (ADR 0011, ADR 0037). Overshoot stays fatal.

@@ -1,4 +1,4 @@
-//! FIX06 T5 brittleness counts: exact matches only, never word lists. Pure; the
+//! SPEC01 T5 brittleness counts: exact matches only, never word lists. Pure; the
 //! inventory supplies every input. T5.4 needs the compiled workflow graph and is
 //! counted by hand in the fix record.
 const std = @import("std");

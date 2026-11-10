@@ -1,7 +1,7 @@
 # ADR 0025: Accept valid clarification answers in the run that reads them
 
 - **Status:** Accepted amendment. Not yet implemented
-  ([FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
+  ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 - **Date:** 2026-10-20, rewritten and accepted 2026-10-21
 - **Decision authority:** The user's decisions of 21 October 2026. The user first
   asked for the proposal to be rewritten around this flow: run 1 generates
@@ -34,7 +34,7 @@ would record it, from `ValidateClarificationUserSubmissionAction` through
 `BindAuthenticatedClarificationSubmissionAction` and
 `BuildClarificationResponseAction`. It names no provider behind
 `AuthenticationPort`, and none of the chain is implemented, so fresh answers cannot
-complete the registered recovery path. FIX06 E7 lists where each one stops.
+complete the registered recovery path. SPEC01 E7 lists where each one stops.
 
 The clarification state already persists each response with its clarification ID,
 input state and record revisions, exact submitted form bytes, typed answer,

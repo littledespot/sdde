@@ -354,7 +354,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
   scored. The member is in `spec-e2e-report/v15`; it stays null until ADR 0041 is
-  implemented (FIX06 E0).
+  implemented (SPEC01 E0).
 
 ### Rubric assessment
 
@@ -640,7 +640,7 @@ a stop leaves no partial output.
   purpose and owner through the baseline scorer's stage classification and
   accumulation. Repair merges are the report's `repairs`: the last merge of each
   candidate still retained when the run ends, not every repair, so earlier merges in a
-  unit and every merge of an earlier unit are missed (FIX06 T8). Only the `schema` member is read
+  unit and every merge of an earlier unit are missed (SPEC01 T8). Only the `schema` member is read
   first. A missing report, or one of an earlier `spec-e2e-report` version, is recorded
   as `unavailable`, and the run still counts as attempted. A current-version report
   that doesn't decode, or any other version, makes the run unmeasurable.
@@ -680,7 +680,7 @@ a stop leaves no partial output.
   counts that depend on it compare only at one level, so a case of mixed thresholds
   stops the command, naming the case and both levels.
 - An incomplete publication is never a publication; it is measured once ADR 0041 writes
-  its marker (FIX06 E0). A marker on a run that isn't failed or blocked, or an empty or
+  its marker (SPEC01 E0). A marker on a run that isn't failed or blocked, or an empty or
   repeated artifact set, makes the run unmeasurable, as does an attempt whose usage
   total isn't its input plus output.
 
@@ -790,4 +790,4 @@ request-projection freezes, not by a live run.
   evidence.
 
 Human calibration and broader rerun/failure acceptance are tracked in
-[FIX06](../../fixes/FIX06.md).
+[SPEC01](../../fixes/SPEC01.md).

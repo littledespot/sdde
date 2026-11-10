@@ -1,8 +1,8 @@
-# Z_FIX06 — Implemented FIX06 items
+# Z_SPEC01 — Implemented SPEC01 items
 
-Implemented FIX06 items ([convention](README.md)): what each changed, its owner, its keep
+Implemented SPEC01 items ([convention](README.md)): what each changed, its owner, its keep
 decision and any rule a later change must follow. Measurements, run-by-run evidence and
-earlier versions of these records are in git history. Earlier completed FIX06 work (Q1, Q2,
+earlier versions of these records are in git history. Earlier completed SPEC01 work (Q1, Q2,
 Q3, Q4's first attempt, Q6, D7.1, D11.1/.2/.4/.5, DE6, T1, T5's measures) is
 `fixes/Z_FIX06.md` at git `194e29a`; Q10b D10.2, reverted in full with D13.1 (ADR 0023:25-28),
 is there at git `388438e`.
@@ -15,15 +15,15 @@ repeats an assigned claim (`missing_member`, `duplicate_member`) under the reque
 limit; the request the model receives is unchanged. Defect class: lost source requirement
 (hello-world's UTC claim, lost when the dispositions insert repair answered `duplicate`).
 Evidence: `evaluations/d23-12/measures-set.json` (12 of 12 published; the correction never
-fired, so "not enough evidence"). Open follow-ups: FIX06 Q2b.
+fired, so "not enough evidence"). Open follow-ups: SPEC01 Q2b.
 
 ## Q4 D4.1. `uncovered_member` correction names the covering kinds
 
 **Kept 30 October 2026.** The correction names the covering kinds from the compiled coverage
 rule, never hard-coded (`model_schema_diagnostic.zig`, `model_protocol_retry.zig`);
 `required_preserve` unchanged. Evidence `evaluations/e2e/d41-measures-set.json` (correction
-never fired). Its live firings are in FIX06 Q14; the extension decided 3 November 2026 is open
-in FIX06 Q4.
+never fired). Its live firings are in SPEC01 Q14; the extension decided 3 November 2026 is open
+in SPEC01 Q4.
 
 ## Q13 D13.1. Post-generation reviews removed
 
@@ -33,13 +33,13 @@ decision and what it removed are ADR 0023's removal amendment (0023:25-42).
 ## Q7 D7.4. No engine code span where the text already delimits an exact value
 
 **Committed in `340261e`** (user, 1 November 2026: "implement Q7 D7.4."; ADR 0036 records the
-authority); the user's ruling that D7.4 is not a punctuation rule stays in FIX06 Q7.
+authority); the user's ruling that D7.4 is not a punctuation rule stays in SPEC01 Q7.
 `delimitedByText` (`specification_projection.zig`) gives an exact copy no code span when only
 literal text touches it and that text is directly one balanced pair from the closed wrapper
 table (`exact_value_boundary.zig`), unless the copy ends in terminal punctuation; passive values
 keep their span (ADR 0036 Decision 6; 23-rendering.md §23.1). No request carries the
 projection's spans. Every development-case value ends in punctuation, so no artefact-A
-occurrence changes (FIX06 Q7); no scripted scenario quotes an exact copy (FIX06 T3).
+occurrence changes (SPEC01 Q7); no scripted scenario quotes an exact copy (SPEC01 T3).
 
 ## Q7 D7.2. ADR 0045 withdrawn
 
@@ -60,7 +60,7 @@ line ranges computed from the item's claims and their citations; several files j
   An AC or FR line follows a blank line, because a two-space line directly under a field
   continues that field.
 - The lines reduce no scored defect class; they make each record's links visible to the human
-  reviewer (FIX06 H1). Proof limit: FIX06 T3.
+  reviewer (SPEC01 H1). Proof limit: SPEC01 T3.
 
 ## Q12 D12.1. Records requests receive no unpublished drafts
 
@@ -84,18 +84,18 @@ the record purposes and `records.prompt.md` carry no copy. Story weakening fell 
 ## Q16 D16.1 and D16.2. Requirements own their claims (with D12.1)
 
 **Committed with D16.2 in `6e543e6`; kept 2 November 2026** (user: "keep D12.1 + D16.2"),
-D16.2 amending D16.1 after its set failed the publication guard (FIX06 §2 rule 1's recorded
+D16.2 amending D16.1 after its set failed the publication guard (SPEC01 §2 rule 1's recorded
 exception). ADR 0038 (Decisions 2, 3 and 5) and ADR 0035 record the rule: requirements own
 their claims; a partly taken statement is `shared_member`, a wholly taken one a native
 `repeated_statement` delete; FR, BR, UO and PB need a scenario. Versions:
 `model-request-debug/v16`, `spec-e2e-report/v14`, `baseline-acquisition/v11`. Evidence:
 `evaluations/q16-measures-set.json`, `evaluations/d162-measures-set.json` (Keep if not met:
 restatement 4 → 3, "not enough evidence"). The native delete first fired on 3 November; the
-report lists only some deletes (FIX06 T8).
+report lists only some deletes (SPEC01 T8).
 
 ## Q19 D19.2. The engine composes the story (ADR 0047)
 
-**Committed in `f6ef0f6`; kept 7 November 2026** with D12.3 (FIX06 §2 rule 3's recorded
+**Committed in `f6ef0f6`; kept 7 November 2026** with D12.3 (SPEC01 §2 rule 3's recorded
 exception): no story defect in the 12 adjudicated runs since, against 7 in the D12.2 reference's
 9 publications. ADR 0047 records the decision and mechanism (`compose-specification-story`,
 `src/domain/specification_story.zig`; no story model call; `no_story_requirements` and
@@ -107,7 +107,7 @@ story.
 ## Q12 D12.3. The story leaves pre-generation source review
 
 **Implemented 7 November 2026** (user: "apply recommendations", then "yes, advance both"; ADR
-0047 Decision 5); kept with ADR 0047 (FIX06 §2 rule 3). Not yet exercised live: no run since
+0047 Decision 5); kept with ADR 0047 (SPEC01 §2 rule 3). Not yet exercised live: no run since
 ADR 0047 has reached source review. `specification_authority.projectRecords` no longer seeds the
 story; the story's required-authority policy, slot, clarification question and packet-guidance
 purpose are deleted. Defect: `2026-11-02T09-15-31Z` ended `workflow_invalid` when readiness
@@ -129,7 +129,7 @@ byte-identical, so the proof is the accepted and rejected owner tests.
 ## Bare-value `reference_only` correction
 
 **Implemented 7 November 2026** (user: "fix the bare-message failure"); kept or reverted per
-FIX06 §3 Next item 1. Native recognition makes text that is exactly a source value one
+SPEC01 §3 Next item 1. Native recognition makes text that is exactly a source value one
 exact-value node, so a prose-required field holding only it rejects as `reference_only` (ADR
 0036:156-158). The field registry's explanation (`text_field_policy.referenceOnly`) is derived
 from the exact-copy role: where recognition runs it says an exact source value or supplied
@@ -159,7 +159,7 @@ beyond those named.
   read their own reports were not swept.
 - **Dead code:** the principle-citation validator and the principle registry's selection and
   guidance functions, with their tests. 22-repair.md:417-419 still describes principle citation
-  diagnostics (FIX06 §8 "Design–code conflicts").
+  diagnostics (SPEC01 §8 "Design–code conflicts").
 - **Principles section removed** (user: "if it unused and brings no value then remove it"): the
   `principles` configuration section, `principle_policy.zig` and the category fields;
   `specification-state` moved to v22, and a `principles` member rejects as unknown. Amended:
@@ -191,7 +191,7 @@ that every exemption at the wire is a validator delete.
 
 - **Adjudicated 3 November 2026** (user-triggered `/evaluate-e2e`, skill `af394020…`): the D12.2
   set's publications and the first six ADR 0047 runs (`evaluations/e2e/<run>/`,
-  `evaluations/adjudications/`). One applied decision is open (FIX06 §7 H1).
+  `evaluations/adjudications/`). One applied decision is open (SPEC01 §7 H1).
 - **v15, implemented 7 November 2026** (user: "implement items 1 and 2"): `spec-e2e-report/v15`
   and `baseline-acquisition/v12` carry ADR 0047's source-catalogue reasons and `issue`, the
   publication reason `adjudication_required`, and an admission audit that accepts no story
@@ -202,13 +202,13 @@ that every exemption at the wire is a validator delete.
 ## T7. One evaluator version per comparison
 
 **Rule:** a keep or revert is decided only on a reference scored in the same evaluator version
-(FIX06 §2 rule 5). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…`
+(SPEC01 §2 rule 5). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…`
 count as one evaluator:
 - `0b552067…` and `1d66d882…` changed no scoring rule (user, 7 November 2026: "approved"; 8
   November 2026: "recommendations accepted for 1 to 6", which also treats the one divergence,
   a missing refusal scenario scored in `728d…` but not `fa03…`, as evaluator variance);
-- `3c74781e…` added the title ruling (FIX06 §7 H1), a new scoring rule; the reference was
-  re-scored under it on 9 November 2026 (FIX06 §3 Next item 3), and no title in it drops a
+- `3c74781e…` added the title ruling (SPEC01 §7 H1), a new scoring rule; the reference was
+  re-scored under it on 9 November 2026 (SPEC01 §3 Next item 3), and no title in it drops a
   value;
 - `185b9bc6…` (user, 9 November 2026: "Once, same evaluator, no re-score") files a defect in an
   edge case's linked Then once, on the criterion (ADR 0038 Decision 7); no reference run has an
@@ -226,13 +226,13 @@ or an outcome without its verb, isn't weakening. `e2e-assistant-evaluation/v4` r
 **Implemented 8 November 2026** (user: "implement then"); test-only. The scripted records fault
 `.duplicate_record` (`spec_generation_driver.zig`) repeats the first functional requirement
 exactly; the run publishes with no correction, and no batch keeps two records of equal content
-(`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Open parts: FIX06 T3.
+(`workflow_tests.zig`, beside D16.2's `shared_statement` scenario). Open parts: SPEC01 T3.
 
 ## T5. Brittleness counts
 
 **Committed in `93476e7`.** `zig build code-heuristics -- --freeze <dir>` writes them to the
 `brittleness` member of `code-heuristics/v2` (`build/code_heuristics/brittleness.zig`). Latest
-counts and when they are due: FIX06 T5.
+counts and when they are due: SPEC01 T5.
 - **Definitions** (approved 1 November 2026; exact matches only):
   - A is every `.md` and JSON string value under `design/workflows/`, whitespace-collapsed.
   - M is production literals outside tests, of 3+ whitespace-separated runs, whose decoded
@@ -264,7 +264,7 @@ counts and when they are due: FIX06 T5.
 
 ## T6. Structural counts in the measures
 
-**Committed in `f6ef0f6`** (FIX06 §2 rule 4, H6.1; widened 3 November 2026, user: "Yes, count
+**Committed in `f6ef0f6`** (SPEC01 §2 rule 4, H6.1; widened 3 November 2026, user: "Yes, count
 them"). `measures.structure` (`test/harness/e2e/measures.zig`) reads each response through the
 production envelope parser and counts records by kind, the entities `disposition` and entity
 count, a `claims` response's claims by `category` or `no_feature_claim`, and every
@@ -281,7 +281,7 @@ a claim had, by rule, no `preserve` classification origin, which the shared `att
 mapped to `missing_response` (`harness_error` `MissingProviderEvidence`). The validator names
 the rule (`producerless`, missing entries only) and `attribution()` gives `candidate`
 (contract 27); a lost origin on a duplicate, unknown or forbidden entry still rejects. Open
-parts: FIX06 E6.
+parts: SPEC01 E6.
 
 ## E6. Lock failures report their own code
 
@@ -291,7 +291,7 @@ state change. `acquire_feature_log_stream_lock.zig` fails with `LogLockTimeout` 
 `LockUnavailable` and with `LogSinkFailure` for every other sink error (an exhaustive switch in
 `Action.execute`), and its `failureCode` gives each one's log code, `LOG_LOCK_TIMEOUT` or
 `LOG_SINK_FAILURE` (F0002:545, :556-557); the feature log runner and the retention runner call
-it. The cancellation half stays in FIX06 E6.
+it. The cancellation half stays in SPEC01 E6.
 
 ## Next 6. An entity is a name and its groups (ADR 0038 Decision 6)
 
@@ -302,7 +302,7 @@ and lost, weakened or added to it (5 in the 6 reference runs). ADR 0038 Decision
 mechanism and versions; the engine renders the statements that share a group (§23.1).
 - **Keep rule** (9 November 2026): lost requirements per loan-renewal publication no higher than
   the reference's 3 over 3 publications, and all six runs publish.
-- **Result** (HEAD set, FIX06 §1): loan-renewal lost 0, all six runs published and passed,
+- **Result** (HEAD set, SPEC01 §1): loan-renewal lost 0, all six runs published and passed,
   entity-field defects 0; thirteen native repeated-statement deletes, all graded helpful. The
   no-data entity in hello-world (`invented_or_restating_entity`, a minor scope defect the lever
   doesn't target) was in 2 of 3.
@@ -313,7 +313,7 @@ mechanism and versions; the engine renders the statements that share a group (§
 class: `rendering_artefact`, a backslash before ordinary punctuation (`renewed\.`,
 `Hello\, World\!`). The owner is `literal`/`escape` in `src/domain/specification_markdown.zig`
 (:370, :375) and §23.1's closed table. No request changes. Kept on guards and mechanism, like a
-hygiene phase (FIX06 §2 rule 6): the artefact was in all 6 reference runs and none of the 12
+hygiene phase (SPEC01 §2 rule 6): the artefact was in all 6 reference runs and none of the 12
 later runs (p = 0.062, under the evidence floor); the change is deterministic.
 
 ## Next 8. An edge case's outcome is the Then of a linked criterion (ADR 0038 Decision 7)
@@ -325,7 +325,7 @@ and `weakened_obligation` in an edge case's free-text outcome. ADR 0038 Decision
 design, candidate rule and versions. Owners: `scenario_link.zig` (candidates, links,
 stored-link check), `scenario_link_request.zig` (the closed request and its admission), the
 `link-scenarios` subgraph of `spec.workflow.yaml` (on `links.prompt.md` and
-`links.schema.json`) and `assemble`, which resolves the links. Its limit is open in FIX06 §3
+`links.schema.json`) and `assemble`, which resolves the links. Its limit is open in SPEC01 §3
 Next item 8; E11 removed its identity prediction.
 
 ## E14. Forced irrelevance for every extractor

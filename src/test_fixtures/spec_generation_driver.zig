@@ -99,7 +99,7 @@ pub const Driver = struct {
         const exhausted = self.disposition_sequence == .exhaust;
         var assertion: []const u8 = "repair-count";
         errdefer std.debug.print("disposition-sequence assertion={s} mode={s}\n", .{ assertion, if (exhausted) "exhaust" else "recover" });
-        // FIX06 D2.3: an omitted claim is corrected at admission, never inserted by repair.
+        // SPEC01 D2.3: an omitted claim is corrected at admission, never inserted by repair.
         try std.testing.expectEqual(@as(usize, 0), self.reconciliation_repair_calls);
         assertion = "merge-count";
         try std.testing.expectEqual(@as(usize, 0), self.reconciliation_merges);
@@ -229,7 +229,7 @@ pub const Driver = struct {
             std.testing.expectEqual(base.len + @as(usize, if (current_request.protocolCorrection() != null) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
             if (self.disposition_sequence != null and std.mem.eql(u8, phase, "dispositions") and attempt == 3) {
-                // FIX06 D2.3: a dispositions answer that omits an assigned claim is rejected
+                // SPEC01 D2.3: a dispositions answer that omits an assigned claim is rejected
                 // at admission and the whole assignment is corrected, naming the claim.
                 const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
                 const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
@@ -419,7 +419,7 @@ pub const Driver = struct {
                     const path = diagnostic.get("path").?.string;
                     std.testing.expect(std.mem.startsWith(u8, path, "/records/") and std.mem.indexOf(u8, path, "/claim_ids/") != null) catch unreachable;
                     std.testing.expectEqualStrings(path, correction.value.object.get("expected").?.object.get("path").?.string) catch unreachable;
-                    // The correction names the compiled covering kinds (FIX06 D4.1), from their owner.
+                    // The correction names the compiled covering kinds (SPEC01 D4.1), from their owner.
                     const covering = correction.value.object.get("covering").?.object;
                     const rule = @import("../domain/specification_session.zig").scenario_coverage;
                     std.testing.expectEqualStrings(rule.kind_property, covering.get("kind_property").?.string) catch unreachable;

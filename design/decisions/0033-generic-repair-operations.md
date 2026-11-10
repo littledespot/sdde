@@ -347,5 +347,5 @@ All offline:
 - Owner enums for Plan, Tasks and Implement, which wait for the
   [ADR 0034](0034-spec-quality-gate.md) Specify quality gate.
 - Engine-owned release, which ADR 0030 leaves open.
-- FIX06 R6's exact-reference repair eligibility. That stays open, and this ADR doesn't
+- SPEC01 R6's exact-reference repair eligibility. That stays open, and this ADR doesn't
   foreclose it.

@@ -275,7 +275,7 @@ Native owners:
   whose payload is exactly that row's fields; F0002 §4 owns the fact shape and what
   a fact may not contain. `model.prompt_fragment` is not a fact. The native
   `TelemetryFact` in [telemetry.zig](../src/domain/telemetry.zig) doesn't meet that
-  shape yet (FIX06 "F0002 event registry").
+  shape yet (SPEC01 "F0002 event registry").
 
 Kept here, flagged, because the native types lack them:
 
@@ -2319,7 +2319,7 @@ level, emission, fields and sensitivity, is the
 F0002 §4 limits what a producer's fact may carry and §6.4 fixes the emergency line.
 It is implemented as `EventType` in [telemetry.zig](../src/domain/telemetry.zig)
 and [log_event_registry.zig](../src/domain/log_event_registry.zig), which don't meet that
-registry yet (FIX06 "F0002 event registry").
+registry yet (SPEC01 "F0002 event registry").
 
 ---
 

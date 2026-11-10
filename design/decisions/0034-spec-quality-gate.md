@@ -23,7 +23,7 @@
 ## Context
 
 Plan, Tasks and Implement would consume Specify's output and multiply the engine's
-per-concept costs. [FIX06](../../fixes/FIX06.md) §1 records the gate's status.
+per-concept costs. [SPEC01](../../fixes/SPEC01.md) §1 records the gate's status.
 
 ## Decision
 

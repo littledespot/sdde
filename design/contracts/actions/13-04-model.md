@@ -313,7 +313,7 @@ Proposed, no code: build a unit's deterministic initial guidance packet ([§12](
 > **ADR 0033 (not yet implemented).** The repair entries below become domain functions of
 > [ADR 0033](../../decisions/0033-generic-repair-operations.md)'s four generic repair operations;
 > today each owner registers its own `authorize`/`parse`/`merge` operations. Whether the
-> no-invention and semantic-review branches stay is an open decision (FIX06 "Design–code
+> no-invention and semantic-review branches stay is an open decision (SPEC01 "Design–code
 > conflicts").
 
 ## `ClassifyRepairAuthorizationPurposeAction`

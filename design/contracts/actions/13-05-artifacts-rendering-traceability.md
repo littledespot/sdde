@@ -412,7 +412,7 @@ responsibilities are the stage pointers at the end.
 ## Proposed, no code: authentication chain and actor-evidence registry
 
 [ADR 0025](../../decisions/0025-clarification-answer-authentication.md) records evidence in
-this shared actor-evidence registry; no code implements it yet (FIX06 E7). Today
+this shared actor-evidence registry; no code implements it yet (SPEC01 E7). Today
 `refresh-clarifications` rejects every newly submitted answer with `AuthenticationRequired`.
 
 ## `AuthenticateActorAction`

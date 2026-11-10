@@ -9,7 +9,7 @@
     - delete a restatement only "if the kept one covers it";
     - when the kept one doesn't cover the evidence, "leave it as today";
     - "keep FR; else the earlier".
-- **Amended 2 November 2026** (FIX06 D16.1 and D16.2; user: "Yes, Q16 replaces it", then
+- **Amended 2 November 2026** (SPEC01 D16.1 and D16.2; user: "Yes, Q16 replaces it", then
   "approved" and "Yes, exempt FRs"): ADR 0038 Decision 5 replaces the comparison between
   records in one batch. A business rule, outcome, assumption, non-goal or prohibition whose
   every claim a requirement or an earlier such record names is deleted natively after this

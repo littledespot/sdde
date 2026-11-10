@@ -43,7 +43,7 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
     return .{ .valid = .{ .revision = parsed.revision, .last_repair = parsed.last_repair, .entries = entries } };
 }
 
-/// One piece of source evidence is one claim (FIX06 D8.3). A claim's text is the
+/// One piece of source evidence is one claim (SPEC01 D8.3). A claim's text is the
 /// engine's quote of its cited lines (ADR 0036), so a later claim of the same
 /// category citing the same lines of the same chunk is the same evidence and adds
 /// nothing: the first is kept, with its origin, before any claim identity exists.

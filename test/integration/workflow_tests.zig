@@ -1362,7 +1362,7 @@ fn testSpecificationWorkflows(workflow_cases: SpecificationCases) !void {
     return untraced_allocator.run(runSpecificationWorkflows, .{ workflow_cases, null });
 }
 
-/// `projection` collects the request projection (FIX06 T5(e)); without one, a sink
+/// `projection` collects the request projection (SPEC01 T5(e)); without one, a sink
 /// that writes a freeze only when the environment names one.
 fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: SpecificationCases, projection: ?*request_projection.Sink) !void {
     const io = std.testing.io;
@@ -2159,7 +2159,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
             }
             if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition or driver.reconciliation_fault == .duplicate_disposition) {
-                // FIX06 D2.3: a repeated disposition record is corrected at admission,
+                // SPEC01 D2.3: a repeated disposition record is corrected at admission,
                 // as one more attempt of the dispositions request, never repaired.
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);

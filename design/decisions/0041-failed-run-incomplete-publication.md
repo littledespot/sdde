@@ -9,7 +9,7 @@
   took v23, and the linked edge-case outcome
   ([ADR 0038](0038-record-claims-and-scenario-coverage.md) Decision 7, 8 November 2026) took v24,
   so when this ADR resumes it takes v25. Since
-  post-generation review was removed (FIX06 D13.1, 1 November 2026), "review" leaves the
+  post-generation review was removed (SPEC01 D13.1, 1 November 2026), "review" leaves the
   checks a failed view lists as not completed.
 - **Date:** 2026-10-26
 - **Decision authority:** The user's decision on 26 October 2026. Asked whether a

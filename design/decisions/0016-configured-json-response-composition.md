@@ -133,9 +133,9 @@ this mechanism for summary, disposition, signal and conflict assignments, not a
 call-number-specific path. Atomic repairs keep their existing authorized scope and
 projection owner.
 
-**Packet-guidance amendment (user-approved, 30 October 2026, FIX06 D3.1, record in
+**Packet-guidance amendment (user-approved, 30 October 2026, SPEC01 D3.1, record in
 `fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
-FIX06 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
+SPEC01 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
 Decision 5 and 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decisions 6 and 7, which removed the entity meaning and relationship entries and the entity
 repair tail, and then the edge case's outcome entry):** workflow resources own the semantic
@@ -155,7 +155,7 @@ requirement. Native code keeps rule ownership, mechanical diagnostics, identity,
 requirements, composition frames and the user-facing clarification question
 frames; a question about a record or reference subject embeds that subject's task
 from the guidance. Mechanical sentences inside a moved entry move with it until
-FIX06 Q4 removes them.
+SPEC01 Q4 removes them.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through

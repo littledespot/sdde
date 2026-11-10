@@ -34,7 +34,7 @@
   request at the configured `temperatureRunawayRetry`. A runaway on the re-send stops
   the workflow. This supersedes the B9 amendment's "no `output_limit` correction".
 - **Amended by:** [ADR 0023](0023-advisory-post-generation-review.md)'s removal
-  amendment (FIX06 D13.1, 1 November 2026): post-generation advice and its
+  amendment (SPEC01 D13.1, 1 November 2026): post-generation advice and its
   incomplete-advice outcomes are removed, so every model call is required work.
 - **Amended by:** [ADR 0041](0041-failed-run-incomplete-publication.md) (26 October
   2026; on hold since 30 October 2026, not implemented): a required failure of model

@@ -4,7 +4,7 @@
 - **Date:** 2026-11-03
 - **Decision authority:** The user's decisions on 3 November 2026:
   - D19.1, "Yes, may restate (Recommended)": the primary story may restate its source's
-    requirements in one paragraph, adding nothing ([Z_FIX06](../../fixes/Z_FIX06.md) Q19 D19.2);
+    requirements in one paragraph, adding nothing ([Z_SPEC01](../../fixes/Z_SPEC01.md) Q19 D19.2);
   - "yes" to the Q19 preflight's question, "Should the engine write the story itself, from the
     source's requirement sentences, using these rules?", with the six rules in the Decision.
   - Amended 7 November 2026 (user: "apply recommendations", then "yes, advance both"): Decision
@@ -40,7 +40,7 @@
 The model-written story held 26 of 30 weakened obligations scored in published specifications
 since 29 October ("A borrower may renew…") and added unsupported content, such as invented
 steps ("logs into the library system and selects…"). Prompt wording moved the story between
-these modes without removing them ([Z_FIX06](../../fixes/Z_FIX06.md) Q12 D12.2 and Q19
+these modes without removing them ([Z_SPEC01](../../fixes/Z_SPEC01.md) Q12 D12.2 and Q19
 D19.2).
 
 ADR 0036 already makes each claim's wording the engine's quote of its cited source lines, so
@@ -76,7 +76,7 @@ claims, but it can't paraphrase them.
    readiness (ADR 0023) assesses the other required feature subjects, not the story: its
    support is the provenance of the claims it quotes (Decision 1), and a catalogue with none
    blocks (Decision 2), so a support review of it checks nothing that provenance doesn't
-   already establish; the one such review that ran raised a false finding (FIX06,
+   already establish; the one such review that ran raised a false finding (SPEC01,
    `2026-11-02T09-15-31Z`). The story has no required-authority policy, clarification question
    or packet-guidance purpose; removing them advanced `packet-guidance` to v3 and the
    required-authority contract to 2.
@@ -110,4 +110,4 @@ changes. Its rejection reasons entered `spec-e2e-report/v15` (`test/harness/e2e/
 - A single-requirement source whose only non-FR record equals the story keeps that record.
 - A story exact value satisfies no exact-copy duty.
 - The request projection shows the story call removed and no other request changed.
-- Live: a measurement set on both cases (FIX06 §2 rules 4–6).
+- Live: a measurement set on both cases (SPEC01 §2 rules 4–6).

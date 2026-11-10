@@ -272,7 +272,7 @@ For scored criteria, the percentage is:
 - The calibration panels (`test/integration/fixtures/*/calibration/panel.json`;
   [R8](acceptance.md#review-and-qualify-the-grader)) use this same evaluator and
   rubric; reviewer expectations are not included in judge inputs. Human review and
-  live calibration are tracked in FIX06 H3.
+  live calibration are tracked in SPEC01 H3.
 
 ## Attempts and failures
 

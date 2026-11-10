@@ -7,7 +7,7 @@
 **Authority:** This is the proposed implementation baseline. Accepted ADRs, indexed
 in [§32](#32-accepted-and-deferred-implementation-choices), amend only their stated
 scope and do not accept the remainder. Requirements here are not claims that the
-engine already meets them; [FIX06](../fixes/FIX06.md) tracks implementation gaps.
+engine already meets them; [SPEC01](../fixes/SPEC01.md) tracks implementation gaps.
 [Engine intent](intent.md) orients judgment but is not contract authority.
 
 Sections 1–4 and 30–32 are stated here. §13 links to its action catalogues in

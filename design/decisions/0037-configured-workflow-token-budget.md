@@ -75,7 +75,7 @@ budget.
 - **Configuration.** Every configuration document must state the budget; the closed
   schema, the example and all fixtures changed together, with no compatibility reader.
 - **Not changed.** The experiment-wide stops (1,000 sends, 2,000,000 tokens) stay a
-  separate open decision ([FIX06](../../fixes/FIX06.md) H4). A larger budget lets runs
+  separate open decision ([SPEC01](../../fixes/SPEC01.md) H4). A larger budget lets runs
   near the limit finish; it doesn't make review cheaper or runs more reliable.
 - **Tests.**
   - Decoding accepts 1, 125,000 and 4,294,967,295, and rejects a missing value, 0, −1,

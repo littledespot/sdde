@@ -70,7 +70,7 @@ the engine, its prompts or its deterministic code.
      | `rendering_artefact` | Escaping, joining, punctuation or formatting the engine introduced |
      | `engine_vocabulary_leak` | Engine or schema vocabulary in published text |
 
-     The user's rulings (3 November 2026, FIX06 H1) settle these boundaries:
+     The user's rulings (3 November 2026, SPEC01 H1) settle these boundaries:
      - A required ability restated as permission ("must be able to renew" as "may renew")
        is `weakened_obligation`.
      - An edge case that applies the source's stated conditions to a boundary or a
@@ -90,7 +90,7 @@ the engine, its prompts or its deterministic code.
      - An acceptance criterion's generic trigger naming the actor of the source's stated
        action ("The borrower initiates a renewal request") is not an invented step.
 
-     The user's severity rulings (3 November 2026, FIX06 H1) set scores:
+     The user's severity rulings (3 November 2026, SPEC01 H1) set scores:
      - A story, acceptance criterion, edge case or entity meaning that states a requirement
        more weakly than a correct FR (a "may renew" story; an edge case's "fourteen days"
        without the new due date) scores that requirement's criterion below 3. A summary that
@@ -111,7 +111,7 @@ the engine, its prompts or its deterministic code.
        only, unless they change an exact value.
      - Text published identically in two runs gets the same defects and scores in both.
 
-     Readings applied in the D12.2 re-score, made rules by the user (3 November 2026, Z_FIX06
+     Readings applied in the D12.2 re-score, made rules by the user (3 November 2026, Z_SPEC01
      T7; the link rule is in section 3 step 7):
      - A repeat states a requirement when it gives the requirement's value or wording
        ("extends the due date by fourteen days"), so dropping part of it ("calendar") scores
@@ -127,12 +127,12 @@ the engine, its prompts or its deterministic code.
        its verb ("leaves the due date unchanged and displays `Renewal refused.`" without
        "refuses").
 
-     Ruling of 8 November 2026 (FIX06 section 3 Next 3): a title that gives a requirement's
+     Ruling of 8 November 2026 (SPEC01 section 3 Next 3): a title that gives a requirement's
      value or wording states it, like any other repeat above, so a title that drops part of it
      ("by 14 days" for "fourteen calendar days") scores that requirement's criterion below 3.
      A title that gives no value is a label, scored against `organization` only.
 
-     Ruling of 9 November 2026 (FIX06 section 3 Next 8): an edge case's outcome is its linked
+     Ruling of 9 November 2026 (SPEC01 section 3 Next 8): an edge case's outcome is its linked
      acceptance criterion's Then (ADR 0038 Decision 7), so a defect in that Then is one
      defect, filed on the criterion with the edge case named in its evidence.
 
@@ -207,7 +207,7 @@ the engine, its prompts or its deterministic code.
    - `speculative`: a plausible mechanism only.
    - `first_native_rejection` shows chronology, not cause.
 5. **Check review verdicts.** Only required pre-generation source review runs (no
-   review runs after generation since FIX06 D13.1). When it ran, each review call's
+   review runs after generation since SPEC01 D13.1). When it ran, each review call's
    `model_output.txt` holds its findings. Note any finding whose type doesn't match
    what it describes; filing an unsupported addition as `candidate_omission` is a
    known pattern. Such findings count against finding-type accuracy.
@@ -245,7 +245,7 @@ the engine, its prompts or its deterministic code.
 
 ## 4. Recommend changes that generalize
 
-Read the open work in [fixes/FIX06.md](../../../fixes/FIX06.md) first. For each group of defects that share
+Read the open work in [fixes/SPEC01.md](../../../fixes/SPEC01.md) first. For each group of defects that share
 an origin, propose one change at the owning abstraction, with:
 
 - **The failure class.** Name the general class and the invariant it breaks, never a
@@ -254,7 +254,7 @@ an origin, propose one change at the owning abstraction, with:
 - **The owner.** Name the prompt, schema, composition, renderer, validator or review
   assignment to change, with its `path:line`. Prefer deterministic code for anything
   computable.
-- **Existing work.** Cite any FIX06 item that already covers the defect, and
+- **Existing work.** Cite any SPEC01 item that already covers the defect, and
   prefer its approved or proposed fix.
 - **Authority.** Check the accepted ADRs (`design/decisions/`, indexed in design.md
   §32) for any rule the change would break, or ask the `design-router` agent. Label
@@ -296,7 +296,7 @@ Write these to `evaluations/e2e/<run>/`, next to the numbered copies:
      threshold, any critical failures, and the top three findings. The accuracy defect
      counts are the `content`-basis defects of each accuracy class:
      `lost_source_requirement`, `weakened_obligation`, `unsupported_addition` and
-     `contradiction`. Keep decisions compare these counts, never the aggregate (FIX06 §2
+     `contradiction`. Keep decisions compare these counts, never the aggregate (SPEC01 §2
      rule 6); the outcome decides only this run's acceptance.
   3. A rubric table with each criterion's score, cited evidence and defects.
   4. Each defect, with its spec and source lines, origin class, producing call and
@@ -328,7 +328,7 @@ Write these to `evaluations/e2e/<run>/`, next to the numbered copies:
   `build.source_sha256` distinguishes uncommitted trees that share a revision.
   `skill_sha256` is the SHA-256 of this file when it scored the run
   (`shasum -a 256 .claude/skills/evaluate-e2e/SKILL.md`); compare only evaluations with
-  the same value (FIX06 §2 rule 5). Re-scoring a run under a changed skill replaces its
+  the same value (SPEC01 §2 rule 5). Re-scoring a run under a changed skill replaces its
   `evaluation.json` and `evaluation.md`.
 - **`adjudication-record.json`**, for a published run. If the run's existing record
   already names the current skill SHA-256 in `reviewer`, the run has its adjudication
@@ -362,8 +362,8 @@ One run is one sample, so claim no reliability. Write nothing outside `evaluatio
 ## 7. Review-accuracy labels (B2)
 
 This section applies only to runs that contain review findings: required
-pre-generation source review, or post-generation review if it returns (FIX06 H2).
-Since FIX06 D13.1 (1 November 2026) no review runs after generation, so a current run
+pre-generation source review, or post-generation review if it returns (SPEC01 H2).
+Since SPEC01 D13.1 (1 November 2026) no review runs after generation, so a current run
 has no principle findings.
 
 When asked to label review findings, write
@@ -392,7 +392,7 @@ When asked to label review findings, write
 - **`metrics`** is always present. Finding-type accuracy is the share of review findings
   whose predicted type equals the expected type; `missed_defect` entries (no finding,
   null `predicted_type`) are excluded from its denominator and counted in recall.
-  Precision is per predicted type and recall per expected type (FIX06 review measures;
+  Precision is per predicted type and recall per expected type (SPEC01 review measures;
   `design/harness/e2e.md`, "Reliability assessment").
-- **`provisional`** stays `true`. Only a human confirms labels (FIX06 H2); never mark them
+- **`provisional`** stays `true`. Only a human confirms labels (SPEC01 H2); never mark them
   confirmed yourself.

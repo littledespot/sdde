@@ -412,7 +412,7 @@ test "claims quote their cited source lines and split only across top-level list
     const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "A borrower must be able to renew a loan.\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, parse.execute(a, .{ .entries = &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[{\"category\":\"business\",\"citations\":[1],\"content\":{\"business\":{\"segments\":\"A borrower may renew a loan.\"}}}],\"token_classifications\":[]}")} }));
 }
-test "same-category claims citing the same lines are one claim, before identities (FIX06 D8.3)" {
+test "same-category claims citing the same lines are one claim, before identities (SPEC01 D8.3)" {
     const Selection = @import("domain/source_selections.zig").Selection;
     const Expected = struct { category: []const u8, citations: []const Selection };
     const one = struct {

@@ -290,7 +290,7 @@ For each feature-brief or specification unit other than the engine-composed stor
   references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
   repair packets include an earlier draft only for the entities unit, which receives
   the brief. Brief and records requests receive no sibling draft, so a batch
-  record can't copy unpublished draft wording (FIX06 D12.1). The brief draft is
+  record can't copy unpublished draft wording (SPEC01 D12.1). The brief draft is
   resolved business text; its canonical provenance, fragment wrappers and display-span
   bookkeeping remain native. Record-family purposes come from the workflow's
   packet guidance ([ADR 0016](../decisions/0016-configured-json-response-composition.md)

@@ -18,13 +18,13 @@
   - "APPROVED. Implement B5": reinstate the split
     ([ADR 0038](0038-record-claims-and-scenario-coverage.md)), after the withdrawal's
     evidence turned out to be misread;
-  - 1 November 2026, FIX06 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
+  - 1 November 2026, SPEC01 Q7 D7.4, decided and then "implement Q7 D7.4.": the engine adds
     no code span to an exact copy its text already wraps in a balanced pair (Decision 6);
   - 1 November 2026, "Yes, keep the span": a copy that ends in terminal punctuation keeps
     its span, although every development-case value then stays doubled (Decision 6);
-  - 3 November 2026, FIX06 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
+  - 3 November 2026, SPEC01 Q7 D7.2, "apply recommendations": Decision 6 stays, and ADR 0045,
     which would have extended it to entity meaning and relationships, is withdrawn;
-  - 7 November 2026, FIX06 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
+  - 7 November 2026, SPEC01 Q8 D8.3, "i accept recommendation" and "implement D8.3": a quoted
     claim of the same category and cited lines as an earlier claim of its chunk is the same
     claim (Decisions 3 and 4).
 - **Amends:**
@@ -109,7 +109,7 @@ same claim and native checks couldn't tell distinct duties apart.
      prose-only claims and a cited line holding two facts.
    - ADR 0038's scenario rule needs one claim per requirement, which the split supplies
      for list sources (ADR 0038 Decision 4).
-   - **One piece of evidence is one claim** (FIX06 D8.3). A quoted claim with the same
+   - **One piece of evidence is one claim** (SPEC01 D8.3). A quoted claim with the same
      category and the same cited lines as an earlier claim of its chunk is the same
      evidence, because its wording is the quote of those lines. Extraction text validation
      keeps the first, with its origin, after the split and before claim identities exist.
@@ -204,7 +204,7 @@ same claim and native checks couldn't tell distinct duties apart.
     `REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE`, so no state version changes.
   - Stored readback validates claim text against the text policy but doesn't re-quote it
     from its citations. That would need the Unicode normalizer at readback; it is open
-    work ([FIX06](../../fixes/FIX06.md), B7 contract-review leftovers).
+    work ([SPEC01](../../fixes/SPEC01.md), B7 contract-review leftovers).
 - **Tests.**
   - Code delimiters:
     - at the recogniser: equal, double and unequal runs, a backtick shared by two values,

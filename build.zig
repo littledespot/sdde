@@ -139,7 +139,7 @@ fn define(b: *std.Build) Graph {
     if (b.args) |args| heuristics_report.addArgs(args);
     // Source inventory is read at runtime; always refresh after local edits.
     heuristics_report.has_side_effects = true;
-    b.step("code-heuristics", "Write advisory code metrics and FIX06 T5 brittleness counts to zig-out/code-heuristics/report.{md,json} (-- --freeze <dir>)").dependOn(&heuristics_report.step);
+    b.step("code-heuristics", "Write advisory code metrics and SPEC01 T5 brittleness counts to zig-out/code-heuristics/report.{md,json} (-- --freeze <dir>)").dependOn(&heuristics_report.step);
     const heuristics_tests = b.addRunArtifact(b.addTest(.{ .root_module = heuristics_module }));
     heuristics_tests.setCwd(b.path("."));
     b.step("test-code-heuristics", "Test code metrics, source inventory and deterministic report rendering").dependOn(&heuristics_tests.step);

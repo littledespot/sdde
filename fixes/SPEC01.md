@@ -1,9 +1,9 @@
-# FIX06 — Open Spec work
+# SPEC01 — Open Spec work
 
 The only fix record: open work and user decisions not yet recorded in an ADR
 ([convention](README.md)). Each phase needs the user's approval before its changes, and
 every live run needs its own approval. **Decision** marks a question only the user settles;
-a recommendation is not a decision. Implemented items are in [Z_FIX06](Z_FIX06.md); closed
+a recommendation is not a decision. Implemented items are in [Z_SPEC01](Z_SPEC01.md); closed
 and reverted work, superseded measurements and earlier references are in git history
 (`fixes/FIX06.md` before 9 November 2026; earlier items at `39fd9ff` and `0f3e4d2`).
 
@@ -12,14 +12,14 @@ and reverted work, superseded measurements and earlier references are in git his
 **Gate (ADR 0034): the user's to declare.** On 9 November 2026 the HEAD set, the first set on a
 committed, unmodified build (`a3d083e`, source `5fb59f67…`, 3 runs per case, none retried,
 `2026-11-08T22-3*`), published 6 of 6, and `adjudicate-spec` accepted every run (skill
-`185b9bc6…`, no critical failure) with no lost or weakened requirement ([Z_FIX06](Z_FIX06.md)
+`185b9bc6…`, no critical failure) with no lost or weakened requirement ([Z_SPEC01](Z_SPEC01.md)
 Next 6). **Judged 9 November 2026** (user: "three per case is enough for now"): the HEAD set is
 enough stability evidence for now. ADR 0034 leaves actioning Plan to the user, so none is
 started.
 
 **Reference** for quality phases (§2 rule 7): the HEAD set, the last kept state (§3 Next items
 6, 7 and 8). Skills `af394020…`, `0b552067…`, `1d66d882…`, `3c74781e…` and `185b9bc6…` count
-as one evaluator ([Z_FIX06](Z_FIX06.md) T7). Accuracy defect counts, content basis, as lost /
+as one evaluator ([Z_SPEC01](Z_SPEC01.md) T7). Accuracy defect counts, content basis, as lost /
 weakened / unsupported addition / contradiction:
 
 | Case | Publications | Pass | Defects | Advisory score, mean (range) |
@@ -66,7 +66,7 @@ governs; these add what the phases need.
      the change alters (the §2.10 projection names them) is screened with paired replays of a
      retained request from each case, `e2e-call --repeats` as captured and with `--edit`
      (design/harness/e2e.md:66-91), about ten per arm, on the captured run's model and
-     reasoning effort. A screen measures only the structural counts of [Z_FIX06](Z_FIX06.md)
+     reasoning effort. A screen measures only the structural counts of [Z_SPEC01](Z_SPEC01.md)
      T6, so it can't measure a prose-only change; it decides nothing, and each replay batch
      needs approval. Its as-captured arm is a call-level control allowed for screens only: a
      set adds no control run on the comparison point's build (decided 1 November 2026).
@@ -79,7 +79,7 @@ governs; these add what the phases need.
      reference are scored on one evaluate-e2e revision. When the skill has changed, the
      reference is re-scored first from its numbered copies under `evaluations/e2e/` (rubric
      scores and defect classes; the link check and defect origins need the run directory), with
-     link-derived `unsupported_addition` counted apart ([Z_FIX06](Z_FIX06.md) T7).
+     link-derived `unsupported_addition` counted apart ([Z_SPEC01](Z_SPEC01.md) T7).
 6. **Keep or revert** (the default recommendation; the user decides).
    - **Before the set,** record:
      - targets: accuracy defect classes (lost source requirement, weakened obligation,
@@ -119,7 +119,7 @@ governs; these add what the phases need.
     - Every accounted request's projection is byte-identical.
     - One live run of each case; the item lands only between sets.
 11. **Evaluation protocol:** the [protocol](../test/calibration/semantic-simplicity/README.md)
-    owns its 24-feature panel; FIX06 sets use the two development cases and aren't protocol
+    owns its 24-feature panel; SPEC01 sets use the two development cases and aren't protocol
     experiments.
 12. **Report versions:** `adjudicate-spec` decodes `report.json` strictly, so adding, removing
     or renaming a closed member needs a report version. Runs before the closing set stay
@@ -157,7 +157,7 @@ research. "Gap" means between measurement sets.
 **Next:**
 
 1. The bare-value `reference_only` correction and the repeated-statement change are
-   implemented ([Z_FIX06](Z_FIX06.md)). The correction is kept or reverted on a repeated set of
+   implemented ([Z_SPEC01](Z_SPEC01.md)). The correction is kept or reverted on a repeated set of
    both cases on one committed build, scored on published output and publication rate; sets
    where it never fires are not enough evidence. Its one live firing (8 November,
    `2026-11-07T20-44-15Z-9273…`, uncommitted tree) changed nothing: all three records attempts
@@ -165,7 +165,7 @@ research. "Gap" means between measurement sets.
    change is judged on the same set: it removes that failure where the bare outcome is a
    repeat, and the correction serves the rest.
 2. **Closed 8 November 2026:** skill `1d66d882…` is the same evaluator as `af394020…` and
-   `0b552067…` ([Z_FIX06](Z_FIX06.md) T7).
+   `0b552067…` ([Z_SPEC01](Z_SPEC01.md) T7).
 3. **Decided 8 November 2026** (user: "recommendations accepted for 1 to 6"): a title that
    repeats a requirement's value states it (§7 H1 "Titles"). The re-score of the reference it
    required is done (9 November 2026, skill `3c74781e…`, `evaluations/e2e/<run>/`); its records
@@ -173,11 +173,11 @@ research. "Gap" means between measurement sets.
 4. **Decided 8 November 2026** (same words): Q14 b3 stays held and b4 is not started. Revisit b3
    if refusal scenarios go missing (§4 Q14).
 5. Lossy repeats in titles have no lever (§3 open problems).
-6. **Kept 9 November 2026:** an entity is a name and its groups ([Z_FIX06](Z_FIX06.md) Next 6).
+6. **Kept 9 November 2026:** an entity is a name and its groups ([Z_SPEC01](Z_SPEC01.md) Next 6).
 7. **Kept 9 November 2026:** the renderer escapes only the bytes Markdown reads as markup
-   ([Z_FIX06](Z_FIX06.md) Next 7).
+   ([Z_SPEC01](Z_SPEC01.md) Next 7).
 8. **Kept 9 November 2026:** an edge case's outcome is the Then of a linked criterion
-   ([Z_FIX06](Z_FIX06.md) Next 8). Evidence for it: EC-001's free-text outcome dropped
+   ([Z_SPEC01](Z_SPEC01.md) Next 8). Evidence for it: EC-001's free-text outcome dropped
    "calendar", "existing" or the new due date, failing `successful-renewal` in 4 of the 6
    loan-renewal runs before 8 November and 2 of the 3 that day. ADR 0038:227-228's limit still applies: a success criterion
    citing the refusal claims can be a refusal edge case's only candidate and print the success
@@ -202,7 +202,7 @@ of the 125,000-token workflow budget (`2026-11-02T02-28-14Z`, which reached sour
 the HEAD set used 12,971 to 17,037 tokens a run. Runs since ADR 0047 have failed only by retry
 exhaustion, never budget, in two modes, each reported with no lever:
 - records, on the bare outcomes `"Loan renewed!"` and `"Renewal refused."`: where the bare
-  outcome is a wholly taken repeat its text is no longer judged ([Z_FIX06](Z_FIX06.md)
+  outcome is a wholly taken repeat its text is no longer judged ([Z_SPEC01](Z_SPEC01.md)
   "Repeated statement text is not judged"); `2026-11-07T06-12-34Z-f549…`'s outcome was the only
   non-scenario record naming its claim, so that case still fails;
 - reconcile dispositions (`2026-11-07T20-44-02Z-9d7f…`, hello-world): the model answered with
@@ -235,8 +235,8 @@ or the user records it as a model limitation.
     that show it still fail their criterion, nothing is weakened, and no further prompt change
     targets it. Two prompt changes, Q20's entity-meaning purpose and the one-owner hygiene
     change, didn't stop it and were reverted (7 November 2026). The structural lever, ADR 0038
-    Decision 6, is kept ([Z_FIX06](Z_FIX06.md) Next 6).
-  - **Edge-case outcomes:** ADR 0038 Decision 7, kept ([Z_FIX06](Z_FIX06.md) Next 8). **Not
+    Decision 6, is kept ([Z_SPEC01](Z_SPEC01.md) Next 6).
+  - **Edge-case outcomes:** ADR 0038 Decision 7, kept ([Z_SPEC01](Z_SPEC01.md) Next 8). **Not
     accepted** (user, 7 November 2026: "that is a poor idea and I will not accept it"): the
     engine filling `then` and `expected_outcome` from the record's cited source lines. ADR 0038
     Decision 7 records that this doesn't cover copying a criterion's Then.
@@ -272,7 +272,7 @@ or the user records it as a model limitation.
 
 ### Q2b. Generic content-loss guard for repairs
 
-**D2.3** is implemented and kept ([Z_FIX06](Z_FIX06.md)). Open follow-ups:
+**D2.3** is implemented and kept ([Z_SPEC01](Z_SPEC01.md)). Open follow-ups:
 
 - remove `Relations.competing` under §2.12 (`reference_reconciliation_diagnostic.zig:159-161`);
 - fold `member_count` into `collection`'s `exact_members` variant
@@ -289,11 +289,11 @@ token classifications.
 The first attempt removed the second `citations` sentence (`extraction.context.json:14`) and
 was reverted on 31 October 2026 after hello-world's first extraction returned
 `no_feature_claim` in 5 of 6 runs (`evaluations/q4/measures-set.json`), so the retry keeps it.
-12-model-boundary.md:369-370 and ADR 0016:157-158 say FIX06 Q4 removes the restated rules. No
+12-model-boundary.md:369-370 and ADR 0016:157-158 say SPEC01 Q4 removes the restated rules. No
 published spec contains engine vocabulary, so this is AGENTS.md compliance, not an output
 target.
 
-**D4.1's extension** (D4.1 in [Z_FIX06](Z_FIX06.md); decided 3 November 2026): the rule covers
+**D4.1's extension** (D4.1 in [Z_SPEC01](Z_SPEC01.md); decided 3 November 2026): the rule covers
 native rule and correction texts too, and a sentence that says what a field, claim or response
 contains stays even when the engine enforces or transforms it.
 
@@ -335,7 +335,7 @@ D16.1 and D16.2 sets:
   reference is offered, and fragments join with no separator
   (`model_candidate_json.zig:251-253`). D7.5 owns it.
 
-- **D7.4** (implemented, [Z_FIX06](Z_FIX06.md)): decided 1 November 2026, D7.4 is not a
+- **D7.4** (implemented, [Z_SPEC01](Z_SPEC01.md)): decided 1 November 2026, D7.4 is not a
   punctuation rule (AGENTS.md "Prose heuristic").
 - **D7.5** (decided 3 November 2026: yes, a conformance fix with no contract amendment, since
   07-domain-representations.md:74-79, ADR 0006:302-316, 12-model-boundary.md:199-203 and
@@ -377,13 +377,13 @@ Decision 3 and ADR 0038 Decision 4 (the list-item split,
   interior line is blank (`markdown_code_spans.zig:53`, `:59`;
   `exact_token_obligation.zig:40-45`; `source_selections.zig:57-60`). No fixture covers it.
   Decided offline with fixtures at its owners and §2.10 projections, in any gap, or recorded.
-- **D8.3** is implemented ([Z_FIX06](Z_FIX06.md)); semantic benefit is not demonstrated, since
+- **D8.3** is implemented ([Z_SPEC01](Z_SPEC01.md)); semantic benefit is not demonstrated, since
   no live run since has duplicated an extraction claim.
 
 ### Q13. Inline source lines
 
 D13.1 (post-generation reviews removed) and the inline source lines are in
-[Z_FIX06](Z_FIX06.md). **D13.4** (decided 1 November 2026): principles are context and
+[Z_SPEC01](Z_SPEC01.md). **D13.4** (decided 1 November 2026): principles are context and
 constraints only, never origins, and never modified (Q17). Nothing checks what a shown source
 line means beyond the advisory evaluate-e2e link check.
 
@@ -652,7 +652,7 @@ rewrite land with that conversion. Failure-evidence gaps:
 - **Redaction policy ID:** 26-security.md:195 and F0002:542 name `redaction/default-v1`, which
   no code carries. **Decision:** a record carries the ID (a new field, so `feature-log/v3`;
   v2 is current, `feature_log_limits.zig:1`), or both documents drop it. **Recommended:** drop it.
-- **Producerless rejection** (fixed, [Z_FIX06](Z_FIX06.md)), still open: contract 27
+- **Producerless rejection** (fixed, [Z_SPEC01](Z_SPEC01.md)), still open: contract 27
   (27-observability.md:44-47) names only coverage as an assembled-candidate example (design
   edit awaiting approval: add `producerless` as a second example); `observation.capture`'s
   candidate arm (`test/harness/e2e/observation.zig:131-132`) has no direct test. **Decision**
@@ -755,7 +755,7 @@ and fix002 (`workflow_tests.zig:1633-1698`); tests R36 (`model_envelope_test.zig
 - The retained GPT-OSS compatibility exchange is assessed `incompatible` since ADR 0036
   (`provider_compatibility_tests.zig:261-262`, `:305-309`), so the normal §22.6-normalized path
   has no compatible-assessment coverage.
-- Proof limits recorded at implementation ([Z_FIX06](Z_FIX06.md)): no scripted scenario
+- Proof limits recorded at implementation ([Z_SPEC01](Z_SPEC01.md)): no scripted scenario
   quotes an exact copy, so D7.4's freeze doesn't reach its path; Q13's two-source citations
   are covered at the codec, not the projection (the fixture reads one file); every scripted
   records batch has one claim, so D16.2's partly taken record is proven only at admission.
@@ -771,7 +771,7 @@ extending `spec_generation_responses.zig`.
 
 ### T5. Brittleness counts
 
-Definitions and decisions: [Z_FIX06](Z_FIX06.md). Each change set that a phase reports on
+Definitions and decisions: [Z_SPEC01](Z_SPEC01.md). Each change set that a phase reports on
 retakes them on its committed build: `zig build code-heuristics -- --freeze <dir>` with the
 freeze §2.10 takes on that build, and T5.4 by hand from `spec.workflow.yaml` (a `slot: repair`
 step whose prompt no non-repair step binds). Last taken 2 November 2026 on the `b38628c` tree
@@ -850,7 +850,7 @@ evaluate-e2e skill carries each as a scoring rule (SKILL.md §2, under the class
   label, scored against `organization` only (§3 Next 3).
 - **Linked Then** (9 November 2026; user: "Once, same evaluator, no re-score"): a defect in an
   edge case's linked Then is filed once, on the criterion (§3 Next 8; skill `185b9bc6…` is the
-  same evaluator, [Z_FIX06](Z_FIX06.md) T7).
+  same evaluator, [Z_SPEC01](Z_SPEC01.md) T7).
 
 ### H2. Review-label confirmation (B2)
 
@@ -874,7 +874,7 @@ labelled.
 The hello-world and loan-renewal panels (each case's `calibration/` under
 `test/integration/fixtures/`) have proposed labels only (`human-review.json`,
 `qualification.json` `pending`). They qualify only the standalone evaluator; neither the gate
-nor FIX06's sets need them.
+nor SPEC01's sets need them.
 
 ### H4. Experiment stops, qualified scope and the formal baseline (B4, B5)
 
@@ -921,7 +921,7 @@ narrow correction of invalid loss evidence (today `invalid`,
 reassessment under §22.1 with no voting or retry-until-positive. Evidence: of two runs that
 reached required source review, `2026-11-02T02-28-14Z`'s repair helped and
 `2026-11-02T09-15-31Z`'s false `candidate_omission` on the story ended the run (the story has
-since left source review, [Z_FIX06](Z_FIX06.md) Q12 D12.3).
+since left source review, [Z_SPEC01](Z_SPEC01.md) Q12 D12.3).
 
 ### B7 contract-review leftovers
 
@@ -979,15 +979,15 @@ edits). **Next:** **Decision** marks what only the user settles; F0002 is a code
   (:400-401); the validator checks neither (`validate_feature_log_policy_transition.zig:17-31`).
   **Recommended:** §9.4's reading, an execution-local successor with no durability proof.
 
-### Retired FIX06 IDs cited elsewhere
+### Retired SPEC01 IDs cited elsewhere
 
-These IDs are no longer in FIX06 (their records are in git at `194e29a`, `fixes/Z_FIX06.md`);
+These IDs are no longer in SPEC01 (their records are in git at `194e29a`, `fixes/Z_FIX06.md`);
 each citing file needs its reference rewritten, a docs edit needing approval for ADRs:
 "D3.1" (`src/domain/packet_guidance.zig:1`); "T5(b)"
 (`test/harness/e2e/measures.zig:197`); "T5(e)" (`src/test_fixtures/request_projection.zig:1`,
-`test/integration/workflow_tests.zig:1365`); "FIX06 review measures"
+`test/integration/workflow_tests.zig:1365`); "SPEC01 review measures"
 (`.claude/skills/evaluate-e2e/SKILL.md:395`; the measures are defined at e2e.md:608-610).
-"FIX06 <ID>" citations of items now in [Z_FIX06](Z_FIX06.md) resolve there.
+"SPEC01 <ID>" citations of items now in [Z_SPEC01](Z_SPEC01.md) resolve there.
 
 The skill's aggregate formula (`SKILL.md:150-151`) puts each weight outside its sum; the
 canonical rule (evaluator.md "Score calculation", `test/harness/judgment.zig`) puts it inside.

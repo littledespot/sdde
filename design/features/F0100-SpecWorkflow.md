@@ -31,7 +31,7 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 since 30 October 2026. The
 [§32 index](../design.md#32-accepted-and-deferred-implementation-choices) lists every
 decision. [Implementation status](#implementation-status) and
-[FIX06](../../fixes/FIX06.md) record what is built and what remains.
+[SPEC01](../../fixes/SPEC01.md) record what is built and what remains.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -214,7 +214,7 @@ Accepting submitted answers requires the trusted authentication mechanism that
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md) selects: the
 operating-system account that runs the engine, with the run that reads valid closed
 forms as the act of acceptance. It is not yet implemented
-([FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
+([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 Merely editing a form or loading an actor/evidence ID is not authentication. This does not affect user-close file
 protection, which applies even when acceptance is blocked.
 
@@ -950,7 +950,7 @@ validators:
 - Write failure, reruns and the pending publication's lack of completion authority
   follow [§25](../contracts/25-publication.md#252-abandonment-and-reruns).
 - Authenticated answer application remains open
-  ([FIX06 E7](../../fixes/FIX06.md#e7-clarification-answer-recovery-r2-adr-0025)).
+  ([SPEC01 E7](../../fixes/SPEC01.md#e7-clarification-answer-recovery-r2-adr-0025)).
 
 ### 3.13 Actionable questions
 
@@ -959,7 +959,7 @@ owns shared question preparation. Reuse model/evidence contracts and existing
 clarification builders; no workflow-local loader or summary call. Open forms gate later
 stages under [§24.2](../contracts/24-workflow-state.md#242-stage-transition-state-machine).
 Answer authentication is separate:
-[ADR 0025](../decisions/0025-clarification-answer-authentication.md) (FIX06 E7; not yet
+[ADR 0025](../decisions/0025-clarification-answer-authentication.md) (SPEC01 E7; not yet
 implemented).
 
 ## 4. Required logical coverage
@@ -1258,7 +1258,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Canonical exact copies are derived occurrence handles, never replacement display bytes.
 - Arbitrary loaded clarification-response IDs are rejected; applicable-answer
   integration is [ADR 0025](../decisions/0025-clarification-answer-authentication.md)
-  (FIX06 E7; not yet implemented).
+  (SPEC01 E7; not yet implemented).
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
@@ -1520,10 +1520,10 @@ paths and negative cases. Reruns regenerate views using the persisted record-ID 
   shared required-authority gate, the native content schema and Markdown codec, and
   registered publication of either completed output or the ADR 0017 incomplete
   specification with its clarification forms and pending state.
-- Not implemented: authenticated answer application (ADR 0025, FIX06 E7), additional
+- Not implemented: authenticated answer application (ADR 0025, SPEC01 E7), additional
   reference formats, the reference-feedback API (§16.5), and §5.5's failed-run
   incomplete publication (ADR 0041, accepted, on hold since 30 October 2026).
 - Offline verification does not establish live E2E acceptance; the
   [harness](../harness/e2e.md) captures the exact published specification for
   separate adjudication by `/evaluate-e2e` ([R8](../harness/acceptance.md)), which starts only
-  as AGENTS.md "Testing expectations" allows, and [FIX06](../../fixes/FIX06.md) tracks open work.
+  as AGENTS.md "Testing expectations" allows, and [SPEC01](../../fixes/SPEC01.md) tracks open work.
