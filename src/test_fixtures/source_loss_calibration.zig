@@ -275,7 +275,6 @@ pub fn admitAttributed(a: std.mem.Allocator, context: provenance.Context, value:
 
 pub fn admitBrief(a: std.mem.Allocator, context: provenance.Context, brief: spec.Brief) !spec.Brief {
     return .{
-        .title = try admitAttributed(a, context, brief.title, .spec_title),
         .description = try admitAttributed(a, context, brief.description, .spec_description),
         .primary_goal = try admitAttributed(a, context, brief.primary_goal, .spec_goal),
     };
@@ -421,7 +420,7 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     const assigned = try @import("../domain/specification_source_binding.zig").resolveGroups(a, records, sources, ids_selected, .content);
     const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, assigned.selection);
     const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
-    var brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
+    var brief: spec.Brief = .{ .description = value, .primary_goal = value };
     brief = try admitBrief(a, provenance_context, brief);
     const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished);
     return .{ .inputs = inputs, .context = provenance_context, .guidance = &(try @import("packet_guidance.zig").shipped(a)).guidance, .brief = brief, .passive = passive };

@@ -389,3 +389,28 @@ semantic claim. No request builder changes; the only new model input is ADR 0046
 correction, sent where an empty answer used to abort. §2 rule 10's request-projection diff
 wasn't taken. No schema, report or log version changes, and no keep decision is needed.
 **Rule:** a member or coverage check must handle an empty array.
+
+## Q22. Engine-derived title (ADR 0048)
+
+**Implemented 11 November 2026** (user: option B1 "approved", then "yes level-1 headings block
+run"); **kept 11 November 2026** (user: "yes mark Q22 as kept"). Defect class: lost source
+requirement and restatement through the model-written title (4 of 54 loan-renewal and 21 of 55
+hello-world evaluations since 2 November). ADR 0048 records the decisions, derived choices and
+versions. Owners: `markdown_code_spans.levelOneHeading` (heading classification),
+`specification_title.zig` (derivation and the readback check) and
+`specification_session.initialize`, which takes the title or blocks with `no_title_heading` or
+`conflicting_title_headings`. No screen ran (user: "yes as per recommendation"): every retained
+capture was `model-request-debug/v16`, which the build refuses.
+- **Set** (`2026-11-11T10-14-3*`; revision `35e7937`, `build.source.modified` true, one source
+  `e8a54c98…`; 3 runs per case, none retried; skill `3fe52a92…`): 6 of 6 published and passed.
+  Content-basis counts, lost / weakened / unsupported / contradiction: hello-world 0 / 0 / 0 / 0
+  and loan-renewal 0 / 0 / 3 / 0, all three AC-001's recording clause from a records request that
+  hashes as before Q22. All six H1s are the sources' headings, the nine native deletes were all
+  helpful, and title restatement fell to 0 of 3 hello-world (reference 3 of 3). The target was
+  0 in both states ("benefit not demonstrated"), so the keep rests on the mechanism and the
+  guards. Measures: `evaluations/q22-measures-set.json`.
+- **Evaluator version:** the reference counts (SPEC01 §1) were scored under `185b9bc6…`, which
+  T7 doesn't count with `3fe52a92…`, and weren't re-scored first (SPEC01 §2 rule 5). A re-score
+  can't reverse the keep: the set has no lost, weakened or contradiction defect; each of its
+  three additions is an AC-001 Then byte-identical to one in the reference, which the skill
+  scores the same; and on the target the set holds 0.

@@ -368,7 +368,7 @@ Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), th
   invalidation/rework route; an unregistered or administratively owned gap blocks.
 - Only a gate whose gaps are all `clarification_required` reaches the need builder; an
   upstream-rework or administrative-block entry blocks the gate first
-  (`required_authority.zig:275`). The builder converts every such gap in one run: one
+  (`required_authority.zig:276`). The builder converts every such gap in one run: one
   registered typed need per gap, owned by its requirement's registered owner stage (user
   decision, 9 November 2026). The shared clarification refresh opens or updates one form per
   need, keyed by its structural subject, and rejects two needs with the same stage and subject.

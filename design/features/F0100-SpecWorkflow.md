@@ -22,8 +22,8 @@ primary story); and ADRs [0013](../decisions/0013-workflow-input-reuse.md),
 [0036](../decisions/0036-source-quoted-claims.md),
 [0038](../decisions/0038-record-claims-and-scenario-coverage.md),
 [0039](../decisions/0039-configured-temperatures-and-runaway-resend.md),
-[0043](../decisions/0043-model-facing-exact-text-names.md) and
-[0046](../decisions/0046-complete-dispositions-at-admission.md). Not yet implemented:
+[0043](../decisions/0043-model-facing-exact-text-names.md),
+[0046](../decisions/0046-complete-dispositions-at-admission.md) and [0048](../decisions/0048-engine-derived-specification-title.md). Not yet implemented:
 [ADR 0025](../decisions/0025-clarification-answer-authentication.md),
 [ADR 0033](../decisions/0033-generic-repair-operations.md) and most of
 [ADR 0030](../decisions/0030-engine-owned-model-request.md);
@@ -673,10 +673,10 @@ specification-quality oracle. `src/domain/required_authority.zig` owns the
 closed requiredness/ownership policies, current support checks and outcomes.
 `specification_authority.zig` contributes the schema-derived Specify projection.
 
-- The source-readiness projection includes the display name, description, primary
-  goal, acceptance criteria, functional requirements, scenario coverage and
-  evidence-backed entity decision, but not the engine-composed primary story (ADR 0047
-  Decision 5); every accounted reference signal/conflict; and each exact-preservation
+- The source-readiness projection includes the description, primary goal, acceptance
+  criteria, functional requirements, scenario coverage and evidence-backed entity decision,
+  but not the engine-derived primary story or display name (ADRs 0047 Decision 5 and 0048);
+  every accounted reference signal/conflict; and each exact-preservation
   obligation. The opt-in source-preservation projection
   ([ADR 0021](../decisions/0021-optional-source-preservation-review.md)) holds one
   obligation per captured source.
@@ -931,7 +931,7 @@ validators:
   exact compiled extraction-contract comparison evidence, reconciliation and
   passive-literal records, accepted brief/content/provenance,
   coverage, record-ID counters, clarification state/revision and the captured principle
-  registry identity (`specification-state/v24`). Neither variant holds review evidence.
+  registry identity (`specification-state/v25`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
 - `capture-workflow-state` and `parse-specification-state` validate this singleton
@@ -1044,13 +1044,13 @@ then applicable sections in this exact relative order:
 - Branch, creation date, draft status and original command metadata are not fields in
   the current content contract and are not fabricated or inferred from the feature
   title.
-- The feature directory remains the identity; the human title is reference-grounded.
+- The feature directory remains the identity; the title is the sources' level-1 heading (ADR 0048).
 
 ### 5.2 Typed content mapping
 
 | Section | Native content field / record kind | Purpose |
 | --- | --- | --- |
-| Document H1 | `display_name` | Reference-grounded human feature name. |
+| Document H1 | `display_name` | The sources' level-1 heading as written, taken natively ([ADR 0048](../decisions/0048-engine-derived-specification-title.md)). |
 | Primary User Story | `primary_user_story` | The source's business claims, quoted in source order and joined natively ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)). |
 | Acceptance Criteria | `acceptance_criterion` / `AC-*` | Testable initial state, action, and expected outcome. |
 | User-Visible Outcomes | `user_visible_outcome` / `UO-*` | Results, validation, confirmation, or terminal responses a user can directly observe. |
@@ -1086,8 +1086,8 @@ continuation encoding.
 
 The hierarchy does not authorize invented filler:
 
-- `displayName`, `primaryUserStory`, and every contract-required record must be
-  supported by current reference or resolved clarification authority;
+- `primaryUserStory` and every contract-required record must be supported by current
+  reference or resolved clarification authority; `displayName` is the sources' heading (ADR 0048);
 - acceptance criteria and functional requirements each require supported
   records before successful publication; their headings remain mandatory;
 - other empty collections render no heading, bullet, placeholder or synthetic
@@ -1200,9 +1200,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   - Canonical-state parsing rejects missing mandatory families through the same
     specification required-family contract.
 
-- Native proposals contain the attributed title, `records` with one closed
-  content-kind variant and provenance per record, and the entity decision/basis. The
-  engine composes the attributed story (ADR 0047).
+- Native proposals contain `records` with one closed content-kind variant and
+  provenance per record, and the entity decision/basis. The engine composes the
+  attributed story (ADR 0047) and takes the title from the sources (ADR 0048).
 - They contain no generated IDs, paths, questions or completion fields.
 - Ordinary business values use the existing typed-text shape; canonical exact copies
   are engine-derived occurrence handles (ADR 0020), never a second copy of source bytes.
@@ -1220,7 +1220,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 ### 5.7 Generation, coverage and repair
 
 - The native generation candidate is a closed content/clarification/inconclusive union.
-- Content units are a feature brief (title, description, primary goal), the
+- Content units are a feature brief (description, primary goal), the
   engine-composed primary story (ADR 0047), feature-wide entity applicability plus
   entity records, or a source-group batch of non-entity records (§17.3). Each entity independently selects its support; each
   non-entity record names the claims it supports from its batch's group ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)).

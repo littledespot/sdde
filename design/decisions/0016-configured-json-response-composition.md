@@ -136,14 +136,16 @@ projection owner.
 **Packet-guidance amendment (user-approved, 30 October 2026, SPEC01 D3.1, record in
 `fixes/Z_FIX06.md` at git `194e29a`; amended 1 November 2026 by
 SPEC01 D13.1, 7 November 2026 by [ADR 0047](0047-engine-composed-primary-story.md)
-Decision 5 and 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
+Decision 5, 8 November 2026 by [ADR 0038](0038-record-claims-and-scenario-coverage.md)
 Decisions 6 and 7, which removed the entity meaning and relationship entries and the entity
-repair tail, and then the edge case's outcome entry):** workflow resources own the semantic
-guidance that native packet builders present. One closed `packet-guidance/v5` resource holds exactly one text for each
+repair tail, and then the edge case's outcome entry, and 11 November 2026 by
+[ADR 0048](0048-engine-derived-specification-title.md), which removed the `display_name`
+purpose):** workflow resources own the semantic
+guidance that native packet builders present. One closed `packet-guidance/v6` resource holds exactly one text for each
 registered key: feature and record purposes, source-review scopes, the reconciliation
 summary purpose, support-evidence guidance and the semantic tails of native repair
-requirements. The removed post-generation review's scopes and the engine-composed
-story's purpose have no key. The keys are closed native enums, derived from the native
+requirements. The removed post-generation review's scopes and the engine-derived
+story's and title's purposes have no key. The keys are closed native enums, derived from the native
 registries where one exists, so the compiler rejects a missing, extra, duplicate,
 mistyped or empty entry and an unsupported version. One `capture-packet-guidance` step publishes
 the compiled guidance as run data; consuming operations declare `.packet_guidance`

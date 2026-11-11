@@ -14,7 +14,7 @@ const text = @import("../../../src/test_fixtures/reference_text.zig");
 const native = @import("../../../src/provider_invocation_test_fixture.zig");
 const retained = @import("corpus.zig");
 
-pub const FailureClass = enum { insertion_only, collapsed_records, prose_without_insertions, admitted_generation_then_review_failure, embedded_insertion_syntax, unrelated_loan_control };
+pub const FailureClass = enum { collapsed_records, prose_without_insertions, admitted_generation_then_review_failure, embedded_insertion_syntax, unrelated_loan_control };
 pub const Origin = enum { authentic_capture, scripted_control, unavailable_capture };
 pub const Rejection = union(enum) {
     syntax: strict.Diagnostic,
@@ -46,13 +46,13 @@ pub const Row = struct {
     outcome: Outcome,
 };
 pub const Report = struct {
-    version: enum { @"exact-value-production-admission/v1" } = .@"exact-value-production-admission/v1",
+    version: enum { @"exact-value-production-admission/v2" } = .@"exact-value-production-admission/v2",
     projection: enum { current_native_test_context_over_retained_source_bytes } = .current_native_test_context_over_retained_source_bytes,
     historical_metadata_promoted: bool = false,
     model_calls: usize = 0,
     workflow_authority: bool = false,
     semantic_quality_assessed: bool = false,
-    requested_runs: usize = 5,
+    requested_runs: usize = 4,
     available_requested_runs: usize,
     unavailable_requested_runs: usize,
     replayed_capture_rows: usize,
@@ -265,15 +265,14 @@ fn replay(a: std.mem.Allocator, input: Input) !Row {
                 const effective = try p.effectiveClaims(a, record.provenance.claim_ids, values);
                 for (extra_claims.items) |id| try std.testing.expect(refs.r.contains(refs.r.ClaimId, effective, id) or !containsExact(values, id));
             }
-            const title = try plain(a, context, "Observable application behavior", .spec_title);
             const description = try plain(a, context, "The application provides the requested result.", .spec_description);
             const goal = try plain(a, context, "Provide the requested behavior.", .spec_goal);
             const story = try plain(a, context, "The user requests the supported behavior and observes the result.", .spec_story);
-            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{}, &.{});
-            const coverage = try @import("../../../src/domain/specification_coverage.zig").validate(a, context.references, .{ .title = title, .description = description, .primary_goal = goal }, identified.content);
+            const identified = try @import("../../../src/domain/specification_identity.zig").assign(a, .{ .display_name = current.title, .primary_user_story = story, .entities = current.units[2].?.response.content.entities.decision(), .records = checked.response.content.records }, .{}, &.{});
+            const coverage = try @import("../../../src/domain/specification_coverage.zig").validate(a, context.references, .{ .description = description, .primary_goal = goal }, identified.content);
             var targets: usize = 0;
             for (coverage.obligations) |obligation| targets += obligation.exact_targets.len;
-            try p.validateStored(a, context.inputs, .{ .records = context.registry.records, .occurrences = context.registry.occurrences }, @import("../../../src/domain/reference_support.zig").records(context.references), .{ .title = title, .description = description, .primary_goal = goal }, identified.content);
+            try p.validateStored(a, context.inputs, .{ .records = context.registry.records, .occurrences = context.registry.occurrences }, @import("../../../src/domain/reference_support.zig").records(context.references), .{ .description = description, .primary_goal = goal }, identified.content);
             row.outcome = .{ .admitted = .{ .records = checked.response.content.records.len, .exact_nodes = exact_nodes, .explicit_support_unchanged = true, .exact_claims_beyond_explicit_support = extra_claims.items.len, .coverage_obligations = coverage.obligations.len, .behavioral_exact_targets = targets } };
             return row;
         },
@@ -288,12 +287,11 @@ fn containsExact(values: []const g.spec.BusinessValue, id: refs.r.ClaimId) bool 
 
 pub fn run(a: std.mem.Allocator) !Report {
     var rows: std.ArrayList(Row) = .empty;
-    try rows.append(a, try replay(a, try representation(a, "2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8", 7, "f11-insertion-only-title", "16 October 16:20", .insertion_only, .brief)));
     try rows.append(a, try replay(a, try representation(a, "2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31", 13, "f12-collapsed-records", "16 October 18:58", .collapsed_records, .records)));
     try rows.append(a, try replay(a, try proseCapture(a)));
     try rows.append(a, .{ .id = "generation-pass-review-budget-run", .requested_run_aedt = "16 October 20:33", .failure_class = .admitted_generation_then_review_failure, .origin = .unavailable_capture, .execution_id = "2026-10-16T09-33-15Z-d749fce107972fd4feaad6c9ac902538", .outcome = .{ .unavailable = .retained_raw_capture_not_found } });
     try rows.append(a, try replay(a, try syntaxCapture(a)));
-    try rows.append(a, try replay(a, .{ .id = "loan-native-lineage-control", .time = "independent scripted control", .class = .unrelated_loan_control, .origin = .scripted_control, .source = "When an eligible borrower renews a loan, the service must extend the due date and display `Loan renewed!`.\n", .output = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":\"An eligible borrower has a renewable loan.\",\"when\":\"The borrower requests renewal.\",\"then\":\"The service extends the due date and displays Loan renewed!\"},\"claim_ids\":[1]},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The service must extend the renewable loan and display Loan renewed!\"},\"claim_ids\":[1]}]}", .unit = .records }));
+    try rows.append(a, try replay(a, .{ .id = "loan-native-lineage-control", .time = "independent scripted control", .class = .unrelated_loan_control, .origin = .scripted_control, .source = "# Loan renewal\nWhen an eligible borrower renews a loan, the service must extend the due date and display `Loan renewed!`.\n", .output = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":\"An eligible borrower has a renewable loan.\",\"when\":\"The borrower requests renewal.\",\"then\":\"The service extends the due date and displays Loan renewed!\"},\"claim_ids\":[1]},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The service must extend the renewable loan and display Loan renewed!\"},\"claim_ids\":[1]}]}", .unit = .records }));
     var admitted_rows: usize = 0;
     var rejected_rows: usize = 0;
     var capture_rows: usize = 0;
@@ -306,7 +304,7 @@ pub fn run(a: std.mem.Allocator) !Report {
             .unavailable => {},
         }
         const prohibited_capture = switch (row.failure_class) {
-            .insertion_only, .collapsed_records, .embedded_insertion_syntax => true,
+            .collapsed_records, .embedded_insertion_syntax => true,
             // This immutable prose capture also authors an entity in its old
             // record batch, forbidden by the current feature-owned contract.
             .prose_without_insertions => true,
@@ -314,5 +312,5 @@ pub fn run(a: std.mem.Allocator) !Report {
         };
         if (prohibited_capture and row.outcome == .admitted) escapes += 1;
     }
-    return .{ .available_requested_runs = 4, .unavailable_requested_runs = 1, .replayed_capture_rows = capture_rows, .scripted_control_rows = 1, .admitted_rows = admitted_rows, .typed_rejection_rows = rejected_rows, .admission_escape_rows = escapes, .rows = try rows.toOwnedSlice(a) };
+    return .{ .available_requested_runs = 3, .unavailable_requested_runs = 1, .replayed_capture_rows = capture_rows, .scripted_control_rows = 1, .admitted_rows = admitted_rows, .typed_rejection_rows = rejected_rows, .admission_escape_rows = escapes, .rows = try rows.toOwnedSlice(a) };
 }

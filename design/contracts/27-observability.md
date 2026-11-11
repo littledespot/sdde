@@ -136,7 +136,7 @@ re-send is logged:
   carrying the diagnostic `RunawayRepeated`.
 
 Logging rejection prevents the re-send. The temperature each attempt sent is recorded in
-its request description (`model-request-debug/v16`), not in a log field. A re-send that
+its request description (`model-request-debug/v17`), not in a log field. A re-send that
 succeeds removes neither event.
 
 At `debug` or `trace`, ADR 0018's capture logs every runaway in full in the prompt

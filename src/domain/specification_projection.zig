@@ -4,13 +4,12 @@ const std = @import("std");
 const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error;
-pub const Brief = struct { title: []const u8, description: []const u8, primary_goal: []const u8 };
+pub const Brief = struct { description: []const u8, primary_goal: []const u8 };
 
 /// Read-only business context allocated in the caller's scratch arena;
 /// canonical fragments and lineage stay native.
 pub fn brief(allocator: std.mem.Allocator, context: provenance.Context, value: spec.Brief) Error!Brief {
     return .{
-        .title = try businessText(allocator, context, value.title),
         .description = try businessText(allocator, context, value.description),
         .primary_goal = try businessText(allocator, context, value.primary_goal),
     };
@@ -237,7 +236,8 @@ pub fn project(allocator: std.mem.Allocator, context: provenance.Context, direct
         }
     }
     const document: spec.CapturedDocument = .{
-        .display_name = try scalar(allocator, context, content.display_name),
+        // ADR 0048: the title is already the sources' text, with no exact value to render.
+        .display_name = .{ .bytes = content.display_name.bytes },
         .primary_user_story = try scalar(allocator, context, content.primary_user_story),
         .records = records,
         .entity_section = if (content.entities.disposition == .required) .present else .omitted,

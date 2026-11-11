@@ -123,7 +123,7 @@ The LLM returns `SpecificationContentProposal` semantic fields with no IDs or st
 
 [View the Specification IR sample](../code.md#specification-ir).
 
-The two singleton fields have fixed provenance keys `spec.display_name` and `spec.primary_user_story`; their engine-owned structural slots survive reparse without an allocated ordinal. Every repeatable editable/provenance-bearing record uses a monotonic prefix:
+The two singleton fields have fixed keys `spec.display_name` and `spec.primary_user_story`; their engine-owned structural slots survive reparse without an allocated ordinal. `spec.display_name` holds a native text value, the sources' level-1 heading, with no attributed provenance ([ADR 0048](../decisions/0048-engine-derived-specification-title.md)); `spec.primary_user_story` is a provenance key. Every repeatable editable/provenance-bearing record uses a monotonic prefix:
 
 | Record kind | Prefix |
 | --- | --- |

@@ -232,7 +232,7 @@ test "test.integration.representation_admission retained F10 F11 and F12 observa
             }
         }
     }
-    const required: Counts = .{ .runs = 7, .captures = 32, .wire_syntax_rejected_responses = 11, .values = 86, .reference_only = 13, .prohibited_exact = 5, .embedded_insertion_syntax = 20, .admitted = 48 };
+    const required: Counts = .{ .runs = 7, .captures = 32, .wire_syntax_rejected_responses = 11, .values = 78, .reference_only = 13, .prohibited_exact = 1, .embedded_insertion_syntax = 19, .admitted = 45 };
     try std.testing.expectEqualDeep(required, fixture.expected);
     try std.testing.expectEqualDeep(required, counts);
     const output = ".zig-cache/representation-admission";

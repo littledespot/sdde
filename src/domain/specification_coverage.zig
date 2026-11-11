@@ -5,7 +5,8 @@ const g = @import("specification_generation.zig");
 const r = @import("reference_reconciliation.zig");
 const provenance = @import("specification_provenance.zig");
 const text = @import("typed_text.zig");
-pub const Key = union(enum) { title, description, primary_goal, primary_user_story, entities, record: spec.Id };
+/// The title maps no claim: the engine takes it from the sources (ADR 0048).
+pub const Key = union(enum) { description, primary_goal, primary_user_story, entities, record: spec.Id };
 pub const Account = struct {
     claim_id: r.ClaimId,
     disposition: union(enum) { mapped: []const Key, context_only: []const r.SignalId },
@@ -97,11 +98,10 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
     return .{ .valid = .{ .accounts = accounts.items, .obligations = obligations.items } };
 }
 const AttributedTarget = struct { key: Key, value: spec.AttributedValue, field: text.field_policy.Field };
-fn singletons(brief: g.Brief, candidate: spec.IdentifiedContent) [5]AttributedTarget {
+fn singletons(brief: g.Brief, candidate: spec.IdentifiedContent) [4]AttributedTarget {
     return .{
-        .{ .key = .title, .value = brief.title, .field = .spec_title },                        .{ .key = .description, .value = brief.description, .field = .spec_description },
-        .{ .key = .primary_goal, .value = brief.primary_goal, .field = .spec_goal },           .{ .key = .primary_user_story, .value = candidate.primary_user_story, .field = .spec_story },
-        .{ .key = .entities, .value = candidate.entities.basis, .field = .spec_entity_basis },
+        .{ .key = .description, .value = brief.description, .field = .spec_description },             .{ .key = .primary_goal, .value = brief.primary_goal, .field = .spec_goal },
+        .{ .key = .primary_user_story, .value = candidate.primary_user_story, .field = .spec_story }, .{ .key = .entities, .value = candidate.entities.basis, .field = .spec_entity_basis },
     };
 }
 pub fn exactTargets(a: std.mem.Allocator, brief: g.Brief, candidate: spec.IdentifiedContent, claim_id: r.ClaimId) Error![]const Key {

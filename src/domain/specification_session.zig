@@ -14,6 +14,8 @@ pub const records_index = @intFromEnum(std.meta.Tag(g.Unit).records);
 pub const Session = struct {
     feature: @import("feature_identity.zig").FeatureId,
     reference_state: @import("reference_identity.zig").StateId,
+    /// The display name the engine took from the sources (ADR 0048).
+    title: @import("specification.zig").DisplayName,
     revision: u64 = 1,
     completed: usize = 0,
     record_cursor: usize = 0,
@@ -57,7 +59,12 @@ pub fn initialize(a: std.mem.Allocator, feature: @import("feature_identity.zig")
     const records = @import("reference_support.zig").records(context.references);
     if (try binding.recordCount(records) == 0) return .{ .blocked = try binding.rejection(a, context.references) };
     try binding.validate(records, context.inputs);
-    return .{ .ready = .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(records) } };
+    // ADR 0048: the title is the sources' level-1 heading; without one, nothing is generated.
+    const title = switch (try @import("specification_title.zig").derive(a, context.inputs)) {
+        .title => |value| value,
+        .gap => |gap| return .{ .blocked = binding.titleRejection(context.references, gap) },
+    };
+    return .{ .ready = .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .title = title, .record_group_count = try binding.recordCount(records) } };
 }
 
 pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context) Error!binding.Bound {
@@ -397,7 +404,8 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
     if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = scenario_coverage });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
-        .brief => inline for (.{ "title", "description", "primary_goal" }) |field| {
+        // Each brief field the model writes selects its own groups.
+        .brief => inline for (comptime std.meta.fieldNames(@FieldType(g.ModelResponse, "brief"))) |field| {
             try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
         },
         .primary_user_story => return error.InvalidSpecificationUnit,
@@ -652,7 +660,7 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
         .criterion = try placedIndex(placed.items, link.criterion),
     };
     return @import("specification_identity.zig").assign(allocator, .{
-        .display_name = current.units[0].?.response.content.brief.title,
+        .display_name = current.title,
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
         .entities = current.units[2].?.response.content.entities.decision(),
         .records = records,

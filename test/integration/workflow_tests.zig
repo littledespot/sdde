@@ -1355,6 +1355,8 @@ fn stateId(runner: *@import("../../src/application/workflow_pipeline_runner.zig"
 }
 
 const SpecificationCases = enum { existing, source_preservation, reuse_regeneration, scenario_links };
+/// The applicability sources' level-1 title heading (ADR 0048).
+const applicability_heading = "# Required output\n";
 
 // Every scenario allocates through one leak-checked untraced allocator; the
 // sweep's allocations would otherwise each pay for a stack trace.
@@ -1502,48 +1504,51 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
-        if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        // Every source set below opens with a level-1 title heading (ADR 0048).
+        if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\n" ++ "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
         if (link_scenario) {
             const several = scenario != link_start;
-            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (several) "Renew the loan.\n" else "A librarian renews an eligible loan and sees the new return deadline.\n" });
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (several) "# Loan renewal\nRenew the loan.\n" else "# Loan renewal\nA librarian renews an eligible loan and sees the new return deadline.\n" });
             if (several) {
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = "Issue a receipt.\n" });
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = "Confirm the renewal.\n" });
             }
         }
         if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
-            "MOCK Track library loans and display their return deadlines.\n"
+            "# Library loans\nMOCK Track library loans and display their return deadlines.\n"
         else
-            "MOCK Track customer invoices and display the outstanding balance.\n" });
-        if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
-        if (candidate_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario) "A visitor sees the current UTC date and time on startup. Display `Hello, World!`.\n" else if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
-        if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
-        if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "After renewal display `Loan renewed!` and the new return deadline.\n" else "On startup display `Hello, World!` and the current UTC date and time.\n" });
-        if (summary_scenario or global_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - summary_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
-        if (brief_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - brief_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
+            "# Customer invoices\nMOCK Track customer invoices and display the outstanding balance.\n" });
+        if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" else "# Loan renewal\nAfter renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (candidate_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario) "# Startup display\nA visitor sees the current UTC date and time on startup. Display `Hello, World!`.\n" else if (scenario == omission_scenario + 1) "# Loan renewal\nA librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "# Booking confirmation\nA traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
+        if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" else "# Loan renewal\nAfter renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (evidence_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == evidence_start + 1) "# Loan renewal\nAfter renewal display `Loan renewed!` and the new return deadline.\n" else "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" });
+        if (summary_scenario or global_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - summary_start) % 2 == 0) "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" else "# Loan renewal\nAfter renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
+        if (brief_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - brief_start) % 2 == 0) "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" else "# Loan renewal\nAfter renewal display `Loan renewed!` and label the deadline `Return by`.\n" });
         if (applicability) |mode| {
-            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = mode.source(other_applicability) });
+            const source = try std.mem.concat(allocator, u8, &.{ applicability_heading, mode.source(other_applicability) });
+            defer allocator.free(source);
+            try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = source });
             if (mode == .no_entities) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (other_applicability) "Display only the digest.\n" else "Display only the greeting.\n" });
         }
-        if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
+        if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" else "# Loan renewal\nAfter renewal display `Loan renewed!` and the new return deadline.\n" });
         // Keep the omitted claim and its exact token in the selected producer's
         // chunk so the empty -> claim -> classification recovery is exercised.
         // A discarded token reaches generation only on a line no claim quotes (ADR 0036).
         if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = switch (source_repairs[scenario - source_repair_start]) {
-            .partial => "MOCK librarian renews an eligible loan and sees the new return deadline.\n",
-            .classification => "A librarian renews a loan and sees the new return deadline.\nDisplay `Loan renewed!`.\n",
-            else => "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n",
+            .partial => "# Loan renewal\nMOCK librarian renews an eligible loan and sees the new return deadline.\n",
+            .classification => "# Loan renewal\nA librarian renews a loan and sees the new return deadline.\nDisplay `Loan renewed!`.\n",
+            else => "# Loan renewal\nA librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n",
         } });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
-            .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
-            .misbound_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "On startup display `Hello, World!` and the current UTC date and time.\n" }),
+            .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nDisplay `Loan renewed!`.\n" }),
+            .misbound_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Startup display\nOn startup display `Hello, World!` and the current UTC date and time.\n" }),
             .occupied_conflict => {
-                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/conflict.md", .data = "Reject the renewal.\n" });
             },
             .permuted_disposition, .permuted_conflict_disposition => {
-                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
+                try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "# Loan renewal\nRenew the loan.\n" });
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/receipt.md", .data = "Issue a receipt.\n" });
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/confirmation.md", .data = "Confirm the renewal.\n" });
             },
@@ -1634,7 +1639,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         }
         if (applicability) |mode| {
             driver.applicability = mode;
-            driver.brief_text = .{ "Required output", mode.source(other_applicability), mode.source(other_applicability) };
+            driver.brief_text = .{ mode.source(other_applicability), mode.source(other_applicability) };
             driver.entities_required = mode == .entities;
             if (!other_applicability) driver.measurement_prefix = switch (mode) {
                 .no_entities => ".zig-cache/phase4-complete",
@@ -1700,7 +1705,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             // binding supplies evidence after the semantic fields are admitted.
             const summary_first = (scenario - brief_start) % 2 == 0;
             if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_source_single;
-            driver.brief_text = if (summary_first) .{ "Startup greeting", "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Loan renewal", "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
+            driver.brief_text = if (summary_first) .{ "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
         }
         cost.enter(.execution);
         if (link_scenario) driver.edge_cases = switch (scenario - link_start) {
@@ -1885,7 +1890,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                     try std.testing.expectEqual(@as(usize, 0), entities.origins.fields.len);
                     try std.testing.expectEqual(.not_applicable, entities.response.content.entities.disposition);
                     try std.testing.expectEqual(@as(usize, 0), entities.response.content.entities.records.len);
-                    try std.testing.expectEqualDeep(current.units[0].?.response.content.brief.title, entities.response.content.entities.basis);
+                    try std.testing.expectEqualDeep(current.units[0].?.response.content.brief.description, entities.response.content.entities.basis);
                     var owner_arena: std.heap.ArenaAllocator = .init(allocator);
                     defer owner_arena.deinit();
                     const owner = try @import("../../src/domain/specification_session.zig").ownerFor(owner_arena.allocator(), current, @import("../../src/domain/specification_session.zig").entities_index);
@@ -1962,10 +1967,19 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expectEqual(@as(usize, 0), reference.conflicts.len);
             const published = try project.dir.readFileAlloc(io, "requirements/current/chosen/spec.md", a, .limited(8_388_608));
             assertion_context = "applicability original source and rendered content";
-            try std.testing.expectEqualStrings(mode.source(other_applicability), reference.inputs.corpus.sources[0].bytes);
+            const captured = reference.inputs.corpus.sources[0].bytes;
+            try std.testing.expect(std.mem.startsWith(u8, captured, applicability_heading));
+            try std.testing.expectEqualStrings(mode.source(other_applicability), captured[applicability_heading.len..]);
             var expected_source: std.Io.Writer.Allocating = .init(a);
             try @import("../../src/domain/specification_markdown.zig").literal(&expected_source.writer, mode.source(other_applicability), .block_start);
             try std.testing.expect(std.mem.indexOf(u8, published, expected_source.written()) != null);
+            // ADR 0048: the stored and published title is the source's level-1 heading, and
+            // readback rejects a stored title the captured sources don't yield.
+            try std.testing.expectEqualStrings("Required output", state.content.display_name.bytes);
+            try std.testing.expect(std.mem.startsWith(u8, published, "# Feature Specification: Required output\n"));
+            const forged = try std.mem.replaceOwned(u8, a, saved, "\"display_name\":{\"bytes\":\"Required output\"", "\"display_name\":{\"bytes\":\"Required outputs\"");
+            try std.testing.expect(!std.mem.eql(u8, forged, saved));
+            try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, forged, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource()));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .functional_requirement));
             try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(state.content, .acceptance_criterion));
             try std.testing.expectEqual(@as(@TypeOf(state.content.entities.disposition), if (mode == .entities) .required else .not_applicable), state.content.entities.disposition);
@@ -2369,11 +2383,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             } else {
                 const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
                 const brief = session.units[0].?.response.content.brief;
-                inline for (.{ "title", "description", "primary_goal" }) |field| {
+                inline for (.{ "description", "primary_goal" }) |field| {
                     const attributed = @field(brief, field);
                     try std.testing.expect(attributed.value.segments[0] == .literal);
                     try std.testing.expectEqual(@as(usize, 1), attributed.provenance.claim_ids.len);
-                    try std.testing.expectEqualDeep(brief.title.provenance.claim_ids, attributed.provenance.claim_ids);
+                    try std.testing.expectEqualDeep(brief.description.provenance.claim_ids, attributed.provenance.claim_ids);
                 }
             }
         }
@@ -2471,7 +2485,7 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
                 const context = try @import("../../src/application/specification_workflow.zig").readContext(&view);
                 var projection_arena: std.heap.ArenaAllocator = .init(allocator);
                 defer projection_arena.deinit();
-                inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
+                inline for (.{ "description", "primary_goal" }, 0..) |field, index| {
                     const projected = try @import("../../src/domain/specification_projection.zig").scalar(projection_arena.allocator(), context, @field(session.units[0].?.response.content.brief, field));
                     try std.testing.expectEqualStrings(driver.brief_text.?[index], projected.bytes);
                 }
@@ -2694,8 +2708,8 @@ fn verifyPublication(io: std.Io, allocator: std.mem.Allocator, project: std.Io.D
     const bytes = try project.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", a, .limited(64 * 1024 * 1024));
     const restored = try @import("../../src/domain/specification_state.zig").parse(a, bytes, .{ .bytes = "chosen" }, contracts);
     const persisted = restored.specified() orelse return error.ExpectedSpecifiedState;
-    try std.testing.expectEqualStrings("specification-state/v24", persisted.schema);
-    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v24", "specification-state/v23");
+    try std.testing.expectEqualStrings("specification-state/v25", persisted.schema);
+    const stale_state = try std.mem.replaceOwned(u8, a, bytes, "specification-state/v25", "specification-state/v24");
     try std.testing.expect(!std.mem.eql(u8, stale_state, bytes));
     try std.testing.expectError(error.InvalidSpecificationState, @import("../../src/domain/specification_state.zig").parse(a, stale_state, .{ .bytes = "chosen" }, contracts));
     const principles = @import("../../src/domain/principle_registry.zig");

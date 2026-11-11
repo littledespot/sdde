@@ -4,11 +4,10 @@ const g = @import("specification_generation.zig");
 const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
-pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
+pub const Subject = union(enum) { description, primary_goal, story, entity_basis, record: usize };
 pub const ValueField = union(enum) { value, given, when, then, text, condition, name };
 pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
     return switch (subject) {
-        .title => .spec_title,
         .description => .spec_description,
         .primary_goal => .spec_goal,
         .story => .spec_story,
@@ -191,7 +190,6 @@ fn setRecordIndex(target: *Target, index: usize) void {
 }
 fn attributed(comptime boundary: g.spec.Boundary, content: *g.Responses(boundary).Content, subject: Subject) Error!*g.spec.Values(boundary).AttributedValue {
     return switch (subject) {
-        .title => if (content.* == .brief) &content.brief.title else error.InvalidSpecificationRepair,
         .description => if (content.* == .brief) &content.brief.description else error.InvalidSpecificationRepair,
         .primary_goal => if (content.* == .brief) &content.brief.primary_goal else error.InvalidSpecificationRepair,
         // Unit validation still reports the engine-composed story's observed value;

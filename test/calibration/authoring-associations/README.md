@@ -173,9 +173,9 @@ Assess the metrics independently using the unscored template:
 
 All sufficient-source logical trials must complete, pass current native admission
 and fulfil their specific assigned purposes without unsupported additions. The
-brief preserves the intended feature meaning jointly: its title names the feature,
-its description explains the behavior and its goal explains the purpose. Do not
-require each of those fields to repeat every source clause. The entity basis must
+brief preserves the intended feature meaning jointly: its description explains the
+behavior and its goal explains the purpose; the engine takes the title from the sources
+(ADR 0048). Do not require either field to repeat every source clause. The entity basis must
 justify its decision, rather than restate every behavioral duty. Each complete record collection must preserve
 its assigned group obligations; individual records must fulfil their own field
 and family purposes, rather than each restating the entire group.
@@ -186,7 +186,7 @@ Every selected group and explanation must be semantically justified. The case
 for every field. Permit a different selection when it genuinely supports the
 particular output. Presence, nonemptiness and even an expected ID are not meaning
 proof. Exact literals must be correct where an authored value uses a literal; do not
-require titles, goals or explanations to copy a literal they do not need. The
+require goals or explanations to copy a literal they do not need. The
 assembled specification’s separate aggregate exact-preservation gate remains
 unchanged, and this controlled panel does not replace it. A failure is an unqualified candidate, not a
 reason to weaken required-output, source-review or publication gates. Whole-workflow

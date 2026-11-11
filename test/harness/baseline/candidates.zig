@@ -129,7 +129,7 @@ fn makeChecked(unit: generation.Unit, request: usize) generation.Checked {
     return .{
         .unit = unit,
         .response = .{ .content = switch (unit) {
-            .brief => .{ .brief = .{ .title = attributed, .description = attributed, .primary_goal = attributed } },
+            .brief => .{ .brief = .{ .description = attributed, .primary_goal = attributed } },
             .primary_user_story => .{ .primary_user_story = attributed },
             .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = attributed } },
             .records => .{ .records = &.{} },
@@ -179,7 +179,7 @@ test "native first pass rejects missing corrected and repaired generation origin
     var batch = makeChecked(.records, 4);
     // An apparently original provider origin alone cannot close first-pass
     // proof without every native batch-assignment receipt.
-    var current: session.Session = .{ .feature = .{ .bytes = "selected" }, .reference_state = .{ .bytes = "reference-test" }, .completed = session.unit_count, .record_cursor = 1, .record_group_count = 1, .record_batches = &.{batch}, .units = narrative };
+    var current: session.Session = .{ .feature = .{ .bytes = "selected" }, .reference_state = .{ .bytes = "reference-test" }, .title = .{ .bytes = "Selected feature" }, .completed = session.unit_count, .record_cursor = 1, .record_group_count = 1, .record_batches = &.{batch}, .units = narrative };
     try std.testing.expect(!firstPass(current));
     batch.record_assignment = .{ .reference_state = current.reference_state, .group_index = 0, .source_group_id = .{ .ordinal = 1 }, .references = .{ .bytes = @splat(0) } };
     current.record_batches = &.{batch};
@@ -233,9 +233,10 @@ test "native assembled observations resolve unrelated exact values and preserve 
     const references = @import("../../../src/test_fixtures/reference_reconciliation.zig");
     const extraction = @import("../../../src/domain/reference_extraction.zig");
     const values = @import("../../../src/application/pipeline_values.zig");
-    for ([_][3][]const u8{
-        .{ "Display the receipt `Ready.` after successful reservation.", "Display the receipt after successful reservation.", "Ready." },
-        .{ "Notify the sender with `Delivered.` after handing over the parcel.", "Notify the sender after handing over the parcel.", "Delivered." },
+    // Source, authored narrative, exact value and the source's title heading (ADR 0048).
+    for ([_][4][]const u8{
+        .{ "# Room reservation\nDisplay the receipt `Ready.` after successful reservation.", "Display the receipt after successful reservation.", "Ready.", "Room reservation" },
+        .{ "# Parcel handover\nNotify the sender with `Delivered.` after handing over the parcel.", "Notify the sender after handing over the parcel.", "Delivered.", "Parcel handover" },
     }) |example| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -282,7 +283,7 @@ test "native assembled observations resolve unrelated exact values and preserve 
                 continue;
             }
             const response: generation.Response = .{ .content = switch (unit) {
-                .brief => .{ .brief = .{ .title = narrative, .description = behavior, .primary_goal = narrative } },
+                .brief => .{ .brief = .{ .description = behavior, .primary_goal = narrative } },
                 .primary_user_story => unreachable,
                 .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = narrative } },
                 .records => batch: {
@@ -338,7 +339,7 @@ test "native assembled observations resolve unrelated exact values and preserve 
         try std.testing.expect(first.first_pass);
         const captured = try std.json.parseFromSlice(std.json.Value, a, first.json, .{});
         defer captured.deinit();
-        try std.testing.expectEqualStrings(example[1], captured.value.object.get("document").?.object.get("display_name").?.object.get("bytes").?.string);
+        try std.testing.expectEqualStrings(example[3], captured.value.object.get("document").?.object.get("display_name").?.object.get("bytes").?.string);
         try std.testing.expect(std.mem.indexOf(u8, captured.value.object.get("document").?.object.get("primary_user_story").?.object.get("bytes").?.string, example[2]) != null);
         try std.testing.expect(captured.value.object.get("native_reference_support").?.object.get("claims").?.array.items.len == support.items.entries.len);
         try std.testing.expectEqualStrings(example[0], captured.value.object.get("native_reference_support").?.object.get("sources").?.array.items[0].object.get("bytes").?.string);

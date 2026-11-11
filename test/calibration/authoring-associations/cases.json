@@ -46,7 +46,6 @@
       1
     ],
     "seed": {
-      "title": "MOCK Startup display",
       "description": "MOCK On startup the application starts successfully, displays the supplied greeting and outputs UTC date and time.",
       "primary_goal": "MOCK Present the greeting and UTC time on successful startup.",
       "entity_disposition": "not_applicable",
@@ -100,7 +99,7 @@
       "id": "equipment-joint-support",
       "cohort": "development",
       "sources": [
-        "MOCK An equipment register must retain equipment identifiers and inspection results.\n",
+        "MOCK An equipment register must retain equipment identifiers and inspection results.\n\n# MOCK Equipment inspections\n",
         "MOCK When an inspection fails, the register must mark that equipment unavailable until a later successful inspection.\n"
       ],
       "claims": [
@@ -138,7 +137,6 @@
       2
     ],
     "seed": {
-      "title": "MOCK Equipment inspections",
       "description": "MOCK The register retains equipment identifiers and inspection results; failed inspections keep equipment unavailable until a later successful inspection.",
       "primary_goal": "MOCK Record inspections and prevent availability after a failed inspection until a successful inspection.",
       "entity_disposition": "required",
@@ -193,7 +191,7 @@
       "id": "renewal-information-gap",
       "cohort": "development",
       "sources": [
-        "MOCK A library must track loans and their return deadlines.\nMOCK Eligible renewals extend the return deadline; the extension duration is undecided.\n"
+        "MOCK A library must track loans and their return deadlines.\nMOCK Eligible renewals extend the return deadline; the extension duration is undecided.\n\n# MOCK Loan renewal\n"
       ],
       "claims": [
         {
@@ -228,7 +226,6 @@
       1
     ],
     "seed": {
-      "title": "MOCK Loan renewal",
       "description": "MOCK The library tracks loans and return deadlines; eligible renewal extends the deadline but the extension duration remains undecided.",
       "primary_goal": "MOCK Track loans and renew eligible deadlines once the extension duration is specified.",
       "entity_disposition": "required",

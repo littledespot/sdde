@@ -84,7 +84,6 @@ pub fn recordsFor(allocator: std.mem.Allocator, g: *const Guidance, kinds: []con
 pub fn question(allocator: std.mem.Allocator, g: *const Guidance, id: a.Id) a.Error![]const u8 {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;
     if (id.unit == .feature) return switch (id.slot) {
-        .display_name => "What name should identify this feature's purpose?",
         .description => "What user-visible behavior is missing or undecided in the current source evidence?",
         .primary_goal => "What benefit should this feature provide to its users?",
         .acceptance_criteria => "Which pass/fail outcome is still undecided? Describe when it applies and what the user should observe.",

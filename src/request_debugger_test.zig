@@ -205,6 +205,8 @@ test "captured descriptions round-trip controls and reject a retired output allo
     // ADR 0039: v12 recorded no sampling or configured temperatures, so it is refused.
     const v12 = try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v12");
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, v12));
+    // ADR 0048: v16 could bind the retired brief title's text field, so it is refused.
+    try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, @import("domain/model_request_description.zig").current_version, "model-request-debug/v16")));
     try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, try std.mem.replaceOwned(u8, a, bytes, ",\"sampling\":\"configured\"", "")));
     // A re-send records its sampling, and the value it sent round-trips.
     var resend = description;

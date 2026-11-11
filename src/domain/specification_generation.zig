@@ -68,11 +68,11 @@ pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []con
 pub const AuthoringEntity = struct { content: spec.Content(spec.BusinessValue), signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 /// A non-entity record names the claims it supports from its batch's group (ADR 0038).
 pub const AuthoringRecord = struct { content: spec.Content(spec.BusinessValue), claim_ids: []const @import("reference_identity.zig").ClaimId };
-/// ADR 0047: the engine composes the story, so no model response carries one.
+/// ADR 0047: the engine composes the story, so no model response carries one. Nor does
+/// one carry the title, which the engine takes from the sources (ADR 0048).
 pub const ModelResponse = union(enum) {
     brief: struct {
-        pub const model_fields = .{ .title = @import("text_field_policy.zig").Field.spec_title, .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
-        title: AuthoringValue,
+        pub const model_fields = .{ .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
         description: AuthoringValue,
         primary_goal: AuthoringValue,
     },
@@ -96,7 +96,7 @@ pub const ModelResponse = union(enum) {
             .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = try wireValue(allocator, context, need.question), .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
-                .brief => |brief| .{ .brief = .{ .title = try wireValue(allocator, context, brief.title), .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
+                .brief => |brief| .{ .brief = .{ .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
                 .primary_user_story => return error.InvalidSpecificationUnit,
                 .entities => |entities| entity: {
                     const records = try allocator.alloc(AuthoringEntity, entities.records.len);
@@ -129,7 +129,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("sp
             break :clarification .{ .clarification = .{ .reason = need.reason, .question = try associated(allocator, available, need.question, .question), .record_kind = need.record_kind } };
         },
         .inconclusive => |failure| .{ .inconclusive = failure },
-        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .title = try associated(allocator, available, brief.title, .content), .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
+        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
         .entities => |entities| if (bound == .entities) entity: {
             const records = try allocator.alloc(spec.Model.RecordProposal, entities.records.len);
             for (entities.records, records) |wire, *record| {
@@ -240,7 +240,6 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
-                    .title = inspectAuthored(boundary, allocator, validator, context, brief.title, .spec_title, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
                     .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .spec_description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
                     .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .spec_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },

@@ -10,13 +10,15 @@ pub const Mode = enum { content, question };
 pub const Catalogue = struct { records: refs.Records, inputs: evidence.Inputs };
 pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
 pub const Association = struct { source_group_ids: []const r.SignalId, selection: spec.Selection };
-pub const Reason = enum { empty_catalogue, no_record_authoring_groups, no_story_requirements, story_not_admissible, edge_case_without_criterion };
-/// Built only by `rejection`, `storyRejection` and `edgeCaseRejection`, and checked again on
-/// decode, so a reason and its issue always pair: `story_not_admissible` carries the unit issue
-/// that kept the engine-composed story out (ADR 0047); every other reason has none.
-/// A story reason has no model origin: the engine produced the story. Nor does
+pub const Reason = enum { empty_catalogue, no_record_authoring_groups, no_story_requirements, story_not_admissible, edge_case_without_criterion, no_title_heading, conflicting_title_headings };
+/// Built only by `rejection`, `storyRejection`, `edgeCaseRejection` and `titleRejection`, and
+/// checked again on decode, so a reason and its issue always pair: `story_not_admissible`
+/// carries the unit issue that kept the engine-composed story out (ADR 0047); every other
+/// reason has none. A story reason has no model origin: the engine produced the story. Nor does
 /// `edge_case_without_criterion`, which the engine found in a completed records unit; its one
 /// eligible signal is the source group of the edge case, with the claims the edge case names.
+/// Nor does a title reason, which the engine found in the sources before any generation call
+/// (ADR 0048); the title selects no group, so it has no eligible signal.
 pub const Rejection = struct {
     state_id: evidence.identity.StateId,
     partition_id: r.PartitionId,
@@ -27,12 +29,14 @@ pub const Rejection = struct {
     issue: ?@import("specification_candidate.zig").Issue = null,
 
     pub fn valid(self: Rejection) bool {
-        const engine_found = self.reason == .no_story_requirements or self.reason == .story_not_admissible or self.reason == .edge_case_without_criterion;
+        const title = self.reason == .no_title_heading or self.reason == .conflicting_title_headings;
+        const engine_found = title or self.reason == .no_story_requirements or self.reason == .story_not_admissible or self.reason == .edge_case_without_criterion;
         return (self.reason == .story_not_admissible) == (self.issue != null) and (!engine_found or self.origin == null) and
-            (self.reason != .edge_case_without_criterion or self.eligible_signals.len == 1);
+            (self.reason != .edge_case_without_criterion or self.eligible_signals.len == 1) and
+            (!title or self.eligible_signals.len == 0);
     }
 
-    /// Decoding rejects an unpaired reason and issue, or a story reason with an origin.
+    /// Decoding rejects an unpaired reason and issue, or an engine-found reason with an origin.
     pub fn jsonParse(a: std.mem.Allocator, source: *std.json.Scanner, options: std.json.ParseOptions) std.json.ParseError(std.json.Scanner)!Rejection {
         const wire = try std.json.innerParse(Wire, a, source, options);
         const result: Rejection = .{ .state_id = wire.state_id, .partition_id = wire.partition_id, .revision = wire.revision, .origin = wire.origin, .reason = wire.reason, .eligible_signals = wire.eligible_signals, .issue = wire.issue };
@@ -83,14 +87,14 @@ fn preservedTokensOnly(records: refs.Records, claims: []const r.ClaimId) Error!b
     return true;
 }
 pub const Guidance = union(enum) {
-    brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
+    brief: struct { description: FieldGuidance, primary_goal: FieldGuidance },
     entities: FieldGuidance,
     records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, requirements: []const Requirement },
 };
 
 pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement, record_kinds: []const spec.Kind) Error!Guidance {
     return switch (bound) {
-        .brief => .{ .brief = .{ .title = try fieldGuidance(a, .display_name, mode), .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
+        .brief => .{ .brief = .{ .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
         // ADR 0047: the engine composes the story; no authoring request carries it.
         .primary_user_story => return error.InvalidSpecificationBinding,
         .entities => .{ .entities = .{ .purpose = switch (mode) {
@@ -244,6 +248,14 @@ pub fn edgeCaseRejection(a: std.mem.Allocator, references: r.Accounted, group: r
     const edge = try a.alloc(EligibleSignal, 1);
     edge[0] = .{ .signal_id = group, .claim_ids = try a.dupe(r.ClaimId, claims) };
     return blocked(references, .edge_case_without_criterion, null, null, edge);
+}
+/// ADR 0048: the sources yield no title. The engine read the sources, so the rejection has no
+/// model origin, and the title selects no group, so it offers none.
+pub fn titleRejection(references: r.Accounted, gap: @import("specification_title.zig").Gap) Rejection {
+    return blocked(references, switch (gap) {
+        .no_title_heading => .no_title_heading,
+        .conflicting_title_headings => .conflicting_title_headings,
+    }, null, null, &.{});
 }
 fn blocked(references: r.Accounted, reason: Reason, origin: ?@import("model_candidate_origin.zig").Origin, issue: ?@import("specification_candidate.zig").Issue, available: []const EligibleSignal) Rejection {
     const prior = references.records.assignments.checked.prior.prior;

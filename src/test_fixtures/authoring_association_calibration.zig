@@ -17,8 +17,8 @@ const captured_run = "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45
 const captured_feature = captured_run ++ "/project/specs/hello-world";
 const parent_identity: shared.ReviewParent = .{ .run = "RUN-5603b655c6e6a7498c6980fc0d447584", .call = "request-1-inference-1" };
 
+/// The brief seeds carry no title: the engine takes it from the sources (ADR 0048).
 const Seed = struct {
-    title: []const u8,
     description: []const u8,
     primary_goal: []const u8,
     entity_disposition: spec.Applicability,
@@ -352,7 +352,7 @@ fn attributed(a: std.mem.Allocator, value: []const u8, selected: binding.Associa
 const compose_story: @import("../actions/specification/compose_specification_story.zig").Action = .{ .validator = text.validator };
 fn narrativeSeeds(a: std.mem.Allocator, example: Case, selected: binding.Association) ![2]g.Response {
     return .{
-        .{ .content = .{ .brief = .{ .title = try attributed(a, example.seed.title, selected), .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
+        .{ .content = .{ .brief = .{ .description = try attributed(a, example.seed.description, selected), .primary_goal = try attributed(a, example.seed.primary_goal, selected) } } },
         .{ .content = .{ .entities = .{ .disposition = example.seed.entity_disposition, .basis = try attributed(a, example.seed.entity_basis, selected), .records = if (example.seed.entity_name) |name| try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .entity = .{ .name = try business(a, name) } }, .source_group_ids = selected.source_group_ids, .provenance = selected.selection }}) else &.{} } } },
     };
 }
@@ -402,13 +402,13 @@ fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner
     const prose = try std.fmt.allocPrint(a, "{s} MOCK The application starts successfully and displays its greeting and UTC date and time.", .{occurrences[0].bytes});
     const groups: []const @import("../domain/reference_reconciliation.zig").SignalId = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } };
     const plain: g.AuthoringValue = .{ .value = try business(a, "MOCK Startup display"), .signal_ids = groups };
-    const wire = try codec.encode(g.ModelResponse, a, .{ .brief = .{ .title = plain, .description = .{ .value = try business(a, prose), .signal_ids = groups }, .primary_goal = plain } });
+    const wire = try codec.encode(g.ModelResponse, a, .{ .brief = .{ .description = .{ .value = try business(a, prose), .signal_ids = groups }, .primary_goal = plain } });
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,
     };
     try std.testing.expectEqual(@as(u32, 4), checked.response.content.brief.description.value.segments[0].exact_copy.claim_id.ordinal);
-    const echoed = "{\"kind\":\"brief\",\"title\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]},\"description\":{\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]},\"primary_goal\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]}}";
+    const echoed = "{\"kind\":\"brief\",\"description\":{\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]},\"primary_goal\":{\"value\":\"MOCK Startup display\",\"signal_ids\":[1,2]}}";
     try std.testing.expectError(error.InvalidCalibrationPayload, admitResponse(a, schema, current, context, echoed));
 }
 

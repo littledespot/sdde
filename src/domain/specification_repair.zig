@@ -345,7 +345,6 @@ fn repairTask(a: std.mem.Allocator, guidance: *const @import("packet_guidance.zi
         .provenance => return error.InvalidSpecificationRepair,
     };
     const slot: authority.Slot = switch (subject) {
-        .title => .display_name,
         .description => .description,
         .primary_goal => .primary_goal,
         .entity_basis => .entities,

@@ -275,7 +275,7 @@ define the `inventory-presets` successor, as the fixture does.
   workflow root.
 - An operation parameter that expects a prompt, schema, example, JSON-composition
   ([ADR 0016](../decisions/0016-configured-json-response-composition.md)) or
-  `packet-guidance/v5` (ADR 0016 packet-guidance amendment) resource accepts only a
+  `packet-guidance/v6` (ADR 0016 packet-guidance amendment) resource accepts only a
   declared alias of that expected kind.
 - A JSON-composition resource references one complete result schema and owns only the
   part partition and dependencies; it adds no configuration owner or executable
@@ -619,7 +619,7 @@ service is published.
   through one narrow compiler port bound at composition.
 - Result-schema resources are decoded; their tagged compiled values carry an opaque
   immutable schema and exact captured bytes. JSON-composition resources (§3.3) and
-  `packet-guidance/v5` resources (ADR 0016 packet-guidance amendment) are also decoded
+  `packet-guidance/v6` resources (ADR 0016 packet-guidance amendment) are also decoded
   and validated at compilation through their closed encodings.
 - The registry owns deep copies of this same authority.
 - Missing, malformed, unsupported or unbounded schema declarations reject the graph with

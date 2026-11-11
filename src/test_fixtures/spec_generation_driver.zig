@@ -72,7 +72,7 @@ pub const Driver = struct {
     failed_classification_repair: bool = false,
     malformed_classification_repair_once: bool = false,
     classification_repair_calls: usize = 0,
-    brief_text: ?[3][]const u8 = null,
+    brief_text: ?[2][]const u8 = null,
     brief_references: ?*const data.Value = null,
     entities_required: bool = false,
     contradict_entities: bool = false,
@@ -359,7 +359,7 @@ pub const Driver = struct {
                         const expected = correction.value.object.get("expected").?.object;
                         std.testing.expectEqualStrings("/provenance", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string) catch unreachable;
                         const fields = expected.get("shape").?.object.get("fields").?.object;
-                        for ([_][]const u8{ "title", "description", "primary_goal" }) |field| {
+                        for ([_][]const u8{ "description", "primary_goal" }) |field| {
                             // Initial authoring owns its source association;
                             // fixed-value repair remains a separate value-only
                             // contract and cannot choose another group.

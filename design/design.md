@@ -70,7 +70,7 @@ The resulting boundary is:
   enforcement, policy, facts, identifiers, paths, artifact locations,
   rendering, side effects, validation, hard ceilings, diagnostics, and
   completion evidence.
-- **The LLM owns:** understanding arbitrary reference material, extracting intent, writing business-facing requirements, making justified design choices, decomposing work, and generating or repairing code. The primary user story is not LLM-owned: the engine joins the source's quoted business claims ([ADR 0047](decisions/0047-engine-composed-primary-story.md)).
+- **The LLM owns:** understanding arbitrary reference material, extracting intent, writing business-facing requirements, making justified design choices, decomposing work, and generating or repairing code. The primary user story is not LLM-owned: the engine joins the source's quoted business claims ([ADR 0047](decisions/0047-engine-composed-primary-story.md)). Nor is the specification title: the engine takes the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)).
 - **Executable evidence owns:** syntax, build, lint, test, and other preset-defined checks. An LLM assertion never substitutes for executable evidence.
 
 ---
@@ -86,7 +86,7 @@ engine fixes them:
 | Workflow selection | `sdde <workflowId> ...` resolves exactly one validated `WorkflowId` with no default or filename inference. The compiled workflow's YAML-named invocation operation produces its run context. |
 | SDD sequence | `specify -> plan -> tasks -> implement` is enforced by those workflows' predecessor gates, not an engine-wide role list. |
 | Specify launch | `--feature <feature-directory>` and `--reference <relative-selector>` are independent and both required; neither is inferred from business prose. Every specification has one non-empty selector beneath `paths.references`; there is no reference-free mode. Missing or invalid reference input blocks before activation, logging, model calls or writes. |
-| Reference precedence | Every decoded reference artifact is an authoritative peer within the feature-intent domain. `README.md` may organize them but has no precedence. Conflicts become blocking questions. |
+| Reference precedence | Every decoded reference artifact is an authoritative peer within the feature-intent domain. `README.md` may organize them but has no precedence. Conflicts become blocking questions; sources whose level-1 title headings differ block instead ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). |
 | Artifact paths | The engine assigns `spec.md`, `plan.md`, `tasks.md` and every other canonical artifact location. |
 | Editability | `spec.md` is the only user-editable stage output. `clarify/SNN.md`, `PNN.md` and `TNN.md` accept edits only in their status/answer regions. `reference-context.md`, plan/design views and `tasks.md` are read-only projections. |
 | User validation | Plan views require explicit approval before Tasks; the tasks view requires approval before Implement. Rejection supplies feedback through the engine. |
@@ -248,7 +248,7 @@ Deterministic checks should be used wherever the answer can be computed from con
 | Area | Engine-deterministic | LLM-owned | Limit or escalation |
 | --- | --- | --- | --- |
 | Command input | Parse flags, defaults, enums, duplicates, required arguments | None | Invalid user input is non-repairable by the model. |
-| Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; validate brief schema/citations | Derive human title, description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
+| Feature directory and brief | Validate the supplied directory, containment, no-follow safety and exact output paths; take the title from the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)); validate brief schema/citations | Derive the description and goal from reconciled references | The directory identifies the feature; no model-derived name or ownership registry. |
 | Reference discovery | Root containment, traversal, symlinks, inventory, ordering, readability, size, decoder availability | None | Unsupported inputs block or require an installed reader according to policy. |
 | Reference understanding | Source span validity, exact token preservation for structured formats, coverage ledger | Extract requirements, classify signals, recognize semantic conflicts | The engine can prove a citation exists; it cannot prove every semantic implication was found. |
 | Business/technical split | None; explicit references and exact values keep their typed rules ([§21.2](contracts/21-validation.md) records the removed lint) | Place generated content in the business spec or technical context ([§17.5](contracts/17-specify.md)) | The human who reviews and edits the published `spec.md` judges placement; no native check or post-generation review does (ADR 0023). |
@@ -1152,6 +1152,7 @@ gives its title and status.
 | [0043](decisions/0043-model-facing-exact-text-names.md) | Model-facing exact-text names | Accepted |
 | [0046](decisions/0046-complete-dispositions-at-admission.md) | Reconciliation dispositions are complete at response admission | Accepted |
 | [0047](decisions/0047-engine-composed-primary-story.md) | Engine-composed primary user story | Accepted |
+| [0048](decisions/0048-engine-derived-specification-title.md) | Engine-derived specification title | Accepted |
 
 Additional accepted feature boundaries:
 

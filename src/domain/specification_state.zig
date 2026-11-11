@@ -5,7 +5,7 @@ const spec = @import("specification.zig");
 const reference = @import("reference_snapshot.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v24";
+pub const schema = "specification-state/v25";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -127,6 +127,8 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     const allocator = scratch.allocator();
     const records = try @import("reference_support.zig").snapshot(allocator, state.reference);
     try @import("specification_provenance.zig").validateStored(allocator, state.reference.inputs, .{ .records = state.reference.passive_records, .occurrences = state.reference.passive_occurrences }, records, state.brief, state.content);
+    // ADR 0048: the stored title is the one the captured sources yield.
+    try @import("specification_title.zig").validateStored(allocator, state.reference.inputs, state.content.display_name);
     const coverage = @import("specification_coverage.zig");
     const checked = try coverage.checkRecords(allocator, records, state.brief, state.content);
     if (checked != .valid) return error.InvalidSpecificationState;

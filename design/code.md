@@ -507,8 +507,9 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This illustrative sample describes canonical `specification/v5` under
-[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Initial narrative
+This illustrative sample describes canonical `specification/v6` under
+[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). The display name is native
+text, the sources' level-1 heading ([ADR 0048](decisions/0048-engine-derived-specification-title.md)). Initial narrative
 responses select current whole groups through `signal_ids`; non-entity record
 responses keep their one native-assigned group and name a nonempty ordered subset of
 its claims as `claim_ids` ([ADR 0038](decisions/0038-record-claims-and-scenario-coverage.md));

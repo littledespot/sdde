@@ -31,7 +31,8 @@ arguments of the generic workflow engine.
 - There is no slug generation, `max-length`, ownership registration, selector-to-owner mapping,
   or scan of other active/archived features.
 - The human title, description and goal still come from validated reference content, not the
-  directory name.
+  directory name. The title is the sources' level-1 heading as written
+  ([ADR 0048](../decisions/0048-engine-derived-specification-title.md)).
 
 ### 17.2 Deterministic preflight
 
@@ -83,13 +84,12 @@ admission, repair, exact coverage and stored readback share.
 The LLM performs these semantic activities:
 
 1. reference claim extraction and bounded hierarchical reconciliation;
-2. one reference-grounded feature brief containing the human title, description, and primary goal;
+2. one reference-grounded feature brief containing the description and primary goal;
 3. specification content generation from original sources, the validated brief and
    currently retained claim selections.
 
 Typed content covers these concerns; each concern does not require a separate call:
 
-- display title;
 - observable outcomes;
 - acceptance-criteria candidates;
 - functional-requirement candidates;
@@ -103,7 +103,13 @@ Typed content covers these concerns; each concern does not require a separate ca
 - The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state,
   passive-literal values, clarification lifecycle, or execution status, and does not write
   the primary story, which the engine composes
-  ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)).
+  ([ADR 0047](../decisions/0047-engine-composed-primary-story.md)), or the display title.
+- The display title is the text of the sources' first level-1 heading, as written; peer
+  sources' headings must agree. Session initialization takes it before any generation call, and a
+  corpus with no such heading, or with different ones, blocks with the typed rejection
+  `no_title_heading` or `conflicting_title_headings`, never repaired or retried. It holds no
+  claim, group or provenance, and readback derives it again from the captured sources
+  ([ADR 0048](../decisions/0048-engine-derived-specification-title.md)).
 - Every initial brief/spec record has eligible effective reference claims from
   explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
@@ -186,7 +192,7 @@ open questions; initial clarification questions have a separate native eligibili
 scope and select only their actual evidence. Existing missing/ambiguous/conflicting
 reasons and inconclusive outcomes remain. A question does not establish a genuine
 user gap merely by having valid IDs. Field purposes, owned by the workflow's
-packet guidance, describe derivation from source-backed behavior, not a demand for prewritten titles or goals.
+packet guidance, describe derivation from source-backed behavior, not a demand for prewritten goals.
 Do not invent an actor, benefit or entity to fill a field.
 
 Record authoring binds one complete retained group containing at least one
