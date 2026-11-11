@@ -1396,8 +1396,11 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         .{ .stage = .extraction, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
         .{ .stage = .reconciliation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
         .{ .stage = .generation, .shape = .alternating_protocol, .repetition = .{ .every_request = 2 } },
+        // ADR 0038 Decision 3: a batch whose requirement claims no scenario names is
+        // admitted, and the engine inserts one criterion per uncovered claim, whose claim it
+        // fixes; the run publishes with no correction, in one batch or in every batch.
         .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .first_request = 1 } },
-        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .persistent },
+        .{ .stage = .records, .shape = .uncovered_scenario, .repetition = .{ .every_request = 1 } },
         // ADR 0038 Decision 5: a wholly taken statement is deleted natively and publishes
         // with no correction. Every scripted records batch has one claim, so a partly
         // taken one is proven at response admission instead.
@@ -1409,7 +1412,8 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
         // duplicate; it is deleted natively and the run publishes with no correction.
         .{ .stage = .records, .shape = .duplicate_record, .repetition = .{ .first_request = 1 } },
         // ADR 0039: a records runaway is re-sent once; a re-send that runs away
-        // fails typed, and a re-sent response takes the same admission.
+        // fails typed, and a re-sent response takes the same admission and validation,
+        // here an uncovered claim's criterion insert.
         .{ .stage = .records, .shape = .runaway, .repetition = .{ .first_request = 1 } },
         .{ .stage = .records, .shape = .runaway, .repetition = .persistent },
         .{ .stage = .records, .shape = .runaway_uncovered, .repetition = .{ .first_request = 2 } },
@@ -2403,6 +2407,27 @@ fn runSpecificationWorkflows(allocator: std.mem.Allocator, workflow_cases: Speci
             try std.testing.expect(requirements != 0);
             // The statement was added to at least one batch, so the check is not vacuous.
             if (fault.?.shape == .bare_statement) try std.testing.expect(driver.bare_statements != 0);
+        }
+        if (fault != null and (fault.?.shape == .uncovered_scenario or fault.?.shape == .runaway_uncovered)) {
+            // Every claim a behaviour statement names is named by a scenario of its batch, and
+            // the scenarios the response lost came back as engine-bound criteria naming one
+            // claim each: at least one insert per batch that lost its scenarios.
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            for (session.record_batches) |batch| for (batch.response.content.records) |record| {
+                switch (std.meta.activeTag(record.content).role()) {
+                    .requirement, .behaviour => {},
+                    .scope, .scenario, .entity => continue,
+                }
+                for (record.provenance.claim_ids) |claim| {
+                    const named = for (batch.response.content.records) |other| {
+                        if (std.meta.activeTag(other.content).role() == .scenario and @import("../../src/domain/reference_reconciliation.zig").contains(@import("../../src/domain/reference_identity.zig").ClaimId, other.provenance.claim_ids, claim)) break true;
+                    } else false;
+                    try std.testing.expect(named);
+                }
+            };
+            try std.testing.expect(driver.uncovered_records != 0);
+            try std.testing.expect(driver.scenario_inserts >= driver.uncovered_records);
         }
         if (fault != null and fault.?.shape == .duplicate_record) {
             // The repeat was deleted natively: no batch keeps two records of equal content.

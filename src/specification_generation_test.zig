@@ -1588,22 +1588,28 @@ test "complete specification sessions preserve unit order provenance and conditi
             defer @import("domain/model_input_packet.zig").release(packet);
             try checkAuthoringPacket(a, packet.body());
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "principles") == null);
-            const response: g.Response = .{ .content = switch (unit) {
-                .brief => .{ .brief = .{ .description = value, .primary_goal = value } },
-                .primary_user_story => unreachable,
-                .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = value } },
-                .records => result: {
-                    const records = try a.dupe(spec.Model.RecordProposal, &.{.{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance }});
-                    break :result .{ .records = records };
+            const response: g.Response = .{
+                .content = switch (unit) {
+                    .brief => .{ .brief = .{ .description = value, .primary_goal = value } },
+                    .primary_user_story => unreachable,
+                    .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = value } },
+                    .records => result: {
+                        // ADR 0038: the requirement's claims need a scenario of the same batch.
+                        const records = try a.dupe(spec.Model.RecordProposal, &.{
+                            .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
+                            .{ .content = .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
+                        });
+                        break :result .{ .records = records };
+                    },
                 },
-            } };
+            };
             current = try appendMockResponse(a, current, fixture.context, response);
         }
         const identified = try sessions.assemble(a, text.validator, fixture.context, current, &.{});
         // ADR 0048: the display name is the session's title, taken from the sources.
         try std.testing.expectEqualDeep(current.title, identified.content.display_name);
-        try std.testing.expectEqual(@as(usize, 1), identified.content.records.len);
-        try std.testing.expectEqual(spec.Id{ .kind = .functional_requirement, .ordinal = 1 }, identified.content.records[0].id);
+        try std.testing.expectEqual(@as(usize, 2), identified.content.records.len);
+        for (identified.content.records) |record| try std.testing.expect(std.meta.eql(record.id, spec.Id{ .kind = .functional_requirement, .ordinal = 1 }) or std.meta.eql(record.id, spec.Id{ .kind = .acceptance_criterion, .ordinal = 1 }));
         try std.testing.expectEqual(@as(usize, 0), first.completed);
         try std.testing.expectError(error.InvalidSpecificationUnit, sessions.append(current, current.units[0].?));
         var stale = fixture.context;
@@ -1825,13 +1831,24 @@ test "record requirements apply across bound groups while native assembled famil
                 const signal = assigned.get("signal").?.integer;
                 if (previous_signal) |prior| try std.testing.expect(prior != signal);
                 previous_signal = signal;
-                // Each group emits only its selected family; no group receives
+                // Each group emits only its selected families; no group receives
                 // a per-group floor or optional filler requirement. A record names
-                // claims from its own batch's group (ADR 0038).
+                // claims from its own batch's group, and a requirement's claims need a
+                // scenario of that batch (ADR 0038), so only a batch of scope statements
+                // leaves both families out.
                 const selected = try sessions.currentBinding(a, current, fixture.context);
-                var authored = if (group == 0 and mode != 2) fr else ac;
-                authored.provenance = selected.records.selection;
-                const records: []const spec.Model.RecordProposal = if (group == 0 or mode == 0) &.{authored} else &.{};
+                var requirement = fr;
+                requirement.provenance = selected.records.selection;
+                var criterion = ac;
+                criterion.provenance = selected.records.selection;
+                var scope = fr;
+                scope.content = .{ .non_goal = .{ .text = value.value } };
+                scope.provenance = selected.records.selection;
+                const records: []const spec.Model.RecordProposal = switch (mode) {
+                    0 => if (group == 0) try a.dupe(spec.Model.RecordProposal, &.{ requirement, criterion }) else &.{},
+                    1 => if (group == 0) try a.dupe(spec.Model.RecordProposal, &.{scope}) else &.{},
+                    else => if (group == 0) try a.dupe(spec.Model.RecordProposal, &.{criterion}) else &.{},
+                };
                 const raw: g.Response = .{ .content = .{ .records = records } };
                 const response = try g.parse(a, try json.encode(g.ModelResponse, a, try g.ModelResponse.from(a, fixture.context, raw)), selected);
                 const checked = (try validate_unit.execute(a, current, fixture.context, .{ .response = response })).valid;
@@ -1876,12 +1893,16 @@ test "record requirements apply across bound groups while native assembled famil
             try std.testing.expectError(error.InvalidSpecificationUnit, sessions.validateRecordAssignments(a, current, changed_context));
             const content = (try sessions.assemble(a, text.validator, fixture.context, current, &.{})).content;
             try std.testing.expectEqual(@as(usize, if (mode == 0) 2 else 1), content.records.len);
-            for (content.records) |record| try std.testing.expect(record.id.kind == .acceptance_criterion or record.id.kind == .functional_requirement);
+            for (content.records) |record| try std.testing.expect(record.id.kind == .acceptance_criterion or record.id.kind == .functional_requirement or record.id.kind == .non_goal);
             // The assembled family floor is a native structural fact; no model
             // review can stand in for a missing mandatory family.
             for (spec.required_record_families) |kind| {
-                const missing: ?spec.Kind = if (mode == 1) .acceptance_criterion else if (mode == 2) .functional_requirement else null;
-                try std.testing.expectEqual(missing != kind, spec.hasRecords(content, kind));
+                const missing = switch (mode) {
+                    0 => false,
+                    1 => true,
+                    else => kind == .functional_requirement,
+                };
+                try std.testing.expectEqual(!missing, spec.hasRecords(content, kind));
             }
         }
     }
@@ -2265,8 +2286,9 @@ test "native record batch assembly preserves corrected field and unchanged sibli
         current = try sessions.appendBound(a, current, first_checked);
         try std.testing.expectEqual(sessions.records_index, current.completed);
         const second_group = try sessions.currentBinding(a, current, fixture.context);
+        // A scope statement, which needs no scenario of its batch (ADR 0038 Decision 2).
         const next_response: g.Response = .{ .content = .{ .records = &.{.{
-            .content = .{ .functional_requirement = .{ .text = good.value } },
+            .content = .{ .assumption = .{ .text = good.value } },
             .source_group_ids = good.source_group_ids,
             .provenance = second_group.records.selection,
         }} } };
@@ -2457,7 +2479,10 @@ test "source-bound record batches reject duplicates without merging their eviden
     try std.testing.expectEqual(.competing_records, issue.blocked.?);
     var distinct = first;
     distinct.content.functional_requirement.text = (try fixture.proposal("The clock result is visible.")).value;
-    const different = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{distinct} } })).valid;
+    // Its claims need a scenario of its batch (ADR 0038 Decision 2).
+    var tested = distinct;
+    tested.content = .{ .acceptance_criterion = .{ .given = distinct.content.functional_requirement.text, .when = distinct.content.functional_requirement.text, .then = distinct.content.functional_requirement.text } };
+    const different = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{ distinct, tested } } })).valid;
     try std.testing.expect((try sessions.checkConsistency(a, current, fixture.context, different, null)) == null);
 }
 
@@ -3429,15 +3454,18 @@ test "a repeated statement holding the batch's only copy of an exact value is ke
     const requirement_copied = record(.{ .functional_requirement = .{ .text = copied } }, claim);
     const outcome = record(.{ .user_visible_outcome = .{ .text = copied } }, claim);
     const rule = record(.{ .business_rule = .{ .text = copied } }, claim);
+    // The scenario the claim needs (ADR 0038 Decision 2). It holds no exact value, so it
+    // changes no delete.
+    const criterion = record(.{ .acceptance_criterion = .{ .given = plain, .when = plain, .then = plain } }, claim);
     for ([_]struct { records: []const spec.Model.RecordProposal, deleted: []const usize, kept: []const spec.Model.RecordProposal }{
         // ADR 0038 Decision 5: the outcome is the only record holding the exact value, so
         // deleting it would lose the value; it stays.
-        .{ .records = &.{ requirement_plain, outcome }, .deleted = &.{}, .kept = &.{ requirement_plain, outcome } },
+        .{ .records = &.{ requirement_plain, outcome, criterion }, .deleted = &.{}, .kept = &.{ requirement_plain, outcome, criterion } },
         // The requirement holds the value too, so the outcome is deleted.
-        .{ .records = &.{ requirement_copied, outcome }, .deleted = &.{1}, .kept = &.{requirement_copied} },
+        .{ .records = &.{ requirement_copied, outcome, criterion }, .deleted = &.{1}, .kept = &.{ requirement_copied, criterion } },
         // Each delete is decided on the batch it leaves: the first of two holders goes, and
         // the last holder of the value stays.
-        .{ .records = &.{ requirement_plain, outcome, rule }, .deleted = &.{1}, .kept = &.{ requirement_plain, rule } },
+        .{ .records = &.{ requirement_plain, outcome, rule, criterion }, .deleted = &.{1}, .kept = &.{ requirement_plain, rule, criterion } },
     }) |case| {
         var proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = case.records } } };
         for (case.deleted) |deleted| {
@@ -3486,23 +3514,25 @@ test "a wholly taken statement whose text breaks its field's policy is deleted, 
     const outcome_bare = record(.{ .user_visible_outcome = .{ .text = bare } }, claim);
     const rule_bare = record(.{ .business_rule = .{ .text = bare } }, claim);
     const outcome_plain = record(.{ .user_visible_outcome = .{ .text = plain_value } }, claim);
+    // The scenario the claim needs (ADR 0038 Decision 2); it holds no exact value.
+    const criterion = record(.{ .acceptance_criterion = .{ .given = claim.value, .when = claim.value, .then = claim.value } }, claim);
 
     // Accepted: the requirement holds the value, so the defective statement is deleted.
     for ([_][]const spec.Model.RecordProposal{
-        &.{ requirement_copied, outcome_bare },
-        &.{ requirement_copied, rule_bare },
-        &.{ requirement_copied, outcome_bare, rule_bare },
-        &.{ requirement_copied, outcome_plain },
+        &.{ requirement_copied, outcome_bare, criterion },
+        &.{ requirement_copied, rule_bare, criterion },
+        &.{ requirement_copied, outcome_bare, rule_bare, criterion },
+        &.{ requirement_copied, outcome_plain, criterion },
     }) |records| {
         var proposed: repair.Candidate = .{ .response = .{ .content = .{ .records = records } } };
-        for (records[1..]) |_| {
+        for (records[1 .. records.len - 1]) |_| {
             const rejection = (try validate_unit.execute(a, current, fixture.context, proposed)).invalid;
             try std.testing.expectEqual(candidate_rule.repeated_statement, rejection.issue.rule);
             try std.testing.expect(rejection.issue.text_issue == null);
             const authorization = try repair.authorize(a, current, fixture.context, proposed, rejection, &packet_guidance.marked);
             proposed = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs), current, fixture.context, proposed, authorization, null, null);
         }
-        try std.testing.expectEqualDeep(&[_]spec.Model.RecordProposal{requirement_copied}, proposed.response.content.records);
+        try std.testing.expectEqualDeep(&[_]spec.Model.RecordProposal{ requirement_copied, criterion }, proposed.response.content.records);
         _ = (try validate_unit.execute(a, current, fixture.context, proposed)).valid;
     }
 
@@ -3570,7 +3600,7 @@ fn admissionReports(a: std.mem.Allocator, context: provenance.Context, records: 
         .reference_state = (try provenance.items(context)).state_id,
         .occurrences = try provenance.exactOccurrences(a, @import("domain/reference_support.zig").records(context.references), null),
     };
-    const statements: composition.Statements = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } }, .rule = @import("domain/specification_session.zig").scenario_coverage };
+    const statements: composition.Statements = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } }, .rule = @import("domain/specification_session.zig").statement_rule };
     const diagnostic = (try composition.check(a, document.value, try json.fieldBindings(g.ModelResponse, a, .{}), &.{}, &.{}, .{ .exact_scope = scope, .statements = if (exempting) statements else null })) orelse return &.{};
     var reported: std.ArrayList(usize) = .empty;
     for (diagnostic.fields) |field| {
@@ -3666,7 +3696,7 @@ test "response admission exempts only statements the records validator deletes" 
 test "a record's part in the repeated-statement rule is the part the request's coverage gives its kind" {
     // The wire reads a kind's part from the recorded coverage kinds, the validator and the
     // session from the kind itself. Both must agree for every kind.
-    const rule = @import("domain/specification_session.zig").scenario_coverage;
+    const rule = @import("domain/specification_session.zig").statement_rule;
     const ownership = @import("domain/statement_ownership.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -3823,7 +3853,13 @@ test "ADR 0035 restatements use production evidence shapes and keep uncovered wo
         current = try sessions.appendBound(a, current, first);
         var uncovered: spec.Model.RecordProposal = .{ .content = .{ .business_rule = .{ .text = story.value } }, .source_group_ids = &.{fixture.context.references.records.signals[1].id}, .provenance = story.provenance };
         uncovered.provenance.claim_ids = &.{.{ .ordinal = 2 }};
-        _ = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{uncovered} } } })).valid;
+        // Its claim needs a scenario of the batch (ADR 0038 Decision 2).
+        var criterion = ac;
+        criterion.content = .{ .acceptance_criterion = .{ .given = story.value, .when = story.value, .then = story.value } };
+        criterion.source_group_ids = uncovered.source_group_ids;
+        criterion.provenance = uncovered.provenance;
+        const checked = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &.{ uncovered, criterion } } } })).valid;
+        try std.testing.expect(checked.response.content.records[0].content == .business_rule);
     }
 }
 
@@ -4190,13 +4226,16 @@ test "coverage rejects unsafe whole-field reconstruction without changing busine
         try std.testing.expectEqual(.reference_only, inspection.text_issue.?.reason);
         const named = try fixture.proposalAllGroups("The requested outcome is named.");
         var current = (try sessions.initialize(a, .{ .bytes = "chosen" }, fixture.context)).ready;
+        // The outcome's claims need a scenario of its batch (ADR 0038 Decision 2); its
+        // fields copy no exact value, so the exact-copy gap stays.
+        const criterion: spec.Model.RecordProposal = .{ .content = .{ .acceptance_criterion = .{ .given = good.value, .when = good.value, .then = good.value } }, .source_group_ids = visible.source_group_ids, .provenance = visible.provenance };
         while (current.completed < sessions.unit_count) {
             const unit = try sessions.unit(current.completed);
             const response: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .description = named, .primary_goal = good } },
                 .primary_user_story => .{ .primary_user_story = good },
                 .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = good } },
-                .records => .{ .records = &.{record} },
+                .records => .{ .records = &.{ record, criterion } },
             } };
             current = try appendMockResponse(a, current, fixture.context, response);
         }
@@ -6398,6 +6437,9 @@ test "multiple missing exact obligations do not authorize invalid insertion-only
         try records.append(a, .{ .content = .{ .functional_requirement = .{ .text = .{ .segments = try a.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{ .{ .literal = .{ .value = raw[0..2] } }, .{ .literal = .{ .value = raw[2..] } }, .{ .literal = .{ .value = "suffix" } } }) } } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance });
     };
     try std.testing.expectEqual(@as(usize, 2), records.items.len);
+    // The requirements' claims need a scenario of the batch (ADR 0038 Decision 2); its
+    // fields copy no exact value, so the exact-copy gaps stay.
+    try records.append(a, .{ .content = .{ .acceptance_criterion = .{ .given = good.value, .when = good.value, .then = good.value } }, .source_group_ids = good.source_group_ids, .provenance = good.provenance });
     const named = try fixture.proposalAllGroups("The requested outcomes are named.");
     var current = (try sessions.initialize(a, .{ .bytes = "chosen" }, fixture.context)).ready;
     while (current.completed < sessions.unit_count) {
@@ -9236,7 +9278,7 @@ test "equal-byte originals retain mixed-kind exact duties through one representa
     try std.testing.expectError(error.InvalidSpecificationState, state.parse(a, try std.json.Stringify.valueAlloc(a, forged, .{}), current.feature, contracts.port()));
 }
 
-test "records name the claims they support from their group, requirements own their claims, and a behaviour statement's claims need a scenario" {
+test "records name the claims they support from their group, requirements own their claims, and an uncovered behaviour claim gets an engine-bound criterion" {
     const schema = @import("domain/model_result_schema.zig");
     const check = @import("domain/model_payload_schema.zig");
     const sessions = @import("domain/specification_session.zig");
@@ -9301,10 +9343,10 @@ test "records name the claims they support from their group, requirements own th
         try std.testing.expect(try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{record} } }) == .invalid);
     }
     // ADR 0038: the records request names the group's claims, and admission sends back a
-    // behaviour statement's claim no acceptance criterion or edge case names, and a
     // non-requirement statement naming both claims a requirement or an earlier such
-    // statement names and claims none does. Assumptions and non-goals need no scenario,
-    // and requirements may share a claim.
+    // statement names and claims none does. A behaviour statement's claim no acceptance
+    // criterion or edge case names is admitted: the session repairs it (Decision 3).
+    // Requirements may share a claim.
     const packet = try sessions.packet(a, current, fixture.context, &packet_guidance.marked);
     defer @import("domain/model_input_packet.zig").release(packet);
     const restricted = try schema.restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
@@ -9319,18 +9361,18 @@ test "records name the claims they support from their group, requirements own th
     for ([_]struct { bytes: []const u8, rejection: ?check.Rejection, path: []const u8 = "" }{
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", both, both }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ scenario ++ "]}}", .{ "functional_requirement", both, both }), .rejection = null },
-        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ scenario ++ "]}}", .{ "functional_requirement", both, one }), .rejection = .uncovered_member, .path = "/records/0/claim_ids/1" },
+        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ scenario ++ "]}}", .{ "functional_requirement", both, one }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", one, "business_rule", both, both }), .rejection = .shared_member, .path = "/records/1" },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", one, "assumption", both, both }), .rejection = .shared_member, .path = "/records/1" },
-        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "business_rule", both }), .rejection = .uncovered_member, .path = "/records/0/claim_ids/0" },
+        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "business_rule", both }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ criterion ++ "]}}", .{ "business_rule", both, both }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", one, "non_goal", second, one }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "assumption", both }), .rejection = null },
-        // Every behaviour kind needs a scenario. Every non-requirement statement kind is
-        // corrected when partly taken, by a requirement before or after it or by an
-        // earlier such statement.
-        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "user_visible_outcome", both }), .rejection = .uncovered_member, .path = "/records/0/claim_ids/0" },
-        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "prohibited_behavior", both }), .rejection = .uncovered_member, .path = "/records/0/claim_ids/0" },
+        // No behaviour kind's uncovered claim is an admission defect. Every
+        // non-requirement statement kind is corrected when partly taken, by a requirement
+        // before or after it or by an earlier such statement.
+        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "user_visible_outcome", both }), .rejection = null },
+        .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "prohibited_behavior", both }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "]}}", .{ "non_goal", both }), .rejection = null },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", one, "user_visible_outcome", both, both }), .rejection = .shared_member, .path = "/records/1" },
         .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"records\",\"records\":[" ++ item ++ "," ++ item ++ "," ++ criterion ++ "]}}", .{ "functional_requirement", one, "non_goal", both, both }), .rejection = .shared_member, .path = "/records/1" },
@@ -9365,7 +9407,7 @@ test "records name the claims they support from their group, requirements own th
         try std.testing.expectEqualStrings("/records/1", (try rejected.describeExpected(a)).path);
         try std.testing.expect((try projection.locate(a, restricted.selected(), rejected.expected)) != null);
         try std.testing.expect((try projection.outline(a, rejected.expected)) == .object);
-        try std.testing.expectEqualDeep(sessions.scenario_coverage, rejected.coverage.?.rule);
+        try std.testing.expectEqualDeep(sessions.statement_rule, rejected.coverage.?.rule);
         const records = response.object.get("records").?.array;
         try std.testing.expectEqualDeep(@as(?check.SharedNaming, .{ .item = 1, .position = 0 }), check.nextSharedNaming(records, rejected.coverage.?, .{ .item = 0, .position = 0 }));
         try std.testing.expect(check.nextSharedNaming(records, rejected.coverage.?, .{ .item = 1, .position = 1 }) == null);
@@ -9399,6 +9441,122 @@ test "records name the claims they support from their group, requirements own th
     }
     _ = (try validate_unit.execute(a, current, fixture.context, proposed)).valid;
     try std.testing.expectEqualDeep(@as([]const spec.Model.RecordProposal, &.{ batch[1], batch[2], batch[3], batch[4], batch[6] }), proposed.response.content.records);
+
+    // ADR 0038 Decision 3: a behaviour statement's claim that no scenario of its batch
+    // names is decided on the batch the native deletes leave, and repaired by one
+    // acceptance-criterion insert whose claim and group the engine fixes; the model
+    // writes only its content. A statement the engine deletes needs no scenario, and an
+    // assumption or non-goal needs none at all.
+    const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
+    const scope_only = [_]spec.Model.RecordProposal{
+        .{ .content = fr, .source_group_ids = signals, .provenance = .{ .claim_ids = group[0..1], .clarification_response_ids = &.{} } },
+        .{ .content = ac, .source_group_ids = signals, .provenance = .{ .claim_ids = group[0..1], .clarification_response_ids = &.{} } },
+        .{ .content = .{ .assumption = .{ .text = refuse } }, .source_group_ids = signals, .provenance = .{ .claim_ids = group[1..2], .clarification_response_ids = &.{} } },
+    };
+    _ = (try validate_unit.execute(a, current, fixture.context, .{ .response = .{ .content = .{ .records = &scope_only } } })).valid;
+    const uncovered_batch = [_]spec.Model.RecordProposal{
+        .{ .content = fr, .source_group_ids = signals, .provenance = .{ .claim_ids = group, .clarification_response_ids = &.{} } },
+        .{ .content = ec, .source_group_ids = signals, .provenance = .{ .claim_ids = group[0..1], .clarification_response_ids = &.{} } },
+        // Every claim of this outcome the requirement names, so the engine deletes it first.
+        .{ .content = .{ .user_visible_outcome = .{ .text = refuse } }, .source_group_ids = signals, .provenance = .{ .claim_ids = group[1..2], .clarification_response_ids = &.{} } },
+    };
+    var uncovered: repair.Candidate = .{ .response = .{ .content = .{ .records = &uncovered_batch } } };
+    const repeat = (try validate_unit.execute(a, current, fixture.context, uncovered)).invalid;
+    try std.testing.expectEqual(@import("domain/specification_candidate.zig").Rule.repeated_statement, repeat.issue.rule);
+    uncovered = try repair.merge(a, canonical, current, fixture.context, uncovered, try repair.authorize(a, current, fixture.context, uncovered, repeat, &packet_guidance.marked), null, null);
+    const gap = (try validate_unit.execute(a, current, fixture.context, uncovered)).invalid;
+    try std.testing.expectEqual(@import("domain/specification_candidate.zig").Rule.scenario_coverage, gap.issue.rule);
+    try std.testing.expectEqual(group[1].ordinal, gap.issue.uncovered_claim.?.ordinal);
+    const insert = try repair.authorize(a, current, fixture.context, uncovered, gap, &packet_guidance.marked);
+    try std.testing.expect(insert.operation == .insert);
+    try std.testing.expectEqual(@as(usize, 2), insert.target.record);
+    const policy = insert.rule.group.?;
+    try std.testing.expect(policy == .scenario);
+    try std.testing.expectEqualDeep(&[_]@import("domain/reference_identity.zig").ClaimId{group[1]}, policy.scenario.fixed_provenance.claim_ids);
+    try std.testing.expectEqualDeep(signals, policy.scenario.fixed_source_group_ids);
+    // The request selects the content-only criterion definition and names the fixed claim.
+    const insert_packet = try repair.packet(a, current, fixture.context, insert, &packet_guidance.marked);
+    defer @import("domain/model_input_packet.zig").release(insert_packet);
+    try std.testing.expectEqualStrings("repair_record_acceptance_criterion", insert_packet.resultDefinition().?.bytes);
+    try std.testing.expect(std.mem.indexOf(u8, insert_packet.body(), "\"provenance\"") != null);
+    // Rejected: another record kind, or any claims but the fixed one.
+    const tested: spec.Model.RecordProposal = .{ .content = ac, .source_group_ids = signals, .provenance = .{ .claim_ids = group[1..2], .clarification_response_ids = &.{} } };
+    var edge = tested;
+    edge.content = ec;
+    var widened = tested;
+    widened.provenance.claim_ids = group;
+    for ([_]spec.Model.RecordProposal{ edge, widened }) |wrong| {
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, canonical, current, fixture.context, uncovered, insert, .{ .record = wrong }, null));
+    }
+    const repaired = try repair.merge(a, canonical, current, fixture.context, uncovered, insert, .{ .record = tested }, null);
+    try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, repaired)).?.validated.result);
+    _ = (try validate_unit.execute(a, current, fixture.context, repaired)).valid;
+    try std.testing.expectEqualDeep(@as([]const spec.Model.RecordProposal, &.{ uncovered_batch[0], uncovered_batch[1], tested }), repaired.response.content.records);
+    // The rejection binds the revision it was found at: after the insert it is stale.
+    try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, fixture.context, repaired, gap, &packet_guidance.marked));
+}
+
+test "every uncovered claim of a batch takes its own criterion insert within the frozen repair bound" {
+    // ADR 0038 Decision 3 in an unrelated domain: one requirement names six list-item claims
+    // and no scenario names any, so six inserts follow one another under the bound frozen at
+    // the first authorization, more than the batch's one record alone allows.
+    const sessions = @import("domain/specification_session.zig");
+    const repair = @import("domain/specification_repair.zig");
+    const ClaimId = @import("domain/reference_identity.zig").ClaimId;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const claims = [_]@import("domain/reference_extraction.zig").Proposal{
+        .{ .category = .business, .citations = &.{.{ .ordinal = 1 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 2 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 3 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 4 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 5 }} },
+        .{ .category = .business, .citations = &.{.{ .ordinal = 6 }} },
+    };
+    var fixture = try Fixture.initClaimsGrouped(a, "MOCK Book a meeting room.\nMOCK Show free rooms.\nMOCK Hold a room for ten minutes.\nMOCK Release an unconfirmed hold.\nMOCK Refuse a double booking.\nMOCK Email the organiser.\n", null, .{ .selected = &claims }, &.{&.{ 0, 1, 2, 3, 4, 5 }});
+    defer fixture.deinit();
+    var current = (try sessions.initialize(a, fixture.context.inputs.corpus.feature_id, fixture.context)).ready;
+    const good = try fixture.proposalAllGroups("MOCK Book a meeting room.");
+    current.completed = sessions.records_index;
+    current.units[0] = (try g.validate(a, text.validator, fixture.context, .brief, .{ .content = .{ .brief = .{ .description = good, .primary_goal = good } } })).valid;
+    current.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{ .disposition = .not_applicable, .basis = good } } })).valid;
+    const bound = try sessions.currentBinding(a, current, fixture.context);
+    const group = bound.records.selection.claim_ids;
+    try std.testing.expectEqual(@as(usize, 6), group.len);
+    const signals = try a.dupe(@TypeOf(bound.records.signal), &.{bound.records.signal});
+    const requirement: spec.Model.RecordProposal = .{ .content = .{ .functional_requirement = .{ .text = good.value } }, .source_group_ids = signals, .provenance = .{ .claim_ids = group, .clarification_response_ids = &.{} } };
+    const canonical = try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, text.normalizer, fixture.context.inputs);
+    var candidate: repair.Candidate = .{ .response = .{ .content = .{ .records = try a.dupe(spec.Model.RecordProposal, &.{requirement}) } } };
+    var inserts: usize = 0;
+    var frozen: ?u32 = null;
+    while (true) {
+        const result = try validate_unit.execute(a, current, fixture.context, candidate);
+        if (result == .valid) break;
+        const gap = result.invalid;
+        try std.testing.expectEqual(@import("domain/specification_candidate.zig").Rule.scenario_coverage, gap.issue.rule);
+        try std.testing.expectEqual(group[inserts].ordinal, gap.issue.uncovered_claim.?.ordinal);
+        const insert = try repair.authorize(a, current, fixture.context, candidate, gap, &packet_guidance.marked);
+        // The retry state admits a new target only while its scope's frozen bound has room
+        // (`workflow_retry.zig`), so the bound fixed at the first insert must hold them all.
+        const permit = insert.retry.?;
+        if (frozen) |bound_targets| try std.testing.expectEqual(bound_targets, permit.maximum_targets) else frozen = permit.maximum_targets;
+        try std.testing.expect(inserts < permit.maximum_targets);
+        const wording = try std.fmt.allocPrint(a, "MOCK Case {d} is observed.", .{inserts + 1});
+        const tested: spec.BusinessValue = .{ .segments = try a.dupe(@import("domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = wording } }}) };
+        const criterion: spec.Model.RecordProposal = .{ .content = .{ .acceptance_criterion = .{ .given = tested, .when = tested, .then = tested } }, .source_group_ids = signals, .provenance = .{ .claim_ids = try a.dupe(ClaimId, &.{group[inserts]}), .clarification_response_ids = &.{} } };
+        // Rejected: the same criterion in a group other than the batch's.
+        var elsewhere = criterion;
+        elsewhere.source_group_ids = &.{};
+        try std.testing.expectError(error.InvalidSpecificationRepair, repair.merge(a, canonical, current, fixture.context, candidate, insert, .{ .record = elsewhere }, null));
+        candidate = try repair.merge(a, canonical, current, fixture.context, candidate, insert, .{ .record = criterion }, null);
+        try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, candidate)).?.validated.result);
+        inserts += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 6), inserts);
+    try std.testing.expectEqual(@as(usize, 7), candidate.response.content.records.len);
+    // The one requirement alone would bound the scope at 5 targets, fewer than its six claims.
+    try std.testing.expect(frozen.? > 6);
 }
 
 test "coverage counts only the claims each record names" {

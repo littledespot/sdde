@@ -353,7 +353,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   case. The report records the published incomplete set as `incomplete_publication`
   (the artifacts written), beside its failed step and diagnostic, and the run retains
   its bytes in `project/` for inspection. Like ADR 0017's pending view, it is not
-  scored. The member is in `spec-e2e-report/v16`; it stays null until ADR 0041 is
+  scored. The member is in `spec-e2e-report/v17`; it stays null until ADR 0041 is
   implemented (SPEC01 E0).
 
 ### Rubric assessment
@@ -587,7 +587,7 @@ scorer verifies these facts independently of assessor labels and keeps
 `representation_admission` failure attribution separate from native paid-resource
 stages.
 
-The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v16`,
+The current closed formats are `spec-e2e-case/v3`, `spec-e2e-report/v17`,
 `e2e-step-event/v2`, `baseline-freeze/v3`, `baseline-acquisition/v12`,
 `baseline-score/v4`, `baseline-budget-feasibility/v2`, the evaluator packets'
 `baseline-assessment-inputs/v2` and `provider-compatibility-report/v1`; assessor

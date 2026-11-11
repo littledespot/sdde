@@ -203,7 +203,7 @@ change, not a Plan-local one:
 - **The harness is Spec-only:**
   - case `spec-e2e-case/v3`, which requires Spec's four artifacts
     (`test/harness/e2e/contracts.zig:4`, `:23-26`);
-  - report `spec-e2e-report/v16` (`:140`);
+  - report `spec-e2e-report/v17` (`:140`);
   - adjudication `spec-adjudication-record/v1` (`test/harness/adjudication.zig:13`, `:50`);
   - stage measures, which count `plan_unit` as `other` (`test/harness/baseline/stages.zig:94`).
   - "Plan, Tasks and Implement need their own workflow cases" (design/harness/e2e.md:328).

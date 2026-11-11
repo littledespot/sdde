@@ -35,7 +35,7 @@ scorer judgment moves one by about ±3.6, and keep decisions use the accuracy co
 judged" set (`2026-11-08T00-39-26Z` to `00-45-47Z`), two `input_invalid` runs (`00-36-27Z`,
 `00-37-49Z`), the entity and escaping set (`05-5*`) and six edge-case-lever runs on `071ce2b`
 (`09-2*`). Earlier runs are removed; their evaluations and measures stay under `evaluations/`.
-The current build decodes only `spec-e2e-report/v16` (`test/harness/e2e/contracts.zig:140`); v15 runs need their own build.
+The current build decodes only `spec-e2e-report/v17` (`test/harness/e2e/contracts.zig:140`); earlier runs need their own build.
 
 ## 2. Rules for measured phases
 
@@ -170,8 +170,8 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
    repeats a requirement's value states it (§7 H1 "Titles"). The re-score of the reference it
    required is done (9 November 2026, skill `3c74781e…`, `evaluations/e2e/<run>/`); its records
    are unapplied (`adjudication-record.3c74781e-unapplied.json`, §2 rule 12).
-4. **Decided 8 November 2026** (same words): Q14 b3 stays held and b4 is not started. Revisit b3
-   if refusal scenarios go missing (§4 Q14).
+4. **Kept 12 November 2026:** a scenario gap takes an engine-bound criterion insert (ADR 0038
+   Decision 3; [Z_SPEC01](Z_SPEC01.md) Q14 b3). b4 is not started (decided 8 November 2026).
 5. **Kept 11 November 2026:** the engine takes the title (ADR 0048; [Z_SPEC01](Z_SPEC01.md) Q22).
 6. **Kept 9 November 2026:** an entity is a name and its groups ([Z_SPEC01](Z_SPEC01.md) Next 6).
 7. **Kept 9 November 2026:** the renderer escapes only the bytes Markdown reads as markup
@@ -185,16 +185,15 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
    Decision 7 (a **Decision**).
 
 **Output track** (recommended order, not decided, inside the decided constraints: D17.1 puts
-Q17 after D12.2, and D14.1 holds Q14 b3; each change set is measured on its own committed
+Q17 after D12.2; each change set is measured on its own committed
 build, §2.1 and §2.3):
 
 | Rank | Item | Defect class reduced | Effort | Validation | Decided |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Q14 b3** | lost source requirement: the add-a-link route of the missing refusal scenario (`728d…`; not `fa03…`'s first-attempt route, §4 Q14) | L | Measurement set | D14.1: held (§3 Next item 4) |
-| 2 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
-| 3 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
-| 4 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
-| 5 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
+| 1 | **Q17** principles as records-call context | none scored; guards only unless the rubrics gain a principle criterion | M | Records screen, then a set | D17.1 |
+| 2 | **Q7 D7.5** a plain string only where a field offers no insertion | rendering artefact C (joined fragments): none published since ADR 0047 composes the story; conformance only (§4 Q7) | S | Screen, then a set | D7.5 yes, a conformance fix |
+| 3 | **Q4** retry, with D4.1's extension | engine vocabulary (none published; AGENTS.md compliance) | S | Screens of each changed call kind, then a set | D4.1 extension yes |
+| 4 | **Q21** behaviour claims need statements | lost source requirement: a behaviour claim no statement names, passed through a whole-group selection (none since ADR 0047) | M–L, by D21.1 | Fixtures at the owner, screens of each changed call kind, then a set | D21.1 deferred |
 
 **Robustness track** (run completion and budget; no scored defect): E5's §22.6 correction
 location. Since D13.1 the measured runs show 0 runaways and 0 re-sends; the highest used 67,448
@@ -293,7 +292,7 @@ was reverted on 31 October 2026 after hello-world's first extraction returned
 published spec contains engine vocabulary, so this is AGENTS.md compliance, not an output
 target.
 
-**D4.1's extension** (D4.1 in [Z_SPEC01](Z_SPEC01.md); decided 3 November 2026): the rule covers
+**D4.1's extension** (decided 3 November 2026; D4.1's own correction left with Q14 b3): the rule covers
 native rule and correction texts too, and a sentence that says what a field, claim or response
 contains stays even when the engine enforces or transforms it.
 
@@ -427,7 +426,7 @@ error.
   (`model_protocol_retry.zig:96`).
 - **Change (approval needed to implement):** the `enum_mismatch` correction for an ID choice
   names the rejected value and lists the allowed IDs, both taken from the compiled choice,
-  never hard-coded (D4.1's precedent for `uncovered_member`). It amends 22-repair.md:573-574,
+  never hard-coded (as the `shared_member` correction names its compiled kinds). It amends 22-repair.md:573-574,
   which keeps the allowed-ID list out of an integer-enum outline, and :568-569 ("no other
   correction changes"). It changes model-visible correction text only; first requests stay
   byte-identical (§2.10). Proven offline: a scripted non-existent claim gets the named
@@ -445,32 +444,8 @@ close. No retained `uncovered_member` firing ended well: two runs exhausted the 
 limit (2, `spec.workflow.yaml:732`), and three passed by adding the claim IDs to the
 success-only AC-001. The advisory evaluate-e2e link check can't record over-citation.
 
-- **b3 (D14.1):** a claim-bound scenario insert: the engine fixes the new record's
-  `claim_ids` to the uncovered claim and the model writes only its content, closing the
-  add-a-link escape. Effort L, using today's repair loop (`spec.workflow.yaml:749-774`); E4 is
-  not a prerequisite.
-  - Coverage must move from payload admission (`model_payload_schema.zig:235-247`, behind
-    `shared_member` at `:228-234`, where no typed candidate exists and only a whole-response
-    retry is possible) into the unit validator beside entity membership
-    (`specification_generation.zig:247-264`).
-  - Insert repair exists today only for entity membership (`specification_repair.zig:50-67`,
-    `:128-141`, `:373-377`, `:468-477`). The record gates at `:254`, `:375` and `:469` lift; a
-    group policy for a fixed claim is added (`GroupPolicy` has only `.membership`,
-    `specification_candidate.zig:140-142`); the record repair definition stops being only
-    `repair_record_entity` (`specification_repair.zig:271`); and the unused content-only
-    `repair_record_acceptance_criterion` schema (`generation.schema.json:469-480`) gains an
-    edge-case counterpart.
-  - A compiled coverage rule needs covering kinds (`model_result_schema.zig:210`), so keeping
-    `shared_member` at admission without `uncovered_member` changes the result-schema rule
-    contract.
-  - ADR 0038 Decision 1 already says repairs stay content-only and keep the record's claims
-    (0038:95-96). Deletes the admission-time coverage check (`uncovered_member`) and D4.1's
-    covering-kinds correction; D16.2's partly taken statement (`shared_member`) stays at
-    admission and its repeated statement a native delete.
-  - Amends ADR 0038 Decision 3 (:104-112, :287-289) and :150-152, :246-248;
-    22-repair.md:270-274, :561-567 and :802-803; 12-model-boundary.md:105-108 and :846-847;
-    17-specify.md:206-209; F0100:1195-1198 and :1374-1379.
-  - An inserted scenario still links without checking meaning.
+- **b3 (D14.1):** a claim-bound scenario insert. **Kept 12 November 2026** (user: "keep B3";
+  [Z_SPEC01](Z_SPEC01.md) Q14 b3, ADR 0038 Decision 3). No insert has fired live.
 - **b4** (proposed 8 November 2026; not started, §3 Next item 4): claim-bound scenarios at
   first generation too: the engine fixes each scenario's `claim_ids` before the model writes
   it, closing `fa03…`'s first-attempt route that b3 leaves. Slots can come only from IDs, so a
@@ -482,8 +457,7 @@ success-only AC-001. The advisory evaluate-e2e link check can't record over-cita
 
 **D14.1:** b3, not b2 (decided 1 November 2026); held until lost source requirement recurs
 (re-decided 3 November 2026), a condition since met; held again with b4 not started (8
-November 2026, §3 Next item 4). When it goes ahead, **Keep if** lost source requirement falls
-and publication and exhausted runs don't worsen.
+November 2026, §3 Next item 4); released, implemented and kept 12 November 2026.
 
 ### Q17. Principles as Spec context
 
@@ -529,7 +503,7 @@ set may show only "benefit not demonstrated".
 every obligation-bearing claim must be named by a behaviour statement (FR, BR, UO or PB),
 whose claims then need a scenario. A coverage gap blocks with no repair today
 (`specification_coverage_repair.zig:26-30`), so it needs a correction at records admission
-(ADR 0038 Decision 3) or a claim-bound insert (b3, §4 Q14), or silent passes become blocked
+(ADR 0038 Decision 3) or a claim-bound insert (b3, [Z_SPEC01](Z_SPEC01.md) Q14 b3), or silent passes become blocked
 runs. Owner: `Coverage` (`model_result_schema.zig:56`) and `specification_coverage.zig`;
 amends ADR 0038 Decision 2 and :234-241, 17-specify.md §17.5 and F0100.
 
@@ -604,7 +578,7 @@ derived choices 1–8 (:224-241), including offline evidence; can be asked with 
 ### E4. Generic repair operations (W3, ADR 0033)
 
 After E1, E2's measure and its capture replays (ADR 0033:261), which must be
-`model-request-debug/v17` captures (`model_request_description.zig:5-10`; earlier captures no
+`model-request-debug/v18` captures (`model_request_description.zig:5-10`; earlier captures no
 longer decode): all Specify owners in one change on offline equivalence evidence; the 29
 operations and 13 owners of ADR 0033:87-103 still match (10 authorize, 6 build, 6 parse, 7
 merge). Seven operations read `.packet_guidance`; their variants keep those reads. Retained
@@ -1566,7 +1540,7 @@ The guarded form is at `test/harness/integration/tests.zig:145-146`.
 
 **C45. Versions, layouts and lists repeated by hand.**
 
-- `spec-e2e-report/v16` is spelled on 66 lines in 15 test files, because the schema field has no
+- `spec-e2e-report/v17` is spelled on 66 lines in 15 test files, because the schema field has no
   default (`test/harness/e2e/contracts.zig:140`). §2 rule 12 makes each closed-member change a
   version bump.
 - The measures reader repeats the evidence layout as literals and returns no responses when the

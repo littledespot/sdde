@@ -385,7 +385,7 @@ test "a retained run measures its configured threshold and one feature log, and 
     var root = std.testing.tmpDir(.{});
     defer root.cleanup();
     // A missing report, or one of a known older version, leaves the report unavailable.
-    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v15\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
+    for ([_]?[]const u8{ null, "{\"schema\":\"spec-e2e-report/v9\",\"retired\":true}", "{\"schema\":\"spec-e2e-report/v16\",\"attempts\":[]}" }, [_][]const u8{ "missing", "older", "previous" }) |report, name| {
         try putTestRun(io, a, root.dir, name, report);
         const run = try measure(io, a, root.dir, name);
         try std.testing.expectEqualStrings(name, run.run);
@@ -405,8 +405,8 @@ test "a retained run measures its configured threshold and one feature log, and 
     // A report of the current version that doesn't decode, or of an unknown version,
     // makes the run unmeasurable rather than its report unavailable.
     for ([_][]const u8{
-        "{\"schema\":\"spec-e2e-report/v16\"}",
-        "{\"schema\":\"spec-e2e-report/v16\"}",
+        "{\"schema\":\"spec-e2e-report/v17\"}",
+        "{\"schema\":\"spec-e2e-report/v18\"}",
         "{\"schema\":\"spec-e2e-report/v09\"}",
         "{\"status\":\"generated\"}",
         "not json",
@@ -454,7 +454,7 @@ fn currentReport(a: std.mem.Allocator) ![]const u8 {
         .accounting = .exact_usage,
         .usage = .{ .input_tokens = 4, .output_tokens = 3, .total_tokens = 7 },
     }};
-    const report: c.Report = .{ .schema = .@"spec-e2e-report/v16", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .model_calls = 1, .total_tokens = 7, .attempts = &attempts };
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v17", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .model_calls = 1, .total_tokens = 7, .attempts = &attempts };
     return std.json.Stringify.valueAlloc(a, report, .{});
 }
 

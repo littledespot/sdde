@@ -17,14 +17,6 @@ limit; the request the model receives is unchanged. Defect class: lost source re
 Evidence: `evaluations/d23-12/measures-set.json` (12 of 12 published; the correction never
 fired, so "not enough evidence"). Open follow-ups: SPEC01 Q2b.
 
-## Q4 D4.1. `uncovered_member` correction names the covering kinds
-
-**Kept 30 October 2026.** The correction names the covering kinds from the compiled coverage
-rule, never hard-coded (`model_schema_diagnostic.zig`, `model_protocol_retry.zig`);
-`required_preserve` unchanged. Evidence `evaluations/e2e/d41-measures-set.json` (correction
-never fired). Its live firings are in SPEC01 Q14; the extension decided 3 November 2026 is open
-in SPEC01 Q4.
-
 ## Q13 D13.1. Post-generation reviews removed
 
 **Committed in `2b3dc8b`** (user, 1 November 2026: "apply best recommendations"). The
@@ -414,3 +406,45 @@ capture was `model-request-debug/v16`, which the build refuses.
   can't reverse the keep: the set has no lost, weakened or contradiction defect; each of its
   three additions is an AC-001 Then byte-identical to one in the reference, which the skill
   scores the same; and on the target the set holds 0.
+
+## Q14 b3. A scenario gap takes an engine-bound criterion insert (ADR 0038 Decision 3)
+
+**Implemented 12 November 2026** (user: "B3 is approved, implement"); **kept 12 November
+2026** (user: "keep B3"). Defect class: lost source requirement, a behaviour claim no scenario
+tests, reached when the whole-response correction answered a scenario gap by adding the
+claim to an unrelated criterion or exhausted the records retries (SPEC01 Q14). ADR 0038
+Decision 3 records the decision, its derived choices and the versions.
+- **Owners:** `specification_session.scenarioCoverageIssue` (after the duplicate,
+  restatement and repeated-statement checks, on the batch their deletes leave);
+  `specification_candidate.GroupPolicy.scenario`, a fixed record beside entity membership;
+  and `specification_repair` (authorize, packet with the `provenance` context and the
+  claim's exact values, parse, merge, retry validation). Admission keeps only
+  `shared_member`: the result-schema rule records the exclusive and owning kinds, and the
+  `uncovered_member` reason and its correction are gone. `model-request-debug/v18`,
+  `spec-e2e-report/v17`.
+- **Tests:** in `specification_generation_test.zig`, the session reports the uncovered claim
+  after the native delete, needs none for a scope-only claim, authorizes the insert at the end
+  of the batch with the claim and group fixed, selects the criterion definition, refuses an
+  edge case or other claims, validates the merged batch and refuses the stale rejection; six
+  claims of one requirement take six inserts within the bound frozen at the first, which
+  `targetBound` sizes with a criterion per claim a statement names (contract review, 12
+  November 2026); the
+  admission, result-schema and replay tests admit an uncovered response; the scripted matrix
+  publishes uncovered batches, one or every, and a re-sent runaway, each with its inserts and
+  no correction. Request projection `q22-final` to `q14b3-after`: 1,450 of 1,633 requests
+  unchanged, 179 records requests differ only in their recorded rule, and the 4 changed
+  requests of the three uncovered scenarios became repair-slot inserts (one call added).
+- **Set** (`2026-11-11T20-47-36Z` to `-41Z`; revision `666e0c30`, `build.source.modified` true;
+  3 runs per case, none retried; skill `3fe52a92…`, the Q22 evaluator; reference the Q22 set):
+  6 of 6 published and passed, 9 calls each, no correction, re-send, runaway or admission
+  rejection. Content-basis counts, lost / weakened / unsupported / contradiction: hello-world
+  0 / 0 / 0 / 0 and loan-renewal 0 / 0 / 3 / 0 (AC-001's recording clause), the Q22 set's
+  counts; `-38Z`, `-39Z` and `-40Z` publish records byte-identical to a Q22 run. The 10 native
+  deletes of the loan-renewal runs were all helpful. No `scenario_coverage` event fired, so no
+  insert ran live; the target was 0 in both states ("benefit not demonstrated"), so the keep
+  rests on the mechanism, the offline tests and the guards (lost source requirement 0 in both
+  cases, publication 3 of 3 each, exhausted 0). Median tokens 12,712 and 16,342 against the Q22
+  set's 12,796 and 16,290. Measures: `evaluations/q14b3-measures-set.json`.
+- **Not covered by a test or a live run:** replacing an inserted criterion, and exhaustion of
+  the insert's repair bound.
+- **Rule:** an inserted record's association is the engine's; the model writes content only.

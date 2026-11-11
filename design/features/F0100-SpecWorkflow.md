@@ -1192,9 +1192,9 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
   - Generation that completes without a mandatory record family ends `invalid`
     (`check-specification-generation-progress`); no model evidence supplies it.
-  - Natively, ADR 0038's one-statement-record and scenario rules apply in each records
-    response ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
-    Decisions 2 and 5). No model compares the generated candidate with its sources; the
+  - Natively, ADR 0038's one-statement-record rule applies to each records response and its
+    scenario rule to each batch the native deletes leave ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)
+    Decisions 2, 3 and 5). No model compares the generated candidate with its sources; the
     human who reviews `spec.md` judges scenario meaning (ADR 0023).
   - Missing behavior cannot be satisfied by citation presence or a title.
   - Canonical-state parsing rejects missing mandatory families through the same
@@ -1371,11 +1371,11 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   acceptance.
 - Protocol corrections remain separate provider attempts.
 
-- A records response whose behaviour-statement claim no acceptance criterion or edge
-  case names is rejected at admission as `uncovered_member`, and one with a
-  non-requirement statement naming both taken and untaken claims as `shared_member`. Each
-  takes the request's existing protocol
-  correction, which names the governing kinds; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md)). Coverage counts only the claims
+- A records response with a non-requirement statement naming both taken and untaken
+  claims is rejected at admission as `shared_member`, whose protocol correction names the
+  governing kinds. A behaviour-statement claim no acceptance criterion or edge case names,
+  on the batch the native deletes leave, is a `scenario_coverage` unit defect repaired by
+  one acceptance criterion whose claim and group the engine fixes; exhaustion fails ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decision 3). Coverage counts only the claims
   each record names, so a claim no record names maps only through another target.
 - Coverage rejections retain the missing claim/token obligation and block with
   `no_independent_supported_target`: filling an aggregate gap would invent meaning or

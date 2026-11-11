@@ -165,7 +165,7 @@ constant, so projects couldn't choose it.
    protocol correction's response, goes through exactly the checks a first response
    does, in the same order: observation and usage validation, envelope decoding,
    payload-schema validation, the native admission constraints (assignment membership
-   and scenario coverage), domain validation, the evidence and repair rules, and every
+   and statement exclusivity), domain validation, the evidence and repair rules, and every
    publication check. No check is skipped, relaxed or reordered for a retry, and a
    retry response can't be accepted on less evidence than a first response. A retry
    that succeeds removes no earlier failure from the logs or the report.
@@ -207,7 +207,8 @@ constant, so projects couldn't choose it.
     descriptions and complete returned outputs in the prompt log before the failure
     events; at a higher level, only the events.
   - Same checks: a re-sent response is rejected exactly as a first response would be
-    for malformed JSON, a schema violation, a missing assignment member and an
-    uncovered scenario claim, and the E2E report marks the re-send attempt.
+    for malformed JSON, a schema violation and a missing assignment member, its
+    uncovered scenario claim takes the same engine-bound insert as a first response's
+    (ADR 0038 Decision 3), and the E2E report marks the re-send attempt.
   - Replay: a current description round-trips each temperature, and a v12 description,
     which recorded no sampling, is refused.

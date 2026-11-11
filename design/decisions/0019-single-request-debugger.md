@@ -8,10 +8,10 @@
   [ADR 0011](0011-provider-owned-request-limits.md) (18 October 2026),
   [ADR 0023](0023-advisory-post-generation-review.md#assignment-membership-at-response-admission-18-october-2026)
   (18 October 2026), [ADR 0028](0028-anthropic-messages-provider.md) (21 October 2026,
-  Anthropic provider configuration), [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October
-  and 2 November 2026) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
+  Anthropic provider configuration), [ADR 0038](0038-record-claims-and-scenario-coverage.md) (25 October,
+  2 and 12 November 2026) and [ADR 0039](0039-configured-temperatures-and-runaway-resend.md)
   (26 October 2026), which change what the request description records ("Capture and
-  lineage" and "Replay" below; current version `model-request-debug/v17`, which also carries
+  lineage" and "Replay" below; current version `model-request-debug/v18`, which also carries
   [ADR 0043](0043-model-facing-exact-text-names.md)'s model-facing names and, since
   [ADR 0048](0048-engine-derived-specification-title.md), no brief-title field binding).
   [ADR 0030](0030-engine-owned-model-request.md) (22 October 2026, amended 23 October
@@ -68,7 +68,7 @@ plain-prose selectors used by the source-aware model-text wire validator; native
 wire-field bindings to the composition registry, so the selected schema and diagnostic
 replay enforce the same permitted insertions; the immutable exact-occurrence scope
 (ADR 0020); and each applied exact-membership selection (ADR 0023) and native coverage
-rule, with its covered, covering, exclusive and owning kinds (ADR 0038), which the
+rule, with its exclusive and owning kinds (ADR 0038; until v18 also covered and covering kinds), which the
 schema bytes cannot express, so replay reapplies them through the same schema
 restriction owner. This metadata is diagnostic input, not provider-visible authority.
 Older descriptions remain unchanged and reject readback; replay requires a new capture,

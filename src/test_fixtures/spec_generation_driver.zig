@@ -60,6 +60,10 @@ pub const Driver = struct {
     bare_statements: usize = 0,
     /// Records requests whose response gained an exact repeat of a requirement.
     duplicate_records: usize = 0,
+    /// Records requests whose response lost the scenarios naming its requirements' claims.
+    uncovered_records: usize = 0,
+    /// Engine-bound acceptance-criterion inserts requested (ADR 0038 Decision 3).
+    scenario_inserts: usize = 0,
     malformed: bool = false,
     uncertain: bool = false,
     malformed_once: bool = false,
@@ -408,27 +412,14 @@ pub const Driver = struct {
                     const repeated = attempt > 2 and fault.shape != .review_moving;
                     std.testing.expectEqual(@as(usize, @intFromBool(repeated)), std.mem.count(u8, content[base.len].guidance, "The previous correction still failed this validation.")) catch unreachable;
                 }
-                if (matches_stage and fault.shape == .uncovered_scenario and attempt > 1) {
-                    // ADR 0038: an uncovered functional-requirement claim is a response-admission
-                    // defect; the bounded protocol correction names its exact location.
-                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
-                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
-                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
-                    const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
-                    std.testing.expectEqualStrings("uncovered_member", diagnostic.get("reason").?.string) catch unreachable;
-                    const path = diagnostic.get("path").?.string;
-                    std.testing.expect(std.mem.startsWith(u8, path, "/records/") and std.mem.indexOf(u8, path, "/claim_ids/") != null) catch unreachable;
-                    std.testing.expectEqualStrings(path, correction.value.object.get("expected").?.object.get("path").?.string) catch unreachable;
-                    // The correction names the compiled covering kinds, from their owner.
-                    const covering = correction.value.object.get("covering").?.object;
-                    const rule = @import("../domain/specification_session.zig").scenario_coverage;
-                    std.testing.expectEqualStrings(rule.kind_property, covering.get("kind_property").?.string) catch unreachable;
-                    std.testing.expectEqual(rule.covering.len, covering.get("kinds").?.array.items.len) catch unreachable;
-                    for (rule.covering, covering.get("kinds").?.array.items) |kind, listed| std.testing.expectEqualStrings(kind, listed.string) catch unreachable;
-                }
                 // ADR 0038 Decision 5: a wholly taken statement never reaches a correction, and
-                // neither does an evidence-equivalent duplicate (ADR 0035).
-                if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record)) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
+                // neither does an evidence-equivalent duplicate (ADR 0035) or an uncovered
+                // behaviour claim, which the engine repairs with a criterion insert (Decision 3).
+                if (matches_stage and (fault.shape == .shared_statement or fault.shape == .bare_statement or fault.shape == .duplicate_record or fault.shape == .uncovered_scenario)) std.testing.expectEqual(@as(u32, 1), attempt) catch unreachable;
+                if (stage == .repair and fault.shape == .uncovered_scenario or stage == .repair and fault.shape == .runaway_uncovered) {
+                    const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
+                    if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "repair_record_acceptance_criterion")) self.scenario_inserts += 1;
+                }
                 if (matches_stage and (fault.shape == .runaway or fault.shape == .runaway_uncovered or fault.shape == .runaway_partial_assignment) and attempt > 1) {
                     // ADR 0039: the re-send of a first runaway repeats its request at
                     // the runaway-retry temperature, with no correction guidance.
@@ -450,15 +441,9 @@ pub const Driver = struct {
                     const collection = memberCollection((std.json.parseFromSlice(std.json.Value, arena.allocator(), body, .{}) catch unreachable).value);
                     std.testing.expectEqualStrings(std.fmt.allocPrint(arena.allocator(), "/{s}", .{collection.array}) catch unreachable, diagnostic.get("path").?.string) catch unreachable;
                 }
-                if (matches_stage and fault.shape == .runaway_uncovered and attempt == 3) {
-                    // The re-sent response passed the same admission and its uncovered
-                    // claim takes the ordinary correction at the configured temperature.
-                    std.testing.expectEqual(.configured, request.prepared().?.sampling) catch unreachable;
-                    const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
-                    std.testing.expectEqualStrings(corrupt(arena.allocator(), body, .uncovered_scenario, attempt - 1) catch unreachable, prior.value.rejected_response) catch unreachable;
-                    const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
-                    std.testing.expectEqualStrings("uncovered_member", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("reason").?.string) catch unreachable;
-                }
+                // A re-sent response passes the same checks as a first one: its uncovered
+                // claim reaches no correction (ADR 0039).
+                if (matches_stage and fault.shape == .runaway_uncovered) std.testing.expect(attempt <= 2) catch unreachable;
                 if (matches_stage and fault.shape == .alternating_protocol and attempt > 1) {
                     const evidence = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                     std.testing.expectEqualStrings(if (attempt % 2 == 0) "{" else "{}", evidence.value.rejected_response) catch unreachable;
@@ -488,6 +473,7 @@ pub const Driver = struct {
                     } else self.fake.invocation_plan.complete.content = if (fault.shape == .alternating_protocol or fault.shape == .alternating_missing) (if (attempt % 2 == 1) "{" else "{}") else corrupt(arena.allocator(), body, fault.shape, attempt) catch unreachable;
                     if (fault.shape == .bare_statement and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.bare_statements += 1;
                     if (fault.shape == .duplicate_record and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.duplicate_records += 1;
+                    if ((fault.shape == .uncovered_scenario or fault.shape == .runaway_uncovered) and self.fake.invocation_plan == .complete and !std.mem.eql(u8, self.fake.invocation_plan.complete.content, body)) self.uncovered_records += 1;
                     self.fault_calls += 1;
                 }
             }
@@ -917,6 +903,7 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
     }
     if (shape == .uncovered_scenario) {
         // Keep the functional requirements and drop every scenario that names their claims.
+        // A batch with no requirement or no scenario is returned unchanged.
         const items = &(parsed.value.object.getPtr("records") orelse return error.InvalidFixture).array;
         var kept: usize = 0;
         var requirements: usize = 0;
@@ -927,7 +914,7 @@ fn corrupt(allocator: std.mem.Allocator, body: []const u8, shape: @FieldType(Fau
             items.items[kept] = item;
             kept += 1;
         }
-        if (requirements == 0 or kept == items.items.len) return error.InvalidFixture;
+        if (requirements == 0 or kept == items.items.len) return allocator.dupe(u8, body);
         items.shrinkRetainingCapacity(kept);
         return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
     }

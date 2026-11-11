@@ -339,19 +339,15 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
 }
 
-/// ADR 0038: every claim a behaviour statement (requirement, rule, outcome or
-/// prohibition) names needs an acceptance criterion or edge case that names it too;
-/// assumptions and non-goals are scope statements that no scenario tests. Functional
-/// requirements own their claims: a business rule, outcome, assumption, non-goal or
-/// prohibition whose every claim a requirement or an earlier one of those names restates
-/// them, so it is deleted natively (`repeatedStatementIssue`); one naming such claims
-/// and others too is rejected at response admission, like an uncovered claim, and takes
-/// the request's protocol correction. Requirements are never deleted or rejected here,
-/// so one prose claim may yield several.
-pub const scenario_coverage: @import("model_result_schema.zig").ItemCoverage = .{
+/// ADR 0038 Decision 5: functional requirements own their claims. A business rule,
+/// outcome, assumption, non-goal or prohibition whose every claim a requirement or an
+/// earlier one of those names restates them, so it is deleted natively
+/// (`repeatedStatementIssue`); one naming such claims and others too is rejected at
+/// response admission and takes the request's protocol correction. Requirements are
+/// never deleted or rejected here, so one prose claim may yield several. Scenario
+/// coverage is the session's (`scenarioCoverageIssue`, Decision 3).
+pub const statement_rule: @import("model_result_schema.zig").ItemCoverage = .{
     .kind_property = "content",
-    .covered = recordKinds(&.{ .requirement, .behaviour }),
-    .covering = recordKinds(&.{.scenario}),
     .exclusive = recordKinds(&.{ .behaviour, .scope }),
     .owning = recordKinds(&.{.requirement}),
 };
@@ -402,7 +398,7 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     };
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
-    if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = scenario_coverage });
+    if (selected == .records) try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } } }, .allowed = claim_ids.items, .collection = .unique_subset, .coverage = statement_rule });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
         // Each brief field the model writes selects its own groups.
         .brief => inline for (comptime std.meta.fieldNames(@FieldType(g.ModelResponse, "brief"))) |field| {
@@ -560,7 +556,35 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Conte
             };
         }
         if (try restatementIssue(a, current, proposed.records, model)) |issue| return issue;
-        return repeatedStatementIssue(a, proposed.records, model);
+        if (try repeatedStatementIssue(a, proposed.records, model)) |issue| return issue;
+        return scenarioCoverageIssue(proposed.records);
+    }
+    return null;
+}
+
+/// ADR 0038 Decisions 2 and 3: every claim a functional requirement, business rule,
+/// user-visible outcome or prohibited behavior names must also be named by an acceptance
+/// criterion or edge case of the same batch. It is decided on the batch the native deletes
+/// leave, so a record the engine deletes needs no scenario. The first uncovered claim, in
+/// record and claim order, is repaired by one engine-bound acceptance-criterion insert.
+fn scenarioCoverageIssue(records: []const g.spec.RecordProposal) ?@import("specification_candidate.zig").Issue {
+    const r = @import("reference_reconciliation.zig");
+    for (records) |record| {
+        switch (std.meta.activeTag(record.content).role()) {
+            .requirement, .behaviour => {},
+            .scope, .scenario, .entity => continue,
+        }
+        claims: for (record.provenance.claim_ids) |claim| {
+            for (records) |other| if (std.meta.activeTag(other.content).role() == .scenario and r.contains(r.ClaimId, other.provenance.claim_ids, claim)) continue :claims;
+            return .{
+                .unit = .records,
+                .field = .unit,
+                .rule = .scenario_coverage,
+                .observed = null,
+                .uncovered_claim = claim,
+                .detail = "A behaviour statement names a claim that no acceptance criterion or edge case of its batch names.",
+            };
+        }
     }
     return null;
 }

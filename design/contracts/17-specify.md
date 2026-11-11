@@ -203,9 +203,9 @@ own their claims: in one response, a business rule, outcome, assumption, non-goa
 prohibition whose every claim a requirement or an earlier such record names is deleted
 natively unless it holds an exact copy no other record holds (a record so deleted is not
 judged on its text), and one naming such claims and others is a defect;
-requirements are never deleted or rejected by this rule. Every claim a behaviour
-statement names must also be named by an acceptance criterion or edge case. Admission
-rejects either defect for the request's existing protocol correction
+requirements are never deleted or rejected by this rule; admission rejects that defect for the
+request's existing protocol correction. Every claim a behaviour statement names must also be named by an acceptance criterion or
+edge case of its batch after the native deletes; the session repairs a gap by inserting one acceptance criterion whose claim it fixes
 ([ADR 0038](../decisions/0038-record-claims-and-scenario-coverage.md) Decisions 2, 3 and 5). The shared finite native
 iteration contract in §6 fixes the population at the brief, the engine-composed story
 and the entities assignment plus the native record-authoring group count and advances

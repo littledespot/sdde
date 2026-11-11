@@ -28,7 +28,10 @@
   and its groups (Decision 6). Amended again on 8 November 2026 (SPEC01 §3, the edge-case
   outcome lever; user: "apply recommendations", "recommendations accepted for 1 to 6", then
   "go"): an edge case's outcome is the Then of an acceptance criterion it links to
-  (Decision 7).
+  (Decision 7). Amended on 12 November 2026 (SPEC01 Q14 b3; user: "B3 is approved,
+  implement"): a scenario gap is the session's, repaired by one acceptance criterion whose
+  claim the engine fixes (Decision 3); admission keeps only the partly taken statement
+  (Decision 5).
 - **Amends:**
   - [ADR 0020](0020-derived-exact-reference-lineage.md): a non-entity record's response
     names claims; its canonical selection is a subset of its one group;
@@ -67,6 +70,15 @@
     v25). The records schema loses the edge case's outcome, the required-authority contract
     is 4, and a link-scenarios step with its own prompt and result schema follows
     generation.
+  - Since 12 November 2026, Decision 3 (a claim-bound scenario insert): §12 (admission no
+    longer applies the scenario rule), §17.3 and §17.5, §22 (a scenario gap takes an
+    engine-bound insert, not a protocol correction, and the `uncovered_member` correction
+    and its covering kinds are gone), F0100 §5.7;
+    [ADR 0019](0019-single-request-debugger.md) (`model-request-debug/v18`: a recorded rule
+    names only its exclusive and owning kinds);
+    [ADR 0039](0039-configured-temperatures-and-runaway-resend.md) (admission's native
+    constraints); and reports advance to `spec-e2e-report/v17`. No record shape, content,
+    state or packet-guidance version changes.
 
   "One records call per feature", part of FIX05's B5 proposal, is not adopted: under
   Decision 1 a group's scenarios are all in its own batch, and both live cases already
@@ -93,7 +105,8 @@ only block.
      subset of its group. A whole-group selection is still valid, so earlier stored
      states keep reading back.
    - Entities keep selecting whole groups. Repairs stay content-only and keep the
-     record's claims.
+     record's claims; the one record whose claims the engine sets is Decision 3's
+     inserted criterion, and the model writes only its content.
 2. **A behaviour statement's claims need a scenario.** In one records response, every
    claim a `functional_requirement`, `business_rule`, `user_visible_outcome` or
    `prohibited_behavior` names must also be named by an `acceptance_criterion` or
@@ -101,15 +114,29 @@ only block.
    so they need none. The rule needs no claim categories or keywords: title and
    purpose claims aren't named by behaviour statements. (Functional requirements only,
    until 2 November 2026.)
-3. **A gap takes the request's protocol correction.** The rule is a native admission
-   constraint beside ADR 0023's `exact_members`: the result-schema module records it on
-   the records array (`Coverage`), response admission rejects an uncovered claim as
-   `uncovered_member` at its exact location (`/records/<i>/claim_ids/<j>`), and the
-   records step's existing `retry-limit` bounds the correction. Exhaustion fails the
-   run. It asks for missing content and never removes any. Decision 5's partly taken
-   statement, `shared_member`, takes the same route.
-   - Request descriptions record the constraint so replay enforces the same admission
-     (from `model-request-debug/v12`).
+3. **A gap takes an engine-bound criterion insert** (amended 12 November 2026; until then
+   response admission rejected an uncovered claim as `uncovered_member` and the records
+   request's protocol correction asked for the whole response again). The specification
+   session checks the rule (`scenarioCoverageIssue`) after its duplicate, story-restatement
+   and repeated-statement checks, on the batch their native deletes leave, so a record the
+   engine deletes needs no scenario. The first uncovered claim, in record and claim order,
+   is a unit defect (`scenario_coverage`) repaired by one insert:
+   - the engine fixes the new record's kind (`acceptance_criterion`), its claims (the one
+     uncovered claim) and its group (the batch's), and the model writes only its content,
+     through the content-only `repair_record_acceptance_criterion` definition; the request
+     names the claim in its `provenance` context and offers only that claim's exact values;
+   - an edge case is never inserted: an uncovered claim has no criterion an edge case could
+     link to, so it would block under Decision 7;
+   - the insert follows the existing records repair route under §22's preconditions, retry
+     limits and impacted and full validation; each further uncovered claim takes its own
+     insert, and exhaustion fails the run. It adds content and never removes any;
+   - the insert repairs a named source obligation: the claim is one a behaviour statement
+     of the same batch already names, so it invents no requirement.
+
+   Decision 5's partly taken statement, `shared_member`, stays a response-admission
+   defect, and request descriptions record that rule so replay enforces the same admission
+   (from `model-request-debug/v12`; its covered and covering kinds left with
+   `model-request-debug/v18`).
 4. **List sources yield one claim per requirement.** ADR 0036 Decision 3's native
    list-item split is reinstated: a claim whose cited lines span several top-level
    list items becomes one quoted claim per item, so a list requirement can be checked
@@ -148,16 +175,16 @@ only block.
      repeat is lost where valid text would have kept it. Deciding it later would leave the
      exempted defect to a unit repair that refuses it (below).
    - **Partly taken statement:** such a record naming taken claims and others too is
-     rejected at response admission as `shared_member` at `/records/<i>`, before any
-     coverage gap. The correction offers the record's shape, names the exclusive and
+     rejected at response admission as `shared_member` at `/records/<i>`. The correction
+     offers the record's shape, names the exclusive and
      owning kinds (`exclusive`), and lists every taken claim's naming in such records
      (`shared`), so one retry can fix them all (user: "Yes, list every location").
    - **Requirements are exempt** (user, 2 November 2026: "Yes, exempt FRs"): a
      requirement is never deleted or rejected by this rule, so one prose claim holding
      two obligations may yield two requirements. Deleting the second would lose the
      obligation it alone states.
-   - The result-schema rule records the exclusive and owning kinds beside the covering
-     kinds, as required members.
+   - The result-schema rule records the exclusive and owning kinds, as required members;
+     since 12 November 2026 they are all it records (Decision 3).
    - It replaces ADR 0035's comparison between records in one batch (user: "Yes, Q16
      replaces it"). ADR 0035's same-kind delete runs first and is unchanged.
    - The records prompt keeps its "at most one" sentence, requirements included, as the
@@ -201,8 +228,8 @@ only block.
      (ADR 0047's rejection), naming the edge case's group and claims. Deleting the edge case
      would delete a scenario, which Decision 5 never does, and a second coverage rule would
      send the batch back for a criterion no other record needs. Decision 2 still counts an
-     edge case as cover, so a claim that only an edge case names passes admission and blocks
-     here, after every generation call; of the 31 edge cases in the 26 retained loan-renewal
+     edge case as cover, so a claim that only an edge case names passes the scenario rule and
+     blocks here, after every generation call; of the 31 edge cases in the 26 retained loan-renewal
      runs, 3 had no such criterion (two runs, both on 7 November builds), 20 had one and 8
      had several, and hello-world wrote none.
    - The canonical content is `specification/v5` and the state `specification-state/v24`: an
@@ -243,9 +270,10 @@ only block.
     wording:
     - a business rule or prohibition stating a second obligation of an FR's prose claim
       is deleted like a repeat; requirements alone are exempt;
-    - admission judges the response as returned, so coverage is required of a record the
-      session then deletes, and a statement taken only through a record that ADR 0035
-      then deletes as a story restatement is kept;
+    - scenario coverage is decided on the batch the native deletes leave (since 12
+      November 2026; until then admission required it of a record the session then
+      deleted), and a statement taken only through a record that ADR 0035 then deletes as
+      a story restatement is kept;
     - a repeated statement's own text defect takes no correction and no unit repair:
       admission and the validator exempt the record the rule deletes. The text of a
       record the rule keeps, and any defect elsewhere in the response, still take theirs;
@@ -268,44 +296,60 @@ only block.
     (ADR 0035 Decision 3).
   - **A repeated claim ID** passes the schema (subset selectors don't enforce
     uniqueness) and ends the unit at parsing, as a repeated `signal_ids` entry does.
+  - **The criterion insert (Decision 3)** links its claim without checking meaning, like
+    any record. An inserted criterion whose content equals another record's with other
+    claims blocks as `competing_records` under the existing duplicate rule. It closes only
+    the route where the batch names the claim in a statement and no scenario: a criterion
+    that names every claim of its batch still passes the rule without testing each one
+    (SPEC01 Q14 b4).
 - **Persistence.** Decisions 1 to 5 left the canonical record shape unchanged, so they
   changed no specification or state version; the generation schema's records gained a
   required `claim_ids`. Decision 6 changed the entity shape, so it took
   `specification/v4` and `specification-state/v23`. Decision 7 changed the edge-case
-  shape, so it took `specification/v5` and `specification-state/v24`.
+  shape, so it took `specification/v5` and `specification-state/v24`. Decision 3's
+  amendment changes no record shape and no specification or state version; the recorded
+  admission rule took `model-request-debug/v18`, and the report's closed rejection members
+  `spec-e2e-report/v17`.
 - **Tests.**
-  - The result-schema rule: admitted (covered, a non-covering kind ignored, empty),
-    rejected at the exact uncovered value, restored by replay from the record, kept by
-    clones, and invalid configurations rejected.
+  - The result-schema rule: admitted (a value only an exclusive item names, ungoverned
+    kinds, empty), kept by clones, and invalid configurations rejected; admission
+    requires no scenario.
   - Records: named subsets parse into group order; empty, repeated and foreign
     selections reject; stored readback accepts a canonical subset and rejects one out
-    of group order; the records packet carries the rule, and admission accepts an
-    acceptance criterion or edge case as cover and rejects a functional requirement
-    whose claim nothing covers; identical records naming different claims block.
+    of group order; the records packet carries the rule, and admission admits a
+    functional requirement, business rule, user-visible outcome or prohibited behavior
+    whose claim no scenario names; identical records naming different claims block.
   - Coverage: a named claim maps, an unnamed claim in an unselected group blocks, and a
     narrative selection maps it.
-  - Protocol correction: a scripted records response missing its scenarios is corrected
-    once and publishes; repeated, it exhausts the records step and fails. The guidance
-    names `uncovered_member` at the claim's location.
-  - Replay: a recorded coverage round-trips, rejects an uncovered response, and a record
+  - The criterion insert (Decision 3, 12 November 2026): in the session, a batch whose
+    outcome the engine deletes first and whose requirement then leaves a claim no
+    scenario names reports `scenario_coverage` for that claim; a scope-only claim needs
+    none; the insert is authorized at the end of the batch with the claim and group
+    fixed, its request selects the criterion definition and names the claim, a
+    replacement of another kind or naming other claims is refused, the merged batch
+    validates, and the rejection is stale after the insert; in an unrelated domain, one
+    requirement naming six claims takes six inserts within the repair bound frozen at the
+    first, which counts a criterion per claim a statement names, and a criterion in another
+    group is refused. Scripted records responses
+    missing their scenarios, in one batch, in every batch and as a re-sent runaway,
+    publish with one engine-bound criterion per lost scenario and no correction.
+  - Replay: a recorded rule round-trips, admits an uncovered response, and a record
     that doesn't fit the captured schema is refused.
   - Requirements own their claims (Decision 5):
     - at the result-schema rule, each value in one exclusive item is admitted, an
-      exclusive kind with no scenario is admitted, covering items may repeat a value,
+      exclusive kind with no scenario is admitted, ungoverned items may repeat a value,
       owning items are unconstrained, and an exclusive item whose every value is taken,
       by an owning item before or after it or an earlier exclusive item, is admitted;
     - an exclusive item naming taken and untaken values, of another kind or the same
-      kind, is rejected at the item before any coverage gap, and replay restores the rule;
+      kind, is rejected at the item, and replay restores the rule;
     - the correction lists every taken value's naming in such items (several items, two
       in one item, behind an opening artefact, none in a wholly taken item), and a
       response whose first such item differs, whose only shared item is wholly taken, or
       with none is refused;
-    - exclusive or owning kinds that repeat, are covering kinds, overlap each other, or
-      aren't offered reject, and so does a rule on arrays nested in an outer array;
+    - exclusive or owning kinds that are missing, repeat, overlap each other, or aren't
+      offered reject, and so does a rule on arrays nested in an outer array;
     - a recorded rule without its exclusive or owning kinds doesn't decode;
-    - at the records packet, an uncovered functional requirement, business rule,
-      user-visible outcome or prohibited behavior rejects; an assumption or non-goal
-      needs no scenario; every non-requirement statement kind rejects when partly taken,
+    - at the records packet, every non-requirement statement kind rejects when partly taken,
       by a requirement before or after it or an earlier statement; wholly taken ones and
       two requirements sharing a claim are admitted;
     - in the session, a batch with outcomes restating requirements before and after them
@@ -335,7 +379,7 @@ only block.
       - the same batches, encoded as the wire carries them and validated as typed records,
         give admission exemptions that are a subset of the validator's deletes, over every
         statement kind and over text that is not a valid scalar; the roles the validator
-        gives each kind equal the kinds of the request's coverage rule;
+        gives each kind equal the kinds of the request's statement rule;
       - the statements array is the one array a schema covers, and replay restores it from
         the record: a recorded request exempts a repeat's defect and keeps the first
         statement's, and without the record the same bytes are reported;

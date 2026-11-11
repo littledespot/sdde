@@ -720,7 +720,7 @@ const statement_scope: @import("domain/model_exact_values.zig").Scope = .{ .refe
 const ambiguous_scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 3 }, .bytes = "Loan renewed!" }, .{ .claim_id = .{ .ordinal = 4 }, .bytes = "Loan renewed!" } } };
 const statement_rule: @import("domain/model_text_composition.zig").Statements = .{
     .path = &.{ .{ .property = "records" }, .items, .{ .property = "claim_ids" } },
-    .rule = @import("domain/specification_session.zig").scenario_coverage,
+    .rule = @import("domain/specification_session.zig").statement_rule,
 };
 /// `insertion` appends an exact-copy insertion of the claim 3 value (or a handle naming no claim).
 const StatementRecord = struct { kind: []const u8, text: []const u8, claims: []const i64 = &.{3}, insertion: enum { none, claim, handle } = .none };

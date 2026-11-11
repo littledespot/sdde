@@ -2,16 +2,16 @@
 //! field names and expected shapes; reports copy only reason and JSON Pointer.
 const std = @import("std");
 const schema = @import("model_result_schema.zig");
-pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, uncovered_member, shared_member, missing_member };
+pub const Reason = enum { type_mismatch, missing_required_property, unknown_property, string_length, integer_range, array_length, constant_mismatch, enum_mismatch, unknown_variant, duplicate_member, shared_member, missing_member };
 pub const Segment = @import("json_pointer.zig").Segment;
 pub const Description = struct { reason: Reason, path: []const u8 };
 pub const Diagnostic = struct {
     reason: Reason,
     expected: *const schema.Node,
     expected_location: enum { value, parent } = .value,
-    /// ADR 0038: for `uncovered_member` and `shared_member`, the compiled cross-item
-    /// rule and the property it governs, borrowed like `expected`, so a correction can
-    /// name the kinds it governs and find every naming.
+    /// ADR 0038 Decision 5: for `shared_member`, the compiled cross-item rule and the
+    /// property it governs, borrowed like `expected`, so a correction can name the kinds
+    /// it governs and find every naming.
     coverage: ?schema.Coverage = null,
     /// For `missing_member`, the first assigned member no item names.
     member: ?i64 = null,
@@ -35,7 +35,6 @@ pub const Diagnostic = struct {
             .unknown_variant => "Schema validation failed: this discriminator does not identify an allowed kind.",
             .duplicate_member => "Schema validation failed: this item repeats an assigned member; return exactly one item for every assigned member.",
             .missing_member => "Schema validation failed: no item names this assigned member; return exactly one item for every assigned member.",
-            .uncovered_member => "Schema validation failed: no item of a kind in covering.kinds names this value; add one that does, as the instructions require.",
             .shared_member => "Schema validation failed: this item names values that an item of a kind in exclusive.owning names, or an earlier item of a kind in exclusive.kinds names, as well as values none of those items names. Rewrite this item to name and state only the values none of those items names. shared lists every such naming in this response.",
         };
     }

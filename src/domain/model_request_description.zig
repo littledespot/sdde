@@ -2,12 +2,12 @@
 const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
-pub const Version = enum { @"model-request-debug/v17" };
+pub const Version = enum { @"model-request-debug/v18" };
 /// The one admitted description version, for readers that classify captures by it.
-pub const current_version = @tagName(Version.@"model-request-debug/v17");
+pub const current_version = @tagName(Version.@"model-request-debug/v18");
 
 pub const Description = struct {
-    version: Version = .@"model-request-debug/v17",
+    version: Version = .@"model-request-debug/v18",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,

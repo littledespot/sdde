@@ -399,6 +399,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const record: g.spec.Model.RecordProposal = .{ .content = .{ .entity = .{ .name = content_value } }, .provenance = membership.fixed_provenance };
                         return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
+                    // ADR 0038 Decision 3: the engine fixed the criterion's claim; the
+                    // response is its content only.
+                    if (auth.rule.group != null and auth.rule.group.? == .scenario) {
+                        // Written from the fixed claim, so criteria inserted in different
+                        // batches don't repeat each other's content.
+                        const tested = try withoutExact(allocator, options, try attributed(allocator, all, auth.rule.group.?.scenario.fixed_provenance.claim_ids));
+                        const content: @FieldType(g.spec.Model.RecordProposal, "content") = .{ .acceptance_criterion = .{ .given = tested.value, .when = tested.value, .then = tested.value } };
+                        return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, content) });
+                    }
                 }
                 return if (options.failed_repair) "{\"provenance\":{\"claim_ids\":[999999]}}" else error.UnexpectedScriptedRepair;
             }

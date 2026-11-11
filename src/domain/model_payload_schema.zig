@@ -47,15 +47,6 @@ fn listedValue(value: envelope.Value) ?i64 {
     if (value != .number) return null;
     return exactInteger(value.number) catch null;
 }
-fn covered(items: *const envelope.Array, coverage: schema.Coverage, wanted: i64) bool {
-    for (0..items.count()) |index| {
-        const item = items.at(index).?;
-        if (!hasKind(item, coverage.rule.kind_property, coverage.rule.covering)) continue;
-        const values = item.object.get(coverage.property).?.array;
-        for (0..values.count()) |position| if (listedValue(values.at(position).?) == wanted) return true;
-    }
-    return false;
-}
 /// One naming of a taken value in an exclusive item that also names an untaken one
 /// (ADR 0038 Decision 5). A value is taken when an owning item names it anywhere or an
 /// earlier exclusive item does. An exclusive item naming only taken values is admitted:
@@ -221,29 +212,14 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
                     }
                 }
             }
-            // ADR 0038: no exclusive item names both taken and untaken values, and every
-            // value a covered item names needs a covering item that names it too. The
-            // location names the partly taken item, whose whole shape the correction
-            // offers, or the uncovered value.
+            // ADR 0038 Decision 5: no exclusive item names both taken and untaken values.
+            // The location names the partly taken item, whose whole shape the correction
+            // offers. Scenario coverage is the session's (Decision 3), not admission's.
             if (contract.coverage) |coverage| {
-                const listed = schema.findProperty(contract.items.object, coverage.property).?.schema.array.items;
                 if (nextSharedNaming(value.array, coverage, .{ .item = 0, .position = 0 })) |shared| {
                     var diagnostic = reject(.shared_member, contract.items);
                     diagnostic.coverage = coverage;
                     return diagnostic.within(.{ .index = shared.item });
-                }
-                for (0..count) |index| {
-                    const item = value.array.at(index).?;
-                    if (!hasKind(item, coverage.rule.kind_property, coverage.rule.covered)) continue;
-                    const values = item.object.get(coverage.property).?.array;
-                    for (0..values.count()) |position| {
-                        const wanted = listedValue(values.at(position).?) orelse continue;
-                        if (!covered(value.array, coverage, wanted)) {
-                            var diagnostic = reject(.uncovered_member, listed);
-                            diagnostic.coverage = coverage;
-                            return diagnostic.within(.{ .index = position }).within(.{ .property = coverage.property }).within(.{ .index = index });
-                        }
-                    }
                 }
             }
         },

@@ -174,10 +174,13 @@ pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig
 /// Full candidate validation retains the native value-repair evidence bound.
 /// Recognition during revalidation cannot widen a previously authorized S+E.
 pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: candidate.Candidate) Error!Validation {
-    if (proposed.group_repair != null and unit != .entities) return error.InvalidSpecificationUnit;
+    if (proposed.group_repair) |group| if (std.meta.activeTag(unit) != @as(std.meta.Tag(Unit), switch (group.policy) {
+        .membership => .entities,
+        .scenario => .records,
+    })) return error.InvalidSpecificationUnit;
     const result = try validate(a, validator, context, unit, proposed.response);
     if (result != .valid) return result;
-    if (proposed.group_repair) |group| if (group.policy.membership.evidence_bound) |bound| {
+    if (proposed.group_repair) |group| if (group.policy.fixed().evidence_bound) |bound| {
         var scratch_arena: std.heap.ArenaAllocator = .init(a);
         defer scratch_arena.deinit();
         const scratch_allocator = scratch_arena.allocator();
@@ -186,13 +189,13 @@ pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zi
         if (selected != .record or result.valid.response != .content) return error.InvalidSpecificationUnit;
         const record = (recordCollection(.canonical, result.valid.response.content) orelse return error.InvalidSpecificationUnit)[selected.record];
         {
-            const fixed = group.policy.membership.fixed_provenance;
+            const fixed = group.policy.fixed().fixed_provenance;
             if (fixed.claim_ids.len != record.provenance.claim_ids.len) return error.InvalidSpecificationUnit;
             for (fixed.claim_ids, record.provenance.claim_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
             if (fixed.clarification_response_ids.len != record.provenance.clarification_response_ids.len) return error.InvalidSpecificationUnit;
             for (fixed.clarification_response_ids, record.provenance.clarification_response_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
         }
-        const groups = group.policy.membership.fixed_source_group_ids;
+        const groups = group.policy.fixed().fixed_source_group_ids;
         if (groups.len != record.source_group_ids.len) return error.InvalidSpecificationUnit;
         for (groups, record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
         const resolved = try provenance.lineageForRepair(scratch_allocator, context, .{ .claim_ids = record.provenance.claim_ids, .clarification_response_ids = record.provenance.clarification_response_ids }, try provenance.recordValues(scratch_allocator, record.content));
