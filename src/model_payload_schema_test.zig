@@ -11,7 +11,7 @@ const integer = "{\"type\":\"integer\",\"minimum\":-9223372036854775808,\"maximu
 const variants =
     \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"content"},"value":{"type":"string","maxLength":8}},"required":["kind","value"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"question"},"subject":{"enum":["alpha","beta"]}},"required":["kind","subject"],"additionalProperties":false}]}
 ;
-const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, shared: []const []const u8 = &.{}, foreign: []const []const u8 = &.{} };
+const Case = struct { bytes: []const u8, rejection: ?validation.Rejection = null, path: ?[]const u8 = null, expected_path: ?[]const u8 = null, member: ?i64 = null, shared: []const []const u8 = &.{}, foreign: []const []const u8 = &.{} };
 
 const child_objects =
     \\{"type":"object","properties":{"optional":{"type":"object","properties":{"a~/b":{"type":"boolean"},"deep":{"type":"object","properties":{"id":{"type":"boolean"}},"required":["id"],"additionalProperties":false}},"required":["a~/b","deep"],"additionalProperties":false},"empty":{"type":"object","properties":{},"required":[],"additionalProperties":false},"loose":{"type":"object","properties":{"flag":{"type":"boolean"}},"required":[],"additionalProperties":false},"items":{"type":"array","maxItems":2,"items":{"type":"boolean"}},"choice":
@@ -703,6 +703,7 @@ pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").
     if (case.rejection) |reason| {
         try std.testing.expect(result != null);
         try std.testing.expectEqual(reason, result.?.reason);
+        if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.?.member);
         if (case.path) |path| {
             const description = try result.?.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);
@@ -770,6 +771,23 @@ test "provider schema rejection proofs and protocol corrections retain every dia
         try omitted.initWithCompiledSchema(native.selected());
         defer omitted.deinit();
         try checkFixture(&omitted, case);
+    }
+    // A schema that states no minimum admits an empty array (ADR 0006), and a
+    // native count keeps that bound. An empty array omits every member, so it is
+    // rejected at the array like any other omission, naming the first (ADR 0046).
+    const unbounded = try adapter.compiler().compile(arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"array\",\"maxItems\":8,\"items\":{\"type\":\"object\",\"properties\":{\"ordinal\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":8}},\"required\":[\"ordinal\"],\"additionalProperties\":false}}},\"required\":[\"value\"],\"additionalProperties\":false}");
+    const owed = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, unbounded, &.{}, &.{.{ .target = .{ .path = &.{ .{ .property = "value" }, .items, .{ .property = "ordinal" } } }, .allowed = &.{ 2, 4, 6 }, .collection = .exact_members, .member_count = .native }});
+    defer owed.release();
+    try std.testing.expectEqual(@as(u32, 0), owed.selected().root().object[0].schema.array.minimum);
+    for ([_]Case{
+        .{ .bytes = "{\"value\":[]}", .rejection = .missing_member, .path = "/value", .member = 2 },
+        .{ .bytes = "{\"value\":[{\"ordinal\":4}]}", .rejection = .missing_member, .path = "/value", .member = 2 },
+        .{ .bytes = "{\"value\":[{\"ordinal\":6},{\"ordinal\":4},{\"ordinal\":2}]}" },
+    }) |case| {
+        var unanswered: Fixture = undefined;
+        try unanswered.initWithCompiledSchema(owed.selected());
+        defer unanswered.deinit();
+        try checkFixture(&unanswered, case);
     }
     // An uncovered value is located at itself, and an exclusive item that names both a
     // value an earlier one names and a value none does at the item; each correction names
@@ -858,6 +876,7 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
     const result = (action.Action{}).execute(decoded.candidate);
     if (case.rejection) |reason| {
         try std.testing.expectEqual(reason, result.invalid.reason);
+        if (case.member) |member| try std.testing.expectEqual(@as(?i64, member), result.invalid.member);
         if (case.path) |path| {
             const description = try result.invalid.describe(std.testing.allocator);
             defer std.testing.allocator.free(description.path);

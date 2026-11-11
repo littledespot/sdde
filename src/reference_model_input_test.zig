@@ -409,6 +409,14 @@ test "a dispositions assignment binds every semantic claim natively and states n
         try std.testing.expectEqualStrings(sequence.selected().modelBytes(), native.selected().modelBytes());
         try std.testing.expectEqual(@as(usize, 1), native.selected().memberChoices().len);
         try std.testing.expectEqualDeep(bound.?.allowed, native.selected().memberChoices()[0].allowed);
+        // ADR 0046: an empty answer omits every assigned claim, so it is rejected at
+        // the array and its correction names the first one.
+        var unanswered = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, "{\"claim_dispositions\":[],\"conflict_groups\":[]}", null);
+        defer unanswered.deinit();
+        const omission = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&unanswered.parsed.value), native.selected().root()).?;
+        try std.testing.expectEqual(.missing_member, omission.reason);
+        try std.testing.expectEqual(bound.?.allowed[0], omission.member.?);
+        try std.testing.expectEqualStrings("/claim_dispositions", (try omission.describe(a)).path);
         // A native count on any other collection is not a valid restriction.
         const misbound = try a.dupe(schema.IntegerChoice, plain);
         for (misbound) |*choice| if (choice.target == .path and std.mem.eql(u8, choice.target.path[0].property, "claim_dispositions")) {

@@ -367,3 +367,25 @@ and published bytes are unchanged. Live runs (user-approved, 10 November 2026):
 `2026-11-09T20-29-51Z` hello-world and `20-29-52Z` loan-renewal published and passed
 adjudication (92.86% each; accuracy 0/0/0/0 and 0/0/1/0, the known AC-001 recording clause);
 loan-renewal's EC-001 linked natively to AC-001, its sole candidate.
+
+## C1. An empty exact-member answer is corrected, not a crash (ADR 0046)
+
+**Implemented 11 November 2026** (user: "implement C1"). Defect class: successful completion.
+`validateValue` (`model_payload_schema.zig`) began its repeat scan with `for (1..count)`, which
+panics on an empty array, so an array with a member set and no `minItems` aborted the process
+before its missing-member check. Every answer bound by `withDispositionChoices` reached it
+(native member count; `semantic_dispositions` states no minimum): the dispositions request,
+its repairs and the source-omission conflict-group repair (`reference_reconciliation_repair.zig`
+`:334`, `:753`; ADR 0046 Decision 3), and a replay of any of them (`request_replay.zig:211`). A
+model answer `{"claim_dispositions":[],"conflict_groups":[]}` would have ended the run with a
+panic. The scan now starts at index 0, so an empty array is rejected as `missing_member` at the
+array, naming the first assigned member (ADR 0046:54-56), and takes the bounded correction
+(:58-60). Owner: `model_payload_schema.zig`. Tests, both of which crashed on the old code: in
+`model_payload_schema_test.zig`, a generic schema without `minItems` rejects `[]` and a
+one-item omission as `missing_member` naming member 2, with their corrections, and admits the
+complete set; in `reference_model_input_test.zig`, the dispositions restriction on the real
+reconciliation schema rejects the empty answer in both fixture domains, naming the first
+semantic claim. No request builder changes; the only new model input is ADR 0046's existing
+correction, sent where an empty answer used to abort. §2 rule 10's request-projection diff
+wasn't taken. No schema, report or log version changes, and no keep decision is needed.
+**Rule:** a member or coverage check must handle an empty array.

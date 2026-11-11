@@ -207,7 +207,7 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             // or, without repeats, a member no item names. When the schema states
             // the member count, a missing member already failed as the item count.
             if (contract.members) |members| {
-                for (1..count) |index| {
+                for (0..count) |index| {
                     const key = memberKey(value.array.at(index).?, members.property);
                     for (0..index) |prior| if (memberKey(value.array.at(prior).?, members.property) == key) return (reject(.duplicate_member, node)).item(index);
                 }

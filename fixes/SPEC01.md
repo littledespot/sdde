@@ -815,8 +815,7 @@ several merges in one unit and merges in two units reports each merge once, in o
 acceptance instead of your record?"): the `/evaluate-e2e` skill writes each published run's
 `spec-adjudication-record/v1` from its rubric scores and applies it with `zig build
 adjudicate-spec` (AGENTS.md "Testing expectations"; ADR 0034 and design/harness/acceptance.md
-amended). Only the user triggers or approves the skill (AGENTS.md states the rule);
-`/live-e2e` doesn't run it.
+amended). Only the user triggers or approves the skill (AGENTS.md states the rule).
 
 **Decided 3 November 2026** (user: "YES", "YES approved"): a run's first adjudication under a
 skill version counts (R8, design/harness/acceptance.md).
@@ -1070,20 +1069,6 @@ code, do complete end 2 end analysis, do not guess").
   cost that an accepted ADR or a contract requires, so removing it is a **Decision**.
 
 ### 10.1 Failures first
-
-**C1. An empty array at admission aborts the process.**
-`src/domain/model_payload_schema.zig:209-210` runs `for (1..count)` whenever an array has a member
-set; on the pinned Zig 0.16.0 that loop panics with `integer overflow` when `count` is 0 (run as
-a standalone probe). An empty array reaches it when the schema has no `minItems` and the member
-count is `native`, which keeps the schema's minimum (`model_result_schema.zig:445-448`, default 0
-at `:855`): the dispositions request (`reference_model_input.zig:242-245`;
-`reconciliation.schema.json:507-526`). So `{"claim_dispositions":[],"conflict_groups":[]}` ends
-the run with a panic, not the correction `reference_model_input.zig:238-240` describes. The
-membership test's schema has `"minItems":1` (`src/model_payload_schema_test.zig:751`, asserted
-at `:762`), so it never feeds an empty array. **Class:** successful completion (AGENTS.md
-"Expected rejections are typed outcomes"). **Owner:** `model_payload_schema.zig`. Not executed
-in the engine. **Next:** a unit case with a `minItems`-less array, a native member set and `[]`,
-then the guard. No request changes.
 
 **C2. A publication interrupted between a form and its state blocks every rerun.** Forms are
 written before the clarification state (`clarification_output.zig:17-29`), one file at a time
