@@ -1350,12 +1350,16 @@ test "toolchain safety authority is opaque and path handoff has one adapter cons
     try expectAbsent(service, "std.Io");
     const runner = @embedFile("application/bootstrap_runner.zig");
     try expectAbsent(runner, "invokeBootstrapToolchain");
-    const capture = @embedFile("actions/toolchain/capture_toolchain_presets.zig");
+    const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
+    const capture_step = std.mem.indexOf(u8, stage, "pub fn capturePresets") orelse return error.MissingCaptureStep;
+    const parse_step = std.mem.indexOf(u8, stage, "pub fn parseDocuments") orelse return error.MissingParseStep;
+    const validate_step = std.mem.indexOf(u8, stage, "pub fn validateProject") orelse return error.MissingValidateStep;
+    try std.testing.expect(capture_step < parse_step and parse_step < validate_step);
+    const capture = stage[capture_step..parse_step];
     const budget_index = std.mem.indexOf(u8, capture, "validateCaptureBudget") orelse return error.MissingCaptureBudget;
-    const read_index = std.mem.indexOf(u8, capture, "capturePreset") orelse return error.MissingPresetCapture;
+    const read_index = std.mem.indexOf(u8, capture, "source.capturePreset(") orelse return error.MissingPresetCapture;
     try std.testing.expect(budget_index < read_index);
-    const parser = @embedFile("actions/toolchain/parse_toolchain_documents.zig");
-    try expectAbsent(parser, "validateCaptureBudget");
+    try expectAbsent(stage[parse_step..validate_step], "validateCaptureBudget");
 
     const contracts = @embedFile("domain/toolchain.zig");
     try expectAbsent(contracts, "validateCaptureBudget(");
@@ -1439,6 +1443,155 @@ test "bootstrap dispatcher delegates to focused runners" {
     try expectAbsent(toolchain_runner, "/actions/config/");
     try expectAbsent(toolchain_runner, "/actions/bootstrap/");
     try expectAbsent(toolchain_runner, "/actions/workflow/");
+}
+
+const StageViolation = enum {
+    execute_reaches_a_port,
+    execute_lacks_the_node_runtime,
+    internal_step_takes_the_action,
+    internal_step_takes_two_ports,
+    internal_step_is_erased,
+    absorbs_a_gate_or_model_module,
+};
+
+/// The text between the parentheses of the function whose `fn` keyword is at `at`, across lines.
+fn parameterText(source: []const u8, at: usize) ?[]const u8 {
+    const open = std.mem.indexOfPos(u8, source, at, "(") orelse return null;
+    var depth: usize = 0;
+    var index = open;
+    while (index < source.len) : (index += 1) switch (source[index]) {
+        '(' => depth += 1,
+        ')' => {
+            depth -= 1;
+            if (depth == 0) return source[open + 1 .. index];
+        },
+        else => {},
+    };
+    return null;
+}
+
+/// ADR 0031's source rules for a stage action. `execute` takes the capability-free runtime and no
+/// other runtime handle, and only passes its receiver's fields on: any other use of a field, such
+/// as a call through it or an alias of it, reaches a port. Each internal step takes at most one
+/// port and never the `Action` value, a receiver or an erased parameter, and the stage absorbs no
+/// gate or model module. A struct that bundles ports is not detectable in source text.
+fn stageViolation(source: []const u8) ?StageViolation {
+    for ([_][]const u8{ "workflow_gate", "domain/model_", "provider_" }) |module| {
+        if (std.mem.indexOf(u8, source, module) != null) return .absorbs_a_gate_or_model_module;
+    }
+    if (std.mem.indexOf(u8, source, "pub fn execute")) |start| {
+        const parameters = parameterText(source, start) orelse return .execute_lacks_the_node_runtime;
+        if (countOccurrences(parameters, "runtime: pipeline.NodeRuntime") != 1 or countOccurrences(parameters, "Runtime") != 1 or countOccurrences(parameters, "Input") != 0) return .execute_lacks_the_node_runtime;
+        const receiver = std.mem.trim(u8, parameters[0 .. std.mem.indexOfScalar(u8, parameters, ':') orelse return .execute_lacks_the_node_runtime], " \n");
+        var needle_buffer: [64]u8 = undefined;
+        const needle = std.fmt.bufPrint(&needle_buffer, "{s}.", .{receiver}) catch return .execute_reaches_a_port;
+        var rest = source[start .. std.mem.indexOfPos(u8, source, start, "\n};") orelse source.len];
+        while (std.mem.indexOf(u8, rest, needle)) |at| {
+            var end = at + needle.len;
+            while (end < rest.len and (std.ascii.isAlphanumeric(rest[end]) or rest[end] == '_')) end += 1;
+            if (end >= rest.len or (rest[end] != ',' and rest[end] != ')')) return .execute_reaches_a_port;
+            rest = rest[end..];
+        }
+    }
+    const steps_start = std.mem.indexOf(u8, source, "pub const steps = struct {") orelse return null;
+    var cursor = steps_start;
+    while (std.mem.indexOfPos(u8, source, cursor, "fn ")) |at| {
+        cursor = at + "fn ".len;
+        const parameters = parameterText(source, at) orelse continue;
+        if (std.mem.indexOf(u8, parameters, "anytype") != null or std.mem.indexOf(u8, parameters, "anyopaque") != null) return .internal_step_is_erased;
+        if (std.mem.indexOf(u8, parameters, "Action") != null or std.mem.indexOf(u8, parameters, "self") != null) return .internal_step_takes_the_action;
+        if (countOccurrences(parameters, "_port.") > 1) return .internal_step_takes_two_ports;
+    }
+    return null;
+}
+
+/// A step that turns a candidate value into a validated one returns a type distinct from its
+/// input, and the next step requires exactly that type.
+fn validatedHandoff(comptime Input: type, comptime Output: type, comptime NextInput: type) bool {
+    return Input != Output and Output == NextInput;
+}
+
+fn ReturnPayload(comptime function: anytype) type {
+    return @typeInfo(@typeInfo(@TypeOf(function)).@"fn".return_type.?).error_union.payload;
+}
+
+fn ParameterType(comptime function: anytype, comptime index: usize) type {
+    return @typeInfo(@TypeOf(function)).@"fn".params[index].type.?;
+}
+
+test "the prepare-toolchain stage action obeys ADR 0031's stage rules" {
+    const stage = @embedFile("actions/toolchain/prepare_toolchain.zig");
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage));
+    try expectAllowedActionImports(stage);
+    try expectSingleActionContract(stage);
+    const pipeline = @import("domain/pipeline.zig");
+    const action = @import("actions/toolchain/prepare_toolchain.zig");
+    const contract = action.Action.contract;
+    try std.testing.expect(contract.side_effect == .none or contract.side_effect == .filesystem_read);
+    try std.testing.expectEqual(pipeline.NodeKind.action, contract.kind);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    // The stage reads no retained model request and replaces or produces only its own edge key.
+    try std.testing.expectEqual(@as(usize, 0), contract.requires.len + contract.optional.len + contract.replaces.len + contract.invalidates.len);
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.valid_toolchain}, contract.produces);
+}
+
+test "stage rules reject a stage that reaches a port, lacks the node runtime, takes the action, two ports or an erased parameter, or absorbs a gate or model module" {
+    const execute_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n";
+    const clean_head = execute_head ++ "        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    const steps_tail = "    }\n};\npub const steps = struct {\n};\n";
+    // A call through a port field, an alias of one, and a receiver under another name reach a port.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation(execute_head ++ "        self.source.read();\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation(execute_head ++ "        const alias = self.source;\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_reaches_a_port), stageViolation("pub const Action = struct {\n    pub fn execute(stage: Action, runtime: pipeline.NodeRuntime) void {\n        stage.source.read();\n" ++ steps_tail));
+    // `execute` takes exactly the capability-free runtime: none, or another handle besides it, rejects.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action) void {\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, input: StepInput) void {\n" ++ steps_tail));
+    // A signature split across lines is read whole.
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(\n        a: source_port.ProjectCapturer,\n        b: parser_port.Parser,\n    ) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn split(\n        allocator: std.mem.Allocator,\n        context: *anyopaque,\n    ) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(port: source_port.ProjectCapturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: source_port.ProjectCapturer, b: parser_port.Parser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_the_action), stageViolation(clean_head ++ "    pub fn whole(stage: Action) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_the_action), stageViolation(clean_head ++ "    pub fn method(self: *Self) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn bag(capabilities: anytype) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn raw(context: *anyopaque) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .absorbs_a_gate_or_model_module), stageViolation("const g = @import(\"../../domain/workflow_gate.zig\");\n" ++ clean_head ++ "};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .absorbs_a_gate_or_model_module), stageViolation("const m = @import(\"../../domain/model_request.zig\");\n" ++ clean_head ++ "};\n"));
+}
+
+test "stage steps that validate hand the next step a distinct validated type" {
+    const steps = @import("actions/toolchain/prepare_toolchain.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateProject, 1), ReturnPayload(steps.validateProject), ParameterType(steps.resolveInheritance, 1)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateRegistry, 1), ReturnPayload(steps.validateRegistry), ParameterType(steps.resolveInheritance, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.resolveInheritance, 2), ReturnPayload(steps.resolveInheritance), ParameterType(steps.compose, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.compose, 2), ReturnPayload(steps.compose), ParameterType(steps.validateSafety, 1)));
+    // Only the safety step yields the owner of the valid toolchain.
+    try std.testing.expect(ReturnPayload(steps.validateSafety) == *toolchain_safety.Owner);
+    // A step that returns its own input type, or a type the next step does not take, is rejected.
+    try std.testing.expect(!validatedHandoff(u8, u8, u8));
+    try std.testing.expect(!validatedHandoff(u8, u16, u32));
+}
+
+test "no absorbed toolchain operation remains registered or bound" {
+    const absorbed = [_][]const u8{
+        "capture-project-toolchain",
+        "inventory-toolchain-presets",
+        "capture-toolchain-presets",
+        "parse-toolchain-documents",
+        "validate-project-toolchain-schema",
+        "validate-toolchain-preset-registry",
+        "resolve-toolchain-inheritance",
+        "compose-toolchain",
+        "validate-toolchain-safety",
+    };
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/toolchain_workflow_runner.zig"),
+        @embedFile("test_fixtures/toolchain.workflow.yaml"),
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "runners.PrepareToolchain") != null);
 }
 
 test "configured path policy and resolution have distinct action owners" {

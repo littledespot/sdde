@@ -376,19 +376,14 @@ test "toolchain YAML rejects denied capabilities and missing data predecessors b
         try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = valid_config });
         try project.dir.createDirPath(io, ".sdd/workflows");
         const fixture = @embedFile("../../src/test_fixtures/toolchain.workflow.yaml");
+        // The no-op's outcome set is exact, so this case specifically exercises the missing
+        // `valid_toolchain` input of the step after it.
         const yaml = if (missing_input)
-            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "capture-project: { use: capture-project-toolchain", "capture-project: { use: core.noop")
+            try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "toolchain: { use: prepare-toolchain, on: { ok: end.ok, failed: end.failed } }", "toolchain: { use: core.noop, on: { ok: naming } }\n  naming: { use: compile-naming-policy, on: { ok: end.ok, failed: end.failed } }")
         else
             try std.mem.replaceOwned(u8, std.testing.allocator, fixture, "policy: core.toolchain@1", "policy: core.capability-free@1");
         defer std.testing.allocator.free(yaml);
-        // Keep the replacement operation's outcome set exact so this case
-        // specifically exercises the missing project-capture input.
-        const exact = if (missing_input)
-            try std.mem.replaceOwned(u8, std.testing.allocator, yaml, "capture-project: { use: core.noop, on: { ok: inventory-presets, failed: end.failed } }", "capture-project: { use: core.noop, on: { ok: inventory-presets } }")
-        else
-            try std.testing.allocator.dupe(u8, yaml);
-        defer std.testing.allocator.free(exact);
-        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = exact });
+        try project.dir.writeFile(io, .{ .sub_path = ".sdd/workflows/toolchain.workflow.yaml", .data = yaml });
         const result = runInvocationInProject(io, std.testing.allocator, project.dir, &.{"toolchain-check"});
         try std.testing.expectEqual(@import("../../src/domain/bootstrap_error.zig").PublicError.WORKFLOW_GRAPH_COMPILE_INVALID, result.bootstrap_failed);
     }

@@ -355,79 +355,45 @@ owns the current toolchain shapes.
 ## Toolchain
 
 [F0003](../../features/F0003-ToolChainService.md#workflow-bindings) owns the order and keys.
-Under [ADR 0031](../../decisions/0031-stage-actions.md) (not yet implemented) the nine operations
-through `validate-toolchain-safety` become the steps of one `prepare-toolchain` stage action;
-`compile-naming-policy` stays separate.
+[ADR 0031](../../decisions/0031-stage-actions.md) made the nine former operations the internal
+steps of one `prepare-toolchain` stage action; `compile-naming-policy` stays separate.
 
-## `CaptureProjectToolchainAction` (`capture-project-toolchain`)
+## `PrepareToolchainAction` (`prepare-toolchain`)
 
-- **Owner:** [`src/actions/toolchain/capture_project_toolchain.zig`](../../../src/actions/toolchain/capture_project_toolchain.zig)
-- **Reads:** none · **Writes:** `project_toolchain_capture` · **Side effect:** `filesystem_read`
-- **Does:** Captures the exact `<paths.principles>/toolchain.yaml` through the toolchain source
-  port.
-- **Rejects:** `InvalidToolchain`.
-
-## `InventoryToolchainPresetsAction` (`inventory-toolchain-presets`)
-
-- **Owner:** [`src/actions/toolchain/inventory_toolchain_presets.zig`](../../../src/actions/toolchain/inventory_toolchain_presets.zig)
-- **Reads:** none · **Writes:** `toolchain_preset_inventory` · **Side effect:** `filesystem_read`
-- **Rejects:** `InvalidToolchain`.
-
-## `CaptureToolchainPresetsAction` (`capture-toolchain-presets`)
-
-- **Owner:** [`src/actions/toolchain/capture_toolchain_presets.zig`](../../../src/actions/toolchain/capture_toolchain_presets.zig)
-- **Reads:** `project_toolchain_capture`, `toolchain_preset_inventory` · **Writes:** `toolchain_preset_captures` · **Side effect:** `filesystem_read`
-- **Does:** Checks the capture budget over the project layer and the whole inventory first, then
-  captures each entry through the preset-capture port.
-- **Rejects:** `InvalidToolchain`.
-
-## `ParseToolchainDocumentsAction` (`parse-toolchain-documents`)
-
-- **Owner:** [`src/actions/toolchain/parse_toolchain_documents.zig`](../../../src/actions/toolchain/parse_toolchain_documents.zig)
-- **Reads:** `project_toolchain_capture`, `toolchain_preset_captures` · **Writes:** `raw_toolchain_documents` · **Side effect:** `none`
-- **Does:** Parses the project layer and preset documents through the toolchain-parser port;
-  applies no policy.
-- **Rejects:** `InvalidToolchain`.
-
-## `ValidateProjectToolchainSchemaAction` (`validate-project-toolchain-schema`)
-
-- **Owner:** [`src/actions/toolchain/validate_project_toolchain_schema.zig`](../../../src/actions/toolchain/validate_project_toolchain_schema.zig)
-- **Reads:** `raw_toolchain_documents` · **Writes:** `schema_valid_project_toolchain` · **Side effect:** `none`
-- **Does:** Accepts exactly the `schema`, `presets` and `policies` fields, with bounded
-  package and policy reference lists.
-- **Rejects:** `InvalidToolchain`.
-
-## `ValidateToolchainPresetRegistryAction` (`validate-toolchain-preset-registry`)
-
-- **Owner:** [`src/actions/toolchain/validate_toolchain_preset_registry.zig`](../../../src/actions/toolchain/validate_toolchain_preset_registry.zig)
-- **Reads:** `raw_toolchain_documents` · **Writes:** `schema_valid_toolchain_registry` · **Side effect:** `none`
-- **Does:** Reads each preset's five fields (schema, `package@version`, layer, `extends`,
-  policies), sorts by layer then package, and checks the registry is complete for inheritance.
-- **Rejects:** `InvalidToolchain` for a malformed or duplicate package or too many presets.
-
-## `ResolveToolchainInheritanceAction` (`resolve-toolchain-inheritance`)
-
-- **Owner:** [`src/actions/toolchain/resolve_toolchain_inheritance.zig`](../../../src/actions/toolchain/resolve_toolchain_inheritance.zig)
-- **Reads:** `schema_valid_project_toolchain`, `schema_valid_toolchain_registry` · **Writes:** `resolved_toolchain_inheritance` · **Side effect:** `none`
-- **Does:** Resolves the project layer's complete preset inheritance closure from
-  `paths.toolchainPreset`.
-- **Rejects:** `InvalidToolchain` for a missing, conflicting, duplicate or cyclic reference.
-
-## `ComposeToolchainAction` (`compose-toolchain`)
-
-- **Owner:** [`src/actions/toolchain/compose_toolchain.zig`](../../../src/actions/toolchain/compose_toolchain.zig)
-- **Reads:** `schema_valid_project_toolchain`, `resolved_toolchain_inheritance` · **Writes:** `composed_toolchain` · **Side effect:** `none`
-- **Does:** Keeps the inherited packages in resolved order and forms the stable union of their
-  policies, then the project layer's, without duplicates.
-- **Rejects:** `InvalidToolchain`.
-
-## `ValidateToolchainSafetyAction` (`validate-toolchain-safety`)
-
-- **Owner:** [`src/actions/toolchain/validate_toolchain_safety.zig`](../../../src/actions/toolchain/validate_toolchain_safety.zig)
-- **Reads:** `composed_toolchain` · **Writes:** `valid_toolchain` · **Side effect:** `none`
-- **Does:** Proves the merged policy keeps every locked rule; the only constructor of
-  `ValidToolchain`.
-- **Rejects:** `InvalidToolchain`.
+- **Owner:** [`src/actions/toolchain/prepare_toolchain.zig`](../../../src/actions/toolchain/prepare_toolchain.zig)
+- **Reads:** none · **Writes:** `valid_toolchain` · **Side effect:** `filesystem_read`
+- **Ports:** the toolchain source ports (project capture, preset inventory, preset capture) and the
+  toolchain-parser port, so the binding derives `toolchain-read` and `toolchain-parser` only.
+- **Outcomes:** `ok`, `failed`. Each internal step's success continues to the next and every
+  failure ends the stage with the step's own error (`InvalidToolchain`). The stage records the
+  step it stopped at in its diagnostic slot, which the binding hands the runner's step slot, and
+  the runner records it as `step_id` in the failed action's event ([§27](../27-observability.md)).
+  It checks the runtime between steps, so a cancelled run stops before the next step and the
+  runner reports the runtime's own stop.
+- **Does:** Runs these functions in order. Each keeps its former action's responsibility, input,
+  output and rejection rules; intermediates are function-local values, and only the last step
+  constructs `ValidToolchain`.
+  1. `captureProject`: captures the exact `<paths.principles>/toolchain.yaml` through the toolchain
+     source port. Rejects `InvalidToolchain`.
+  2. `inventoryPresets`: inventories the preset documents. Rejects `InvalidToolchain`.
+  3. `capturePresets`: checks the capture budget over the project layer and the whole inventory
+     first, then captures each entry through the preset-capture port. Rejects `InvalidToolchain`.
+  4. `parseDocuments`: parses the project layer and preset documents through the toolchain-parser
+     port; applies no policy. The parser returns exactly one document per capture, project
+     first. Rejects `InvalidToolchain`, including for a short or long result.
+  5. `validateProject`: accepts exactly the `schema`, `presets` and `policies` fields, with
+     bounded package and policy reference lists. Rejects `InvalidToolchain`.
+  6. `validateRegistry`: reads each preset's five fields (schema, `package@version`, layer,
+     `extends`, policies), sorts by layer then package, and checks the registry is complete for
+     inheritance. Rejects `InvalidToolchain` for a malformed or duplicate package or too many
+     presets.
+  7. `resolveInheritance`: resolves the project layer's complete preset inheritance closure from
+     `paths.toolchainPreset`. Rejects `InvalidToolchain` for a missing, conflicting, duplicate or
+     cyclic reference.
+  8. `compose`: keeps the inherited packages in resolved order and forms the stable union of their
+     policies, then the project layer's, without duplicates. Rejects `InvalidToolchain`.
+  9. `validateSafety`: proves the merged policy keeps every locked rule; the only constructor of
+     `ValidToolchain`. Rejects `InvalidToolchain`.
 
 ## `CompileNamingPolicyAction` (`compile-naming-policy`)
 
@@ -550,4 +516,4 @@ The earlier feature state-ID ledger is superseded: no project state-ID ledger ex
 identities are execution-local and published with the output
 ([§7.3](../07-domain-representations.md#73-canonical-state-and-model-request-identity)). The earlier preset tie-break `(layerRank, presetId,
 version)` has no owner; the code orders the registry by layer, then package
-(`validate-toolchain-preset-registry` above), and Plan design decides any further rule.
+(`validateRegistry` in the `prepare-toolchain` entry above), and Plan design decides any further rule.

@@ -4,7 +4,7 @@
 
 **Compatibility:** None. This is a pre-release proof of concept with no
 deployed predecessor. `feature-log/v2` and its two column schemas,
-`event-columns/v2` and `prompt-columns/v3`, are the only accepted shapes; the
+`event-columns/v3` and `prompt-columns/v3`, are the only accepted shapes; the
 implementation MUST NOT contain migrations,
 aliases, dual readers/writers, historical conversion, or compatibility
 fallbacks. Recovery accepts only the exact current headings and contracts.
@@ -351,7 +351,7 @@ Logging-internal nodes are not recursively observed.
 | `action.started` | `debug` | — | — |
 | `action.completed` | `debug` | `outcome` | `duration_ms` |
 | `action.invalid` | `warning` | `diagnostic_code`, `outcome` | — |
-| `action.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms` |
+| `action.failed` | `error` | `diagnostic_code`, `outcome` | `duration_ms`, `step_id` |
 | `model.requested` | `debug` | `model_route_id`, `model_profile_id` | — |
 | `model.completed` | `debug` | `model_route_id`, `model_profile_id`, `outcome` | `input_tokens`, `output_tokens`, `duration_ms` |
 | `model.protocol_failed` | `warning` | `model_route_id`, `model_profile_id`, `diagnostic_code`, `outcome` | — |
@@ -393,7 +393,7 @@ Logging-internal nodes are not recursively observed.
 - `feature-log/v2` uses a deterministic fixed-header pipe-delimited format to avoid
   repeating field names in every record.
 - The initial F0002 implementation embeds exactly two schemas as compiler constants:
-  `event-columns/v2` and `prompt-columns/v3`.
+  `event-columns/v3` and `prompt-columns/v3`.
 - It does not generate columns from the event registry or read headings/schema IDs from
   configuration, workflow files, persisted data, or plugins.
 - The first row of each segment is exactly one matching stream-specific column heading.
@@ -407,11 +407,13 @@ Logging-internal nodes are not recursively observed.
 The hard-coded headings are:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|step_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
 record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|attempt|request_id|route_id|model_profile_id|fragment_id|direction|body_class|content|retained_bytes|truncated|redacted|workflow_id|action_id|call_id|call_kind|original_call_id|parent_call_id|body_bytes
 ```
 
-- The first is the event heading and the second the prompt heading; each has 37 columns.
+- The first is the event heading (38 columns) and the second the prompt heading (37 columns).
+  `step_id` is the internal step of an [ADR 0031](../decisions/0031-stage-actions.md) stage action
+  at which a failed action stopped, and appears only on `action.failed`.
 - Existing wire columns `model_route_id` (events) and `route_id` (prompts) carry
   the workflow model-operation identity; `model_profile_id` carries the repository
   model-slot identity. ADR 0018 does not rename columns or introduce a route registry.
@@ -471,9 +473,9 @@ For example, the registered `task.started` event at `info` can produce this
 segment:
 
 ```text
-record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
-segment_header|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
-event|feature-log/v2|event|event-columns/v2|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-42|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+record_kind|schema_version|stream|column_schema_id|log_policy_id|feature_log_binding_id|segment_ordinal|workflow_shortcode|event_id|sequence|occurred_at_utc|monotonic_offset|level|event_type|message_template_id|run_id|feature_id|stage|node_id|parent_event_id|correlation_id|attempt|task_id|duration_ms|diagnostic_code|validator_id|rule_id|step_id|model_route_id|model_profile_id|input_tokens|output_tokens|repair_unit_kind|command_id|exit_code|evidence_status|outcome|count
+segment_header|feature-log/v2|event|event-columns/v3|LOGPOL-001|LOGBIND-001|1|\N|\N|\N|2026-08-28T10:15:00Z|\N|\N|\N|\N|RUN-001|F0002|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
+event|feature-log/v2|event|event-columns/v3|LOGPOL-001|LOGBIND-001|1|IMPL|EVENT-42|42|2026-08-28T10:15:30Z|1205|info|task.started|task.started/v1|RUN-001|F0002|implement|\N|\N|\N|\N|TASK-001|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N|\N
 ```
 
 `IMPL` is illustrative only; the selected compiled workflow's definition
@@ -709,7 +711,7 @@ F0002 does not:
     compiled policy injects every fixed behavior in Section 6.4, including the
     2,000 ms one-attempt lock deadline, exact pipe-delimited console mirror, and exact
     bounded emergency-line grammar.
-20. Only the current proof-of-concept `feature-log/v2` headings (`event-columns/v2`
+20. Only the current proof-of-concept `feature-log/v2` headings (`event-columns/v3`
     and `prompt-columns/v3`) and contracts are accepted;
     no compatibility or migration branch exists.
 

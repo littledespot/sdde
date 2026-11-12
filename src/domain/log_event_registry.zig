@@ -9,6 +9,7 @@ pub const Field = enum {
     diagnostic_code,
     validator_id,
     rule_id,
+    step_id,
     model_route_id,
     model_profile_id,
     input_tokens,
@@ -63,7 +64,9 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .review_approved,
         .review_rejected,
         => definition(event_type, level(event_type), &.{.outcome}, &.{}),
-        .stage_failed, .action_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
+        .stage_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
+        // A failed stage action may also name the internal step it stopped at (ADR 0031).
+        .action_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{ .duration_ms, .step_id }),
         .model_requested => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id }, &.{}),
         .model_completed => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .outcome }, &.{ .input_tokens, .output_tokens, .duration_ms }),
         // ADR 0014 and section 22.6: every normalization is logged.

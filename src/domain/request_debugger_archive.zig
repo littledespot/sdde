@@ -144,7 +144,7 @@ pub const Archive = struct {
             const correlation = (try optionalCell(self.allocator, line, 20)) orelse continue;
             const run = try cell(self.allocator, line, 15);
             for (self.entries.items) |*entry| if (std.mem.eql(u8, entry.call.id, correlation) and std.mem.eql(u8, entry.call.run, run)) {
-                try entry.events.append(self.allocator, .{ .node = try optionalCell(self.allocator, line, 18), .kind = try cell(self.allocator, line, 13), .diagnostic = try optionalCell(self.allocator, line, 24), .outcome = try optionalCell(self.allocator, line, 35) });
+                try entry.events.append(self.allocator, .{ .node = try optionalCell(self.allocator, line, 18), .kind = try cell(self.allocator, line, 13), .diagnostic = try optionalCell(self.allocator, line, 24), .outcome = try optionalCell(self.allocator, line, 36) });
             };
         }
     }

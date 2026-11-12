@@ -67,14 +67,6 @@ pub const DataKey = enum {
     json_composition,
     assembled_json,
     validated_assembled_json,
-    project_toolchain_capture,
-    toolchain_preset_inventory,
-    toolchain_preset_captures,
-    raw_toolchain_documents,
-    schema_valid_project_toolchain,
-    schema_valid_toolchain_registry,
-    resolved_toolchain_inheritance,
-    composed_toolchain,
     valid_toolchain,
     compiled_naming_policy,
     path_token_grammar,
@@ -245,6 +237,12 @@ pub const NodeRuntime = struct {
         return self.status_fn(self.context);
     }
 };
+
+/// Where inside a stage action a failing invocation stopped (ADR 0031). A Zig error carries no
+/// payload, so the runner lends each step invocation this slot and the binding writes the failing
+/// internal step's name, a static enum tag, before it returns its unchanged error. The runner
+/// records it in the failed action's event.
+pub const StageStepSlot = struct { name: ?[]const u8 = null };
 
 pub const NodeDelta = struct {
     data_writes: data.Slots = data.empty_slots,

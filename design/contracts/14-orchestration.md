@@ -113,8 +113,9 @@ The 1,024-step ceiling (ADR 0016) preserves visible detailed operations and
 independent retry identities; there is no hidden dispatcher. Extraction uses this
 shared implementation. Under ADR 0030 (not yet implemented), each part call site is one
 `request-model` step with its `composition-part`; its retry identity stays independent.
-Under [ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented), deterministic
-operations that a stage action absorbs are no longer visible operations.
+Under [ADR 0031](../decisions/0031-stage-actions.md), deterministic operations that a stage
+action absorbs are no longer visible operations: the nine toolchain operations are the internal
+steps of `prepare-toolchain`.
 
 ### 14.2 `StageGateOrchestrator`
 

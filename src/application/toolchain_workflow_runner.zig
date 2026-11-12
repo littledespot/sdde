@@ -1,130 +1,28 @@
 const std = @import("std");
 const pipeline = @import("../domain/pipeline.zig");
-const toolchain = @import("../domain/toolchain.zig");
 const safety = @import("../domain/toolchain_safety.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const values = @import("pipeline_values.zig");
 const schemas = @import("toolchain_workflow_values.zig");
-const publish = @import("workflow_candidate.zig").publish;
 
-// Each binding runs exactly one action. YAML, not this module, owns their order.
-pub const CaptureProject = struct {
-    pub const Action = @import("../actions/toolchain/capture_project_toolchain.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator()) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.project_capture, toolchain.Capture, result);
-    }
-};
-pub const InventoryPresets = struct {
-    pub const Action = @import("../actions/toolchain/inventory_toolchain_presets.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator()) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.preset_inventory, []const toolchain.Entry, result);
-    }
-};
-pub const CapturePresets = struct {
-    pub const Action = @import("../actions/toolchain/capture_toolchain_presets.zig").Action;
+// One binding runs the one stage action. YAML owns where it sits in the graph; the stage's
+// internal steps are functions, not operations.
+pub const PrepareToolchain = struct {
+    pub const Action = @import("../actions/toolchain/prepare_toolchain.zig").Action;
     allocator: std.mem.Allocator,
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch |operation_error| return operation_error;
-        const entries = values.read(&input.step.data, schemas.preset_inventory, []const toolchain.Entry) catch |operation_error| return operation_error;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, entries.*) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.preset_captures, []const toolchain.Capture, result);
-    }
-};
-pub const ParseDocuments = struct {
-    pub const Action = @import("../actions/toolchain/parse_toolchain_documents.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch |operation_error| return operation_error;
-        const presets = values.read(&input.step.data, schemas.preset_captures, []const toolchain.Capture) catch |operation_error| return operation_error;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, presets.*) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.raw_documents, []const toolchain.RawDocument, result);
-    }
-};
-pub const ValidateProject = struct {
-    pub const Action = @import("../actions/toolchain/validate_project_toolchain_schema.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch |operation_error| return operation_error;
-        if (documents.len == 0) return error.OperationExecutionFailed;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), documents.*[0]) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.project, toolchain.Project, result);
-    }
-};
-pub const ValidateRegistry = struct {
-    pub const Action = @import("../actions/toolchain/validate_toolchain_preset_registry.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch |operation_error| return operation_error;
-        if (documents.len == 0) return error.OperationExecutionFailed;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), documents.*[1..]) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.registry, toolchain.Registry, result);
-    }
-};
-pub const ResolveInheritance = struct {
-    pub const Action = @import("../actions/toolchain/resolve_toolchain_inheritance.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch |operation_error| return operation_error;
-        const registry = values.read(&input.step.data, schemas.registry, toolchain.Registry) catch |operation_error| return operation_error;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, registry.*) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.resolved, toolchain.Resolved, result);
-    }
-};
-pub const Compose = struct {
-    pub const Action = @import("../actions/toolchain/compose_toolchain.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch |operation_error| return operation_error;
-        const resolved = values.read(&input.step.data, schemas.resolved, toolchain.Resolved) catch |operation_error| return operation_error;
-        var scratch = std.heap.ArenaAllocator.init(self.allocator);
-        defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, resolved.*) catch |operation_error| return operation_error;
-        return publish(self.allocator, schemas.composed, toolchain.Composed, result);
-    }
-};
-pub const ValidateSafety = struct {
-    pub const Action = @import("../actions/toolchain/validate_toolchain_safety.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action,
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const composed = values.read(&input.step.data, schemas.composed, toolchain.Composed) catch |operation_error| return operation_error;
-        const owner = self.action.execute(self.allocator, composed.*) catch |operation_error| return operation_error;
+        var diagnostic: @import("../actions/toolchain/prepare_toolchain.zig").Diagnostic = .{};
+        const owner = self.action.execute(scratch.allocator(), self.allocator, input.step.runtime, &diagnostic) catch |operation_error| {
+            // The stage-owned slot is read before the unchanged error propagates; the runner
+            // records the step in the failed action's event (ADR 0031).
+            if (input.step.stage_step) |slot| slot.name = if (diagnostic.step) |step| @tagName(step) else null;
+            return operation_error;
+        };
         const result = values.adopt(self.allocator, schemas.valid, safety.ValidToolchain, safety.Owner, owner, safety.value, safety.deinitOwner, safety.retainedBytes(owner)) catch |operation_error| {
             safety.deinitOwner(owner);
             return operation_error;

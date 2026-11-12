@@ -25,6 +25,12 @@ pub const StepInput = struct {
     model_binding: ?*const provider_binding.ValidatedProviderModelBinding,
     repair_permit: ?workflow_retry.Permit = null,
     log: pipeline.WorkflowLog,
+    /// The runner's capability-free status handle, which a stage action checks between its
+    /// internal steps (ADR 0031). A caller that invokes a binding outside the runner has none to
+    /// supply, so it stays always active.
+    runtime: pipeline.NodeRuntime = .{},
+    /// The runner's slot for the internal step a stage action stopped at; absent outside the runner.
+    stage_step: ?*pipeline.StageStepSlot = null,
     model_request_lifecycle: ?*const @import("../domain/provider_operation_lifecycle.zig").Ledger = null,
     provider_invocation: ?@import("../domain/provider_invocation_validation.zig").Call = null,
     model_attempt: ?struct {

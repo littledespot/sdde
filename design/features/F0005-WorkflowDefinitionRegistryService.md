@@ -239,14 +239,14 @@ An operation step contains one registered generic operation, an optional compact
 map, and one outcome map:
 
 ```yaml
-capture-project:
-  use: capture-project-toolchain
-  on: { ok: inventory-presets, failed: end.failed }
+toolchain:
+  use: prepare-toolchain
+  on: { ok: end.ok, failed: end.failed }
 ```
 
 This step of the [toolchain workflow fixture](../../src/test_fixtures/toolchain.workflow.yaml)
 uses a registered operation; a complete graph must supply its required inputs and
-define the `inventory-presets` successor, as the fixture does.
+map every outcome, as the fixture does.
 
 - The step's mapping key is its unique `WorkflowStepId`.
 - `use` identifies a registered operation contract, not a concrete implementation or
@@ -352,8 +352,8 @@ typed content cannot change the compiled semantic graph.
   retry/cycle checks, capability policy and runner semantics apply to the complete
   expanded graph.
 - Nothing is hidden in an action. An [ADR 0031](../decisions/0031-stage-actions.md) stage
-  action (not yet implemented) hides no workflow choice either: its internal steps are
-  functions whose non-success outcomes all end the stage, and every routed outcome stays in
+  action (`prepare-toolchain` is the first) hides no workflow choice either: its internal steps
+  are functions whose non-success outcomes all end the stage, and every routed outcome stays in
   YAML.
 - See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.
 

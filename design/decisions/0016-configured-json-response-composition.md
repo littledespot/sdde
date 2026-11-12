@@ -19,7 +19,7 @@
   yet implemented). Each part's request becomes one `request-model` step with its
   `composition-part`. The lifecycle stages behind it are no longer visible detailed
   operations; distinct request identities and `retain-json-part` stay visible.
-  [ADR 0031](0031-stage-actions.md) (22 October 2026, not yet implemented) likewise
+  [ADR 0031](0031-stage-actions.md) (22 October 2026; `prepare-toolchain` implemented) likewise
   removes absorbed deterministic operations instead of keeping them available beside a
   stage action. [ADR 0036](0036-source-quoted-claims.md) (25 October 2026) removes §5's
   citation repair: claim citations are bounded at admission and claim wording is quoted

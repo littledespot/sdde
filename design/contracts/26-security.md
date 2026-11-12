@@ -171,7 +171,7 @@ Every activated run writes beneath the spec being run, never into the editable s
 - Control rows are storage metadata, not log events, and their event-only cells are absent.
 
 - The initial F0002 implementation contains exactly two compiler-locked column schemas:
-  `event-columns/v2` and `prompt-columns/v3`, with the exact ordered headings specified by F0002
+  `event-columns/v3` and `prompt-columns/v3`, with the exact ordered headings specified by F0002
   Section 6.3 and implemented by `src/domain/feature_log_format.zig`.
 - The schemas are constants, not generated from the event registry and not supplied by config, a
   workflow, stored data, or a plugin.
@@ -183,7 +183,7 @@ Every activated run writes beneath the spec being run, never into the editable s
   and a literal backslash is escaped before the reserved-null check, so absence and content
   cannot alias.
 - Unknown, duplicate, missing, or reordered headings and extra/missing row cells fail closed.
-- This pre-release proof of concept accepts only the current `event-columns/v2` and
+- This pre-release proof of concept accepts only the current `event-columns/v3` and
   `prompt-columns/v3` headings and rejects all obsolete headings; it has no migration,
   compatibility reader, dual writer, or historical conversion.
 - After release acceptance, adding or reordering a column requires a new contract version.

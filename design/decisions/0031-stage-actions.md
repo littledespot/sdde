@@ -1,8 +1,9 @@
 # ADR 0031: One action per deterministic stage
 
-- **Status:** Accepted amendment. **Not yet implemented:** every stage is still a run
-  of single-step actions until its conversion lands. Documents that describe
-  single-step granularity carry a pointer to this ADR until then.
+- **Status:** Accepted amendment. **Partly implemented:** `prepare-toolchain` is the first
+  stage action (12 November 2026, SPEC01 E2); every other stage is still a run of
+  single-step actions until its conversion lands. Documents that describe single-step
+  granularity for those stages carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the
   documentation with the recommendations for option B". It decides FIX05
@@ -11,7 +12,8 @@
   outcomes is the most important". The approved recommendation included three rules:
   single responsibility and narrow ports per function, function-local intermediate
   values, and model calls and every real branch kept in YAML. The choices under "Derived
-  under existing rules" follow from existing authority and await the user's confirmation.
+  under existing rules" follow from existing authority; the user confirmed choices 1–3 and
+  6–8 on 12 November 2026 ("yes").
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (one responsibility and narrow ports)
     and "Testing expectations" (action tests);
@@ -198,11 +200,18 @@ engine-startup graph, the feature-logging pipeline or the invocation operation.
     stage-owned diagnostic slot before returning the error, and its binding reads that
     slot before propagating the unchanged error.
   - The runner's stage event records the step either way, so a report can still say where
-    inside the stage a run stopped.
+    inside the stage a run stopped. The runner lends each step invocation a slot
+    (`StepInput.stage_step`), the binding writes the failing step's name before it returns its
+    unchanged error, and the failed action's event records it as `step_id`
+    (`event-columns/v3`, F0002).
 - **Cancellation** is checked between internal steps. Unlike other actions today, a stage
   action's `execute` also takes the capability-free `NodeRuntime` (from
   `domain/pipeline.zig`) and checks its status between steps. A cancelled stage stops
   before its next internal step and cleans up what it owns.
+  - The runner supplies the runtime in the step input, and a non-model operation that fails
+    after the runtime stopped reports that stop (cancelled or deadline exhausted), not an
+    operation failure, as the checks before and after the invocation do. An allocation
+    failure stays itself, and a model call keeps its own reconciled status.
 
 ### Runner, compiler and registry
 

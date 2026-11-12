@@ -5,7 +5,7 @@ const std = @import("std");
 pub fn yaml(allocator: std.mem.Allocator) ![]const u8 {
     const base = try prepared(allocator);
     defer allocator.free(base);
-    const resources = try std.mem.replaceOwned(u8, allocator, base, "start: capture-project", "resources: { sample: sample.txt }\nstart: capture-project");
+    const resources = try std.mem.replaceOwned(u8, allocator, base, "start: toolchain", "resources: { sample: sample.txt }\nstart: toolchain");
     defer allocator.free(resources);
     const next = try std.mem.replaceOwned(u8, allocator, resources, "use: build-superset-path-token-grammar, on: { ok: end.ok", "use: build-superset-path-token-grammar, on: { ok: scan-tokens");
     defer allocator.free(next);
@@ -15,7 +15,7 @@ pub fn yaml(allocator: std.mem.Allocator) ![]const u8 {
 pub fn prepared(allocator: std.mem.Allocator) ![]const u8 {
     const reference = @embedFile("reference-ingestion.workflow.yaml");
     const toolchain = @embedFile("toolchain.workflow.yaml");
-    const start = try std.mem.replaceOwned(u8, allocator, reference, "start: normalize-feature", "start: capture-project");
+    const start = try std.mem.replaceOwned(u8, allocator, reference, "start: normalize-feature", "start: toolchain");
     defer allocator.free(start);
     const next = try std.mem.replaceOwned(u8, allocator, start, "use: validate-reference-chunks\n    on: { ok: end.ok, failed: end.failed }", "use: validate-reference-chunks\n    on: { ok: compile-naming, failed: end.failed }");
     defer allocator.free(next);

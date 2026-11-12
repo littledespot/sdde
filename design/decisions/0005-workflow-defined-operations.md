@@ -33,7 +33,8 @@ from the model's catalogue entry instead of YAML, both implemented 24 October 20
 also lets one operation's single current contract consist of closed variants selected at
 compile time (see "Unversioned operation IDs" below), a mechanism ADR 0033 uses.
 
-**Stage-action amendment (22 October 2026, not yet implemented):**
+**Stage-action amendment (22 October 2026; `prepare-toolchain` implemented first, 12
+November 2026):**
 [ADR 0031](0031-stage-actions.md) lets one registered stage action own a deterministic
 sequence of internal steps that routes no outcome. Every routed outcome stays a YAML
 transition. The internal steps are functions, not workflow operations or a second

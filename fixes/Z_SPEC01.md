@@ -120,8 +120,9 @@ byte-identical, so the proof is the accepted and rejected owner tests.
 
 ## Bare-value `reference_only` correction
 
-**Implemented 7 November 2026** (user: "fix the bare-message failure"); kept or reverted per
-SPEC01 §3 Next item 1. Native recognition makes text that is exactly a source value one
+**Implemented 7 November 2026** (user: "fix the bare-message failure"); **kept 12 November
+2026** (user: "yes", to recording it kept). No set could measure it: it has fired once live,
+changing nothing, so the keep rests on the mechanism. Native recognition makes text that is exactly a source value one
 exact-value node, so a prose-required field holding only it rejects as `reference_only` (ADR
 0036:156-158). The field registry's explanation (`text_field_policy.referenceOnly`) is derived
 from the exact-copy role: where recognition runs it says an exact source value or supplied
@@ -448,3 +449,76 @@ Decision 3 records the decision, its derived choices and the versions.
 - **Not covered by a test or a live run:** replacing an inserted criterion, and exhaustion of
   the insert's repair bound.
 - **Rule:** an inserted record's association is the engine's; the model writes content only.
+
+## E2. `prepare-toolchain` is one stage action (ADR 0031)
+
+**Implemented 12 November 2026** (user: "yes" confirming DE2, then "approved" to the preflight,
+including the ADR 0031 status edit). The first stage conversion, as the proof of the pattern. No
+behaviour, model request, report, log or state version changes, so no published-output defect
+class is named and no semantic benefit is claimed (ADR 0031:250-252); no live run (choice 7).
+- **Owners:** `src/actions/toolchain/prepare_toolchain.zig` (the closed `Step` enum, the
+  `Diagnostic` slot, `Action.execute` sequencing nine `steps.*` functions with a `NodeRuntime`
+  check between them, and one `NodeContract`: requires nothing, produces `valid_toolchain`,
+  `filesystem_read`); one binding, `toolchain_workflow_runner.PrepareToolchain`; the composition
+  root's one registry entry. A step that reaches a port takes only that port; `validateSafety`
+  alone yields the `safety.Owner`, allocated from the retained allocator while every
+  intermediate lives in the binding's scratch arena. The failure representation of each step is
+  unchanged (`InvalidToolchain`), except that the parser must now return exactly one document per
+  capture: a short or long result rejects at `parse_documents`, where it used to shrink the
+  registry silently and an empty one failed as `OperationExecutionFailed` (user: "yes", 12
+  November 2026, contract review).
+- **Runner:** `StepInput.runtime` carries the runner's `NodeRuntime` (always active for a
+  binding invoked outside the runner), and a non-model operation that fails after the runtime
+  stopped reports that stop (`cancelled`, `deadline_exhausted`), as the checks before and after
+  the invocation do, so a cancelled stage reports what the nine separate nodes did. An
+  allocation failure stays itself and a model call keeps its own reconciled status (contract
+  review, 12 November 2026).
+- **Removed:** the nine actions, nine bindings, eight stage-internal `DataKey`s and their
+  schemas, the Specify subgraph, and the fixture's eight extra steps.
+- **Failing step in the event** (ADR 0031:200-201; user: "yes", 12 November 2026): the runner
+  lends each step invocation a slot (`StepInput.stage_step`, `pipeline.StageStepSlot`), the
+  binding writes the failing step's name before returning its unchanged error, and the failed
+  action's event records it as `step_id`, a new optional field of `action.failed` only (the
+  registry rejects it elsewhere). The event heading gains a column, so **`event-columns/v2`
+  becomes `event-columns/v3`** (38 columns, `step_id` after `rule_id`; F0002, 26-security,
+  design.md updated; no migration, as F0002 requires). The measures harness reads the current
+  heading only, so a feature log written before this change is rejected by it; the saved
+  `measures.json` of earlier runs are unaffected. The prompt stream is unchanged
+  (`prompt-columns/v3`).
+- **Stale pointers** to ADR 0031 as not yet implemented in design.md, ADR 0003, ADR 0005 and ADR
+  0016 now name `prepare-toolchain` as the first stage action (user: "yes").
+- **Evidence (offline):** request projection before and after across the integration matrix is
+  byte-identical (`diff -rq` empty; both equal `q14b3-after`), 122 of 122 integration
+  scenarios pass, and the unit suite covers each function with fake ports, the stage edge (every
+  failing step reported, cancellation between each pair of steps, allocation failure in each
+  step and in the owner, cleanup) and the architecture rules with rejected fixtures.
+- **Live set** (user: "perform 3 e2e live runs and evaluations per test case"; run directories
+  `2026-11-12T00-18-16Z` to `-20Z`; revision `be2966ce`, `build.source.modified` true; 3 runs per
+  case; skill `3fe52a92…`; reference the b3 and Q22 sets): not required by choice 7, taken after
+  the event-field change. Two earlier launch rounds produced no result (a launch without the
+  environment loader, then a provider `AccessDeniedException`, "Authentication failed: Please
+  make sure your API Key is valid.", on a first request byte-identical to a working run's), so
+  their directories are unusable evidence. 6 of 6 published and passed, 9 calls each, no correction, re-send, runaway
+  or admission rejection. Content-basis counts, lost / weakened / unsupported / contradiction:
+  hello-world 0 / 0 / 0 / 0 and loan-renewal 0 / 0 / 2 / 0 (AC-001's recording clause in two of
+  three runs; the third has none), against 0 / 0 / 0 / 0 and 0 / 0 / 3 / 0 before. Hello-world:
+  each run has an entity (3 of 3, against 1 of 3 in both earlier sets), costing one scope point,
+  and the quote-mark artefact is absent (organization 4). The 17 native deletes of the
+  loan-renewal runs (7, 7, 6) were all helpful, including an assumption, a non-goal and a
+  prohibited behavior the source does not state. No `scenario_coverage` event fired, so no insert
+  ran live. Median tokens 12,768 and 16,500 against the b3 set's 12,712 and 16,342. The new
+  `event-columns/v3` logs were written and read by the measures harness; no run failed an
+  action, so no `step_id` was recorded live.
+- **Measures (ADR 0031:355-357), before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Toolchain YAML in `spec.workflow.yaml` | 30-line subgraph, 9 steps (file 1,104 lines) | 1 step (file 1,074 lines) |
+  | Toolchain fixture | 17 lines, 9 steps | 9 lines, 1 step |
+  | Registry entries (`entry(` lines) | 166 | 158 |
+  | `DataKey` members | 194 | 186 |
+  | Toolchain action files | 9 (107 lines) | 1 (130 lines), beside `compile_naming_policy` |
+  | Binding and values files | 136 and 19 lines | 35 and 10 lines |
+  | Files a new pure toolchain step touches | 8 (action, binding, values, `DataKey`, composition, YAML, fixture, 13-01) | 2 code files (the stage and its test) and the 13-01 entry |
+- **Rule:** the internal steps of a stage are functions, so a project cannot recompose them and
+  a concept change lands in the stage's file.

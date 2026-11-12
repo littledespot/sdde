@@ -1010,12 +1010,12 @@ test "production event projection uses closed facts and propagates every barrier
         spy.blocked = blocked;
         const expected: ?log_stream.FailureCode = if (blocked) .LOG_FLUSH_FAILURE else null;
         try std.testing.expectEqual(expected, events.emit(.{ .event_type = .run_started }));
-        try std.testing.expectEqual(expected, events.action(node, null, null));
+        try std.testing.expectEqual(expected, events.action(node, null, null, null));
         for (std.enums.values(@import("domain/workflow.zig").OutcomeTag)) |status| {
-            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null));
+            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null, null));
             if (status != .more) try std.testing.expectEqual(expected, events.terminal(.{ .execution = status }));
         }
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }, null));
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }, null, null));
         try std.testing.expectEqual(log_stream.FailureCode.LOG_SERIALIZATION_FAILURE, events.terminal(.{ .execution = .more }).?);
         try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
         try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));
@@ -1027,7 +1027,7 @@ test "production event projection uses closed facts and propagates every barrier
         try std.testing.expectEqual(expected, events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = .needs_user } }));
         spy.expect_capture = true;
         const rejected: @import("domain/workflow_execution.zig").Rejection = .{ .model_capture = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request } };
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = rejected }, null));
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = rejected }, null, null));
         try std.testing.expectEqual(expected, events.terminal(.{ .execution_rejected = rejected }));
         spy.expect_capture = false;
     }

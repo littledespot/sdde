@@ -156,14 +156,12 @@ research, **C** code-review findings (§10; none scheduled). "Gap" means between
 
 **Next:**
 
-1. The bare-value `reference_only` correction and the repeated-statement change are
-   implemented ([Z_SPEC01](Z_SPEC01.md)). The correction is kept or reverted on a repeated set of
-   both cases on one committed build, scored on published output and publication rate; sets
-   where it never fires are not enough evidence. Its one live firing (8 November,
-   `2026-11-07T20-44-15Z-9273…`, uncommitted tree) changed nothing: all three records attempts
-   returned the same bare outcomes and the run exhausted its retries. The repeated-statement
-   change is judged on the same set: it removes that failure where the bare outcome is a
-   repeat, and the correction serves the rest.
+1. **Kept 12 November 2026** (user: "yes"): the bare-value `reference_only` correction
+   ([Z_SPEC01](Z_SPEC01.md)). It has fired once live (8 November,
+   `2026-11-07T20-44-15Z-9273…`, uncommitted tree) and changed nothing: all three records
+   attempts returned the same bare outcomes and the run exhausted its retries, so the keep
+   rests on the mechanism. The repeated-statement change has no recorded keep decision; its
+   native deletes ran in the Q22 set (nine) and the Q14 b3 set (ten), all helpful.
 2. **Closed 8 November 2026:** skill `1d66d882…` is the same evaluator as `af394020…` and
    `0b552067…` ([Z_SPEC01](Z_SPEC01.md) T7).
 3. **Decided 8 November 2026** (user: "recommendations accepted for 1 to 6"): a title that
@@ -208,8 +206,8 @@ exhaustion, never budget, in two modes, each reported with no lever:
   prose and no JSON on all three attempts, from a request byte-identical to one that succeeded:
   the model's variance under a coherent contract.
 
-**Engine track, in gaps:** E2 early; E3 after E2's first measure (nothing technical ties
-startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
+**Engine track, in gaps:** E2's first conversion is done and measured (the next stage is the
+user's call); E3 may follow (nothing technical ties startup to E1); E1 in any gap, retaking its freeze on the commit before it lands; E6 and E8 in
 any gap; E4 after E1, E2's measure and its capture replays (§5 E4); E5's closed reasons
 with the E1–E4 conversion that rewrites them, its evaluator gap in any gap; E9 with E1, E4 or
 E5; R-A1 after E1; E7 last. E0 is on hold. E1, E4, E5, E9 and T8 land only under §2.12. E1–E4
@@ -563,17 +561,18 @@ option b). If E1 removes a request-lifecycle `DataKey`, it lands under §2.12.
 
 ### E2. Stage actions (A2, ADR 0031)
 
-Not started: convert `prepare-toolchain` (nine steps, `spec.workflow.yaml:182-211`) first and
-record ADR 0031's measures (:355-357) before another stage. **DE2:** confirm ADR 0031's
-derived choices 1–3 and 6–8 (:268-290), including whether choice 7's offline evidence replaces
-the live run. §10 C32 records what the stage feeds today.
+**`prepare-toolchain` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2; DE2 confirmed,
+user: "yes": ADR 0031's derived choices 1–3 and 6–8 (:268-290), including that choice 7's
+offline evidence replaces the live run). Its measures are recorded there; they decide whether
+the next stage converts (ADR 0031:236-238, the user's call). §10 C32 records what the stage feeds
+today.
 
 ### E3. Engine routines (A3, ADR 0032)
 
 Not started. Convert startup first and measure it (ADR 0032:144-151). Feature logging waits on
 its preconditions (:152-172): no test covers cancellation under a log lock, and the
-policy-transition coordinator waits on E6's §14.10 decision. **DE3:** confirm ADR 0032's
-derived choices 1–8 (:224-241), including offline evidence; can be asked with DE2.
+policy-transition coordinator waits on E6's §14.10 decision. **DE3 confirmed 12 November
+2026** (user: "yes"): ADR 0032's derived choices 1–8 (:224-241), including offline evidence.
 
 ### E4. Generic repair operations (W3, ADR 0033)
 
@@ -1313,8 +1312,8 @@ repair needs edits to both files.
 **C22. Change amplification (traced).**
 
 - One operation with one new key: 8 production files and 15 sites.
-  `native_workflow_operations.zig` keeps three parallel lists of about 170 lines and a hand-kept
-  count (`:229`, `core.entries.len + 169 + model_request.count`).
+  `native_workflow_operations.zig` keeps three parallel lists of about 160 lines and a hand-kept
+  count (`:221`, `core.entries.len + 161 + model_request.count`).
 - One record family: three Zig files the compiler enforces, plus `generation.schema.json`,
   `packet-guidance.json`, the prose of `records.prompt.md:9-13` and
   `specification_markdown.zig:155`, which it doesn't.

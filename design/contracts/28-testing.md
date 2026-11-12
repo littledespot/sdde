@@ -15,7 +15,7 @@ credentials alone never authorize a test call.
 ### 28.1 Action unit tests
 
 Each action is tested with immutable fixtures and fake narrow ports. An
-[ADR 0031](../decisions/0031-stage-actions.md) stage action (not yet implemented) is tested this
+[ADR 0031](../decisions/0031-stage-actions.md) stage action is tested this
 way at its edge, and each internal function also gets its own unit tests with fake ports. The
 absorbed actions' accepted and rejected cases survive at the function or the stage edge.
 Required cases include:

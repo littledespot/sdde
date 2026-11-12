@@ -231,7 +231,9 @@ Every action must:
 - An action that publishes output does not decide whether validation passed; it consumes the
   complete validated output set through its declared publication port.
 
-[ADR 0031](../decisions/0031-stage-actions.md) (not yet implemented) adds the **stage action**:
+[ADR 0031](../decisions/0031-stage-actions.md) adds the **stage action** (`prepare-toolchain`
+is the first, in `src/actions/toolchain/prepare_toolchain.zig`; the other stages are not yet
+converted):
 one registered action whose verb-object responsibility is a deterministic sequence of internal
 steps that routes no outcome. The ADR fixes its contract fields: side effect `none` or
 `filesystem_read`, repair role and runner accounting `none`, outcome association
@@ -297,7 +299,7 @@ Every orchestrator must:
 
 ### 6.3 Reordering and composition rules
 
-The internal steps of an [ADR 0031](../decisions/0031-stage-actions.md) stage action (not yet implemented) can't be reorganized from YAML; changing them changes the stage action.
+The internal steps of an [ADR 0031](../decisions/0031-stage-actions.md) stage action can't be reorganized from YAML; changing them changes the stage action.
 
 Actions and orchestrators can be reorganized without changing their implementation when their contracts remain satisfiable:
 

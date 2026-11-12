@@ -1,5 +1,5 @@
 pub const schema_version = "feature-log/v2";
-pub const event_column_schema_id = "event-columns/v2";
+pub const event_column_schema_id = "event-columns/v3";
 pub const prompt_column_schema_id = "prompt-columns/v3";
 
 pub const max_record_bytes: usize = 65_536;

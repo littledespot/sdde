@@ -62,15 +62,7 @@ pub const Assembly = struct {
     capture_principle_registry: principles.CaptureRegistry,
     build_principles: principles.Build,
     capture_packet_guidance: packet_guidance.Capture,
-    capture_project: runners.CaptureProject,
-    inventory_presets: runners.InventoryPresets,
-    capture_presets: runners.CapturePresets,
-    parse_documents: runners.ParseDocuments,
-    validate_project: runners.ValidateProject,
-    validate_registry: runners.ValidateRegistry,
-    resolve_inheritance: runners.ResolveInheritance,
-    compose: runners.Compose,
-    validate_safety: runners.ValidateSafety,
+    prepare_toolchain: runners.PrepareToolchain,
     invocation: invocation.Invocation,
     parse_invocation: invocation.ParseInvocation,
     validate_arguments: invocation.ValidateArguments,
@@ -226,7 +218,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 169 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 161 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -237,15 +229,7 @@ pub const Assembly = struct {
             .capture_principle_registry = .{ .allocator = allocator, .action = .{} },
             .build_principles = .{ .allocator = allocator, .action = .{} },
             .capture_packet_guidance = .{ .allocator = allocator },
-            .capture_project = .{ .allocator = allocator, .action = .{ .source = project_source } },
-            .inventory_presets = .{ .allocator = allocator, .action = .{ .source = preset_source } },
-            .capture_presets = .{ .allocator = allocator, .action = .{ .source = preset_capture } },
-            .parse_documents = .{ .allocator = allocator, .action = .{ .parser = document_parser } },
-            .validate_project = .{ .allocator = allocator },
-            .validate_registry = .{ .allocator = allocator },
-            .resolve_inheritance = .{ .allocator = allocator },
-            .compose = .{ .allocator = allocator },
-            .validate_safety = .{ .allocator = allocator, .action = .{ .registry = policies } },
+            .prepare_toolchain = .{ .allocator = allocator, .action = .{ .project_source = project_source, .preset_source = preset_source, .preset_capture = preset_capture, .parser = document_parser, .policies = policies } },
             .invocation = .{ .allocator = allocator },
             .parse_invocation = .{ .allocator = allocator },
             .validate_arguments = .{ .allocator = allocator },
@@ -412,15 +396,7 @@ pub const Assembly = struct {
             entry(principles.CaptureRegistry, &self.capture_principle_registry),
             entry(principles.Build, &self.build_principles),
             entry(packet_guidance.Capture, &self.capture_packet_guidance),
-            entry(runners.CaptureProject, &self.capture_project),
-            entry(runners.InventoryPresets, &self.inventory_presets),
-            entry(runners.CapturePresets, &self.capture_presets),
-            entry(runners.ParseDocuments, &self.parse_documents),
-            entry(runners.ValidateProject, &self.validate_project),
-            entry(runners.ValidateRegistry, &self.validate_registry),
-            entry(runners.ResolveInheritance, &self.resolve_inheritance),
-            entry(runners.Compose, &self.compose),
-            entry(runners.ValidateSafety, &self.validate_safety),
+            entry(runners.PrepareToolchain, &self.prepare_toolchain),
             .{ .contract = invocation.Invocation.contract, .binding = binding.bind(invocation.Invocation, &self.invocation, invocation.Invocation.invoke) },
             invocationEntry(invocation.ParseInvocation, &self.parse_invocation),
             entry(invocation.ValidateArguments, &self.validate_arguments),
@@ -599,9 +575,9 @@ pub const Assembly = struct {
         self.prepare_specification_output.action.contracts = contracts;
     }
     pub fn bindRoots(self: *Assembly, registry: *const roots.BootstrapRootRegistry) void {
-        self.capture_project.action.source.capability = registry.projectPrinciples();
-        self.inventory_presets.action.source.capability = registry.toolchainPresetRegistry();
-        self.capture_presets.action.source.capability = registry.toolchainPresetRegistry();
+        self.prepare_toolchain.action.project_source.capability = registry.projectPrinciples();
+        self.prepare_toolchain.action.preset_source.capability = registry.toolchainPresetRegistry();
+        self.prepare_toolchain.action.preset_capture.capability = registry.toolchainPresetRegistry();
         self.inspect_directory.action.inspector.capability = registry.referenceSources();
         self.validate_feature.action.roots = registry.featureDirectoryRoots();
         self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();

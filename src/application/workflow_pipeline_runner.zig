@@ -67,6 +67,8 @@ pub const Runner = struct {
     remaining_step_executions: usize,
     events_closed: bool = false,
     last_effects: ?execution.AppliedEffects = null,
+    /// The internal step a stage action stopped at during the current step invocation.
+    stage_step: pipeline.StageStepSlot = .{},
     last_operation_rejection: ?execution.OperationRejection = null,
 
     pub fn init(
@@ -141,12 +143,13 @@ pub const Runner = struct {
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
         self.last_effects = null;
+        self.stage_step = .{};
         const started = self.eventsActive();
-        if (started) if (self.events().action(id, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
+        if (started) if (self.events().action(id, null, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
         const result = self.executeStep(id);
         if (self.eventsActive()) {
-            if (!started) if (self.events().action(id, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
-            if (self.events().action(id, result, if (self.last_effects) |effects| effects.diagnostic else null)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
+            if (!started) if (self.events().action(id, null, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.events().action(id, result, if (self.last_effects) |effects| effects.diagnostic else null, self.stage_step.name)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
             if (result == .rejected and result.rejected == .retry_limit) {
                 if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = .{ .logging = failure } };
             }
@@ -440,6 +443,8 @@ pub const Runner = struct {
             .model_binding = if (retained_request) |request| request.binding() else if (resolved_binding) |*value| value else null,
             .repair_permit = self.repair_retry.currentPermit(),
             .log = pipeline.WorkflowLog.init(self.selected.graph.shortcode),
+            .runtime = self.runtime,
+            .stage_step = &self.stage_step,
             .model_attempt = attempt_input,
             .model_request_lifecycle = if (advances_request) self.model_accounting.?.current_operations else null,
             .provider_invocation = if (validates_observation) call else null,
@@ -454,6 +459,10 @@ pub const Runner = struct {
                 if (rejection) |reason| return .{ .rejected = reason };
             }
             if (calls_model) if (self.captureRejection()) |reason| return .{ .rejected = reason };
+            // A non-model operation that stopped because the runtime did reports that stop, as the
+            // checks before and after the invocation do. An allocation failure stays itself, and a
+            // model call keeps its own reconciled and logged status above.
+            if (!calls_model and err != error.OutOfMemory) if (runtimeTerminal(self.runtime)) |terminal| return .{ .rejected = terminal };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);

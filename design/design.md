@@ -47,7 +47,7 @@ The design has eight defining properties:
    [ADR 0030](decisions/0030-engine-owned-model-request.md) (not yet implemented),
    the stages of one model request are kernel work behind one YAML-selected
    `request-model` step, not workflow operations. Under
-   [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the internal
+   [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), the internal
    steps of a stage action are functions, not workflow operations; the stage action
    itself is addressable.
 2. **Ordered SDD suite:** one feature flows through `specify`, `plan`, `tasks`,
@@ -56,7 +56,7 @@ The design has eight defining properties:
 3. **Deterministic shell around probabilistic work:** argument parsing, feature identity, paths, filenames, artifact structure, identifiers, traceability, dependency graphs, writes, commands, task state, and stage gates are engine-owned.
 4. **Preset-controlled project operations:** every model-proposed project path is classified and checked against the selected development-environment preset, such as React, Node, Java, or .NET, before it can be recorded in a plan, emitted as a task, or written during implementation.
 5. **Atomic repair:** a failed candidate is repaired at the smallest independently replaceable field, record, section, task, path, or code operation. Unrelated valid output is retained. The repaired candidate is never committed until all applicable validators pass.
-6. **Actions and orchestrators:** actions have one responsibility and a common typed contract. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves. Under [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage action's one responsibility may be a deterministic sequence of internal steps that routes no outcome; each step is a single-responsibility function, and the ADR lists the limits. Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), fixed engine sequences are typed engine routines, a third category beside actions and orchestrators.
+6. **Actions and orchestrators:** actions have one responsibility and a common typed contract. They do not coordinate other components. Orchestrators contain actions and/or other orchestrators, but perform no filesystem, LLM, parsing, validation, rendering, or command work themselves. Under [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), a stage action's one responsibility may be a deterministic sequence of internal steps that routes no outcome; each step is a single-responsibility function, and the ADR lists the limits. Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), fixed engine sequences are typed engine routines, a third category beside actions and orchestrators.
 7. **Closed authority reconciliation:** every datum or decision required by a workflow contract resolves to exactly one current supported authority, an explicitly authorized `not_applicable`/exception outcome, or a clarification owned by the earliest responsible stage. Missing, ambiguous, conflicting, multiple, stale, or unsupported authority never becomes a warning, default, approximation, or downstream local fix.
 8. **Native Zig distribution:** the engine is implemented in Zig and packaged as a native executable. It has no Node.js runtime or Node SEA dependency; JavaScript/TypeScript and Node remain target-project technologies governed through presets.
 
@@ -108,7 +108,7 @@ engine fixes them:
   execution, and the initial four-workflow SDD suite host-enforced.
 - Allow a project to add a workflow composed from existing registered operation,
   invocation, policy, and state contracts without rebuilding the engine. Under
-  [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the internal
+  [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), the internal
   steps of a stage action are not composable on their own; a different combination
   of them needs a new stage action and a rebuild.
 - Keep workflow YAML concise while making every workflow operation, resource,
@@ -147,7 +147,7 @@ engine fixes them:
 5. A stage cannot commit any output until all of its blocking deterministic validators pass.
 6. A repair can modify only the repair unit selected by the engine.
 7. A repaired candidate receives impacted validation followed by a full validation pass before commit.
-8. An action performs one responsibility and never invokes an action or orchestrator. A stage action's one responsibility is its whole internal-step sequence ([ADR 0031](decisions/0031-stage-actions.md), not yet implemented); those steps are functions, not actions.
+8. An action performs one responsibility and never invokes an action or orchestrator. A stage action's one responsibility is its whole internal-step sequence ([ADR 0031](decisions/0031-stage-actions.md)); those steps are functions, not actions.
 9. An orchestrator coordinates child nodes and performs no domain or infrastructure operation itself. Under [ADR 0032](decisions/0032-engine-routines.md) (not yet implemented), a fixed engine sequence becomes an engine routine, not an orchestrator, when its conversion lands. It does that work through typed functions, each with only the port it uses. Only the callers the ADR names reach it: the composition root, a runner-owned child binding, or, for logging, the existing logging lifecycle owners.
 10. Task completion is an engine-validated candidate fact published only with successful completion of the whole workflow and its required evidence. No task commits independently; the model cannot request `[X]` directly.
 11. Unsupported or unreadable reference files are never silently skipped.
@@ -197,7 +197,7 @@ engine fixes them:
     adds the fixed stage sequence of one model request to those kernel
     responsibilities. The stage sequence is not a domain sequence; YAML still
     selects each request step and every outcome. Under
-    [ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), a stage
+    [ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), a stage
     action's absorbed steps become functions, not source-only operations. Its fixed
     internal sequence routes no outcome, so it does not compete with the compiled
     YAML graph.
@@ -401,7 +401,7 @@ The catalogue has one entry per registered operation: its code owner, what it re
 writes, its single responsibility and its rejections. An entry marked "Proposed, no code"
 names a responsibility no code registers yet; Plan, Tasks and Implement design rewrites those
 when it starts (user decision, 9 November 2026). Under
-[ADR 0031](decisions/0031-stage-actions.md) (not yet implemented), the entries a stage action
+[ADR 0031](decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), the entries a stage action
 absorbs become one stage-action entry that lists its internal steps, each keeping its former
 entry's rules. All actions follow [§6](#6-common-action-and-orchestrator-contract) and
 [§25](#25-atomic-workflow-execution-and-output).
@@ -853,7 +853,7 @@ The new engine is ready for production evaluation when all of the following are 
 8. **Mandatory feature logging.**
     - Mandatory metadata event logs use fixed-header pipe-delimited `feature-log/v2` beneath
       `<paths.specs>/<featureId>/logs/`.
-    - Logs use only the compiler-locked `event-columns/v2` and `prompt-columns/v3` headings.
+    - Logs use only the compiler-locked `event-columns/v3` and `prompt-columns/v3` headings.
       Each segment has one exact heading and validated segment control rows.
     - Every event/prompt row carries the selected compiled workflow's registry-validated
       `workflow_shortcode` and the registry-owned `level`.
@@ -1139,7 +1139,7 @@ gives its title and status.
 | [0028](decisions/0028-anthropic-messages-provider.md) | Anthropic Messages API provider on shared provider owners | Accepted amendment |
 | [0029](decisions/0029-bedrock-model-families.md) | Bedrock model families | Accepted amendment |
 | [0030](decisions/0030-engine-owned-model-request.md) | One engine-owned step per model request | Accepted amendment, amended 23 October 2026; partly implemented: provider token counting is removed and each catalogue entry requires `requestTimeoutMs`; the `request-model` step is not yet implemented |
-| [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; not yet implemented |
+| [0031](decisions/0031-stage-actions.md) | One action per deterministic stage | Accepted amendment; partly implemented: `prepare-toolchain` is the first stage action; every other stage is not yet converted |
 | [0032](decisions/0032-engine-routines.md) | Typed engine routines for fixed engine sequences | Accepted amendment; not yet implemented |
 | [0033](decisions/0033-generic-repair-operations.md) | Generic repair operations with owner-supplied rules | Accepted amendment; not yet implemented |
 | [0034](decisions/0034-spec-quality-gate.md) | Specify quality gate before Plan | Accepted |

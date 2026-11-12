@@ -190,6 +190,8 @@ pub const TelemetryFields = struct {
     diagnostic_code: ?DiagnosticCode = null,
     validator_id: ?Identifier = null,
     rule_id: ?Identifier = null,
+    /// The internal step of a stage action at which a failed action stopped (ADR 0031).
+    step_id: ?Identifier = null,
     model_route_id: ?Identifier = null,
     model_profile_id: ?Identifier = null,
     input_tokens: ?u64 = null,

@@ -32,7 +32,7 @@ resources:
   packet-guidance: spec/packet-guidance.json
 steps:
   toolchain:
-    call: prepare-toolchain
+    use: prepare-toolchain
     on:
       ok: inputs
       failed: end.failed
@@ -179,36 +179,6 @@ steps:
       blocked: end.blocked
       failed: end.failed
 subgraphs:
-  prepare-toolchain:
-    start: capture-project
-    steps:
-      capture-project:
-        use: capture-project-toolchain
-        on: {ok: inventory-presets, failed: end.failed}
-      inventory-presets:
-        use: inventory-toolchain-presets
-        on: {ok: capture-presets, failed: end.failed}
-      capture-presets:
-        use: capture-toolchain-presets
-        on: {ok: parse-toolchain, failed: end.failed}
-      parse-toolchain:
-        use: parse-toolchain-documents
-        on: {ok: validate-project, failed: end.failed}
-      validate-project:
-        use: validate-project-toolchain-schema
-        on: {ok: validate-registry, failed: end.failed}
-      validate-registry:
-        use: validate-toolchain-preset-registry
-        on: {ok: inherit, failed: end.failed}
-      inherit:
-        use: resolve-toolchain-inheritance
-        on: {ok: compose, failed: end.failed}
-      compose:
-        use: compose-toolchain
-        on: {ok: validate-safety, failed: end.failed}
-      validate-safety:
-        use: validate-toolchain-safety
-        on: {ok: end.ok, failed: end.failed}
   prepare-inputs:
     start: normalize-feature
     steps:
