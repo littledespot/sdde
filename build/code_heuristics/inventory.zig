@@ -7,7 +7,7 @@ const brittleness = @import("brittleness.zig");
 const directories = @import("../../src/adapters/filesystem/directory_access.zig");
 const files = @import("../../src/adapters/filesystem/file_access.zig");
 const projection = @import("../../src/test_fixtures/request_projection.zig");
-const provider_config = @import("../../src/actions/provider/decode_llm_provider_config.zig");
+const provider_config = @import("../../src/domain/llm_provider_document_decode.zig");
 const provider_models = @import("../../src/composition/provider_model_contracts.zig");
 const e2e_case = @import("../../test/harness/e2e/contracts.zig");
 const evaluation_case = @import("../../test/harness/contracts.zig");
@@ -116,7 +116,7 @@ pub const Specifics = struct { models: []const []const u8, cases: []const []cons
 /// evaluation panel's feature and case IDs and sources, each read by its owner.
 pub fn specifics(a: std.mem.Allocator, io: std.Io, root: std.Io.Dir) !Specifics {
     var models: std.ArrayList([]const u8) = .empty;
-    var catalogue = try (provider_config.Action{}).execute(a, try read(a, io, root, "test/e2e/config/.sddproviders.json"));
+    var catalogue = try provider_config.decode(a, try read(a, io, root, "test/e2e/config/.sddproviders.json"));
     defer catalogue.deinit();
     for (catalogue.value().providers) |provider| for (provider.models) |entry| try models.append(a, try a.dupe(u8, entry.model));
     for (provider_models.registry.entries) |entry| if (entry.model) |id| try models.append(a, id.bytes);

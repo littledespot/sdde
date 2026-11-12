@@ -581,8 +581,9 @@ The three preparation subgraphs the E2 preflight named (`prepare-toolchain`, `pr
 
 ### E3. Engine routines (A3, ADR 0032)
 
-Not started. Convert startup first and measure it (ADR 0032:144-151). Feature logging waits on
-its preconditions (:152-172): no test covers cancellation under a log lock, and the
+**Startup and provider bootstrap converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E3; the
+user's "apply recommendations and implement"). Still open: feature logging, which waits on its
+preconditions (ADR 0032:152-172): no test covers cancellation under a log lock, and the
 policy-transition coordinator waits on E6's §14.10 decision. **DE3 confirmed 12 November
 2026** (user: "yes"): ADR 0032's derived choices 1–8 (:224-241), including offline evidence.
 
@@ -1095,9 +1096,9 @@ again after each failure.
   diagnostic is dropped (`provider_response_assembly.zig:127`). So a missing key, HTTP 401, 403
   or 429 and a DNS or TLS failure should all read `failed`. Not executed.
 - **Workflow definition:** every schema, compile and graph rejection is one of two codes with
-  no step, key or rule (`compile_workflow_graphs.zig:13`; 66 `invalid()` lines there, 38 in
-  `validate_compiled_workflow_graphs.zig`, 69 in `validate_workflow_definition_schema.zig`;
-  mapped at `bootstrap_workflow_runner.zig:212`, `:224`, `:255`, `:265`). A key missed from a
+  no step, key or rule (`workflow_graph_compilation.zig`, `workflow_graph_validation.zig` and
+  `workflow_definition_schema.zig` return one `invalid()` error each; the startup routine maps
+  the failing step to its code in `startup_routine.zig` `code`). A key missed from a
   hand-written invalidation list (`source_omission.zig:343`, `:345`; `required_authority.zig:124`)
   fails the same way, because the data-flow check rejects producing a key that is still
   available (`workflow_data_flow.zig:87-95`).
@@ -1283,7 +1284,7 @@ for isn't measured (C17).
 - `token_classification_validation.zig:213` hashes every source byte into a value whose only
   use is a copy (`build_preserved_token_claims.zig:38`; traced).
 - Graph validations run two or three times at startup (traced), with the retry-authority block
-  duplicated (`validate_compiled_workflow_graphs.zig:54-68`; `workflow_registry.zig:172-186`).
+  duplicated (`workflow_graph_validation.zig`; `workflow_registry.zig:172-186`).
 
 **C16. Source review, when it runs, sends the whole evidence catalogue with every per-subject
 request** (`specification_support.zig:129`; traced: the ledger is rebuilt nine times a subject).

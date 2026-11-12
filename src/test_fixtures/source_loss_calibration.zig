@@ -491,12 +491,13 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
 /// cannot drift from it or accept an entry the engine would refuse.
 fn catalogueMaximum(a: std.mem.Allocator) !@import("../domain/llm_provider_contracts.zig").ModelMaximumOutput {
     const registered = &@import("../composition/provider_model_contracts.zig").registry;
-    var catalogue = try (@import("../actions/provider/decode_llm_provider_config.zig").Action{}).execute(a, try read(a, "test/e2e/config/.sddproviders.json"));
+    const provider_steps = @import("../application/model_provider_bootstrap_routine.zig").steps;
+    var catalogue = try provider_steps.decodeConfig(a, try read(a, "test/e2e/config/.sddproviders.json"));
     defer catalogue.deinit();
-    var candidate = try (@import("../actions/provider/build_llm_provider_registry.zig").Action{ .contracts = registered }).execute(a, catalogue.value());
+    var candidate = try provider_steps.buildRegistry(registered, a, catalogue.value());
     defer candidate.deinit();
     const registry = @import("../domain/llm_provider_registry.zig");
-    const owner = try (@import("../actions/provider/validate_llm_provider_registry.zig").Action{ .contracts = registered }).execute(a, candidate);
+    const owner = try provider_steps.validateRegistry(registered, a, candidate);
     defer registry.deinitOwner(owner);
     const entry = registry.registry(owner).resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "openai.gpt-oss-20b-1:0" }) orelse return error.InvalidCalibrationCatalogue;
     return switch (entry.config) {

@@ -12,7 +12,7 @@ pub fn parse(args: []const []const u8) ![]const u8 {
 }
 
 pub fn preflight(a: std.mem.Allocator, config_bytes: []const u8) !void {
-    var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, config_bytes);
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, config_bytes);
     defer config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&config.value().models);
     try @import("../frozen_binding.zig").validateModels(a, &config.value().models);

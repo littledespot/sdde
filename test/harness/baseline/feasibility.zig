@@ -143,7 +143,7 @@ fn readEvidence(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, path: 
     const input_bytes = try files.read(io, a, run, "inputs.json");
     const input = try contracts.decode(@import("../e2e/fixture.zig").Capture, a, input_bytes);
     try @import("../compatibility/cli.zig").preflight(a, input.config);
-    var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, input.config);
+    var expected_config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, input.config);
     defer expected_config.deinit();
     if (!std.mem.eql(u8, input.config_source, selected.config) or !std.mem.eql(u8, input.evaluation.case_source, selected.evaluation_case) or
         input.files.len != selected.files.len or

@@ -4,7 +4,7 @@ Part of [design §13](../../design.md#13-action-catalogue). Action names define 
 boundaries under [§6](../06-pipeline-nodes.md). Results remain execution-local until
 whole-workflow publication; [§25](../25-publication.md) and the clarification exception apply.
 
-> **ADR 0032 (not yet implemented).** The two `specify` invocation actions below become the
+> **ADR 0032 (not yet implemented for the Specify invocation).** The two `specify` invocation actions below become the
 > internal functions of one [ADR 0031](../../decisions/0031-stage-actions.md) stage action
 > (parse, then validate, side effect `none`), named by the definition's `invoke:` field and run
 > by the engine before the graph starts ([ADR 0032](../../decisions/0032-engine-routines.md)).

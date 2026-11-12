@@ -5,8 +5,6 @@ const config = @import("../../src/domain/config.zig");
 const bootstrap_root_registry = @import("../../src/domain/bootstrap_root_registry.zig");
 const toolchain_authority_source = @import("../../src/adapters/filesystem/toolchain_authority_source.zig");
 const toolchain_documents = @import("../../src/adapters/parsers/toolchain_documents.zig");
-const read = @import("../../src/actions/config/read_engine_config.zig");
-const decode = @import("../../src/actions/config/decode_sddtoolkit_config.zig");
 const workflow = @import("../../src/domain/workflow.zig");
 const workflow_compilation = @import("../../src/domain/workflow_compilation.zig");
 const workflow_execution = @import("../../src/domain/workflow_execution.zig");
@@ -14,7 +12,7 @@ const telemetry = @import("../../src/domain/telemetry.zig");
 const request_projection = @import("../../src/test_fixtures/request_projection.zig");
 const model_provider_requirement = @import("../../src/domain/model_provider_requirement.zig");
 const llm_provider_identity = @import("../../src/domain/llm_provider_identity.zig");
-const bootstrap_orchestrator = @import("../../src/application/bootstrap_orchestrator.zig");
+const bootstrap_services = @import("../../src/application/bootstrap_services.zig");
 const llm_provider_contracts = @import("../../src/domain/llm_provider_contracts.zig");
 const llm_provider_registry = @import("../../src/domain/llm_provider_registry.zig");
 const repository_model_allowlist = @import("../../src/domain/repository_model_allowlist.zig");
@@ -22,7 +20,6 @@ const toolchain = @import("../../src/domain/toolchain.zig");
 const run_outcome = @import("../../src/domain/run_outcome.zig");
 const workflow_engine = @import("../../src/application/workflow_engine_orchestrator.zig");
 const model_provider_bootstrap_binding = @import("../../src/application/model_provider_bootstrap_binding.zig");
-const model_provider_bootstrap_orchestrator = @import("../../src/application/model_provider_bootstrap_orchestrator.zig");
 const model_provider_bootstrap_services = @import("../../src/application/model_provider_bootstrap_services.zig");
 const llm_provider_registry_service = @import("../../src/application/llm_provider_registry_service.zig");
 const core_workflow_operations = @import("../../src/composition/core_workflow_operations.zig");
@@ -61,7 +58,7 @@ fn runInvocationInProjectWithRuntime(io: std.Io, allocator: std.mem.Allocator, p
 // Integration-test wiring for supplied operation registries and provider probes.
 fn testBootstrappedInvocation(
     allocator: std.mem.Allocator,
-    boot: *bootstrap_orchestrator.Outcome,
+    boot: *bootstrap_services.Outcome,
     arguments: []const []const u8,
     operation_registry: *const workflow_operation_registry.Registry,
     provider_bootstrap: model_provider_bootstrap_binding.Binding,
@@ -89,7 +86,7 @@ fn runInProject(
     io: std.Io,
     allocator: std.mem.Allocator,
     project_root: std.Io.Dir,
-) bootstrap_orchestrator.Outcome {
+) bootstrap_services.Outcome {
     return runInProjectWithRuntime(io, allocator, project_root, .{});
 }
 
@@ -98,7 +95,7 @@ fn runInProjectWithRuntime(
     allocator: std.mem.Allocator,
     project_root: std.Io.Dir,
     runtime: pipeline.NodeRuntime,
-) bootstrap_orchestrator.Outcome {
+) bootstrap_services.Outcome {
     return runInProjectWithRegistry(io, allocator, project_root, runtime, &core_workflow_operations.registry);
 }
 
@@ -2643,7 +2640,7 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     const a = arena.allocator();
     const repository = std.Io.Dir.cwd();
     const config_bytes = try repository.readFileAlloc(io, "test/e2e/wf-001-hello-world/.sddtoolkit.json", a, .limited(1_048_576));
-    var configuration = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, config_bytes);
+    var configuration = try @import("../../src/domain/engine_config_decode.zig").decode(a, config_bytes);
     defer configuration.deinit();
     const provider_bytes = try repository.readFileAlloc(io, "test/e2e/config/.sddproviders.json", a, .limited(1_048_576));
     // This integration fixture explicitly configures this provider path; the
@@ -3769,7 +3766,7 @@ const InvocationPreparationProbe = struct {
         models: *const config.ModelsConfig,
         temperatures: @import("../../src/domain/model_controls.zig").Temperatures,
         _: *const bootstrap_root_registry.LLMProviderConfigCapability,
-    ) model_provider_bootstrap_orchestrator.Outcome {
+    ) model_provider_bootstrap_binding.Outcome {
         const self: *InvocationPreparationProbe = @ptrCast(@alignCast(context));
         self.prepare_calls += 1;
         self.selected_workflow_id = selected.graph.authority.workflow_id.bytes;

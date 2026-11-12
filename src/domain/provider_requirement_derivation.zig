@@ -1,35 +1,23 @@
 const std = @import("std");
-const compilation = @import("../../domain/workflow_compilation.zig");
-const execution = @import("../../domain/workflow_execution.zig");
-const pipeline = @import("../../domain/pipeline.zig");
-const requirement = @import("../../domain/model_provider_requirement.zig");
-const telemetry = @import("../../domain/telemetry.zig");
-const workflow = @import("../../domain/workflow.zig");
+const compilation = @import("workflow_compilation.zig");
+const execution = @import("workflow_execution.zig");
+const requirement = @import("model_provider_requirement.zig");
+const telemetry = @import("telemetry.zig");
+const workflow = @import("workflow.zig");
 
-pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{
-        .id = "derive-provider-requirement",
-        .kind = .action,
-        .requires = &.{.selected_compiled_workflow},
-        .produces = &.{.model_provider_requirement},
-        .side_effect = .none,
-    };
-
-    pub fn execute(
-        _: Action,
-        selected: *const execution.SelectedWorkflow,
-    ) requirement.Requirement {
-        for (selected.graph.authority.steps) |step| {
-            if (step.model != null) return .required;
-            for (step.capabilities) |capability| {
-                if (std.mem.eql(u8, capability, requirement.capability_id)) {
-                    return .required;
-                }
+/// Whether the selected compiled workflow needs provider bootstrap: any step with a model binding
+/// or the exact provider-call capability. Workflow names never matter.
+pub fn derive(selected: *const execution.SelectedWorkflow) requirement.Requirement {
+    for (selected.graph.authority.steps) |step| {
+        if (step.model != null) return .required;
+        for (step.capabilities) |capability| {
+            if (std.mem.eql(u8, capability, requirement.capability_id)) {
+                return .required;
             }
         }
-        return .not_required;
     }
-};
+    return .not_required;
+}
 
 test "provider-call requirement uses the exact capability and ignores workflow names" {
     try std.testing.expectEqual(
@@ -93,5 +81,5 @@ fn deriveFor(workflow_id: []const u8, capabilities: []const []const u8) requirem
         },
         .graph = &graph,
     };
-    return (Action{}).execute(&selected);
+    return derive(&selected);
 }

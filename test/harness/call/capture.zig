@@ -40,11 +40,11 @@ pub fn load(io: std.Io, allocator: std.mem.Allocator, root: std.Io.Dir, run_path
     const project = try directories.open(io, run, "project");
     defer project.close(io);
     const config_bytes = try files.read(io, a, project, engine_config.engine_config_basename);
-    var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, config_bytes);
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, config_bytes);
     errdefer config.deinit();
     const policy = try @import("../../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(io, project).resolve(a);
-    const specs = try (@import("../../../src/actions/bootstrap/validate_configured_root_path_policy.zig").Action{ .policy = policy }).execute(a, .specs, config.config.paths.specs);
-    const providers = try (@import("../../../src/actions/bootstrap/validate_llm_provider_config_path_policy.zig").Action{ .policy = policy }).execute(a, config.config.paths.providers);
+    const specs = try @import("../../../src/domain/bootstrap_root_derivation.zig").normalizeRootPath(policy, a, .specs, config.config.paths.specs);
+    const providers = try @import("../../../src/domain/bootstrap_root_derivation.zig").normalizeProviderPath(policy, a, config.config.paths.providers);
     const catalogue = try files.read(io, a, project, providers.relative_path);
     const feature_path = try std.fmt.allocPrint(a, "{s}/{s}", .{ specs.relative_path, selected.feature });
     try paths.path(feature_path);

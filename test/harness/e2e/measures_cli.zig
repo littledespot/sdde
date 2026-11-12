@@ -142,7 +142,7 @@ fn unmeasurable(err: RecordError) RecordError!measures.Unmeasurable.Reason {
 /// The run's measures. Its report may be missing or of a known older version; a
 /// missing call output or feature event log leaves its measures empty.
 fn measureRecords(io: std.Io, a: std.mem.Allocator, run: std.Io.Dir) !measures.Measured {
-    var configured = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, try files.read(io, a, run, "project/" ++ config.engine_config_basename));
+    var configured = try @import("../../../src/domain/engine_config_decode.zig").decode(a, try files.read(io, a, run, "project/" ++ config.engine_config_basename));
     defer configured.deinit();
     const reported: ?c.Report = report: {
         const bytes = files.read(io, a, run, "report.json") catch |err| switch (err) {

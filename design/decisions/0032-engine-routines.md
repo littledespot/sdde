@@ -1,16 +1,16 @@
 # ADR 0032: Typed engine routines for fixed engine sequences
 
-- **Status:** Accepted amendment. **Not yet implemented:** startup, provider bootstrap and
-  feature logging still run through child bindings until their conversions land.
-  Documents that describe those orchestrators carry a pointer to this ADR until then.
+- **Status:** Accepted amendment. **Partly implemented:** startup and provider bootstrap are
+  engine routines. Feature logging still runs through child bindings until its conversion
+  lands, and documents that describe those orchestrators carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
 - **Decision authority:** The user's instruction on 22 October 2026, "update the docs
   around yes, form b". It decides FIX05 (`fixes/Z_FIX05.md` §21, git `194e29a`) A3 as
   option (b): fixed engine sequences become typed routines in the pattern of
   [ADR 0031](0031-stage-actions.md), starting with startup. The user had earlier ranked
   the criteria for this proof of concept: "refactoring to best possible outcomes is the
-  most important". The choices under "Derived under existing rules" follow from existing
-  authority and await the user's confirmation.
+  most important". The user confirmed the choices under "Derived under existing rules" on
+  12 November 2026 (DE3), including that offline evidence replaces a live run for startup.
 - **Amends:**
   - AGENTS.md "Actions, orchestrators, and runner" (the startup-graph line), "Testing
     expectations" and the capability-leak review rule;
@@ -219,7 +219,7 @@ claimed".
 ## Derived under existing rules
 
 The user approved option (b). These choices are derived from existing authority, not
-from the user's words, and await the user's confirmation:
+from the user's words. The user confirmed them on 12 November 2026 (DE3):
 
 1. **Category and location:** a third category, the engine routine, in
    `src/application/*_routine.zig`, importing only domain and ports. No existing file

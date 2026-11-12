@@ -245,7 +245,8 @@ Generate large path/task/requirement spaces to prove invariants:
 
 Use spy child nodes; no real filesystem/model ports are available to the orchestrator.
 
-[ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented) replaces the spy-binding
+[ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
+bootstrap; feature logging not yet) replaces the spy-binding
 tests below with routine tests once each sequence converts. This covers the bootstrap,
 provider-bootstrap and feature-logging cases. Each converted engine routine is tested with fake
 ports for:
@@ -277,7 +278,7 @@ survive. The `specify` invocation cases become ADR 0031 stage-action tests.
 - an unrelated compiled workflow that does not reference SDD target-context
   setup never invokes feature-directory, preset, principle, or
   feature-lock children;
-- the fixed engine-startup graph is runnable before any project graph exists,
+- the fixed engine-startup routine is runnable before any project graph exists,
   is absent from the selectable registry, and cannot be extended or replaced by
   a project definition;
 - provider bootstrap:
@@ -285,8 +286,9 @@ survive. The `specify` invocation cases become ADR 0031 stage-action tests.
     registered effective capabilities;
   - cannot be activated by workflow/node names, parameters, configuration or
     policy allowance alone;
-  - exposes only runner-owned child bindings on the fixed provider-bootstrap orchestrator;
-  - makes every provider-file child unreachable for `not_required`;
+  - is reached only through its runner-owned binding and takes only the provider-config port,
+    one per step;
+  - makes every provider-file step unreachable for `not_required`;
   - captures a required document once and keeps the derived immutable registry/
     allowlist authoritative without active-run reread or refresh;
 - invalid reference preflight prevents artifact creation;

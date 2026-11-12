@@ -144,8 +144,8 @@ beyond those named.
 - **String kind:** a `[]const u8` member never decodes from an array of byte values. The engine
   decoders use `strict_json`: `decodeAuthored` for a document a user writes (a member with a
   default may be omitted, a present member keeps its wire kind, a defaulted optional is absent
-  or a value and never `null`) in `decode_sddtoolkit_config.zig`; `decode`, which requires every
-  member, for `decode_llm_provider_config.zig` and the clarification-state parser. So
+  or a value and never `null`) in `engine_config_decode.zig`; `decode`, which requires every
+  member, for `llm_provider_document_decode.zig` and the clarification-state parser. So
   `reasoningEffort` is a string when present and `null` rejects (F0001; ADR 0039:84-86 is the
   precedent). An architecture rule (`architecture_test.zig`) forbids a typed `std.json` decode
   in the action, adapter, application and composition layers. The harness and build tools that
@@ -643,3 +643,66 @@ best practice recommendations", 12 November 2026).
   | Composed test fixtures | 3 variants plus the ingestion fixture | one `prepared` composition plus the ingestion fixture |
 - **Rule:** the Unicode text services are one port family for ADR 0031's one-port rule; any other
   step that mixes two port modules is rejected.
+
+## E3. Startup and provider bootstrap are ADR 0032 engine routines
+
+**Implemented 12 November 2026** (user: "apply recommendations and implement", after DE3). One
+change covers all three sequences: provider-config, provider bootstrap after selection, and startup
+before selection. No behaviour changes: public error codes, the cancel-versus-fail mapping, the
+services built, the absence of a lock, and nothing registered or selectable are as before. No
+published-output defect class is named and no semantic benefit is claimed; offline evidence
+stands in for a live run (DE3), and no live set was taken. **Not yet kept.** ADR 0032's status
+is "partly implemented" and the design pointers say so; feature logging stays unconverted.
+- **Owners:**
+  - `src/application/startup_routine.zig`: 29 steps in a closed `Step` enum, a routine-owned
+    `Diagnostic` slot, a `Ports` set no step receives, `code(step)` for the public code of each
+    step, and a `NodeRuntime` check before the first step and after each. Its steps take one port
+    each (`config_locator`, `root_inspector`, the workflow `Enumerator` and `Capturer`, the
+    definition `Parser`, the result-schema `Compiler`); the path limits and the registered
+    operation contracts are values. `validateWorkflowInventory` returns `ValidatedInventory` and
+    `validateWorkflowOperations` returns `ValidatedOperations`, which the later steps require.
+    The composition root builds the ports and the services from the routine's validated owners
+    (`runInProjectWithRegistry`); the `Outcome` type lives in `bootstrap_services.zig`.
+  - `src/application/model_provider_bootstrap_routine.zig`: 7 steps, one port (the provider
+    document locator); `not_required` makes no port call. Reached through the runner-owned
+    `model_provider_bootstrap_binding.zig`.
+  - Moved logic, with its tests: `engine_config_decode`, `bootstrap_root_derivation`,
+    `workflow_authority_inventory_build`, `workflow_resource_binding`,
+    `workflow_definition_schema`, `workflow_graph_compilation`, `workflow_graph_validation`,
+    `llm_provider_document_decode`, `llm_provider_registry_build` and
+    `provider_requirement_derivation` (all `src/domain/`).
+- **Removed:** 14 sequencing files (the startup orchestrator, runners, execution state and child
+  bindings; the provider-config and provider-bootstrap orchestrators, runners, child bindings
+  and service), 29 startup and provider actions, 27 `DataKey`s (5 provider, 22 startup; 142
+  remain), and the 11 spy-child tests. `validate-workflow-operation-registry` stays: the workflow
+  selection runner still uses it.
+- **Rules:** the architecture test enforces ADR 0032:291-303 for the two routines: imports only
+  `std`, domain and port modules, no `std.Io`, no `anyopaque`, an entry that only passes port
+  fields on, no step that takes the port set, two ports or an erased parameter, and only
+  `src/composition/`, tests and the provider-bootstrap binding (for its own routine) import a
+  routine, with startup importing no log, lock or transaction module; every `*_routine.zig`
+  under `src/application/` is discovered and held to the routine rules; each rule has rejected
+  fixtures.
+- **Tests:** `src/startup_routine_test.zig` runs the routine against fake ports: port order, each
+  reachable failing step with its code and step, cancellation from a port, cancellation and
+  deadline at every check (one more check than there are steps), an allocation-failure sweep
+  that must leak nothing and report a step whose code matches, the distinct validated types, and
+  the moved step tests. `bootstrap_root_registry_test.zig` carries the registry validator's tests.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); integration scenarios pass; `zig build verify` passes (169 of
+  169 steps, 2,060 tests); lint and the architecture tests pass.
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Sequencing files and lines (startup and provider sequences) | 14 files, 2,157 lines | 2 routine files, 810 lines (594 and 216) |
+  | `anyopaque` lines in the converted sequences | 130 | 2 (the provider-bootstrap binding's; none in either routine; 105 in all of `src/application/`) |
+  | Startup `DataKey`s | 42 | 15 |
+  | Spy-child tests | 11 | 0 |
+  | Files to add one startup step | an action, its runner field and invoke function, a vtable slot, the orchestrator call, the dispatcher function, a spy-table entry, composition wiring | the routine (enum member, step, entry call, `code` arm) and its test; composition only for a new port |
+
+  The routine files do not hold the moved logic: the domain modules above total about 2,400
+  lines, so total lines fall less than the sequencing lines do. The last row is read from the
+  structure, not measured by a counted change.
+- **Open:** feature logging (ADR 0032:152-172); the remaining `anyopaque` lines are the
+  feature-logging, workflow-engine, workflow-pipeline and Specify-invocation bindings.

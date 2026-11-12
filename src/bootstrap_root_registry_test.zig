@@ -1,29 +1,6 @@
 const std = @import("std");
-const bootstrap_roots = @import("../../domain/bootstrap_roots.zig");
-const bootstrap_root_registry = @import("../../domain/bootstrap_root_registry.zig");
-const pipeline = @import("../../domain/pipeline.zig");
-
-pub const Error = error{BootstrapRootRegistryInvalid};
-
-pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{
-        .id = "validate-bootstrap-root-registry",
-        .kind = .action,
-        .requires = &.{.bootstrap_root_registry},
-        .produces = &.{.bootstrap_root_registry_evidence},
-        .side_effect = .none,
-    };
-
-    pub fn execute(
-        _: Action,
-        allocator: std.mem.Allocator,
-        candidate: bootstrap_roots.BootstrapRootRegistryCandidate,
-    ) Error!*bootstrap_root_registry.Owner {
-        return bootstrap_root_registry.createValidated(allocator, candidate) catch {
-            return error.BootstrapRootRegistryInvalid;
-        };
-    }
-};
+const bootstrap_roots = @import("domain/bootstrap_roots.zig");
+const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 
 fn validCandidate() bootstrap_roots.BootstrapRootRegistryCandidate {
     const paths = [_][]const u8{
@@ -80,7 +57,7 @@ fn validCandidate() bootstrap_roots.BootstrapRootRegistryCandidate {
 }
 
 test "accepts the exact seven mappings and sole archive nesting exception" {
-    const owner = try (Action{}).execute(std.testing.allocator, validCandidate());
+    const owner = try bootstrap_root_registry.createValidated(std.testing.allocator, validCandidate());
     defer bootstrap_root_registry.deinitOwner(owner);
     const registry = bootstrap_root_registry.registry(owner);
     const workflow_authority = registry.workflowAuthority();
@@ -93,7 +70,7 @@ test "accepts the exact seven mappings and sole archive nesting exception" {
 }
 
 test "publishes each configured root through one concrete typed accessor" {
-    const owner = try (Action{}).execute(std.testing.allocator, validCandidate());
+    const owner = try bootstrap_root_registry.createValidated(std.testing.allocator, validCandidate());
     defer bootstrap_root_registry.deinitOwner(owner);
     const registry = bootstrap_root_registry.registry(owner);
     const capabilities = [_]*const bootstrap_root_registry.ConfiguredBaseRootCapability{
@@ -122,14 +99,14 @@ test "rejects duplicate missing relabelled and case-fold-equivalent capabilities
     duplicate.configured_roots[1].path_key = .specs;
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, duplicate),
+        bootstrap_root_registry.createValidated(std.testing.allocator, duplicate),
     );
 
     var relabelled = validCandidate();
     relabelled.configured_roots[1].root_role = .workflow_authority;
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, relabelled),
+        bootstrap_root_registry.createValidated(std.testing.allocator, relabelled),
     );
 
     var collision = validCandidate();
@@ -137,7 +114,7 @@ test "rejects duplicate missing relabelled and case-fold-equivalent capabilities
     collision.configured_roots[1].canonical_path = "/project/SPECS";
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, collision),
+        bootstrap_root_registry.createValidated(std.testing.allocator, collision),
     );
 }
 
@@ -147,7 +124,7 @@ test "rejects every undeclared nesting direction and physical alias" {
     nested.configured_roots[1].canonical_path = "/project/specs/reference";
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, nested),
+        bootstrap_root_registry.createValidated(std.testing.allocator, nested),
     );
 
     var reverse_archive = validCandidate();
@@ -155,7 +132,7 @@ test "rejects every undeclared nesting direction and physical alias" {
     reverse_archive.configured_roots[0].canonical_path = "/project/specs/archive/active";
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, reverse_archive),
+        bootstrap_root_registry.createValidated(std.testing.allocator, reverse_archive),
     );
 
     var alias = validCandidate();
@@ -167,7 +144,7 @@ test "rejects every undeclared nesting direction and physical alias" {
     };
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, alias),
+        bootstrap_root_registry.createValidated(std.testing.allocator, alias),
     );
 }
 
@@ -180,7 +157,7 @@ test "does not confuse equal file ids from different filesystems" {
         .directory = .{ .filesystem_id = 2, .file_id = 77 },
     };
 
-    const owner = try (Action{}).execute(std.testing.allocator, candidate);
+    const owner = try bootstrap_root_registry.createValidated(std.testing.allocator, candidate);
     defer bootstrap_root_registry.deinitOwner(owner);
 }
 
@@ -189,7 +166,7 @@ test "rejects a canonical path that does not match its normalized relative path"
     mismatched.configured_roots[1].canonical_path = "/project/other";
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, mismatched),
+        bootstrap_root_registry.createValidated(std.testing.allocator, mismatched),
     );
 }
 
@@ -202,7 +179,7 @@ test "rejects provider document collision nesting and wrong basename" {
     };
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, nested),
+        bootstrap_root_registry.createValidated(std.testing.allocator, nested),
     );
 
     var wrong_basename = validCandidate();
@@ -213,7 +190,7 @@ test "rejects provider document collision nesting and wrong basename" {
     };
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, wrong_basename),
+        bootstrap_root_registry.createValidated(std.testing.allocator, wrong_basename),
     );
 
     var beneath_engine_config = validCandidate();
@@ -224,7 +201,7 @@ test "rejects provider document collision nesting and wrong basename" {
     };
     try std.testing.expectError(
         error.BootstrapRootRegistryInvalid,
-        (Action{}).execute(std.testing.allocator, beneath_engine_config),
+        bootstrap_root_registry.createValidated(std.testing.allocator, beneath_engine_config),
     );
 }
 
@@ -240,7 +217,7 @@ test "rejects provider document nesting beneath every configured directory role"
         };
         try std.testing.expectError(
             error.BootstrapRootRegistryInvalid,
-            (Action{}).execute(std.testing.allocator, candidate),
+            bootstrap_root_registry.createValidated(std.testing.allocator, candidate),
         );
     }
 }

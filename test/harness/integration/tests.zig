@@ -181,7 +181,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                     if (changed_part) break;
                 }
                 try std.testing.expect(changed_part);
-                try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("../../../src/actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(a, &.{invalid_graph}));
+                try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("../../../src/domain/workflow_graph_validation.zig").validate(a, &.{invalid_graph}));
             }
             const protocol = for (captured.files) |file| {
                 if (std.mem.eql(u8, file.mapping.source, "design/workflows/spec/protocol.prompt.md")) break file.bytes;

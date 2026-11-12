@@ -7,7 +7,7 @@
 unrelated F0004 design.
 
 **Implementation:** The bounded configured-root capability increment is
-implemented by [the bootstrap root runner](../../src/application/bootstrap_root_runner.zig).
+implemented by [the startup routine](../../src/application/startup_routine.zig).
 It begins with F0001's immutable configuration and exact
 project-root descriptor and ends with one service exposing the validated
 immutable `BootstrapRootRegistry`. It does not inventory or read workflow
@@ -41,41 +41,34 @@ is bound to the canonical invocation project root.
 - F0008 likewise consumes only the opaque provider-document capability.
 
 - The service is a read-only owner, not a path resolver or general filesystem authority.
-- Its construction actions own path validation; after validation its concrete
+- Its construction steps own path validation; after validation its concrete
   `registry()` accessor only returns a borrowed immutable registry.
 - It neither reads root contents nor grants a model, orchestrator, or arbitrary caller a
   path or operation capability.
 
 ## 2. Minimal design
 
-The fixed composition-root-owned startup graph invokes the existing governing
-actions through runner-owned bindings:
+The fixed composition-root-owned startup routine runs these steps:
 
-| Action | Sole responsibility |
+| Step | Sole responsibility |
 | --- | --- |
-| `ValidateConfiguredRootPathPolicyAction` | Normalize one configured directory path under the compiler-locked portability rules. |
-| `ValidateLLMProviderConfigPathPolicyAction` | Normalize the provider-document path under the same rules and require the exact `.sddproviders.json` basename. |
-| `ResolveConfiguredBaseRootAction` | Join one normalized directory path to the canonical project root without following an alias or deriving a child path. |
-| `ResolveLLMProviderConfigPathAction` | Join the normalized provider-document path to the canonical project root the same way. |
-| `ValidateConfiguredBaseRootAction` | Convert that one candidate into its typed root-role capability after normalization, containment, representability, no-follow, and existence/type checks. |
-| `BuildBootstrapRootRegistryIdAction` | Construct only the self-validating `(canonical project root, bootstrap-root contract version)` identity. |
-| `BuildBootstrapRootRegistryAction` | Assemble the seven validated directory capabilities and one provider-document capability exactly once under that identity. |
-| `ValidateBootstrapRootRegistryAction` | Prove exact key/role coverage and the complete configured-location collision and nesting policy. |
+| `validate_root_paths` | Normalize one configured directory path under the compiler-locked portability rules. |
+| `validate_provider_path` | Normalize the provider-document path under the same rules and require the exact `.sddproviders.json` basename. |
+| `resolve_roots` | Join one normalized directory path to the canonical project root without following an alias or deriving a child path. |
+| `resolve_provider_path` | Join the normalized provider-document path to the canonical project root the same way. |
+| `validate_roots` | Convert that one candidate into its typed root-role capability after normalization, containment, representability, no-follow, and existence/type checks. |
+| `build_registry_id` | Construct only the self-validating `(canonical project root, bootstrap-root contract version)` identity. |
+| `build_root_registry` | Assemble the seven validated directory capabilities and one provider-document capability exactly once under that identity. |
+| `validate_root_registry` | Prove exact key/role coverage and the complete configured-location collision and nesting policy. |
 
-- No action calls another action.
-- The startup orchestrator coordinates only the runner-owned bindings, the runner alone
-  validates and applies node deltas, and the composition root alone constructs the
-  filesystem/path adapter and fixed bindings.
-- The orchestrator receives no filesystem, path-normalizer, config, registry-builder, or
-  logger capability.
-- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the startup
-  sequence becomes a typed engine routine run by the composition root.
+- No step calls another step.
+- Under [ADR 0032](../decisions/0032-engine-routines.md), the startup sequence is a typed
+  engine routine run by the composition root, which alone constructs the filesystem/path
+  adapter and its ports.
   - Each step takes only the port it uses, and values pass as typed arguments instead of
     runner-applied deltas.
-  - Fake-port routine tests replace the spy-binding verification.
-  - The codes, cancellation behaviour and properties here are unchanged, and "uses only
-    runner-owned bindings" (AC 9) is read as "reached only through the composition root".
-- Only after final registry validation does the runner construct one
+  - Fake-port routine tests verify the steps.
+- Only after final registry validation does the composition root construct one
   `BootstrapRootRegistryService`.
 
 ## 3. Input, output, and ownership
@@ -249,15 +242,15 @@ or creates an alternative control branch.
    physical file-identity alias at open time.
 6. `workflows` is an existing readable no-follow directory at preselection.
    An existing peer is also a directory; an absent peer grants no operation.
-7. The runner constructs exactly one service only after complete validation;
+7. The composition root constructs exactly one service only after complete validation;
    `registry()` returns the same borrowed immutable value without I/O,
    validation, allocation, or mutation.
 8. No raw path string, untyped absolute path buffer, adapter handle, mutable
    map, copied projection, or partial registry is published. Consumers receive
    only the borrowed registry and its typed opaque directory/file
    capabilities.
-9. The fixed startup graph is nonselectable and not project-extensible, uses
-   only runner-owned bindings, and acquires no feature transaction
+9. The fixed startup routine is nonselectable and not project-extensible, is reached
+   only through the composition root, and acquires no feature transaction
    lock.
 10. Every invalid input or operational failure publishes no service or registry
     and stops before workflow loading or any downstream operation.
@@ -283,9 +276,8 @@ Implementation evidence must cover:
   including collisions whose leaves are absent;
 - proof that adding a caller or a new workflow cannot relabel a capability or
   bypass the shared owner;
-- action tests with narrow fake path/filesystem ports, orchestrator spy-binding
-  order/failure propagation, cleanup on every terminal class, and architecture
-  tests that keep adapters out of domain/actions that do not need them and all
-  operation ports out of the orchestrator; and
+- step tests with narrow fake path/filesystem ports, routine step order/failure
+  propagation, cleanup on every terminal class, and architecture
+  tests that keep adapters out of the routine and its domain modules; and
 - a clean native-executable test using a relocated project root and no source,
   example, schema, or packaged fallback assets.

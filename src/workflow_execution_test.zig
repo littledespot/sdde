@@ -458,7 +458,7 @@ test "pending independent prohibiting outcome prevents publication finalization 
 
 test "maximum graph validates executes every operation and rejects cycles and overflow" {
     const definition = @import("domain/workflow_definition.zig");
-    const validate = @import("actions/workflow/validate_compiled_workflow_graphs.zig");
+    const validate = @import("domain/workflow_graph_validation.zig");
     const maximum = definition.max_steps;
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -484,7 +484,7 @@ test "maximum graph validates executes every operation and rejects cycles and ov
     graph.authority.steps = steps[0..maximum];
     graph.authority.transitions = transitions;
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
-    _ = try (validate.Action{}).execute(a, &.{graph});
+    _ = try validate.validate(a, &.{graph});
     var control: OperationControl = .{ .state = .{ .outcome = .ok } };
     var barrier: FakeBarrier = .{};
     var registry = testRegistry(&control);
@@ -498,11 +498,11 @@ test "maximum graph validates executes every operation and rejects cycles and ov
     try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
 
     transitions[(maximum - 1) * 2].target = .{ .step = steps[0].id };
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}));
     transitions[(maximum - 1) * 2].target = .{ .terminal = .ok };
     graph.authority.steps = steps;
     graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(steps).?;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate.Action{}).execute(a, &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, validate.validate(a, &.{graph}));
 
     var bounded = test_steps[0];
     bounded.retry_authority = .{

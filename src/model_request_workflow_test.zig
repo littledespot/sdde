@@ -751,7 +751,7 @@ test "runner rejects tampered accounting permissions and registry rejects hidden
         step.runner_accounting = .none;
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
     var runner = fixture.runner(&tampered, std.testing.allocator);
     defer runner.deinit();
     var harness: Harness = .{ .runner = &runner };
@@ -956,7 +956,7 @@ test "assignment registration and compiled graphs reject hidden authority" {
             if (remove_permission) step.runner_accounting = .none else step.parameters = &.{.{ .id = .{ .bytes = "kind" }, .value = .{ .enumeration = "inference" } }};
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -1428,7 +1428,7 @@ test "authorization compiler and registry reject hidden producers and a forged d
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         var harness: Harness = .{ .runner = &runner };
@@ -1985,7 +1985,7 @@ test "pre-call request closure rejects YAML assertions missing prerequisites and
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -2350,7 +2350,7 @@ test "pre-call termination rejects YAML assertions missing prerequisites and for
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "terminate" }).rejected);
@@ -2563,7 +2563,7 @@ test "request lifecycle cancellation allocation faults and compiler tampering fa
         step.parameters = &.{};
     };
     tampered.authority.steps = steps;
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
 }
 
 const FaultyRequestLifecycle = struct {
@@ -2899,7 +2899,7 @@ test "provider invocation accounting permission and exact compiled profile canno
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try prepareInvocable(&runner);
@@ -5438,7 +5438,7 @@ test "request closure YAML rejects missing evidence hidden reasons and forged co
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "close-request" }).rejected);
@@ -5855,7 +5855,7 @@ test "completion YAML rejects missing observations and outcome delivery or selec
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "complete-operation" }).rejected);
@@ -6313,7 +6313,7 @@ test "compiled payload validation cannot bypass its candidate or add effects" {
                 }
             };
             tampered.authority.steps = steps;
-            try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+            try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
             var runner = fixture.runner(&tampered, std.testing.allocator);
             defer runner.deinit();
             try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).rejected);
@@ -6589,7 +6589,7 @@ test "compiled decoding contracts cannot bypass evidence or add a provider capab
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "decode" }).rejected);
@@ -6860,7 +6860,7 @@ test "compiled observation validation cannot hide its dependencies or add a capa
             }
         };
         tampered.authority.steps = steps;
-        try std.testing.expectError(error.WorkflowGraphCompileInvalid, (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(fixture.arena.allocator(), &.{tampered}));
+        try std.testing.expectError(error.WorkflowGraphCompileInvalid, @import("domain/workflow_graph_validation.zig").validate(fixture.arena.allocator(), &.{tampered}));
         var runner = fixture.runner(&tampered, std.testing.allocator);
         defer runner.deinit();
         try std.testing.expectEqual(.authority, runner.bindings().invokeStep(.{ .bytes = "validate-response" }).rejected);
@@ -7426,8 +7426,8 @@ const Fixture = struct {
         const allocator = self.arena.allocator();
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
         var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const raw = try (@import("actions/workflow/parse_workflow_definitions.zig").Action{ .parser = parser.parser() }).execute(allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
-        const definitions = try (@import("actions/workflow/validate_workflow_definition_schema.zig").Action{}).execute(allocator, raw);
+        const raw = try @import("application/startup_routine.zig").steps.parseWorkflows(parser.parser(), allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
+        const definitions = try @import("domain/workflow_definition_schema.zig").validate(allocator, raw);
         const extra = if (composition_bytes != null) "composition.json" else if (include_static_input) "input.txt" else "context.json";
         const extra_body = composition_bytes orelse if (include_static_input) input_bytes else static_context orelse "";
         const paths = [_][]const u8{ "request.workflow.yaml", "prompt.md", "result.json", extra, "context.json" };
@@ -7446,10 +7446,10 @@ const Fixture = struct {
             5 => &.{ 2, 3, 4, 5 },
             else => unreachable,
         } };
-        const manifest = try (@import("actions/workflow/resolve_workflow_resources.zig").Action{}).execute(allocator, inv, definitions);
+        const manifest = try @import("domain/workflow_resource_binding.zig").resolve(allocator, inv, definitions);
         const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = extra_body }, .{ .ordinal = 5, .bytes = static_context orelse "" } };
-        const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &self.registry, .result_schema_compiler = schema_parser.compiler() }).execute(allocator, definitions, inv, manifest, captures[0 .. count - 1]);
-        _ = try (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(allocator, graphs);
+        const graphs = try @import("domain/workflow_graph_compilation.zig").compile(&self.registry, schema_parser.compiler(), allocator, definitions, inv, manifest, captures[0 .. count - 1]);
+        _ = try @import("domain/workflow_graph_validation.zig").validate(allocator, graphs);
         return &graphs[0];
     }
 

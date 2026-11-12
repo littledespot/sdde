@@ -26,23 +26,22 @@ An orchestrator “contains” children through composition. It does not contain
 This capability-free root orchestrator executes one explicitly requested
 workflow without branching on workflow names:
 
-1. receive the validated result of the preselection portion of
-   `BootstrapOrchestrator`, which the composition root runs before the engine
-   starts so configuration roots, the complete workflow inventory, compiled
-   graphs, and registry validate before workflow-specific work; the engine
-   invokes no binding for it, and this portion acquires no workflow execution
-   capability. Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet
-   implemented), that portion becomes the startup engine routine;
+1. receive the validated result of the startup engine routine
+   ([ADR 0032](../decisions/0032-engine-routines.md)), which the composition root runs
+   before the engine starts so configuration roots, the complete workflow inventory,
+   compiled graphs, and registry validate before workflow-specific work; the engine
+   invokes no binding for it, and it acquires no workflow execution
+   capability;
 2. invoke `validate-workflow-operation-registry`, then `ParseWorkflowInvocationAction`
    (`parse-workflow-invocation`), through runner-owned bindings to obtain one explicit
    `WorkflowId` and the unchanged workflow-specific arguments;
 3. invoke `select-compiled-workflow` through its runner-owned binding for that
    validated `WorkflowId`;
 4. receive from the runner the selected graph's bound registered operations;
-5. invoke the fixed `ModelProviderBootstrapOrchestrator` through its runner-owned
+5. invoke the fixed provider-bootstrap engine routine through its runner-owned
    binding; it prepares provider authority only when the selected compiled graph
-   requires it ([ADR 0004](../decisions/0004-model-provider-bootstrap.md)). Under
-   ADR 0032 (not yet implemented), that binding reaches the provider-bootstrap routine;
+   requires it ([ADR 0004](../decisions/0004-model-provider-bootstrap.md),
+   ADR 0032);
 6. invoke the selected graph's registered capability-free invocation-contract
    node through its runner-owned binding to validate the remaining arguments
    and produce the typed run context;
@@ -72,7 +71,7 @@ workflow without branching on workflow names:
 - For `specify`, those children are `ParseSpecifyInvocationAction` and
   `ValidateSpecifyArgumentsAction`; neither action receives the invocation contract itself or
   invokes the other.
-- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the `specify`
+- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented for the Specify invocation), the `specify`
   invocation operation becomes an [ADR 0031](../decisions/0031-stage-actions.md) stage action
   with side effect `none`. Parse and validate become its two internal functions, in that order.
   It is still named by the definition's `invoke:` field, not a graph step. The engine still runs
@@ -261,7 +260,7 @@ abandoned execution's resources.
 
 This instrumentation-internal orchestrator is entered once for a feature-sink failure. It coordinates transient-handle cleanup, one bounded emergency diagnostic and fail-closed execution abandonment. It performs no transaction stabilization or recovery, has no sink/filesystem capability itself, and is excluded from logging observation.
 
-Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
+Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), the feature-logging orchestrators in §§14.9–14.10 become typed engine routines in its second conversion. They convert only once its logging preconditions hold. The emergency diagnostic stays exactly once, non-recursive and unobserved, and every lock is released on every path.
 
 ### 14.10 `FeatureLogPolicyTransitionOrchestrator`
 

@@ -1,60 +1,50 @@
 const std = @import("std");
-const pipeline = @import("../../domain/pipeline.zig");
-const definition = @import("../../domain/workflow_definition.zig");
-const inventory = @import("../../domain/workflow_inventory.zig");
+const definition = @import("workflow_definition.zig");
+const inventory = @import("workflow_inventory.zig");
 
 pub const Error = error{WorkflowAuthorityInventoryInvalid};
 
-pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{
-        .id = "resolve-workflow-resources",
-        .kind = .action,
-        .requires = &.{ .workflow_authority_inventory, .declarative_workflow_definitions },
-        .produces = &.{.workflow_resource_manifest},
-        .side_effect = .none,
-    };
-
-    pub fn execute(
-        _: Action,
-        allocator: std.mem.Allocator,
-        inventory_value: inventory.Inventory,
-        definitions: []const definition.Definition,
-    ) Error!inventory.ResourceManifest {
-        var binding_count: usize = 0;
-        for (definitions) |item| {
-            binding_count = std.math.add(usize, binding_count, item.resources.len) catch return invalid();
-        }
-        const bindings = allocator.alloc(inventory.ResourceBinding, binding_count) catch return invalid();
-        var binding_index: usize = 0;
-        for (definitions) |item| {
-            for (item.resources, 0..) |resource, index| {
-                for (item.resources[0..index]) |prior| {
-                    if (std.mem.eql(u8, prior.name, resource.name)) return invalid();
-                }
-                const ordinal = findResourceOrdinal(inventory_value, resource.name) orelse return invalid();
-                bindings[binding_index] = .{
-                    .definition_ordinal = item.source_ordinal,
-                    .resource_id = resource.id,
-                    .resource_ordinal = ordinal,
-                };
-                binding_index += 1;
-            }
-        }
-        std.mem.sort(inventory.ResourceBinding, bindings, {}, bindingLessThan);
-        for (inventory_value.resource_ordinals) |ordinal| {
-            var referenced = false;
-            for (bindings) |binding| if (binding.resource_ordinal == ordinal) {
-                referenced = true;
-                break;
-            };
-            if (!referenced) return invalid();
-        }
-        return .{
-            .bindings = bindings,
-            .resource_ordinals = allocator.dupe(u16, inventory_value.resource_ordinals) catch return invalid(),
-        };
+/// Binds every definition's declared resource to one inventory resource, and requires every
+/// inventory resource to be declared by some definition.
+pub fn resolve(
+    allocator: std.mem.Allocator,
+    inventory_value: inventory.Inventory,
+    definitions: []const definition.Definition,
+) Error!inventory.ResourceManifest {
+    var binding_count: usize = 0;
+    for (definitions) |item| {
+        binding_count = std.math.add(usize, binding_count, item.resources.len) catch return invalid();
     }
-};
+    const bindings = allocator.alloc(inventory.ResourceBinding, binding_count) catch return invalid();
+    var binding_index: usize = 0;
+    for (definitions) |item| {
+        for (item.resources, 0..) |resource, index| {
+            for (item.resources[0..index]) |prior| {
+                if (std.mem.eql(u8, prior.name, resource.name)) return invalid();
+            }
+            const ordinal = findResourceOrdinal(inventory_value, resource.name) orelse return invalid();
+            bindings[binding_index] = .{
+                .definition_ordinal = item.source_ordinal,
+                .resource_id = resource.id,
+                .resource_ordinal = ordinal,
+            };
+            binding_index += 1;
+        }
+    }
+    std.mem.sort(inventory.ResourceBinding, bindings, {}, bindingLessThan);
+    for (inventory_value.resource_ordinals) |ordinal| {
+        var referenced = false;
+        for (bindings) |binding| if (binding.resource_ordinal == ordinal) {
+            referenced = true;
+            break;
+        };
+        if (!referenced) return invalid();
+    }
+    return .{
+        .bindings = bindings,
+        .resource_ordinals = allocator.dupe(u16, inventory_value.resource_ordinals) catch return invalid(),
+    };
+}
 
 fn findResourceOrdinal(inventory_value: inventory.Inventory, name: []const u8) ?u16 {
     var found: ?u16 = null;
@@ -76,9 +66,9 @@ fn invalid() Error {
 }
 
 test "all regular resources must be explicitly and uniquely declared" {
-    const workflow = @import("../../domain/workflow.zig");
-    const telemetry = @import("../../domain/telemetry.zig");
-    const file_identity = @import("../../domain/filesystem_identity.zig");
+    const workflow = @import("workflow.zig");
+    const telemetry = @import("telemetry.zig");
+    const file_identity = @import("filesystem_identity.zig");
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const descriptors = [_]inventory.InventoryDescriptor{
@@ -111,10 +101,10 @@ test "all regular resources must be explicitly and uniquely declared" {
         .resources = &declared,
         .steps = &.{},
     };
-    const manifest = try (Action{}).execute(arena.allocator(), inventory_value, &.{item});
+    const manifest = try resolve(arena.allocator(), inventory_value, &.{item});
     try std.testing.expectEqual(@as(u16, 2), manifest.bindings[0].resource_ordinal);
 
     var missing = item;
     missing.resources = &.{};
-    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, (Action{}).execute(arena.allocator(), inventory_value, &.{missing}));
+    try std.testing.expectError(error.WorkflowAuthorityInventoryInvalid, resolve(arena.allocator(), inventory_value, &.{missing}));
 }

@@ -48,12 +48,13 @@ pub fn rebind(
 ) Error!debug.Description {
     try validateBinding(captured);
     const slot = identities.ModelSlotId.parse(captured.model_slot) orelse return error.InvalidEvaluationContract;
-    var document = (@import("../../src/actions/provider/decode_llm_provider_config.zig").Action{}).execute(allocator, catalogue_bytes) catch return error.InvalidEvaluationContract;
+    const provider_steps = @import("../../src/application/model_provider_bootstrap_routine.zig").steps;
+    var document = provider_steps.decodeConfig(allocator, catalogue_bytes) catch return error.InvalidEvaluationContract;
     defer document.deinit();
-    var candidate = (@import("../../src/actions/provider/build_llm_provider_registry.zig").Action{ .contracts = &registered.registry }).execute(allocator, document.value()) catch return error.InvalidEvaluationContract;
+    var candidate = provider_steps.buildRegistry(&registered.registry, allocator, document.value()) catch return error.InvalidEvaluationContract;
     defer candidate.deinit();
     const registry_contract = @import("../../src/domain/llm_provider_registry.zig");
-    const registry_owner = (@import("../../src/actions/provider/validate_llm_provider_registry.zig").Action{ .contracts = &registered.registry }).execute(allocator, candidate) catch return error.InvalidEvaluationContract;
+    const registry_owner = provider_steps.validateRegistry(&registered.registry, allocator, candidate) catch return error.InvalidEvaluationContract;
     defer registry_contract.deinitOwner(registry_owner);
     const registry = registry_contract.registry(registry_owner);
 

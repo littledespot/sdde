@@ -54,7 +54,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     }
     var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshots = supplied });
     defer invocation.deinit();
-    var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
+    var expected_config = try @import("../../../src/domain/engine_config_decode.zig").decode(allocator, captured.config);
     defer expected_config.deinit();
 
     var trace = try trace_module.Trace.init(store, &invocation, switch (options.purpose) {

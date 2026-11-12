@@ -389,7 +389,7 @@ fn verifyRecord(io: std.Io, a: std.mem.Allocator, parent: std.Io.Dir, frozen: fr
         if (facts.receipts.len != 0) return error.AcquisitionMismatch;
         return &.{};
     };
-    var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, project.captured.config);
+    var expected_config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, project.captured.config);
     defer expected_config.deinit();
     if (workflow.admission_audit) |audit| for (audit.sources) |source| {
         try @import("../contracts.zig").path(source.path);
@@ -742,7 +742,7 @@ fn reviewViews(a: std.mem.Allocator, facts: acquisition.Facts, outputs: []const 
 
 fn projectDocuments(a: std.mem.Allocator, frozen: frozen_inputs.Freeze, trial: comparison.Trial) ![]const assessment.ProjectDocument {
     const project = try frozen_inputs.project(a, frozen, trial);
-    var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, project.captured.config);
+    var config = try @import("../../../src/domain/engine_config_decode.zig").decode(a, project.captured.config);
     defer config.deinit();
     const principles_root = try frozen_inputs.configuredRoot(a, frozen, .principles, config.value().paths.principles);
     var result: std.ArrayList(assessment.ProjectDocument) = .empty;

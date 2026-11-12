@@ -1779,18 +1779,18 @@ schema is already bound by the engine; there is no echoed `schemaId` or outer
 ## 24. Orchestrator composition
 
 ```text
-CompositionRoot (before the engine starts; ADR 0032 routine when implemented)
-└── BootstrapOrchestrator preselection portion; validated result passed to the engine
-    ├── configuration/root actions
-    ├── workflow inventory/capture/parse/schema actions
-    ├── workflow graph compile/validate actions
-    └── variable-size workflow registry actions; no feature transaction lock
+CompositionRoot (before the engine starts; ADR 0032 startup routine)
+└── startup routine; validated result passed to the engine
+    ├── configuration/root steps
+    ├── workflow inventory/capture/parse/schema steps
+    ├── workflow graph compile/validate steps
+    └── variable-size workflow registry steps; no feature transaction lock
 
 PipelineRunner
 ├── WorkflowEngineOrchestrator (capability-free graph coordination)
 │   ├── validate-workflow-operation-registry, parse-workflow-invocation and
 │   │   select-compiled-workflow, in that order, through runner-owned child bindings
-│   ├── ModelProviderBootstrapOrchestrator through a runner-owned child binding (ADR 0004)
+│   ├── provider-bootstrap routine through a runner-owned binding (ADR 0004, ADR 0032)
 │   └── Selected CompiledWorkflowGraph
 │       ├── YAML-named invocation operation through a runner-owned binding
 │       │   └── parser/validator child bindings when that contract composes them

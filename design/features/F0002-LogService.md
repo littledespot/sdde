@@ -87,8 +87,8 @@ F0001 immutable config
   -> F0002
 ```
 
-`CanonicalizeLogLevelAction` alone converts configured case and aliases into a
-canonical level. `ValidateLoggingPolicyAction` consumes that canonical result
+The startup routine's `canonicalize_log_level` step alone converts configured case and aliases into a
+canonical level. Its `validate_logging_policy` step consumes that canonical result
 and validates the remaining logging policy; it does not canonicalize the level
 again. F0002 receives only the validated result.
 
@@ -254,7 +254,7 @@ The steps remain separate action responsibilities. Their orchestrator receives
 runner-owned child bindings and no filesystem, clock, serializer, redaction,
 or sink capability.
 
-Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), these steps
+Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet implemented), these steps
 become the typed steps of a feature-logging engine routine once the ADR's logging
 preconditions hold. The outcomes, failure path and non-recursion here are unchanged.
 

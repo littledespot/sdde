@@ -247,7 +247,7 @@ test "one registry rejects duplicate and structurally invalid operations" {
 test "validation action rejects a duplicate operation identity" {
     const entry: Entry = .{ .contract = .{ .id = "test.noop", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) };
     const registry: Registry = .{ .operations = &.{ entry, entry }, .policies = &.{}, .gates = &.{} };
-    try std.testing.expectError(error.WorkflowOperationRegistryInvalid, (@import("actions/workflow/validate_workflow_operation_registry.zig").Action{}).execute(&registry));
+    try std.testing.expectError(error.WorkflowOperationRegistryInvalid, @import("application/startup_routine.zig").steps.validateWorkflowOperations(&registry));
 }
 
 test "repair roles keep declared guards native and cannot acquire accounting effects" {

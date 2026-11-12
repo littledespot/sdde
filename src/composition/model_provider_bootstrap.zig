@@ -5,13 +5,10 @@ const config = @import("../domain/config.zig");
 const contracts = @import("../domain/llm_provider_contracts.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const llm_provider_config_source = @import("../adapters/filesystem/llm_provider_config_source.zig");
-const locate_llm_provider_config = @import("../actions/provider/locate_llm_provider_config.zig");
-const read_llm_provider_config = @import("../actions/provider/read_llm_provider_config.zig");
 const binding = @import("../application/model_provider_bootstrap_binding.zig");
-const llm_provider_config_runner = @import("../application/llm_provider_config_runner.zig");
-const orchestrator = @import("../application/model_provider_bootstrap_orchestrator.zig");
-const runner = @import("../application/model_provider_bootstrap_runner.zig");
+const routine = @import("../application/model_provider_bootstrap_routine.zig");
 
+/// Builds the provider-bootstrap binding's one port and runs the routine on its behalf (ADR 0032).
 pub const Assembly = struct {
     io: std.Io,
     allocator: std.mem.Allocator,
@@ -45,28 +42,22 @@ pub const Assembly = struct {
         models: *const config.ModelsConfig,
         temperatures: @import("../domain/model_controls.zig").Temperatures,
         capability: *const bootstrap_root_registry.LLMProviderConfigCapability,
-    ) orchestrator.Outcome {
+    ) binding.Outcome {
         const self: *Assembly = @ptrCast(@alignCast(context));
         var source_adapter = llm_provider_config_source.Adapter.init(self.io, self.project_root);
-        var config_runner = llm_provider_config_runner.Runner.init(
+        var diagnostic: routine.Diagnostic = .{};
+        return binding.fromRoutine(routine.run(
+            .{ .locator = source_adapter.locator() },
             self.allocator,
             self.runtime,
-            capability,
-            locate_llm_provider_config.Action{ .locator = source_adapter.locator() },
-            read_llm_provider_config.Action{},
-        );
-        defer config_runner.deinit();
-
-        var provider_runner = runner.Runner.init(
-            self.allocator,
-            self.runtime,
-            selected,
-            models,
-            temperatures,
-            &config_runner,
-            self.registered_contracts,
-        );
-        defer provider_runner.deinit();
-        return orchestrator.run(provider_runner.childBindings());
+            &diagnostic,
+            .{
+                .selected = selected,
+                .models = models,
+                .temperatures = temperatures,
+                .capability = capability,
+                .registered = self.registered_contracts,
+            },
+        ));
     }
 };

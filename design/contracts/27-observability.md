@@ -8,7 +8,7 @@ Part of the [proposed design](../design.md#27-observability), as amended by the
 - Actions call `workflowLog.log(&delta, fact)` to append attributed telemetry without performing
   I/O; runner lifecycle facts use the same active binding.
 - The resulting `NodeDelta.telemetryFactsAdded` values pass through the discrete logging actions
-  described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet
+  described in Section 13.9. Under [ADR 0032](../decisions/0032-engine-routines.md) (feature logging not yet
   implemented), those actions become the steps of a feature-logging engine routine, once its
   logging preconditions hold.
   - The event outcomes, emergency diagnostic and finalization rules here are unchanged.

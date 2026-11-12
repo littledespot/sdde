@@ -12,10 +12,10 @@ const runner_module = @import("application/workflow_pipeline_runner.zig");
 const engine = @import("application/workflow_engine_orchestrator.zig");
 const bindings = @import("application/workflow_engine_child_bindings.zig");
 const registry_module = @import("ports/workflow_operation_registry.zig");
-const parse = @import("actions/workflow/parse_workflow_definitions.zig");
-const validate_schema = @import("actions/workflow/validate_workflow_definition_schema.zig");
-const compile = @import("actions/workflow/compile_workflow_graphs.zig");
-const validate_graphs = @import("actions/workflow/validate_compiled_workflow_graphs.zig");
+const startup = @import("application/startup_routine.zig");
+const definition_schema = @import("domain/workflow_definition_schema.zig");
+const graph_compilation = @import("domain/workflow_graph_compilation.zig");
+const graph_validation = @import("domain/workflow_graph_validation.zig");
 const parser_adapter = @import("adapters/parsers/workflow_definitions.zig");
 const parse_invocation = @import("actions/workflow/parse_workflow_invocation.zig");
 const gate = @import("domain/workflow_gate.zig");
@@ -97,7 +97,7 @@ test "compiler rejects missing duplicate and invalid data schemas" {
     try std.testing.expect(!fixture.registry.validate());
     var graph = fixture.graph.*;
     graph.authority.data_schemas = &.{input_schema};
-    try std.testing.expectError(error.WorkflowGraphCompileInvalid, (validate_graphs.Action{}).execute(fixture.arena.allocator(), &.{graph}));
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, graph_validation.validate(fixture.arena.allocator(), &.{graph}));
     fixture.registry.data_schemas = &schemas;
     var entries = operation_entries;
     for (&entries) |*entry| entry.binding.context = &control;
@@ -455,11 +455,11 @@ const Fixture = struct {
             .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .blocked } }},
         };
         var parser: parser_adapter.Adapter = .{};
-        const raw = try (parse.Action{ .parser = parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
-        const definitions = try (validate_schema.Action{}).execute(arena.allocator(), raw);
+        const raw = try startup.steps.parseWorkflows(parser.parser(), arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
+        const definitions = try definition_schema.validate(arena.allocator(), raw);
         var result_schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-        const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = result_schema_parser.compiler() }).execute(arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
-        _ = try (validate_graphs.Action{}).execute(arena.allocator(), graphs);
+        const graphs = try graph_compilation.compile(&registry, result_schema_parser.compiler(), arena.allocator(), definitions, .{ .capability = undefined, .descriptors = &.{}, .accounts = &.{}, .definition_ordinals = &.{}, .resource_ordinals = &.{} }, .{ .bindings = &.{}, .resource_ordinals = &.{} }, &.{});
+        _ = try graph_validation.validate(arena.allocator(), graphs);
         return .{ .arena = arena, .graph = &graphs[0], .registry = registry };
     }
 

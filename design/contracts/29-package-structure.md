@@ -10,8 +10,9 @@ The logical dependency boundaries map to this Zig source/build layout:
 - Domain modules have no infrastructure dependencies.
 - The composition root is the only location that constructs concrete adapters and binds
   registered operation implementations.
-- It also assembles the one fixed, nonselectable engine-startup graph. Under
-  [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), that graph and the
+- It also runs the one fixed, nonselectable engine-startup routine. Under
+  [ADR 0032](../decisions/0032-engine-routines.md) (implemented for startup and provider
+  bootstrap; feature logging not yet), that routine and the
   other fixed engine sequences are engine routines in `application/*_routine.zig`. Each
   imports only domain and port modules, and the composition root constructs and passes its
   ports.

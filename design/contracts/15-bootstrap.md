@@ -8,20 +8,21 @@ Bootstrap has a fixed engine-startup portion, conditional provider bootstrap
 
 [View the Bootstrap flow sample](../code.md#bootstrap-flow).
 
-- The composition-root-owned startup graph runs before project workflow selection.
+- The composition-root-owned startup routine runs before project workflow selection.
 - It validates the seven configured directory roots and the provider-document location, totally
   accounts the workflow root, compiles every discovered definition from registered operation
   contracts, and validates the variable-size workflow registry.
 - It acquires no feature transaction lock, is not registered as a project workflow, and cannot
   be changed beneath `paths.workflows`.
-- Under [ADR 0032](../decisions/0032-engine-routines.md) (not yet implemented), it is a typed
-  engine routine that the composition root runs, with the same properties and public error
-  codes. It is the first ADR 0032 conversion.
+- Under [ADR 0032](../decisions/0032-engine-routines.md), it is a typed engine routine
+  (`src/application/startup_routine.zig`) that the composition root runs.
 
 - After exact selection and before the invocation operation, the fixed provider bootstrap
   derives the selected graph's model-provider requirement and, only when `required`, captures
   and validates the provider catalogue and slot allowlist; `not_required` performs no
-  provider-document operation.
+  provider-document operation. It is a typed engine routine
+  (`src/application/model_provider_bootstrap_routine.zig`) reached through a runner-owned
+  binding.
 - The YAML-named registered invocation operation then produces the workflow's typed run
   context.
 - Only the selected graph decides whether to invoke registered target-context setup nodes.

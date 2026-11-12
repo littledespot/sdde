@@ -1,33 +1,24 @@
 const std = @import("std");
-const pipeline = @import("../../domain/pipeline.zig");
-const telemetry = @import("../../domain/telemetry.zig");
-const workflow = @import("../../domain/workflow.zig");
-const definition = @import("../../domain/workflow_definition.zig");
-const inventory = @import("../../domain/workflow_inventory.zig");
+const telemetry = @import("telemetry.zig");
+const workflow = @import("workflow.zig");
+const definition = @import("workflow_definition.zig");
+const inventory = @import("workflow_inventory.zig");
+const workflow_source = @import("workflow_source.zig");
 
 pub const Error = error{WorkflowDefinitionSchemaInvalid};
 
-pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{
-        .id = "validate-workflow-definition-schema",
-        .kind = .action,
-        .requires = &.{.raw_workflow_definitions},
-        .produces = &.{.declarative_workflow_definitions},
-        .side_effect = .none,
-    };
-
-    pub fn execute(
-        _: Action,
-        allocator: std.mem.Allocator,
-        raw_values: []const definition.RawDefinition,
-    ) Error![]const definition.Definition {
-        const definitions = allocator.alloc(definition.Definition, raw_values.len) catch return invalid();
-        for (raw_values, definitions) |raw, *destination| {
-            destination.* = try convert(allocator, raw.ordinal, raw.root);
-        }
-        return definitions;
+/// Converts the raw parsed workflow documents into declarative definitions through the closed
+/// workflow-definition schema. It applies no policy and registers nothing.
+pub fn validate(
+    allocator: std.mem.Allocator,
+    raw_values: []const definition.RawDefinition,
+) Error![]const definition.Definition {
+    const definitions = allocator.alloc(definition.Definition, raw_values.len) catch return invalid();
+    for (raw_values, definitions) |raw, *destination| {
+        destination.* = try convert(allocator, raw.ordinal, raw.root);
     }
-};
+    return definitions;
+}
 
 const root_fields = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "resources", "steps", "subgraphs" };
 const root_required = [_][]const u8{ "schema", "id", "version", "shortcode", "invoke", "policy", "start", "steps" };
@@ -311,6 +302,31 @@ fn invalid() Error {
     return error.WorkflowDefinitionSchemaInvalid;
 }
 
+fn sourceEntry(a: std.mem.Allocator, subgraph: ?[]const u8, id: []const u8, kind: @FieldType(workflow_source.Entry, "kind"), target: []const u8, node: *definition.RawNode) Error!workflow_source.Entry {
+    return .{ .subgraph = subgraph, .id = id, .kind = kind, .target = target, .declaration = std.json.Stringify.valueAlloc(a, try sourceJson(a, node), .{ .whitespace = .indent_2 }) catch return invalid() };
+}
+// Structural view of the accepted authored entry; exact YAML bytes are retained
+// separately by the registry. This projection is not imported as authority.
+fn sourceJson(a: std.mem.Allocator, node: *definition.RawNode) Error!std.json.Value {
+    return switch (node.*) {
+        .null_value => .null,
+        .boolean => |v| .{ .bool = v },
+        .integer => |v| .{ .number_string = std.fmt.allocPrint(a, "{d}", .{v}) catch return invalid() },
+        .float => |v| .{ .float = v },
+        .scalar => |v| .{ .string = v },
+        .sequence => |items| block: {
+            var result: std.array_list.Managed(std.json.Value) = .init(a);
+            for (items) |item| result.append(try sourceJson(a, item)) catch return invalid();
+            break :block .{ .array = result };
+        },
+        .mapping => |items| block: {
+            var result: std.json.ObjectMap = .{};
+            for (items) |pair| result.put(a, string(pair.key) orelse return invalid(), try sourceJson(a, pair.value)) catch return invalid();
+            break :block .{ .object = result };
+        },
+    };
+}
+
 const RawBuilder = struct {
     allocator: std.mem.Allocator,
 
@@ -369,12 +385,12 @@ test "accepts the concise workflow mapping and rejects legacy fields" {
     defer arena.deinit();
     const builder: RawBuilder = .{ .allocator = arena.allocator() };
     const accepted = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try conciseRaw(builder, false) }};
-    const values = try (Action{}).execute(arena.allocator(), &accepted);
+    const values = try validate(arena.allocator(), &accepted);
     try std.testing.expectEqualStrings("arbitrary-flow", values[0].workflow_id.bytes);
     try std.testing.expectEqualStrings("run", values[0].start_step_id.bytes);
 
     const rejected = [_]definition.RawDefinition{.{ .ordinal = 1, .root = try conciseRaw(builder, true) }};
-    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, (Action{}).execute(arena.allocator(), &rejected));
+    try std.testing.expectError(error.WorkflowDefinitionSchemaInvalid, validate(arena.allocator(), &rejected));
 }
 
 test "rejects unknown outcome and unsafe resource name" {
@@ -401,7 +417,7 @@ test "rejects unknown outcome and unsafe resource name" {
     });
     try std.testing.expectError(
         error.WorkflowDefinitionSchemaInvalid,
-        (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}),
+        validate(arena.allocator(), &.{.{ .ordinal = 1, .root = root }}),
     );
 }
 
@@ -418,13 +434,13 @@ test "outcome keys and terminal targets use the schema spelling, never a Zig tag
         .{ .key = "failed", .target = "end.failed", .outcome = .failed },
         .{ .key = "cancelled", .target = "end.cancelled", .outcome = .cancelled },
     }) |case| {
-        const values = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }});
+        const values = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }});
         const transition = values[0].steps[0].outcomes[0];
         try std.testing.expectEqual(case.outcome, transition.outcome);
         try std.testing.expectEqual(case.outcome, transition.target.terminal);
     }
     // `more` is a declared outcome key whose successor is a step, never a terminal.
-    const progress = try (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, "more", "run") }});
+    const progress = try validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, "more", "run") }});
     try std.testing.expectEqual(workflow.OutcomeTag.more, progress[0].steps[0].outcomes[0].outcome);
     try std.testing.expect(progress[0].steps[0].outcomes[0].target == .step);
     for ([_]struct { key: []const u8, target: []const u8 }{
@@ -437,32 +453,7 @@ test "outcome keys and terminal targets use the schema spelling, never a Zig tag
     }) |case| {
         try std.testing.expectError(
             error.WorkflowDefinitionSchemaInvalid,
-            (Action{}).execute(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}),
+            validate(arena.allocator(), &.{.{ .ordinal = 1, .root = try outcomeRaw(builder, case.key, case.target) }}),
         );
     }
-}
-
-fn sourceEntry(a: std.mem.Allocator, subgraph: ?[]const u8, id: []const u8, kind: @FieldType(@import("../../domain/workflow_source.zig").Entry, "kind"), target: []const u8, node: *definition.RawNode) Error!@import("../../domain/workflow_source.zig").Entry {
-    return .{ .subgraph = subgraph, .id = id, .kind = kind, .target = target, .declaration = std.json.Stringify.valueAlloc(a, try sourceJson(a, node), .{ .whitespace = .indent_2 }) catch return invalid() };
-}
-// Structural view of the accepted authored entry; exact YAML bytes are retained
-// separately by the registry. This projection is not imported as authority.
-fn sourceJson(a: std.mem.Allocator, node: *definition.RawNode) Error!std.json.Value {
-    return switch (node.*) {
-        .null_value => .null,
-        .boolean => |v| .{ .bool = v },
-        .integer => |v| .{ .number_string = std.fmt.allocPrint(a, "{d}", .{v}) catch return invalid() },
-        .float => |v| .{ .float = v },
-        .scalar => |v| .{ .string = v },
-        .sequence => |items| block: {
-            var result: std.array_list.Managed(std.json.Value) = .init(a);
-            for (items) |item| result.append(try sourceJson(a, item)) catch return invalid();
-            break :block .{ .array = result };
-        },
-        .mapping => |items| block: {
-            var result: std.json.ObjectMap = .{};
-            for (items) |pair| result.put(a, string(pair.key) orelse return invalid(), try sourceJson(a, pair.value)) catch return invalid();
-            break :block .{ .object = result };
-        },
-    };
 }

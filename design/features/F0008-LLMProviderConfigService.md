@@ -4,7 +4,7 @@
 
 **Decision authority:** Explicit user direction on 2026-09-02
 
-**Implementation:** Complete. F0006's conditional bootstrap runner, invoked after
+**Implementation:** Complete. F0006's conditional provider-bootstrap routine, invoked after
 exact workflow selection, invokes this component exactly once when required and
 decodes its untrusted bytes.
 
@@ -69,16 +69,14 @@ reads `config.paths.providers` directly and never resolves the path again.
 
 | Owner | Sole responsibility |
 | --- | --- |
-| `LocateLLMProviderConfigAction` | Ask the narrow source port to open the one F0004-authorized no-follow regular file and return an exact open-file capability. |
-| `ReadLLMProviderConfigAction` | Capture that already opened file completely under the fixed byte limit and return owned untrusted bytes. |
+| `locate_config` step | Ask the narrow source port to open the one F0004-authorized no-follow regular file and return an exact open-file capability. |
+| `read_config` step | Capture that already opened file completely under the fixed byte limit and return owned untrusted bytes. |
 | Filesystem adapter | Consume the opaque F0004 capability, walk beneath the bound project root without following links, open read-only, and verify file identity/type/size before and after capture. |
-| `LLMProviderConfigOrchestrator` | Coordinate only the runner-owned locate and read child bindings and preserve failed/cancelled outcomes. Under ADR 0032 (not yet implemented), it becomes part of the provider-bootstrap engine routine. Locate and read stay separate typed steps (AC 4), with the same outcomes and codes and fake-port tests. |
-| Pipeline runner | Invoke the two actions, validate/apply their declared deltas, own intermediates, and construct the service only after a successful complete read. |
+| Provider-bootstrap routine | Under ADR 0032, run the locate and read steps as part of the provider-bootstrap engine routine, preserve failed/cancelled outcomes, own intermediates, and keep the capture only after a successful complete read. Locate and read stay separate typed steps (AC 4), with fake-port tests. |
 | `LLMProviderConfigService` | Own the captured bytes and expose one borrowed immutable `bytes()` view. |
-| Composition root | Construct the filesystem adapter, actions, runner, and orchestrator entry point without invoking it during ordinary bootstrap. |
+| Composition root | Construct the filesystem adapter and the routine's port without invoking the routine during ordinary bootstrap. |
 
-No action invokes another action. The orchestrator receives only child
-bindings. The service performs no I/O and has no reload or mutation method.
+No step invokes another step. The service performs no I/O and has no reload or mutation method.
 
 ## 4. Read and ownership contract
 
@@ -106,12 +104,12 @@ The bytes remain untrusted. Only F0006's decoder may interpret them.
 
 F0008 returns the closed outcomes `ready`, `failed`, or `cancelled`. Every
 locate or capture rejection returns `failed`; F0006's conditional
-model-provider bootstrap runner maps it to the already accepted
+provider-bootstrap routine maps it to the already accepted
 `LLM_PROVIDER_CONFIG_READ_ERROR`. No partial service is published.
 
 - F0008 does not decide whether a selected workflow needs model binding or provider
   calls.
-- F0006's accepted capability-free model-provider bootstrap orchestrator owns that
+- F0006's accepted model-provider bootstrap routine owns that
   branch.
 - A workflow whose derived requirement is `not_required` must not probe or read the
   provider document merely because `paths.providers` is reserved during root validation.
@@ -124,7 +122,7 @@ model-provider bootstrap runner maps it to the already accepted
    no-follow physical checks when the file is requested.
 3. F0008 consumes only the opaque F0004 capability; raw config path strings do
    not cross into the reader.
-4. Locate and read are separate single-responsibility actions.
+4. Locate and read are separate single-responsibility steps.
 5. The adapter opens read-only beneath the project root without following
    links and verifies a stable regular-file identity and length.
 6. Exactly 1,048,576 bytes are accepted; one byte more is rejected.
@@ -147,8 +145,8 @@ Tests cover:
 - nested configured locations
 - missing, wrong-kind, symlinked, replaced, short, growing, shrinking, exact-size, and
   over-size files
-- orchestrator order and terminal propagation
-- runner delta application and cleanup
+- routine step order and terminal propagation
+- cleanup on every path
 - immutable repeated queries
 - absence of parsing in the service
 - conditional single capture

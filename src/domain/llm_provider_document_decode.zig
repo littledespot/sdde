@@ -1,39 +1,26 @@
 const std = @import("std");
-const document = @import("../../domain/llm_provider_document.zig");
-const identity = @import("../../domain/llm_provider_identity.zig");
-const pipeline = @import("../../domain/pipeline.zig");
-const strict_json = @import("../../domain/strict_json.zig");
+const document = @import("llm_provider_document.zig");
+const identity = @import("llm_provider_identity.zig");
+const strict_json = @import("strict_json.zig");
 
 pub const Error = error{LLMProviderConfigParseError};
 
-pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{
-        .id = "decode-llm-provider-config",
-        .kind = .action,
-        .requires = &.{.raw_llm_provider_config},
-        .produces = &.{.raw_llm_provider_document},
-        .side_effect = .none,
-    };
+/// Decodes the captured provider document through the closed strict shape and checks its bounded
+/// common shape. The caller owns the result.
+pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) Error!document.Owned {
+    var owned = document.Owned.init(allocator);
+    errdefer owned.deinit();
+    owned.document = strict_json.decode(
+        document.RawLLMProviderDocument,
+        owned.allocator(),
+        bytes,
+        .{ .maximum_bytes = document.max_bytes, .maximum_depth = document.max_nesting_depth },
+    ) catch return error.LLMProviderConfigParseError;
 
-    pub fn execute(
-        _: Action,
-        allocator: std.mem.Allocator,
-        bytes: []const u8,
-    ) Error!document.Owned {
-        var owned = document.Owned.init(allocator);
-        errdefer owned.deinit();
-        owned.document = strict_json.decode(
-            document.RawLLMProviderDocument,
-            owned.allocator(),
-            bytes,
-            .{ .maximum_bytes = document.max_bytes, .maximum_depth = document.max_nesting_depth },
-        ) catch return error.LLMProviderConfigParseError;
-
-        try validateIntegers(allocator, bytes);
-        try validateCommonShape(owned.value());
-        return owned;
-    }
-};
+    try validateIntegers(allocator, bytes);
+    try validateCommonShape(owned.value());
+    return owned;
+}
 
 /// The catalogue holds integers only, wherever they stand, a model's `config` included.
 fn validateIntegers(allocator: std.mem.Allocator, bytes: []const u8) Error!void {
@@ -85,7 +72,7 @@ test "strict decoder accepts the exact bounded common shape" {
     const bytes =
         \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
     ;
-    var decoded = try (Action{}).execute(std.testing.allocator, bytes);
+    var decoded = try decode(std.testing.allocator, bytes);
     defer decoded.deinit();
     try std.testing.expectEqual(@as(usize, 1), decoded.value().providers.len);
     try std.testing.expectEqualStrings("model-a", decoded.value().providers[0].models[0].model);
@@ -115,7 +102,7 @@ test "strict decoder rejects malformed closed-shape and transport violations" {
     for (invalid) |bytes| {
         try std.testing.expectError(
             error.LLMProviderConfigParseError,
-            (Action{}).execute(std.testing.allocator, bytes),
+            decode(std.testing.allocator, bytes),
         );
     }
 }
@@ -132,13 +119,13 @@ test "strict decoder enforces nesting and collection totals" {
     try too_deep.appendSlice("}]}]}");
     try std.testing.expectError(
         error.LLMProviderConfigParseError,
-        (Action{}).execute(allocator, too_deep.items),
+        decode(allocator, too_deep.items),
     );
 
     var at_model_limit: std.array_list.Managed(u8) = .init(allocator);
     defer at_model_limit.deinit();
     try appendModelDocument(&at_model_limit, document.max_models_total);
-    var decoded = try (Action{}).execute(allocator, at_model_limit.items);
+    var decoded = try decode(allocator, at_model_limit.items);
     decoded.deinit();
 
     var too_many: std.array_list.Managed(u8) = .init(allocator);
@@ -146,13 +133,13 @@ test "strict decoder enforces nesting and collection totals" {
     try appendModelDocument(&too_many, document.max_models_total + 1);
     try std.testing.expectError(
         error.LLMProviderConfigParseError,
-        (Action{}).execute(allocator, too_many.items),
+        decode(allocator, too_many.items),
     );
 
     var at_provider_limit: std.array_list.Managed(u8) = .init(allocator);
     defer at_provider_limit.deinit();
     try appendProviderDocument(&at_provider_limit, document.max_providers);
-    decoded = try (Action{}).execute(allocator, at_provider_limit.items);
+    decoded = try decode(allocator, at_provider_limit.items);
     decoded.deinit();
 
     var too_many_providers: std.array_list.Managed(u8) = .init(allocator);
@@ -160,7 +147,7 @@ test "strict decoder enforces nesting and collection totals" {
     try appendProviderDocument(&too_many_providers, document.max_providers + 1);
     try std.testing.expectError(
         error.LLMProviderConfigParseError,
-        (Action{}).execute(allocator, too_many_providers.items),
+        decode(allocator, too_many_providers.items),
     );
 }
 
@@ -188,12 +175,12 @@ test "model JSON selection is an explicit closed boolean" {
     for ([_][]const u8{ "", ",\"json\":null", ",\"json\":1", ",\"json\":\"true\"", ",\"json\":true,\"json\":false", ",\"json\":true,\"extra\":false" }) |field| {
         const bytes = try std.mem.concat(a, u8, &.{ prefix, field, "}]}]}" });
         defer a.free(bytes);
-        try std.testing.expectError(error.LLMProviderConfigParseError, (Action{}).execute(a, bytes));
+        try std.testing.expectError(error.LLMProviderConfigParseError, decode(a, bytes));
     }
     for ([_]bool{ false, true }) |json| {
         const bytes = try std.mem.concat(a, u8, &.{ prefix, ",\"json\":", if (json) "true" else "false", "}]}]}" });
         defer a.free(bytes);
-        var decoded = try (Action{}).execute(a, bytes);
+        var decoded = try decode(a, bytes);
         defer decoded.deinit();
         try std.testing.expectEqual(json, decoded.value().providers[0].models[0].json);
     }

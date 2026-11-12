@@ -1,117 +1,109 @@
 const std = @import("std");
-const pipeline = @import("../../domain/pipeline.zig");
-const workflow = @import("../../domain/workflow.zig");
-const definition = @import("../../domain/workflow_definition.zig");
-const compilation = @import("../../domain/workflow_compilation.zig");
-const operation = @import("../../domain/workflow_operation.zig");
-const inventory = @import("../../domain/workflow_inventory.zig");
-const operation_registry = @import("../../ports/workflow_operation_registry.zig");
-const provider_identity = @import("../../domain/llm_provider_identity.zig");
-const workflow_retry = @import("../../domain/workflow_retry.zig");
-const data = @import("../../domain/pipeline_data.zig");
+const pipeline = @import("pipeline.zig");
+const workflow = @import("workflow.zig");
+const definition = @import("workflow_definition.zig");
+const compilation = @import("workflow_compilation.zig");
+const operation = @import("workflow_operation.zig");
+const inventory = @import("workflow_inventory.zig");
+const operation_registry = @import("../ports/workflow_operation_registry.zig");
+const schema_compiler = @import("../ports/model_result_schema_compiler.zig");
+const provider_identity = @import("llm_provider_identity.zig");
+const workflow_retry = @import("workflow_retry.zig");
+const data = @import("pipeline_data.zig");
 
 pub const Error = error{WorkflowGraphCompileInvalid};
 
-pub const Action = struct {
+/// Compiles every validated definition into its graph from the registered operation contracts, the
+/// captured resources and the result-schema compiler. The result is a candidate: graph validation
+/// is a distinct step.
+pub fn compile(
     registry: *const operation_registry.Registry,
-    result_schema_compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
+    result_schema_compiler: schema_compiler.Compiler,
+    allocator: std.mem.Allocator,
+    definitions: []const definition.Definition,
+    inventory_value: inventory.Inventory,
+    manifest: inventory.ResourceManifest,
+    captures: []const inventory.Capture,
+) Error![]const compilation.CompiledWorkflow {
+    if (!registry.validate()) return invalid();
+    const graphs = allocator.alloc(compilation.CompiledWorkflow, definitions.len) catch return invalid();
+    for (definitions, graphs) |source, *graph| {
+        const expanded = @import("workflow_subgraphs.zig").expand(allocator, source) catch return invalid();
+        var item = source;
+        item.steps = expanded.steps;
+        item.start_step_id = expanded.start;
+        const invocation = registry.resolveOperation(item.invocation_operation_id) orelse return invalid();
+        if (invocation.contract.kind != .invocation) return invalid();
+        const policy = registry.resolvePolicy(item.policy_profile_id) orelse return invalid();
+        if (!hasStep(item.steps, item.start_step_id.bytes)) return invalid();
 
-    pub const contract: pipeline.NodeContract = .{
-        .id = "compile-workflow-graphs",
-        .kind = .action,
-        .requires = &.{ .declarative_workflow_definitions, .workflow_resource_manifest, .workflow_resource_captures, .workflow_operation_registry_evidence },
-        .produces = &.{.compiled_workflow_graphs},
-        .side_effect = .none,
-    };
-
-    pub fn execute(
-        self: Action,
-        allocator: std.mem.Allocator,
-        definitions: []const definition.Definition,
-        inventory_value: inventory.Inventory,
-        manifest: inventory.ResourceManifest,
-        captures: []const inventory.Capture,
-    ) Error![]const compilation.CompiledWorkflow {
-        if (!self.registry.validate()) return invalid();
-        const graphs = allocator.alloc(compilation.CompiledWorkflow, definitions.len) catch return invalid();
-        for (definitions, graphs) |source, *graph| {
-            const expanded = @import("../../domain/workflow_subgraphs.zig").expand(allocator, source) catch return invalid();
-            var item = source;
-            item.steps = expanded.steps;
-            item.start_step_id = expanded.start;
-            const invocation = self.registry.resolveOperation(item.invocation_operation_id) orelse return invalid();
-            if (invocation.contract.kind != .invocation) return invalid();
-            const policy = self.registry.resolvePolicy(item.policy_profile_id) orelse return invalid();
-            if (!hasStep(item.steps, item.start_step_id.bytes)) return invalid();
-
-            const resources = try compileResources(allocator, self.registry, self.result_schema_compiler, item, inventory_value, manifest, captures);
-            const steps = allocator.alloc(compilation.CompiledStep, item.steps.len) catch return invalid();
-            var transition_count: usize = 0;
-            for (item.steps, steps) |declared, *compiled| {
-                const entry = self.registry.resolveOperation(declared.operation_id) orelse return invalid();
-                if (entry.contract.kind != .step) return invalid();
-                if (!@import("../../domain/workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return invalid();
-                const parameters = try compileParameters(allocator, entry.contract, declared.parameters, resources);
-                const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
-                transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
-                try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
-                compiled.* = .{
-                    .id = declared.id,
-                    .source_chain = declared.source_chain,
-                    .operation_id = declared.operation_id,
-                    .parameters = parameters,
-                    .requires = entry.contract.requires,
-                    .optional = entry.contract.optional,
-                    .produces = entry.contract.produces,
-                    .replaces = entry.contract.replaces,
-                    .invalidates = entry.contract.invalidates,
-                    .outcomes = entry.contract.outcomes,
-                    .side_effect = entry.contract.side_effect,
-                    .runner_accounting = entry.contract.runner_accounting,
-                    .repair_role = entry.contract.repair_role,
-                    .outcome_association = entry.contract.outcome_association,
-                    .gates = try compileGates(allocator, self.registry, entry.contract.gates),
-                    .capabilities = entry.binding.capabilities(),
-                    .retry_authority = retry_authority,
-                    .iteration = entry.contract.iteration,
-                    .model = if (entry.contract.requiresModelBinding())
-                        @import("../../domain/workflow_model.zig").resolve(parameters) orelse return invalid()
-                    else
-                        null,
-                };
-            }
-
-            const transitions = allocator.alloc(workflow.Transition, transition_count) catch return invalid();
-            var transition_index: usize = 0;
-            for (item.steps) |step| for (step.outcomes) |outcome| {
-                transitions[transition_index] = .{ .from = step.id, .outcome = outcome.outcome, .target = outcome.target };
-                transition_index += 1;
+        const resources = try compileResources(allocator, registry, result_schema_compiler, item, inventory_value, manifest, captures);
+        const steps = allocator.alloc(compilation.CompiledStep, item.steps.len) catch return invalid();
+        var transition_count: usize = 0;
+        for (item.steps, steps) |declared, *compiled| {
+            const entry = registry.resolveOperation(declared.operation_id) orelse return invalid();
+            if (entry.contract.kind != .step) return invalid();
+            if (!@import("workflow_capability.zig").permits(policy.allowed_capabilities, entry.binding.capabilities())) return invalid();
+            const parameters = try compileParameters(allocator, entry.contract, declared.parameters, resources);
+            const retry_authority = try resolveRetryAuthority(item, declared.id, entry.contract, parameters);
+            transition_count = std.math.add(usize, transition_count, declared.outcomes.len) catch return invalid();
+            try validateDeclaredOutcomes(entry.contract.outcomes, declared.outcomes, item.steps, policy.*);
+            compiled.* = .{
+                .id = declared.id,
+                .source_chain = declared.source_chain,
+                .operation_id = declared.operation_id,
+                .parameters = parameters,
+                .requires = entry.contract.requires,
+                .optional = entry.contract.optional,
+                .produces = entry.contract.produces,
+                .replaces = entry.contract.replaces,
+                .invalidates = entry.contract.invalidates,
+                .outcomes = entry.contract.outcomes,
+                .side_effect = entry.contract.side_effect,
+                .runner_accounting = entry.contract.runner_accounting,
+                .repair_role = entry.contract.repair_role,
+                .outcome_association = entry.contract.outcome_association,
+                .gates = try compileGates(allocator, registry, entry.contract.gates),
+                .capabilities = entry.binding.capabilities(),
+                .retry_authority = retry_authority,
+                .iteration = entry.contract.iteration,
+                .model = if (entry.contract.requiresModelBinding())
+                    @import("workflow_model.zig").resolve(parameters) orelse return invalid()
+                else
+                    null,
             };
-            const maximum_step_executions = compilation.calculateExecutionLimit(steps) orelse return invalid();
-            graph.* = .{
-                .source_ordinal = item.source_ordinal,
-                .shortcode = item.shortcode,
-                .authority = .{
-                    .allowed_capabilities = policy.allowed_capabilities,
-                    .data_schemas = try compileDataSchemas(allocator, self.registry.data_schemas, invocation.contract.produces, steps),
-                    .workflow_id = item.workflow_id,
-                    .workflow_version = item.workflow_version,
-                    .invocation_operation_id = item.invocation_operation_id,
-                    .policy_profile_id = item.policy_profile_id,
-                    .start_step_id = item.start_step_id,
-                    .invocation_outputs = invocation.contract.produces,
-                    .resources = resources,
-                    .steps = steps,
-                    .transitions = transitions,
-                    .maximum_step_executions = maximum_step_executions,
-                },
-            };
-            @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
-            @import("../../domain/workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
         }
-        return graphs;
+
+        const transitions = allocator.alloc(workflow.Transition, transition_count) catch return invalid();
+        var transition_index: usize = 0;
+        for (item.steps) |step| for (step.outcomes) |outcome| {
+            transitions[transition_index] = .{ .from = step.id, .outcome = outcome.outcome, .target = outcome.target };
+            transition_index += 1;
+        };
+        const maximum_step_executions = compilation.calculateExecutionLimit(steps) orelse return invalid();
+        graph.* = .{
+            .source_ordinal = item.source_ordinal,
+            .shortcode = item.shortcode,
+            .authority = .{
+                .allowed_capabilities = policy.allowed_capabilities,
+                .data_schemas = try compileDataSchemas(allocator, registry.data_schemas, invocation.contract.produces, steps),
+                .workflow_id = item.workflow_id,
+                .workflow_version = item.workflow_version,
+                .invocation_operation_id = item.invocation_operation_id,
+                .policy_profile_id = item.policy_profile_id,
+                .start_step_id = item.start_step_id,
+                .invocation_outputs = invocation.contract.produces,
+                .resources = resources,
+                .steps = steps,
+                .transitions = transitions,
+                .maximum_step_executions = maximum_step_executions,
+            },
+        };
+        @import("workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
+        @import("workflow_model_request_lifecycle.zig").validateRunawayRoutes(graph.authority) catch return invalid();
     }
-};
+    return graphs;
+}
 
 fn compileDataSchemas(
     allocator: std.mem.Allocator,
@@ -144,8 +136,8 @@ fn compileDataSchemas(
     return result;
 }
 
-fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registry.Registry, ids: []const []const u8) Error![]const @import("../../domain/workflow_gate.zig").Contract {
-    const result = allocator.alloc(@import("../../domain/workflow_gate.zig").Contract, ids.len) catch return invalid();
+fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registry.Registry, ids: []const []const u8) Error![]const @import("workflow_gate.zig").Contract {
+    const result = allocator.alloc(@import("workflow_gate.zig").Contract, ids.len) catch return invalid();
     for (result, ids) |*destination, id| destination.* = (registry.resolveGate(.{ .bytes = id }) orelse return invalid()).*;
     return result;
 }
@@ -153,7 +145,7 @@ fn compileGates(allocator: std.mem.Allocator, registry: *const operation_registr
 fn compileResources(
     allocator: std.mem.Allocator,
     registry: *const operation_registry.Registry,
-    result_schema_compiler: @import("../../ports/model_result_schema_compiler.zig").Compiler,
+    result_schema_compiler: schema_compiler.Compiler,
     item: definition.Definition,
     inventory_value: inventory.Inventory,
     manifest: inventory.ResourceManifest,
@@ -189,7 +181,7 @@ fn compileResources(
         if (kind == .json_composition) continue;
         compiled.* = .{ .id = declared.id, .source_path = declared.name, .content = switch (kind orelse return invalid()) {
             .result_schema => .{ .result_schema = result_schema_compiler.compile(allocator, captured) catch return invalid() },
-            .packet_guidance => .{ .packet_guidance = @import("../../domain/packet_guidance.zig").compile(allocator, captured) catch return invalid() },
+            .packet_guidance => .{ .packet_guidance = @import("packet_guidance.zig").compile(allocator, captured) catch return invalid() },
             .prompt => .{ .prompt = captured },
             .example => .{ .example = captured },
             .data => .{ .data = captured },

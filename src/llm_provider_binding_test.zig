@@ -1,5 +1,5 @@
 const std = @import("std");
-const decode_toolkit = @import("actions/config/decode_sddtoolkit_config.zig");
+const decode_toolkit = @import("domain/engine_config_decode.zig");
 const resolve_binding = @import("actions/provider/resolve_provider_model_binding.zig");
 const provider_services = @import("application/model_provider_bootstrap_services.zig");
 const workflow_runner = @import("application/workflow_pipeline_runner.zig");
@@ -293,7 +293,7 @@ const Fixture = struct {
     }
 
     fn initJSON(registered: contracts.Registry, json: bool) !Fixture {
-        var toolkit = try (decode_toolkit.Action{}).execute(std.testing.allocator, toolkit_config);
+        var toolkit = try decode_toolkit.decode(std.testing.allocator, toolkit_config);
         errdefer toolkit.deinit();
         var candidate = try provider_registry.Candidate.init(std.testing.allocator, 1);
         defer candidate.deinit();

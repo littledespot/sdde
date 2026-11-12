@@ -9,45 +9,17 @@ pub const DataKey = enum {
     prior_principle_registry,
     packet_guidance,
     invocation_working_directory,
-    exact_engine_config_file,
     raw_engine_config,
     engine_config,
-    exact_llm_provider_config_file,
-    raw_llm_provider_config,
-    raw_llm_provider_document,
-    llm_provider_registry_candidate,
     llm_provider_registry,
     repository_model_allowlist,
     canonical_log_level,
     logging_policy,
-    configured_root_path_policy_set,
-    llm_provider_config_path_policy,
-    configured_root_candidate_set,
-    llm_provider_config_path_candidate,
-    configured_root_capability_set,
-    bootstrap_root_registry_id,
-    bootstrap_root_registry,
-    bootstrap_root_registry_evidence,
-    workflow_authority_layout,
-    raw_workflow_authority_entries,
-    normalized_workflow_authority_entries,
-    workflow_authority_entry_accounts,
-    workflow_authority_inventory_candidate,
-    workflow_authority_inventory,
-    workflow_definition_captures,
-    raw_workflow_definitions,
-    declarative_workflow_definitions,
-    workflow_resource_manifest,
-    workflow_resource_captures,
-    compiled_workflow_graphs,
-    validated_workflow_graphs,
-    workflow_definition_registry_candidate,
     workflow_definition_registry,
     workflow_operation_registry,
     workflow_operation_registry_evidence,
     workflow_invocation,
     selected_compiled_workflow,
-    model_provider_requirement,
     validated_provider_model_binding,
     validated_provider_authorization,
     model_request_identity_ledger,
@@ -547,13 +519,13 @@ test "data shape applies only the exact declared effects" {
         .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
-        .produces = &.{.configured_root_path_policy_set},
+        .produces = &.{.canonical_log_level},
         .side_effect = .none,
     };
     const initial = DataShape.init(&.{.engine_config});
     const next = try initial.apply(contract, DataEffects.fromContract(contract));
-    try std.testing.expect(next.contains(.configured_root_path_policy_set));
-    try std.testing.expect(!initial.contains(.configured_root_path_policy_set));
+    try std.testing.expect(next.contains(.canonical_log_level));
+    try std.testing.expect(!initial.contains(.canonical_log_level));
 }
 
 test "data shape rejects missing undeclared and duplicate writes" {
@@ -561,7 +533,7 @@ test "data shape rejects missing undeclared and duplicate writes" {
         .id = "test",
         .kind = .action,
         .requires = &.{.engine_config},
-        .produces = &.{.configured_root_path_policy_set},
+        .produces = &.{.canonical_log_level},
         .side_effect = .none,
     };
     const envelope = DataShape.init(&.{.engine_config});
@@ -577,8 +549,8 @@ test "data shape rejects missing undeclared and duplicate writes" {
         error.DuplicateWrite,
         envelope.apply(contract, .{
             .data_writes = &.{
-                .configured_root_path_policy_set,
-                .configured_root_path_policy_set,
+                .canonical_log_level,
+                .canonical_log_level,
             },
         }),
     );
