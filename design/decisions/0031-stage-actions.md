@@ -1,7 +1,9 @@
 # ADR 0031: One action per deterministic stage
 
 - **Status:** Accepted amendment. **Partly implemented:** `prepare-toolchain` is the first
-  stage action (12 November 2026, SPEC01 E2); every other stage is still a run of
+  stage action (12 November 2026, SPEC01 E2) and `prepare-inputs` the second (12 November
+  2026, SPEC01 E2b), and `prepare-reference-evidence` and `prepare-reference-tokens` the third
+  and fourth (12 November 2026, SPEC01 E2c); every other stage is still a run of
   single-step actions until its conversion lands. Documents that describe single-step
   granularity for those stages carry a pointer to this ADR until then.
 - **Date:** 2026-10-22
@@ -118,7 +120,11 @@ architecture tests carry the narrowness instead:
 - `execute` only calls internal-step functions in order, with a cancellation check
   between them. It never calls a port method itself.
 - Each port-using internal step takes exactly one port parameter. No internal function
-  takes the `Action` value, `self` or any struct that holds more than one port.
+  takes the `Action` value, `self` or any struct that holds more than one port. The one
+  exception is the Unicode text services (the normalizer, the case folder and the lexical
+  classifier, the three types of `ports/unicode_normalizer.zig`), which are pure and carry no
+  operational capability: they count as one port family (user ruling, 12 November 2026), so a step
+  may take any of them together. No other pair of ports, even from one module, is exempt.
 - No capability bag, `anytype` or `anyopaque` crosses an internal-step boundary.
 - §6.1's read-versus-parse split holds between functions: a function that reads does not
   parse. Raw, parsed, normalized and validated values stay distinct types, with explicit
@@ -350,8 +356,8 @@ All offline, for each converted stage:
   - it imports only domain and port modules;
   - `execute` calls no port method, and takes the capability-free `NodeRuntime` and no
     other runtime handle;
-  - no internal function takes two port parameters, the `Action` value or `self`, or any
-    struct holding more than one port;
+  - no internal function takes two port parameters (the Unicode text services count as one),
+    the `Action` value or `self`, or any struct holding more than one port;
   - no internal function takes a capability bag, `anytype` or `anyopaque`;
   - each of these rules has rejected fixtures;
   - no absorbed operation remains registered;

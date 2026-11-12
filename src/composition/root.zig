@@ -105,7 +105,7 @@ pub const Runtime = struct {
         };
         self.native.init(allocator, self.toolchain_source.projectCapturer(), self.toolchain_source.presetEnumerator(), self.toolchain_source.presetCapturer(), self.toolchain_parser.parser(), policy_registry, .{ .normalize_fn = @import("unicode_normalization").nfc }, self.reference.inspector(), self.feature.inspector(), self.inputs.capturer(), @import("../adapters/parsers/clarification_inputs.zig").stateParser(), @import("../adapters/parsers/clarification_inputs.zig").formParser(), self.corpus.enumerator(), self.corpus.capturer(), self.markdown.decoderPort(), .{ .fold_fn = @import("unicode_normalization").caseFold }, self.identities.source(), .{ .boundary_fn = @import("unicode_normalization").lexicalBoundary });
         self.native.publish_output.action.writer = self.outputs.port();
-        self.native.capture_workflow_state.action.source = self.inputs.workflowStateCapturer();
+        self.native.prepare_inputs.action.state_source = self.inputs.workflowStateCapturer();
         self.boot = runInProjectWithRegistry(io, allocator, project, control, &self.native.registry);
         if (self.boot == .ready) {
             self.logging = .{ .allocator = allocator, .io = io, .project = project, .roots = self.boot.ready.roots.registry(), .logs = &self.boot.ready.logs, .inputs = &self.inputs, .outputs = &self.outputs };

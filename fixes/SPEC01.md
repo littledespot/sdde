@@ -248,8 +248,11 @@ or the user records it as a model limitation.
   hygiene change's revert. Report the remaining AC elaboration as a model limitation (AGENTS.md)
   and let H1 judge it.
 - **Repair requests without step guidance:** six repair sites take their task only from the
-  three-line `repair.prompt.md` (`spec.workflow.yaml:371`, `:408`, `:605`, `:760`, `:864`,
-  `:879`), and the two reconciliation repairs among them (`:605`, `:879`) bind no context.
+  three-line `repair.prompt.md` (`spec.workflow.yaml` steps `text-repair` in `extract-references`,
+  the extraction repair in `validate-extraction`, `request` in `repair-reconciliation-candidate`,
+  `repair` in `generate-unit`, `request` in `repair-source-extraction` and `request` in
+  `repair-source-candidate`), and the two reconciliation repairs among them
+  (`repair-reconciliation-candidate` and `repair-source-candidate`) bind no context.
   Binding definitions (Q2) wasn't kept; counted as a brittleness measure (T5).
 - **Provider doesn't enforce the response schema:** the engine's request matches AWS's
   documented Converse shape (`outputConfig.textFormat` json_schema,
@@ -439,7 +442,7 @@ Coverage (ADR 0038 Decision 2; `specification_session.zig:351-357`) covers FR, B
 claims and checks links, not meaning (ADR 0038:219-221), so an AC naming every claim passes
 it: `fa03…` passed on its first attempt with no `uncovered_member` firing, a route b3 doesn't
 close. No retained `uncovered_member` firing ended well: two runs exhausted the records retry
-limit (2, `spec.workflow.yaml:732`), and three passed by adding the claim IDs to the
+limit (2, step `gen` in `generate-unit`), and three passed by adding the claim IDs to the
 success-only AC-001. The advisory evaluate-e2e link check can't record over-citation.
 
 - **b3 (D14.1):** a claim-bound scenario insert. **Kept 12 November 2026** (user: "keep B3";
@@ -469,7 +472,7 @@ principles "should be used for context when executing the spec workflow".
   (Plan, Implement, init, repair) keeps it. ADR 0015 records it (0015:36); design.md §3.3
   doesn't (adding it is a design edit awaiting approval).
 - **Context:** today no generation call receives principles; only `capture-principle-registry`
-  reads them (`spec.workflow.yaml:44-46`). Adding them changes generation requests, so it is a
+  reads them (`spec.workflow.yaml` step `principles`). Adding them changes generation requests, so it is a
   model-input change measured by a set. Principles are context and constraints, never a
   requirement's origin: items still cite only source claims (D13.4).
 - **D17.1 decided 1 November 2026:** the records call only (it writes the FR, AC, BR and other
@@ -550,11 +553,13 @@ Budget-stopped runs publish nothing while it is on hold (none since D13.1).
 ### E1. Engine-owned model request (A1, ADR 0030 slice 4)
 
 Not started: the `request-model` step replacing `model-request-body`
-(`spec.workflow.yaml:979-1035`) and its five wrappers (`:905-978`), with the contract-variant
+(`spec.workflow.yaml` subgraph `model-request-body`) and its five wrappers
+(`model-request-with-context`, `model-request`, `support-request`, `composition-request` and
+`composition-request-body`), with the contract-variant
 mechanism ADR 0033 reuses. It folds in ADR 0039's re-send and retires `validateRunawayRoutes`
 (`src/domain/workflow_model_request_lifecycle.zig:86`). Retake the slice 1 freeze on the commit
 before it lands (slices 1 and 4: git `194e29a:fixes/Z_FIX05.md:2794`, `:4430`). Slice 1 review
-points: make `extract/content` and `extract/content-request` (`spec.workflow.yaml:321-333`) one
+points: make `extract/content` and `extract/content-request` (steps `content` and `content-request` of `extract-references`) one
 step; port each runner-level lifecycle test in `src/model_request_workflow_test.zig` one for one
 with a mapping table and a reason for any dropped assertion (user decision, 23 October 2026,
 option b). If E1 removes a request-lifecycle `DataKey`, it lands under §2.12.
@@ -566,6 +571,13 @@ user: "yes": ADR 0031's derived choices 1–3 and 6–8 (:268-290), including th
 offline evidence replaces the live run). Its measures are recorded there; they decide whether
 the next stage converts (ADR 0031:236-238, the user's call). §10 C32 records what the stage feeds
 today.
+
+**`prepare-inputs` converted 12 November 2026** ([Z_SPEC01](Z_SPEC01.md) E2b; the user's "yes").
+**`prepare-references` converted 12 November 2026** as two stages,
+`prepare-reference-evidence` and `prepare-reference-tokens`, with `compile-naming-policy` a
+separate step between them ([Z_SPEC01](Z_SPEC01.md) E2c; the user's "apply best recommendations").
+The three preparation subgraphs the E2 preflight named (`prepare-toolchain`, `prepare-inputs`,
+`prepare-references`) are now stage actions; converting any other subgraph is a separate decision.
 
 ### E3. Engine routines (A3, ADR 0032)
 
@@ -641,7 +653,7 @@ Not started; no §13 authentication chain exists in `src/`. Fresh answers can't 
 recovery: refresh rejects new submissions (`clarification_refresh.zig:65`); provenance
 rejects nonempty response-ID sets (`specification_provenance.zig:88`,
 `specification_support_evidence.zig:171`); form validation returns one
-`InvalidClarificationInput` (`src/actions/clarification/validate_clarification_forms.zig`);
+`InvalidClarificationInput` (`src/actions/specify/prepare_inputs.zig:179-184`);
 resolved needs are empty (`src/actions/clarification/build_resolved_clarification_needs.zig`);
 passive literal origins are source-only (`passive_literals.zig:16`), so answer text can't get
 ADR 0025's response-owned origin (0025:70-71); generation doesn't consume answers (it binds
@@ -726,7 +738,7 @@ and fix002 (`workflow_tests.zig:1633-1698`); tests R36 (`model_envelope_test.zig
 
 - No integration scenario reaches ADR 0035's story `restatement`; unit coverage only.
   D16.2's `repeated_statement` has one (`workflow_tests.zig:1402`, `:2380-2387`).
-- The no-feature-claim text-repair route (`spec.workflow.yaml:360-381`) has unit coverage only;
+- The no-feature-claim text-repair route (`authorize-text-repair` to `text-repair` in `extract-references`) has unit coverage only;
   the integration `.unbound` mode ends `.invalid` before it.
 - The retained GPT-OSS compatibility exchange is assessed `incompatible` since ADR 0036
   (`provider_compatibility_tests.zig:261-262`, `:305-309`), so the normal §22.6-normalized path
@@ -761,8 +773,8 @@ T5.2 20 (tests 88), T5.3 5 instructions at 11 sites, T5.4 6, T5.5 0, T5.6 13 in 
 **Due:** not retaken since the kept ADR 0047 and D12.3 change set (`f6ef0f6`, `39fd9ff`; freeze
 `evaluations/request-projection/entity-meaning-before`, 130 scenarios, 1,592 calls) or the HEAD
 set's build; ADR 0047 deleted the story prompt and purpose, so T5.2 and T5.3 may change. T5.4
-is still 6 (`spec.workflow.yaml:371`, `:408`, `:605`, `:760`, `:864`, `:879`, each binding
-`repair-prompt`).
+is still 6 (the six sites that bind `repair-prompt`, listed under "Repair requests without step
+guidance").
 
 ### T8. Report repairs cover every unit
 
@@ -1047,7 +1059,7 @@ written before the clarification state (`clarification_output.zig:17-29`), one f
 with no rollback (`adapters/filesystem/workflow_output.zig:1-2`, `:56-87`), and each file is
 truncated in place before it is written (`file_access.zig:8-9`, `:40-42`). The next run fails
 `prepare-inputs` when forms exist without a state or their count differs from its records
-(`validate_clarification_forms.zig:19-22`; `spec.workflow.yaml:251-253`). ADR 0009's acceptance
+(`src/actions/specify/prepare_inputs.zig:179-184`). ADR 0009's acceptance
 (`:144-146`) requires that "a fresh rerun replaces the complete output set without recovery".
 The failpoint test drives the input capturer and the writer with placeholder bytes and fails
 before the file is touched (`test/integration/workflow_tests.zig:3019-3103`, `:3028`), so it
@@ -1092,7 +1104,7 @@ again after each failure.
 - **Result schemas and compositions:** 90 and 48 `invalid()` lines, one error each
   (`model_result_schema.zig`, `json_composition.zig`).
 - **Reference ingestion:** ten typed reasons (`reference_ingestion.zig:42-53`) are discarded;
-  each becomes `InvalidReferenceAccounting` (`validate_reference_accounting.zig:29`, `:44`),
+  each becomes `InvalidReferenceAccounting` (`prepare_reference_evidence.zig:156`, `:169`),
   against ADR 0036:198-200 ("fails at ingestion with a typed reason", said of malformed text).
   Any file that isn't `.md` or `.markdown` is one of them (`markdown_reference.zig:17`).
 - **Toolchain:** `error.InvalidToolchain` on 68 lines in ten files.
@@ -1101,11 +1113,12 @@ again after each failure.
 **C5. Model answers the schema admits that end the run with no correction.**
 
 - `claims: []` with nothing preserved: `validate_reference_claims.zig:28` returns an error and
-  the step has no `invalid` route (`spec.workflow.yaml:425-427`), so the run ends `failed`.
+  the step has no `invalid` route (`validate-claims` in `validate-extraction`), so the run ends
+  `failed`.
   F0100:325-326 states the rule, not its outcome.
 - A repeated ID in `claim_ids` or `signal_ids` is rejected at parse
   (`specification_generation.zig:156-157`; `specification_source_binding.zig:170`) and routed
-  `invalid: end.invalid` (`spec.workflow.yaml:739`). **D:** ADR 0038:88-89.
+  `invalid: end.invalid` (`parse-specification` in `generate-unit`). **D:** ADR 0038:88-89.
 - An edge case with no candidate criterion ends `blocked` after every generation call
   (`scenario_link.zig:46-48`; `scenario_link_request.zig:57-60`).
 
@@ -1143,7 +1156,7 @@ first two; none for the third. **Owners:** the filesystem adapters cited.
   no production code assigns a resolved or cancelled status, by grep), prior subjects are
   retained (`:61-62`), and any open record gives `needs_user` (`:54-59`). A rerun with an open
   record still makes every model call, because open records are first checked at
-  `check-output-clarifications` (`spec.workflow.yaml:832-834`), after generation.
+  `check-output-clarifications` (in `publish-specification`), after generation.
 - Authority subjects are keyed by per-run ordinals and the contract version
   (`required_authority_clarifications.zig:77-88`), which `source_preservation.zig:26` says don't
   survive a rebuild. 24-workflow-state.md:115-117 says regenerated IDs don't define a new
@@ -1164,7 +1177,7 @@ first two; none for the third. **Owners:** the filesystem adapters cited.
 **C10. The conflicts request is sent when only one answer is admissible.** No branch tests whether
 a conflict group was accepted: after signals the phase is `.signals`
 (`reference_reconciliation_stage.zig:106`) and `check-conflicts` routes to the request
-(`spec.workflow.yaml:553-563`). With no group the choice set is empty
+(`check-conflicts` in `validate-reconciliation`). With no group the choice set is empty
 (`reference_reconciliation_stage.zig:79-81`) and the schema owner narrows the array to
 `maxItems: 0` (`model_result_schema.zig:423-430`). In the 38 runs every conflicts request
 carries `"maxItems":0` and every answer is `{"conflicts":[]}`. The call is 9.4% of their model
@@ -1257,7 +1270,8 @@ for isn't measured (C17).
   `ports/workflow_operation_registry.zig:117-140`, "Rebuild on every call").
 - The clean path re-runs validators in all six runs: `validate-dispositions` three times and
   `validate-signals` twice, because each release returns to the first validator
-  (`spec.workflow.yaml:549`, `:569`); `check-summary-reuse` and `validate-summary` twice, once
+  (the `ok` routes of the `merge` steps in `reconcile-references` and `validate-reconciliation`);
+`check-summary-reuse` and `validate-summary` twice, once
   for the requested leaf summary and once for the parent partition that reuses it.
 - One request packet is built through 10 to 15 full copies (traced), each copying every source's
   bytes (`model_input_packet.zig:164-205`, `:199`).
@@ -1404,14 +1418,14 @@ definition.
 
 - Coverage repair can only block: a one-variant decision (`specification_coverage_repair.zig:10`,
   `:22-30`) with a repair role, a descriptor, a data key and a binding branch
-  (`workflow_outcome_binding.zig:433`). The step has no `ok` route (`spec.workflow.yaml:811-813`).
+  (`workflow_outcome_binding.zig:433`). The step has no `ok` route (`authorize-coverage-repair` in `assemble-specification-candidate`).
   Q21 owns the gap that this route blocks on.
 - `validated_specification_rendering` is always `true`
   (`specification_rendering_workflow.zig:53`), so the `!rendering_valid` checks
   (`build_specification_state.zig:16`; `prepare_specification_output.zig:17`) can't fire.
 - The authority outcome is computed by `reconcile` and again by `validate`
   (`required_authority.zig:365-366`), and all four `reconcile` outcomes route to `gate`
-  (`spec.workflow.yaml:1053`). **D:** 13-10:81-83. The `required-authority@1` gate is registered
+  (step `reconcile` in `authority-gate`). **D:** 13-10:81-83. The `required-authority@1` gate is registered
   (`native_workflow_operations.zig:579`), but no production operation declares it (`:665`),
   against F0100:723.
 - `checkConsistency` is called at admission, story composition and assembly
@@ -1471,13 +1485,14 @@ switches on closed sets.
   and `Stage`, `:357`); `:402-415` orders by declaration order.
 - Unit kinds are compared by integer tag across two unions (`specification_generation.zig:240`;
   `specification_repair.zig:212`).
-- The YAML pairs prompts with units by step position (`spec.workflow.yaml:701-715`) and nothing
+- The YAML pairs prompts with units by step position (subgraph `generate-specification`) and nothing
   ties a prompt to its unit (no Zig file names the three prompt resources, by grep), so a
   swapped prompt would be accepted.
 
 **C37. Limits that don't bind, and hand counts.**
 
-- `retry-limit: 64` (`spec.workflow.yaml:770`) and `128` (`:525`, `:593`, `:618`) count visits
+- `retry-limit: 64` (`merge-repair` in `generate-unit`) and `128` (the `merge` steps of
+  `reconcile-references`, `validate-reconciliation` and `repair-reconciliation-candidate`) count visits
   per defect key, which the repair routes can't reach (traced). The real bound is a target
   population written as literals (`specification_repair.zig:186-196`;
   `reference_reconciliation_repair.zig:126-131`). An overflow surfaces as the payload-free
@@ -1577,8 +1592,8 @@ removal is proposed: live runs give them no coverage, so only offline tests do.
   `validation.sourcePreservationCheck` is true (`check_source_preservation_policy.zig:8`; default
   false, `config.zig:68`). That is 40 whole files and 3,078 lines (import closure, traced), 206
   YAML lines and three resources. None of the six runs made a review send.
-- The passive-literal stage (five steps, `spec.workflow.yaml:281-295`) gave an empty list in all
-  344 requests that carry one in the 38 runs.
+- The passive-literal registry gave an empty list in all 344 requests that carry one in the 38
+  runs.
 
 ### 10.7 Unconfirmed readings
 

@@ -10,46 +10,12 @@ const ci = @import("clarification_input_workflow.zig");
 const refresh = @import("clarification_refresh_workflow.zig");
 const rendering = @import("specification_rendering_workflow.zig");
 const authority = @import("required_authority_values.zig");
-pub const raw_schema = values.schema(.raw_workflow_state, ?[]const u8, 1, state.max_bytes + 1024);
 pub const prior_schema = values.schema(.prior_specification_state, owned.Value, 1, null);
 pub const state_schema = values.schema(.specification_publication_state, owned.Value, 1, null);
 pub const reference_schema = values.schema(.rendered_reference_context, owned.Value, 1, null);
 pub const snapshot_schema = values.schema(.reference_snapshot, owned.Value, 1, null);
-pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ raw_schema, prior_schema, state_schema, reference_schema, snapshot_schema };
+pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ prior_schema, state_schema, reference_schema, snapshot_schema };
 
-pub const Capture = struct {
-    pub const Action = @import("../actions/workflow/capture_workflow_state.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const feature = try readFeature(&input.step.data);
-        const paths = values.read(&input.step.data, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch |operation_error| return operation_error;
-        var arena: std.heap.ArenaAllocator = .init(self.allocator);
-        defer arena.deinit();
-        const bytes = self.action.execute(arena.allocator(), feature, paths.*) catch |operation_error| return operation_error;
-        return @import("workflow_candidate.zig").publish(self.allocator, raw_schema, ?[]const u8, bytes);
-    }
-};
-pub const Parse = struct {
-    pub const Action = @import("../actions/specification/parse_specification_state.zig").Action;
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const bytes = values.read(&input.step.data, raw_schema, ?[]const u8) catch |operation_error| return operation_error;
-        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-        errdefer owned.destroy(owner);
-        owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch |cause| return cause };
-        const prior_principles = if (owner.payload.prior_state.specified()) |state_value| state_value.principle_registry else null;
-        const principle_schema = @import("principle_workflow.zig").prior_schema;
-        const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch |operation_error| return operation_error;
-        errdefer values.destroy(projected);
-        var result = owned.publish(self.allocator, prior_schema, owner, .ok) catch |operation_error| return operation_error;
-        result.delta.data_writes[@intFromEnum(principle_schema.key)] = projected;
-        return result;
-    }
-};
 pub const ResolvedNeeds = struct {
     pub const Action = @import("../actions/clarification/build_resolved_clarification_needs.zig").Action;
     allocator: std.mem.Allocator,
@@ -140,6 +106,3 @@ pub const Prepare = struct {
         return @import("workflow_candidate.zig").publish(self.allocator, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared, prepared);
     }
 };
-fn readFeature(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!@import("../domain/feature_directory.zig").Directory {
-    return (values.read(view, @import("feature_directory_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch |operation_error| return operation_error).*;
-}

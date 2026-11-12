@@ -12,7 +12,7 @@ Part of the [proposed design](../design.md#5-logical-architecture), as amended b
    through runner-owned child bindings. A workflow-visible orchestrator is
    addressable from YAML and cannot hide a workflow-specific graph; all
    orchestrators own ordering and branching only, not domain work.
-3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command. Under [ADR 0031](../decisions/0031-stage-actions.md) (`prepare-toolchain` is the first stage action), a stage action performs one deterministic sequence of internal steps, such as toolchain preparation, through internal functions that each do one of those things, within the limits the ADR lists.
+3. **Actions** perform one use-case operation each: read one resource, invoke one model request, validate one concern, render one artifact, publish authorized workflow output, or execute one configured command. Under [ADR 0031](../decisions/0031-stage-actions.md) (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are stage actions), a stage action performs one deterministic sequence of internal steps, such as toolchain preparation, through internal functions that each do one of those things, within the limits the ADR lists.
 4. **Domain** contains immutable intermediate representations, identifiers, diagnostics, policies, and result types.
 5. **Infrastructure adapters** implement filesystem, model-provider, parser, command-runner, clock, logging, and reader ports.
 6. **Workflow/preset/config compilers** validate declarative workflow graphs,

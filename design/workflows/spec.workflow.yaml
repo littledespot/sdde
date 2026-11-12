@@ -37,7 +37,7 @@ steps:
       ok: inputs
       failed: end.failed
   inputs:
-    call: prepare-inputs
+    use: prepare-inputs
     on:
       ok: principles
       failed: end.failed
@@ -49,7 +49,17 @@ steps:
     with: {guidance: packet-guidance}
     on: {ok: references, failed: end.failed}
   references:
-    call: prepare-references
+    use: prepare-reference-evidence
+    on:
+      ok: naming
+      failed: end.failed
+  naming:
+    use: compile-naming-policy
+    on:
+      ok: tokens
+      failed: end.failed
+  tokens:
+    use: prepare-reference-tokens
     on:
       ok: logging
       failed: end.failed
@@ -179,96 +189,6 @@ steps:
       blocked: end.blocked
       failed: end.failed
 subgraphs:
-  prepare-inputs:
-    start: normalize-feature
-    steps:
-      normalize-feature:
-        use: normalize-feature-directory
-        on: {ok: validate-feature, failed: end.failed}
-      validate-feature:
-        use: validate-feature-directory
-        on: {ok: inspect-feature, failed: end.failed}
-      inspect-feature:
-        use: inspect-feature-directory
-        on: {ok: normalize-reference, failed: end.failed}
-      normalize-reference:
-        use: normalize-reference-selector
-        on: {ok: validate-reference, failed: end.failed}
-      validate-reference:
-        use: validate-reference-selector
-        on: {ok: inspect-reference, failed: end.failed}
-      inspect-reference:
-        use: inspect-reference-directory
-        on: {ok: resolve-paths, failed: end.failed}
-      resolve-paths:
-        use: resolve-feature-artifact-paths
-        on: {ok: capture-workflow-state, failed: end.failed}
-      capture-workflow-state:
-        use: capture-workflow-state
-        on: {ok: parse-specification-state, failed: end.failed}
-      parse-specification-state:
-        use: parse-specification-state
-        on: {ok: capture-clarifications, failed: end.failed}
-      capture-clarifications:
-        use: capture-clarification-inputs
-        on: {ok: parse-state, failed: end.failed}
-      parse-state:
-        use: parse-clarification-state
-        on: {ok: validate-state, failed: end.failed}
-      validate-state:
-        use: validate-clarification-state
-        on: {ok: validate-forms, failed: end.failed}
-      validate-forms:
-        use: validate-clarification-forms
-        on: {ok: end.ok, failed: end.failed}
-  prepare-references:
-    start: inventory-references
-    steps:
-      inventory-references:
-        use: inventory-reference-sources
-        on: {ok: validate-inventory, failed: end.failed}
-      validate-inventory:
-        use: validate-reference-inventory
-        on: {ok: capture-references, failed: end.failed}
-      capture-references:
-        use: capture-reference-sources
-        on: {ok: decode-references, failed: end.failed}
-      decode-references:
-        use: decode-reference-markdown
-        on: {ok: validate-accounting, failed: end.failed}
-      validate-accounting:
-        use: validate-reference-accounting
-        on: {ok: identify-references, failed: end.failed}
-      identify-references:
-        use: assign-reference-identities
-        on: {ok: build-chunks, failed: end.failed}
-      build-chunks:
-        use: build-reference-chunks
-        on: {ok: validate-chunks, failed: end.failed}
-      validate-chunks:
-        use: validate-reference-chunks
-        on: {ok: compile-naming, failed: end.failed}
-      compile-naming:
-        use: compile-naming-policy
-        on: {ok: build-grammar, failed: end.failed}
-      build-grammar:
-        use: build-superset-path-token-grammar
-        on: {ok: scan-literals, failed: end.failed}
-      scan-literals:
-        use: scan-reference-passive-literals
-        on: {ok: assign-literals, failed: end.failed}
-      assign-literals:
-        use: assign-passive-literal-identities
-        on: {ok: validate-literals, failed: end.failed}
-      validate-literals:
-        use: validate-reference-passive-literals
-        on: {ok: extract-facts, failed: end.failed}
-      extract-facts:
-        use: extract-structured-reference-facts
-        on: {ok: identify-tokens, failed: end.failed}
-      identify-tokens:
-        use: assign-structured-token-candidate-identities
-        on: {ok: end.ok, failed: end.failed}
   extract-references:
     start: initialize-requests
     steps:

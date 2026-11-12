@@ -2,8 +2,9 @@
 const std = @import("std");
 const extraction = @import("../domain/reference_extraction.zig");
 const evidence = @import("../domain/reference_evidence.zig");
-pub const extract = @import("../actions/reference/extract_structured_reference_facts.zig").Action{};
-pub const identify = @import("../actions/reference/assign_structured_token_candidate_identities.zig").Action{};
+/// The reference token stage's internal steps, called directly: test setup runs the same functions
+/// the stage does.
+pub const stage = @import("../actions/reference/prepare_reference_tokens.zig").steps;
 pub const classify = struct {
     pub fn execute(_: @This(), allocator: std.mem.Allocator, inputs: evidence.Inputs, available: extraction.tokens.Candidates, candidate: extraction.TextValidated) !extraction.Classified {
         return switch (try @import("../domain/token_classification_validation.zig").validate(allocator, inputs, available, candidate)) {
@@ -15,7 +16,7 @@ pub const classify = struct {
 pub const assign = @import("../actions/reference/assign_preserved_token_identities.zig").Action{};
 pub const build = @import("../actions/reference/build_preserved_token_claims.zig").Action{};
 pub fn candidates(allocator: std.mem.Allocator, inputs: evidence.Inputs) !extraction.tokens.Candidates {
-    return identify.execute(allocator, inputs, try extract.execute(allocator, inputs));
+    return stage.assignCandidates(allocator, inputs, try stage.extractFacts(allocator, inputs));
 }
 pub fn assignments(allocator: std.mem.Allocator, inputs: evidence.Inputs, text: extraction.TextValidated) !extraction.TokenAssignments {
     return assign.execute(allocator, try classify.execute(allocator, inputs, try candidates(allocator, inputs), text));

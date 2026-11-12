@@ -22,9 +22,7 @@ test "source coverage requires a complete contiguous span with exact positions" 
     try std.testing.expectError(error.InvalidReferenceAccounting, wrong_position.accept(.{ .start = wrong_position.position, .end = .{ .byte = 6, .line = 1, .column = 7 } }));
 }
 const reference = @import("domain/reference_ingestion.zig");
-const inventory_action = @import("actions/reference/validate_reference_inventory.zig");
-const decode_action = @import("actions/reference/decode_reference_markdown.zig");
-const account_action = @import("actions/reference/validate_reference_accounting.zig");
+const steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
 const markdown = @import("adapters/parsers/markdown_reference.zig");
 const unicode = @import("unicode_normalization");
 const selected: @import("domain/reference_selector.zig").Directory = .{
@@ -33,10 +31,9 @@ const selected: @import("domain/reference_selector.zig").Directory = .{
     .root_identity = .{ .filesystem_id = 1, .file_id = 1 },
     .directory_identity = .{ .filesystem_id = 1, .file_id = 2 },
 };
-const validator: inventory_action.Action = .{
-    .normalizer = .{ .normalize_fn = unicode.nfc },
-    .case_folder = .{ .fold_fn = unicode.caseFold },
-};
+fn validateInventory(allocator: std.mem.Allocator, raw: reference.RawInventory) reference.Error!reference.Inventory {
+    return steps.validateInventory(.{ .normalize_fn = unicode.nfc }, .{ .fold_fn = unicode.caseFold }, allocator, raw);
+}
 fn file(path: []const u8, id: u128, size: u64) reference.Descriptor {
     return .{ .raw_path = path, .observation = .{ .file = .{
         .identity = .{ .filesystem_id = 1, .file_id = id },
@@ -46,7 +43,7 @@ fn file(path: []const u8, id: u128, size: u64) reference.Descriptor {
     } } };
 }
 fn captured(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.CapturedCorpus {
-    const inventory = try validator.execute(allocator, .{ .directory = selected, .entries = &.{file(path, 3, bytes.len)} });
+    const inventory = try validateInventory(allocator, .{ .directory = selected, .entries = &.{file(path, 3, bytes.len)} });
     const entries = try allocator.alloc(reference.CapturedEntry, 1);
     entries[0] = .{ .entry = inventory.entries[0], .source = .{ .bytes = bytes }, .debit = .{ .reserved = bytes.len, .outcome = .{ .committed = bytes.len } } };
     return .{ .inventory = inventory, .entries = entries, .source_bytes = bytes.len, .budget_revision = 1 };
@@ -56,8 +53,8 @@ pub fn read(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !
 }
 pub fn readWithIo(io: std.Io, allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.Inputs {
     var adapter: markdown.Adapter = .{ .io = io };
-    const decoded = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(allocator, try captured(allocator, path, bytes));
-    return (account_action.Action{}).execute(allocator, decoded);
+    const decoded = try steps.decodeMarkdown(adapter.decoderPort(), allocator, try captured(allocator, path, bytes));
+    return steps.validateAccounting(allocator, decoded);
 }
 /// Shared setup for controlled upstream evidence; no model calls or results.
 pub fn readSources(io: std.Io, allocator: std.mem.Allocator, sources: []const []const u8) !reference.Inputs {
@@ -79,7 +76,7 @@ test "reference inventory normalizes sorts and assigns run-local source IDs with
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const raw = [_]reference.Descriptor{ file("z.md", 3, 0), file("Cafe\u{301}.md", 4, 0), file(".hidden.md", 5, 0) };
-    const result = try validator.execute(arena.allocator(), .{ .directory = selected, .entries = &raw });
+    const result = try validateInventory(arena.allocator(), .{ .directory = selected, .entries = &raw });
     try std.testing.expectEqualStrings(".hidden.md", result.entries[0].path.bytes);
     try std.testing.expectEqualStrings("Café.md", result.entries[1].path.bytes);
     try std.testing.expectEqualStrings("Cafe\u{301}.md", result.entries[1].raw_path);
@@ -90,12 +87,12 @@ test "reference inventory rejects Unicode case normalization physical aliases an
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     for ([_][2][]const u8{ .{ "A.md", "a.md" }, .{ "Café.md", "Cafe\u{301}.md" }, .{ "Straße.md", "STRASSE.md" }, .{ "Σ.md", "σ.md" } }) |pair| {
-        try std.testing.expectError(error.InvalidReferenceInventory, validator.execute(arena.allocator(), .{ .directory = selected, .entries = &.{ file(pair[0], 3, 0), file(pair[1], 4, 0) } }));
+        try std.testing.expectError(error.InvalidReferenceInventory, validateInventory(arena.allocator(), .{ .directory = selected, .entries = &.{ file(pair[0], 3, 0), file(pair[1], 4, 0) } }));
     }
     for ([_][]const u8{ "../escape.md", "/absolute.md", "a\\b.md", "missing/child.md", "bad\x00.md", "%252e%252e.md", "\xff.md" }) |path| {
-        try std.testing.expectError(error.InvalidReferenceInventory, validator.execute(arena.allocator(), .{ .directory = selected, .entries = &.{file(path, 3, 0)} }));
+        try std.testing.expectError(error.InvalidReferenceInventory, validateInventory(arena.allocator(), .{ .directory = selected, .entries = &.{file(path, 3, 0)} }));
     }
-    try std.testing.expectError(error.InvalidReferenceInventory, validator.execute(arena.allocator(), .{ .directory = selected, .entries = &.{ file("a.md", 3, 0), file("b.md", 3, 0) } }));
+    try std.testing.expectError(error.InvalidReferenceInventory, validateInventory(arena.allocator(), .{ .directory = selected, .entries = &.{ file("a.md", 3, 0), file("b.md", 3, 0) } }));
 }
 
 test "Markdown reader retains BOM CRLF Unicode whitespace links and code without executing or rewriting" {
@@ -156,10 +153,10 @@ test "unsupported and malformed content is retained as explicit failure and cann
         .{ .path = "mojibake.md", .bytes = "Renew\u{85} a loan.", .failure = .malformed_text },
         .{ .path = "delete.md", .bytes = "a\x7fb", .failure = .malformed_text },
     }) |case| {
-        const result = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(arena.allocator(), try captured(arena.allocator(), case.path, case.bytes));
+        const result = try steps.decodeMarkdown(adapter.decoderPort(), arena.allocator(), try captured(arena.allocator(), case.path, case.bytes));
         try std.testing.expectEqual(case.failure, result.entries[0].result.blocked);
         try std.testing.expect(result.entries[0].debit.?.outcome == .released);
-        try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), result));
+        try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), result));
     }
 }
 
@@ -167,28 +164,28 @@ test "accounting rejects missing duplicate forged and incomplete decoder evidenc
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     var adapter: markdown.Adapter = .{ .io = std.testing.io };
-    const valid = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(arena.allocator(), try captured(arena.allocator(), "source.md", "# Original\n"));
+    const valid = try steps.decodeMarkdown(adapter.decoderPort(), arena.allocator(), try captured(arena.allocator(), "source.md", "# Original\n"));
     var bad = valid;
     bad.entries = &.{};
-    try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), bad));
+    try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), bad));
     bad = valid;
     bad.entries = &.{ valid.entries[0], valid.entries[0] };
-    try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), bad));
+    try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), bad));
     bad = valid;
     bad.decoded_bytes += 1;
-    try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), bad));
+    try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), bad));
     var entry = valid.entries[0];
     var block = entry.result.decoded.blocks[0];
     block.span.end.byte -= 1;
     entry.result.decoded.blocks = &.{block};
     bad = valid;
     bad.entries = &.{entry};
-    try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), bad));
+    try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), bad));
     block = valid.entries[0].result.decoded.blocks[0];
     block.span.end.line += 1;
     entry.result.decoded.blocks = &.{block};
     bad.entries = &.{entry};
-    try std.testing.expectError(error.InvalidReferenceAccounting, (account_action.Action{}).execute(arena.allocator(), bad));
+    try std.testing.expectError(error.InvalidReferenceAccounting, steps.validateAccounting(arena.allocator(), bad));
 }
 
 test "reader enforces source and decoded byte ceilings before allocation" {

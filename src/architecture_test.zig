@@ -1470,6 +1470,39 @@ fn parameterText(source: []const u8, at: usize) ?[]const u8 {
     return null;
 }
 
+/// The alias a stage action gives the Unicode text services' port module (`unicode_normalizer.zig`).
+/// The user's ruling (12 November 2026) counts its three types (normalizer, case folder, lexical
+/// classifier) as one port family for ADR 0031's one-port rule; no other module has that exemption.
+const text_family_alias = "text_port";
+
+/// The number of ports a step's parameter list takes: each `*_port.` type counts as one, except that
+/// every type of the text services' module together counts as one.
+fn portCount(parameters: []const u8) usize {
+    var count: usize = 0;
+    var text_family = false;
+    var rest = parameters;
+    while (std.mem.indexOf(u8, rest, "_port.")) |at| {
+        var start = at;
+        while (start > 0 and (std.ascii.isAlphanumeric(rest[start - 1]) or rest[start - 1] == '_')) start -= 1;
+        if (std.mem.eql(u8, rest[start .. at + "_port".len], text_family_alias)) text_family = true else count += 1;
+        rest = rest[at + "_port.".len ..];
+    }
+    return count + @intFromBool(text_family);
+}
+
+/// Whether `word` occurs in `text` as a whole identifier, so `Input` matches `operations.Input` but
+/// not `evidence.Inputs`.
+fn hasWord(text: []const u8, word: []const u8) bool {
+    var from: usize = 0;
+    while (std.mem.indexOfPos(u8, text, from, word)) |at| : (from = at + word.len) {
+        const before = at == 0 or !(std.ascii.isAlphanumeric(text[at - 1]) or text[at - 1] == '_');
+        const end = at + word.len;
+        const after = end == text.len or !(std.ascii.isAlphanumeric(text[end]) or text[end] == '_');
+        if (before and after) return true;
+    }
+    return false;
+}
+
 /// ADR 0031's source rules for a stage action. `execute` takes the capability-free runtime and no
 /// other runtime handle, and only passes its receiver's fields on: any other use of a field, such
 /// as a call through it or an alias of it, reaches a port. Each internal step takes at most one
@@ -1481,7 +1514,7 @@ fn stageViolation(source: []const u8) ?StageViolation {
     }
     if (std.mem.indexOf(u8, source, "pub fn execute")) |start| {
         const parameters = parameterText(source, start) orelse return .execute_lacks_the_node_runtime;
-        if (countOccurrences(parameters, "runtime: pipeline.NodeRuntime") != 1 or countOccurrences(parameters, "Runtime") != 1 or countOccurrences(parameters, "Input") != 0) return .execute_lacks_the_node_runtime;
+        if (countOccurrences(parameters, "runtime: pipeline.NodeRuntime") != 1 or countOccurrences(parameters, "Runtime") != 1 or hasWord(parameters, "Input") or hasWord(parameters, "StepInput")) return .execute_lacks_the_node_runtime;
         const receiver = std.mem.trim(u8, parameters[0 .. std.mem.indexOfScalar(u8, parameters, ':') orelse return .execute_lacks_the_node_runtime], " \n");
         var needle_buffer: [64]u8 = undefined;
         const needle = std.fmt.bufPrint(&needle_buffer, "{s}.", .{receiver}) catch return .execute_reaches_a_port;
@@ -1500,7 +1533,7 @@ fn stageViolation(source: []const u8) ?StageViolation {
         const parameters = parameterText(source, at) orelse continue;
         if (std.mem.indexOf(u8, parameters, "anytype") != null or std.mem.indexOf(u8, parameters, "anyopaque") != null) return .internal_step_is_erased;
         if (std.mem.indexOf(u8, parameters, "Action") != null or std.mem.indexOf(u8, parameters, "self") != null) return .internal_step_takes_the_action;
-        if (countOccurrences(parameters, "_port.") > 1) return .internal_step_takes_two_ports;
+        if (portCount(parameters) > 1) return .internal_step_takes_two_ports;
     }
     return null;
 }
@@ -1547,6 +1580,10 @@ test "stage rules reject a stage that reaches a port, lacks the node runtime, ta
     // `execute` takes exactly the capability-free runtime: none, or another handle besides it, rejects.
     try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action) void {\n" ++ steps_tail));
     try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, input: StepInput) void {\n" ++ steps_tail));
+    // The registry's `Input` union carries the step input, so it is as forbidden as `StepInput`; a domain
+    // type that merely contains the letters, such as `evidence.Inputs`, is not.
+    try std.testing.expectEqual(@as(?StageViolation, .execute_lacks_the_node_runtime), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, input: operations.Input) void {\n" ++ steps_tail));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation("pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime, inputs: evidence.Inputs) void {\n" ++ steps_tail));
     // A signature split across lines is read whole.
     try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(\n        a: source_port.ProjectCapturer,\n        b: parser_port.Parser,\n    ) void {}\n};\n"));
     try std.testing.expectEqual(@as(?StageViolation, .internal_step_is_erased), stageViolation(clean_head ++ "    pub fn split(\n        allocator: std.mem.Allocator,\n        context: *anyopaque,\n    ) void {}\n};\n"));
@@ -1592,6 +1629,167 @@ test "no absorbed toolchain operation remains registered or bound" {
     };
     for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
     try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "runners.PrepareToolchain") != null);
+}
+
+test "the prepare-inputs stage action obeys ADR 0031's stage rules" {
+    const stage = @embedFile("actions/specify/prepare_inputs.zig");
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage));
+    try expectAllowedActionImports(stage);
+    try expectSingleActionContract(stage);
+    const pipeline = @import("domain/pipeline.zig");
+    const contract = @import("actions/specify/prepare_inputs.zig").Action.contract;
+    try std.testing.expect(contract.side_effect == .none or contract.side_effect == .filesystem_read);
+    try std.testing.expectEqual(pipeline.NodeKind.action, contract.kind);
+    try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, contract.repair_role);
+    try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, contract.runner_accounting);
+    // The stage reads only the invocation, replaces and invalidates nothing, and produces only its
+    // own edge keys: none of its intermediates and no gate or captured-retention key.
+    try std.testing.expectEqualSlices(pipeline.DataKey, &.{.specify_invocation}, contract.requires);
+    try std.testing.expectEqual(@as(usize, 0), contract.optional.len + contract.replaces.len + contract.invalidates.len);
+    try std.testing.expectEqual(@as(usize, 8), contract.produces.len);
+}
+
+test "a stage rejects a step that takes two ports under this stage's port aliases" {
+    const clean_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: feature_port.Inspector, b: state_port.Capturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn two(a: input_port.Capturer, b: parser_port.StateParser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(a: input_port.Capturer, allocator: std.mem.Allocator) void {}\n};\n"));
+}
+
+test "a stage counts only the Unicode text services as one port family and rejects every other pair of ports" {
+    const clean_head = "pub const Action = struct {\n    pub fn execute(self: Action, runtime: pipeline.NodeRuntime) void {\n        step(self.source, runtime);\n    }\n};\npub const steps = struct {\n";
+    // The text services are three types of one port module: one family, however many a step takes.
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn texts(a: text_port.Normalizer, b: text_port.CaseFolder, c: text_port.LexicalClassifier) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn mixed(a: text_port.Normalizer, b: identity_port.Source) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn mixed(\n        a: text_port.Normalizer,\n        b: text_port.CaseFolder,\n        c: corpus_port.Capturer,\n    ) void {}\n};\n"));
+    // No other module is a family: two types of one non-text module are two ports.
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: corpus_port.Enumerator, b: corpus_port.Capturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: source_port.ProjectCapturer, b: source_port.PresetCapturer) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, .internal_step_takes_two_ports), stageViolation(clean_head ++ "    pub fn pair(a: parser_port.StateParser, b: parser_port.FormParser) void {}\n};\n"));
+    try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(clean_head ++ "    pub fn one(a: corpus_port.Capturer, allocator: std.mem.Allocator) void {}\n};\n"));
+}
+
+test "the reference preparation stage actions obey ADR 0031's stage rules" {
+    const pipeline = @import("domain/pipeline.zig");
+    const key = pipeline.DataKey;
+    inline for (.{
+        .{ @embedFile("actions/reference/prepare_reference_evidence.zig"), @import("actions/reference/prepare_reference_evidence.zig").Action.contract },
+        .{ @embedFile("actions/reference/prepare_reference_tokens.zig"), @import("actions/reference/prepare_reference_tokens.zig").Action.contract },
+    }) |stage| {
+        try std.testing.expectEqual(@as(?StageViolation, null), stageViolation(stage[0]));
+        try expectAllowedActionImports(stage[0]);
+        try expectSingleActionContract(stage[0]);
+        try expectAbsent(stage[0], "std.Io");
+        try expectAbsent(stage[0], "/adapters/");
+        try std.testing.expect(stage[1].side_effect == .none or stage[1].side_effect == .filesystem_read);
+        try std.testing.expectEqual(pipeline.NodeKind.action, stage[1].kind);
+        try std.testing.expectEqual(@import("domain/workflow_retry.zig").Role.none, stage[1].repair_role);
+        try std.testing.expectEqual(pipeline.RunnerAccountingCapability.none, stage[1].runner_accounting);
+        try std.testing.expectEqual(@as(usize, 0), stage[1].optional.len + stage[1].replaces.len + stage[1].invalidates.len);
+    }
+    // The evidence stage reads the filesystem; the token stage reads nothing and is capability free.
+    const evidence = @import("actions/reference/prepare_reference_evidence.zig").Action.contract;
+    const tokens = @import("actions/reference/prepare_reference_tokens.zig").Action.contract;
+    try std.testing.expectEqual(pipeline.SideEffect.filesystem_read, evidence.side_effect);
+    try std.testing.expectEqual(pipeline.SideEffect.none, tokens.side_effect);
+    try std.testing.expectEqualSlices(key, &.{ .reference_directory, .feature_directory }, evidence.requires);
+    try std.testing.expectEqualSlices(key, &.{.citable_reference_inputs}, evidence.produces);
+    try std.testing.expectEqualSlices(key, &.{ .compiled_naming_policy, .valid_toolchain, .citable_reference_inputs }, tokens.requires);
+    try std.testing.expectEqualSlices(key, &.{ .path_token_grammar, .reference_passive_literals, .structured_token_candidates }, tokens.produces);
+}
+
+test "the reference preparation steps that validate hand the next step a distinct validated type" {
+    const evidence_steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
+    const token_steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateInventory, 3), ReturnPayload(evidence_steps.validateInventory), ParameterType(evidence_steps.captureSources, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateAccounting, 1), ReturnPayload(evidence_steps.validateAccounting), ParameterType(evidence_steps.assignIdentities, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(evidence_steps.validateChunks, 0), ReturnPayload(evidence_steps.validateChunks), @import("domain/reference_evidence.zig").Inputs));
+    try std.testing.expect(validatedHandoff(ParameterType(token_steps.validateLiterals, 4), ReturnPayload(token_steps.validateLiterals), @import("domain/passive_literals.zig").Registry));
+    // Each token step takes exactly the type its predecessor returns.
+    try std.testing.expect(ReturnPayload(token_steps.buildGrammar) == ParameterType(token_steps.scanLiterals, 4));
+    try std.testing.expect(ReturnPayload(token_steps.scanLiterals) == ParameterType(token_steps.assignLiterals, 1));
+    try std.testing.expect(ReturnPayload(token_steps.assignLiterals) == ParameterType(token_steps.validateLiterals, 4));
+    try std.testing.expect(ReturnPayload(token_steps.extractFacts) == ParameterType(token_steps.assignCandidates, 2));
+}
+
+test "no absorbed reference preparation operation remains registered, bound or placed in a workflow, and naming stays separate" {
+    const absorbed = [_][]const u8{
+        "inventory-reference-sources",
+        "validate-reference-inventory",
+        "capture-reference-sources",
+        "decode-reference-markdown",
+        "validate-reference-accounting",
+        "assign-reference-identities",
+        "build-reference-chunks",
+        "validate-reference-chunks",
+        "build-superset-path-token-grammar",
+        "scan-reference-passive-literals",
+        "assign-passive-literal-identities",
+        "validate-reference-passive-literals",
+        "extract-structured-reference-facts",
+        "assign-structured-token-candidate-identities",
+    };
+    const io = std.testing.io;
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/reference_evidence_preparation_workflow.zig"),
+        @embedFile("application/reference_token_preparation_workflow.zig"),
+        @embedFile("test_fixtures/reference-ingestion.workflow.yaml"),
+        @embedFile("test_fixtures/path_token_workflow.zig"),
+        spec_workflow,
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    const native = @embedFile("composition/native_workflow_operations.zig");
+    try std.testing.expect(std.mem.indexOf(u8, native, "evidence_preparation.PrepareReferenceEvidence") != null);
+    try std.testing.expect(std.mem.indexOf(u8, native, "token_preparation.PrepareReferenceTokens") != null);
+    // The naming policy compiles in its own step, between the two stages (SPEC01 E2c).
+    const evidence_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-reference-evidence") orelse return error.MissingEvidenceStage;
+    const naming_at = std.mem.indexOf(u8, spec_workflow, "use: compile-naming-policy") orelse return error.MissingNamingStep;
+    const tokens_at = std.mem.indexOf(u8, spec_workflow, "use: prepare-reference-tokens") orelse return error.MissingTokenStage;
+    try std.testing.expect(evidence_at < naming_at and naming_at < tokens_at);
+}
+
+test "the prepare-inputs stage steps that validate hand the next step a distinct validated type" {
+    const steps = @import("actions/specify/prepare_inputs.zig").steps;
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateFeature, 1), ReturnPayload(steps.validateFeature), ParameterType(steps.inspectFeature, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateReference, 0), ReturnPayload(steps.validateReference), ParameterType(steps.inspectReference, 2)));
+    try std.testing.expect(validatedHandoff(ParameterType(steps.validateClarificationState, 0), ReturnPayload(steps.validateClarificationState), ParameterType(steps.validateClarificationForms, 2)));
+    // Observation precedes path resolution and the prior state is parsed from bytes the capture read.
+    try std.testing.expect(ReturnPayload(steps.inspectFeature) == ParameterType(steps.resolvePaths, 2));
+    try std.testing.expect(ReturnPayload(steps.captureState) == ?[]const u8 and ParameterType(steps.parseState, 3) == ?[]const u8);
+}
+
+test "no absorbed input-preparation operation remains registered, bound or placed in a workflow" {
+    const absorbed = [_][]const u8{
+        "normalize-feature-directory",
+        "validate-feature-directory",
+        "inspect-feature-directory",
+        "resolve-feature-artifact-paths",
+        "normalize-reference-selector",
+        "validate-reference-selector",
+        "inspect-reference-directory",
+        "capture-workflow-state",
+        "parse-specification-state",
+        "capture-clarification-inputs",
+        "parse-clarification-state",
+        "validate-clarification-state",
+        "validate-clarification-forms",
+    };
+    const io = std.testing.io;
+    const spec_workflow = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(spec_workflow);
+    const sources = [_][]const u8{
+        @embedFile("composition/native_workflow_operations.zig"),
+        @embedFile("application/input_preparation_workflow.zig"),
+        @embedFile("test_fixtures/reference-preflight.workflow.yaml"),
+        @embedFile("test_fixtures/reference-ingestion.workflow.yaml"),
+        spec_workflow,
+    };
+    for (absorbed) |id| for (sources) |source| try expectAbsent(source, id);
+    try std.testing.expect(std.mem.indexOf(u8, @embedFile("composition/native_workflow_operations.zig"), "input_preparation.PrepareInputs") != null);
+    try std.testing.expect(std.mem.indexOf(u8, spec_workflow, "use: prepare-inputs") != null);
 }
 
 test "configured path policy and resolution have distinct action owners" {
@@ -1813,10 +2011,11 @@ test "toolchain setup has no unconditional startup path or second result owner" 
 }
 
 test "reference preflight shares path safety without leaking normalization or read capabilities" {
-    const actions = @embedFile("application/reference_workflow_runner.zig");
-    try expectAbsent(actions, "std.Io.Dir");
-    try expectAbsent(actions, "/adapters/");
-    try expectAbsent(actions, "bootstrap_root_registry");
+    inline for (.{ @embedFile("application/input_preparation_workflow.zig"), @embedFile("actions/specify/prepare_inputs.zig") }) |actions| {
+        try expectAbsent(actions, "std.Io.Dir");
+        try expectAbsent(actions, "/adapters/");
+        try expectAbsent(actions, "bootstrap_root_registry");
+    }
     const selector = @embedFile("domain/reference_selector.zig");
     try expectAbsent(selector, "@cImport");
     try expectAbsent(selector, "/adapters/");
@@ -1856,7 +2055,7 @@ test "feature directory selection shares path policy and has no generated identi
     try expectAbsent(domain, "@cImport");
     try expectAbsent(domain, "/adapters/");
     try std.testing.expect(std.mem.indexOf(u8, domain, "path.validate") != null);
-    const action = @embedFile("actions/specify/normalize_feature_directory.zig");
+    const action = @embedFile("actions/specify/prepare_inputs.zig");
     try expectAbsent(action, "std.Io.Dir");
     try expectAbsent(action, "/adapters/");
     try expectAbsent(action, "model_provider");
@@ -1875,7 +2074,7 @@ test "feature directory selection shares path policy and has no generated identi
 }
 
 test "feature inspection root handoff has one narrow consumer and cannot mix configured roots" {
-    try std.testing.expectEqual(.filesystem_read, @import("application/feature_directory_workflow.zig").Inspect.Action.contract.side_effect);
+    try std.testing.expectEqual(.filesystem_read, @import("actions/specify/prepare_inputs.zig").Action.contract.side_effect);
     const roots = @import("domain/bootstrap_root_registry.zig");
     const inspector = @import("ports/feature_directory_inspector.zig").Inspector;
     try std.testing.expect(@FieldType(inspector, "capability") == ?*const roots.FeatureDirectoryReadCapability);
@@ -1897,19 +2096,15 @@ test "feature inspection root handoff has one narrow consumer and cannot mix con
 
 test "clarification input operations have narrow read-only ports and no workflow-name authority" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const capture = comptime binding.inspect(@import("application/clarification_input_workflow.zig").Capture, &.{});
-    try std.testing.expect(capture.valid and capture.feature_input_read);
-    try std.testing.expectEqual(.filesystem_read, @import("application/clarification_input_workflow.zig").Capture.Action.contract.side_effect);
-    try std.testing.expect(!capture.model_provider and !capture.feature_read and !capture.reference_read);
-    const parse = comptime binding.inspect(@import("application/clarification_input_workflow.zig").ParseState, &.{});
-    try std.testing.expect(parse.valid and !parse.feature_input_read);
+    const inputs = comptime binding.inspect(@import("application/input_preparation_workflow.zig").PrepareInputs, &.{});
+    // Reads the feature's inputs through the narrow input port, with no model or output capability.
+    try std.testing.expect(inputs.valid and inputs.feature_input_read);
+    try std.testing.expectEqual(.filesystem_read, @import("actions/specify/prepare_inputs.zig").Action.contract.side_effect);
+    try std.testing.expect(!inputs.model_provider and !inputs.feature_output_write and !inputs.toolchain_read);
     inline for (.{
-        @embedFile("actions/clarification/capture_clarification_inputs.zig"),
-        @embedFile("actions/clarification/parse_clarification_state.zig"),
-        @embedFile("actions/clarification/validate_clarification_state.zig"),
-        @embedFile("actions/clarification/validate_clarification_forms.zig"),
-        @embedFile("actions/specify/resolve_feature_artifact_paths.zig"),
+        @embedFile("actions/specify/prepare_inputs.zig"),
         @embedFile("application/clarification_input_workflow.zig"),
+        @embedFile("application/input_preparation_workflow.zig"),
     }) |source| {
         try expectAbsent(source, "std.Io.Dir");
         try expectAbsent(source, "std.json");
@@ -1949,18 +2144,17 @@ test "reference evidence has shared identity types and pure chunk citation bound
     try std.testing.expect(model.ReferenceChunkId == evidence.identity.ChunkId);
     const binding = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/reference_evidence_workflow.zig");
-    const assigning = comptime binding.inspect(operations.Assign, &.{});
-    try std.testing.expect(assigning.valid and assigning.reference_identity);
-    try std.testing.expect(!assigning.reference_read and !assigning.reference_content_read and !assigning.model_provider);
-    inline for (.{ operations.BuildChunks, operations.ValidateChunks, operations.ValidateCitations }) |T| {
+    // The stage reads the reference content and draws identities, and nothing else.
+    const preparing = comptime binding.inspect(@import("application/reference_evidence_preparation_workflow.zig").PrepareReferenceEvidence, &.{});
+    try std.testing.expect(preparing.valid and preparing.reference_identity and preparing.reference_content_read);
+    try std.testing.expect(!preparing.reference_read and !preparing.model_provider and !preparing.feature_input_read and !preparing.feature_output_write);
+    inline for (.{operations.ValidateCitations}) |T| {
         const pure = comptime binding.inspect(T, &.{});
         try std.testing.expectEqual(@import("application/workflow_operation_binding.zig").Inspection{}, pure);
     }
     inline for (.{
         @embedFile("domain/reference_evidence.zig"),
-        @embedFile("actions/reference/assign_reference_identities.zig"),
-        @embedFile("actions/reference/build_reference_chunks.zig"),
-        @embedFile("actions/reference/validate_reference_chunks.zig"),
+        @embedFile("actions/reference/prepare_reference_evidence.zig"),
         @embedFile("actions/reference/validate_source_citations.zig"),
         @embedFile("application/reference_evidence_workflow.zig"),
     }) |source| {
@@ -2002,7 +2196,7 @@ test "extraction candidates reuse citation and identity owners without gaining c
 test "path-token rules share toolchain authority and scanner bindings are capability free" {
     const bindings = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/path_token_workflow.zig");
-    inline for (.{ operations.Compile, operations.Build, operations.Scan }) |T| {
+    inline for (.{ operations.Compile, operations.Scan, @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens }) |T| {
         try std.testing.expectEqual(bindings.Inspection{}, comptime bindings.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -2021,9 +2215,9 @@ test "path-token rules share toolchain authority and scanner bindings are capabi
 
 test "typed content has one shared boundary and no passive or exact operational capability" {
     const binding = @import("application/workflow_operation_binding.zig");
-    const operations = @import("application/passive_literal_workflow.zig");
+    const operations = @import("application/reference_token_preparation_workflow.zig");
     const extraction = @import("application/reference_extraction_workflow.zig");
-    inline for (.{ operations.Scan, operations.Assign, operations.Validate, extraction.ValidateText }) |T| {
+    inline for (.{ operations.PrepareReferenceTokens, extraction.ValidateText }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expect(T.Action.contract.side_effect == .none);
     }
@@ -2049,7 +2243,7 @@ test "preservation is a generic YAML boundary with source-only scalars and manda
     const selection = @import("application/reference_extraction_workflow.zig").ValidateSelections;
     const binding = @import("application/workflow_operation_binding.zig");
     const key = @import("domain/pipeline.zig").DataKey;
-    inline for (.{ native.Extract, native.AssignCandidates, selection, native.AssignTokens, native.BuildClaims }) |T| {
+    inline for (.{ @import("application/reference_token_preparation_workflow.zig").PrepareReferenceTokens, selection, native.AssignTokens, native.BuildClaims }) |T| {
         try std.testing.expectEqual(binding.Inspection{}, comptime binding.inspect(T, &.{}));
         try std.testing.expectEqual(.none, T.Action.contract.side_effect);
     }

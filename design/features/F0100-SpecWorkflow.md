@@ -136,13 +136,14 @@ sdde <workflow-id> --feature <feature-directory> --reference <relative-selector>
   or registration write is required.
 - An existing directory is not a collision requiring approval.
 
-The existing reusable reference operations remain:
-
-| Contract | Input → output |
-| --- | --- |
-| `normalize-reference-selector` | Validated reference input → normalized candidate |
-| `validate-reference-selector` | Normalized candidate → relative selector |
-| `inspect-reference-directory` | Relative selector → read-only directory observation |
+[ADR 0031](../decisions/0031-stage-actions.md) makes input preparation one stage action,
+`prepare-inputs` ([13.2](../contracts/actions/13-02-invocation-stage-gates.md#prepareinputsaction-prepare-inputs)).
+Its internal steps, in order, are the feature directory's normalization, validation and
+inspection; the reference selector's normalization (validated input → normalized
+candidate), validation (normalized candidate → relative selector) and inspection (relative
+selector → read-only directory observation); artifact-path resolution; the prior
+workflow-state capture and parse; and the clarification state and forms' capture, parse and
+validation. None is registered or placed in YAML.
 
 - The shared ADR 0007 adapter owns NFC.
 - Reference policy retains its 4,096-byte raw/normalized limit, 255-byte segment limit,
@@ -152,9 +153,8 @@ The existing reusable reference operations remain:
   symlinks, requires a readable directory, and grants no write capability.
 - Reference inspection does not read or reconcile the corpus.
 
-`specify-invocation` requires both inputs. `normalize-feature-directory`,
-`validate-feature-directory` and `inspect-feature-directory` reuse shared path
-policy and the runner/value envelope. Inspection carries only `feature-read`;
+`specify-invocation` requires both inputs. The feature steps reuse shared path
+policy and the runner/value envelope. Feature inspection carries only `feature-read`;
 `core.directory-read@1` permits feature/reference inspection. Absent targets are
 accepted without creation; archive targets, aliases and symlinks reject.
 
@@ -172,14 +172,11 @@ The shared artifact-path owner resolves the selected feature's `spec.md`,
 `<paths.workflows>/features/<feature-directory>/`. These are derived paths,
 not configurable filenames, an ownership registry or write permission.
 
-Five registered operations compose through ordinary YAML:
-`resolve-feature-artifact-paths`, `capture-clarification-inputs`,
-`parse-clarification-state`, `validate-clarification-state` and
-`validate-clarification-forms`. Only capture carries `feature-input-read`;
-`core.feature-input-read@1` explicitly permits that capability alongside
-feature/reference inspection; the inspection-only `core.directory-read@1` does not.
-The executable test definition is
-[`feature-input-preflight.workflow.yaml`](../../src/test_fixtures/feature-input-preflight.workflow.yaml),
+The `prepare-inputs` stage resolves the paths and captures and validates the clarification
+inputs. Its binding carries `feature-input-read`; `core.feature-input-read@1` explicitly
+permits that capability alongside feature/reference inspection; the inspection-only
+`core.directory-read@1` does not. The executable test definition is
+[`reference-preflight.workflow.yaml`](../../src/test_fixtures/reference-preflight.workflow.yaml),
 not the complete Specify workflow.
 
 - The single native persisted schema is
@@ -220,10 +217,10 @@ protection, which applies even when acceptance is blocked.
 
 ### 3.3 Read-only Markdown ingestion
 
-- Five registered operations cover the physical source boundary:
-  `inventory-reference-sources`, `validate-reference-inventory`,
-  `capture-reference-sources`, `decode-reference-markdown` and
-  `validate-reference-accounting`.
+- The physical source boundary is the first five steps of the `prepare-reference-evidence`
+  stage action: inventory, inventory validation, capture, Markdown decoding and accounting
+  validation ([13.3](../contracts/actions/13-03-references.md) owns the stages and their
+  order). None of the steps is registered or placed in YAML.
 - They use the configured `paths.references` root and independent selector.
 - Every encountered entry, including hidden files, directories and non-followed
   symlinks, is accounted; unsupported, unreadable, changed, malformed or over-limit
@@ -245,21 +242,22 @@ work; this initial reader does not claim support for arbitrary reference bytes.
 
 ### 3.4 Citable reference inputs
 
-Four registered operations extend that boundary:
+The evidence stage's last three steps extend that boundary, and one registered operation
+validates citations:
 
-| Operation | Contract |
+| Step or operation | Contract |
 | --- | --- |
-| `assign-reference-identities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
-| `build-reference-chunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
-| `validate-reference-chunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
+| `assignIdentities` | Validated reference inputs and selected feature → identified corpus and total provisional-to-canonical mappings. |
+| `buildChunks` | Identified corpus → state-bound chunks; `source_blocks_v1` uses one chunk per existing source block. |
+| `validateChunks` | Original inputs, feature, corpus and chunks → validated citable inputs; reject omissions, duplicates, changed bytes, wrong mappings or foreign state/feature bindings. |
 | `validate-source-citations` | Citable inputs and engine-scoped typed proposals → validated source citations. |
 
 - The [reference identity owner](../../src/domain/reference_identity.zig) supplies the
   same state/chunk types used by model-request owners.
 - Each corpus receives a fresh 128-bit system-random namespace, formatted as
   `reference-<hex>`; entropy failure fails the operation.
-- Only identity assignment has `reference-identity`, explicitly allowed by
-  `core.reference-ingestion@1`.
+- Only the evidence stage has `reference-identity`, explicitly allowed by
+  `core.reference-ingestion@1`, and only its `assignIdentities` step draws on it.
 - There is no persisted ID counter, reservation, hash or journal.
 - Files keep normalized source order; source, state-global block and chunk ordinals are
   deterministic within the state.
@@ -347,13 +345,13 @@ contracts follow Design §7.1. Source discovery uses §11's `SupersetPathTokenGr
 compiled from resolved naming/extension rules, reserved/manifest names and reference
 basenames. It does not classify ordinary prose as an operational reference.
 
-The initial native boundary is implemented through three pure registered
-operations:
+The initial native boundary is implemented through two pure registered operations and one
+step of the token stage:
 
-| Operation | Required inputs → output |
+| Operation or step | Required inputs → output |
 | --- | --- |
 | `compile-naming-policy` | `valid_toolchain` → `compiled_naming_policy` |
-| `build-superset-path-token-grammar` | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
+| `buildGrammar` (`prepare-reference-tokens`) | Compiled naming policy, current toolchain and citable reference inputs → `path_token_grammar` |
 | `scan-path-tokens` | Grammar, current toolchain, citable inputs and required `text` data-resource parameter → `path_token_scan` |
 
 - [F0003 §3.5](F0003-ToolChainService.md#35-registered-lexical-naming-rules) owns the
@@ -387,13 +385,14 @@ operations:
 
 ### 3.7 Typed reference text and source-backed display literals
 
-Three pure YAML operations prepare the execution-local literal registry:
+Three pure steps of the `prepare-reference-tokens` stage prepare the execution-local literal
+registry:
 
-| Operation | Required inputs → output |
+| Step | Required inputs → output |
 | --- | --- |
-| `scan-reference-passive-literals` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
-| `assign-passive-literal-identities` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
-| `validate-reference-passive-literals` | Assigned candidates and current inputs → `reference_passive_literals` |
+| `scanLiterals` | Current grammar/toolchain and citable inputs → ordered source-name/block-span candidates |
+| `assignLiterals` | Candidates → source-ordered IDs, deduplicated by `(kind, NFC bytes)` |
+| `validateLiterals` | Assigned candidates and current inputs → `reference_passive_literals` |
 
 - Validation reuses the shared detector to prove complete exact origins, values and
   allocations.
@@ -441,10 +440,10 @@ file/network access, output write, clarification change or completion transition
 - The source reader and fact extractor share this parser; reader boundaries do not split
   a value, and an over-limit value fails explicitly.
 
-| Operation | Contract |
+| Step or operation | Contract |
 | --- | --- |
-| `extract-structured-reference-facts` | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
-| `assign-structured-token-candidate-identities` | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
+| `extractFacts` (`prepare-reference-tokens`) | Current captured sources → source-ordered, citation-validated exact facts from registered extractors. |
+| `assignCandidates` (`prepare-reference-tokens`) | Current sources and verified complete facts → transient `(source_id, extractor_id, ordinal)` candidates. Ordinals are source/extractor-local. |
 | `validate-reference-selections` | Current candidates and text-validated responses → complete chunk-local token classifications, or typed rejection. Engine-blocked chunks retain blocked candidate dispositions. |
 | `assign-preserved-token-identities` | Validated decisions → state-local token ordinals in source order; irrelevant/blocked candidates allocate none. |
 | `build-preserved-token-claims` | Token assignments → prepared deterministic claims alongside unchanged model claims, before common citation validation, claim-ID assignment and ledger construction. |
@@ -934,7 +933,7 @@ validators:
   registry identity (`specification-state/v25`). Neither variant holds review evidence.
 - The snapshot contains no raw model response, filesystem handle, runner state or saved
   continuation.
-- `capture-workflow-state` and `parse-specification-state` validate this singleton
+- The `capture_state` and `parse_state` steps of `prepare-inputs` validate this singleton
   before generation; reruns reuse only the canonical record-ID counters and the prior
   principle registry's identities, increment the publication revision and regenerate the
   candidate from current inputs.

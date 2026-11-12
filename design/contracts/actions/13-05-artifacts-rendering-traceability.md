@@ -11,38 +11,8 @@ responsibilities are the stage pointers at the end.
 
 ## Clarification lifecycle
 
-## `CaptureClarificationInputsAction` (`capture-clarification-inputs`)
-
-- **Owner:** [`src/actions/clarification/capture_clarification_inputs.zig`](../../../src/actions/clarification/capture_clarification_inputs.zig)
-- **Reads:** `feature_directory`, `feature_artifact_paths` · **Writes:** `raw_clarification_inputs` · **Side effect:** `filesystem_read`
-- **Does:** Capture the feature's clarification-state bytes and every `clarify/` form through its capture port.
-- **Rejects:** the capture port's typed errors.
-
-## `ParseClarificationStateAction` (`parse-clarification-state`)
-
-- **Owner:** [`src/actions/clarification/parse_clarification_state.zig`](../../../src/actions/clarification/parse_clarification_state.zig)
-- **Reads:** `raw_clarification_inputs` · **Writes:** `parsed_clarification_state` · **Side effect:** `none`
-- **Does:** Parse the captured state bytes through the state-parser port; no bytes give no state.
-- **Rejects:** `clarification_inputs.Error` from the parser.
-
-## `ValidateClarificationStateAction` (`validate-clarification-state`)
-
-- **Owner:** [`src/actions/clarification/validate_clarification_state.zig`](../../../src/actions/clarification/validate_clarification_state.zig)
-- **Reads:** `parsed_clarification_state`, `feature_artifact_paths` · **Writes:** `validated_clarification_state` · **Side effect:** `none`
-- **Does:** Check the schema and feature, then each record: stage IDs in order with no gap,
-  revisions within the state's, nonempty bounded question and reason, at most 64 distinct
-  authorities, and one record per stage and subject.
-- **Rejects:** `InvalidClarificationInput`.
-
-## `ValidateClarificationFormsAction` (`validate-clarification-forms`)
-
-- **Owner:** [`src/actions/clarification/validate_clarification_forms.zig`](../../../src/actions/clarification/validate_clarification_forms.zig)
-- **Reads:** `raw_clarification_inputs`, `validated_clarification_state` · **Writes:** `clarification_inputs` · **Side effect:** `none`
-- **Does:** Pair each record with exactly one captured form and parse it against the record's
-  binding. An authority-resolved form must equal its re-rendered audit bytes, and a recorded
-  response's form must equal its saved bytes and answer. A `closed` form becomes protected.
-- **Rejects:** `InvalidClarificationInput` for a form-count or ID mismatch, changed audit or saved
-  bytes, or a requested status that contradicts the record.
+Capturing and validating the clarification inputs are steps 10 to 13 of `prepare-inputs`
+([13.2](13-02-invocation-stage-gates.md#prepareinputsaction-prepare-inputs)).
 
 ## `BuildSpecificationClarificationNeedAction` (`build-specification-clarification-need`)
 
@@ -116,14 +86,6 @@ responsibilities are the stage pointers at the end.
 - **Does:** Return `ok` when the reconciled references are ready for generation, otherwise
   `blocked`.
 - **Rejects:** none.
-
-## `ParseSpecificationStateAction` (`parse-specification-state`)
-
-- **Owner:** [`src/actions/specification/parse_specification_state.zig`](../../../src/actions/specification/parse_specification_state.zig)
-- **Reads:** `feature_directory`, `raw_workflow_state` · **Writes:** `prior_specification_state`, `prior_principle_registry` · **Side effect:** `none`
-- **Does:** Parse the feature's prior `specification-state` or incomplete state; a first run has
-  none.
-- **Rejects:** `specification_state.Error`, including `InvalidSpecificationState`.
 
 ## `InitializeSpecificationGenerationAction` (`initialize-specification-generation`)
 

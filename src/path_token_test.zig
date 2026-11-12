@@ -12,7 +12,7 @@ const normalize: @import("ports/unicode_normalizer.zig").Normalizer = .{ .normal
 const fold: @import("ports/unicode_normalizer.zig").CaseFolder = .{ .fold_fn = unicode.caseFold };
 const classifier: @import("ports/unicode_normalizer.zig").LexicalClassifier = .{ .boundary_fn = unicode.lexicalBoundary };
 const compile_action = @import("actions/toolchain/compile_naming_policy.zig").Action{ .normalizer = normalize, .folder = fold };
-const build_action = @import("actions/reference/build_superset_path_token_grammar.zig").Action{ .normalizer = normalize, .folder = fold };
+const steps = @import("actions/reference/prepare_reference_tokens.zig").steps;
 const scan_action = @import("actions/reference/scan_path_tokens.zig").Action{ .normalizer = normalize, .folder = fold, .classifier = classifier };
 
 const registry: toolchain.PolicyRegistry = .{ .contracts = &.{
@@ -112,7 +112,7 @@ test "one detector recognizes policy reference path and URI tokens with original
     const allocator = arena.allocator();
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "Café.md", "source\n"));
-    const compiled = try build_action.execute(allocator, try compile_action.execute(allocator, safety.value(owner)), safety.value(owner), inputs);
+    const compiled = try steps.buildGrammar(normalize, fold, allocator, try compile_action.execute(allocator, safety.value(owner)), safety.value(owner), inputs);
     const text = "Plain words, (engine.config), app.TEST.WIDGET; Dockerfile .env Build2αTail STRASSE «Cafe\u{301}.md» src/main.go C:\\temp\\file \\\\server\\share / mailto:a@example.test https://example.test/a?q=1 file%252Fname. Secretfile dockerfile unknown.ext 1.25";
     const result = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, text);
     defer scanning.destroy(result);
@@ -159,7 +159,7 @@ test "runner-owned grammar retains rules reference names and exact identity afte
         defer arena.deinit();
         var ids: fixture.IdSource = .{};
         const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "notes.md", "source\n"));
-        const compiled = try build_action.execute(arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
+        const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
         break :retained try values.create(std.testing.allocator, schema, grammar.Grammar, compiled);
     };
     defer values.destroy(retained);
@@ -191,7 +191,7 @@ test "multi-token filenames share exact policy matching and retain Unicode raw s
     defer arena.deinit();
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "Café Notes.md", "source\n"));
-    const compiled = try build_action.execute(arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
+    const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), try compile_action.execute(arena.allocator(), safety.value(owner)), safety.value(owner), inputs);
     const result = try scan_action.execute(std.testing.allocator, compiled, safety.value(owner), inputs, "Read BUILD NOTES, (Guide).cfg and «Cafe\u{301} Notes.md». NotBuild NotesExtra.");
     defer scanning.destroy(result);
     const expected = [_][]const u8{ "BUILD NOTES", "(Guide).cfg", "Cafe\u{301} Notes.md" };
@@ -211,7 +211,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(arena.allocator(), &ids, try ingest(arena.allocator(), "source.md", "source\n"));
     const policy = try compile_action.execute(arena.allocator(), safety.value(owner));
-    const compiled = try build_action.execute(arena.allocator(), policy, safety.value(owner), inputs);
+    const compiled = try steps.buildGrammar(normalize, fold, arena.allocator(), policy, safety.value(owner), inputs);
     const result = try scan_action.execute(allocator, compiled, safety.value(owner), inputs, "source.md Dockerfile src/main.go");
     defer scanning.destroy(result);
     try std.testing.expectEqual(@as(usize, 3), result.matches.len);

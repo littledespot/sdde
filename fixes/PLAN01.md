@@ -62,7 +62,7 @@ authority (intent.md:3-9).
 | Clarification registry, `PNN` IDs, forms, refresh | Generic for S/P/T; answers rejected for every stage | `clarification_refresh.zig:64-66`, `:105-113` |
 | Atomic repair contract and retry state | Generic core; all 7 instances Spec or reference | `atomic_repair.zig:81`; ADR 0033:237-240 |
 | Toolchain capture, inheritance, safety | Generic; holds package IDs and naming rules only | `src/composition/toolchain_policy_registry.zig:6-22`; F0003:208-209 |
-| Principle capture | Generic, persisted, read by no model call | `spec.workflow.yaml:44-46`; 09-configuration.md:336-337 |
+| Principle capture | Generic, persisted, read by no model call | `spec.workflow.yaml` step `principles`; 09-configuration.md:336-337 |
 | Bounded no-follow directory scan | Root-generic; two users | `src/adapters/filesystem/directory_inventory.zig:8-34` |
 | Request-owner and state ID types | Declared, never built in production | `model_request_identity.zig:15-19`, `:61-68` |
 
@@ -90,7 +90,7 @@ change, not a Plan-local one:
 - publication permission, which only a clarification subject has
   (`src/domain/workflow_outcome_association.zig:206-215`);
 - the feature-directory chain, which starts from the Spec invocation
-  (`src/actions/specify/normalize_feature_directory.zig:12`);
+  (`src/actions/specify/prepare_inputs.zig:126`);
 - the state parser, which accepts two Spec stages (`specification_state.zig:52`);
 - packet guidance, one closed `packet-guidance/v6` keyed by Spec registries (ADR 0016:144-149).
 

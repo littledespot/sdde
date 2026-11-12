@@ -54,7 +54,7 @@ test "passive literals deduplicate normalized source scalars and retain exact or
     try std.testing.expectEqualDeep(prepared.registry.occurrences[0].id, prepared.registry.occurrences[1].id);
     const origin = prepared.registry.occurrences[0].origin;
     try std.testing.expectEqualStrings("src/Cafe\u{301}.zig", bytes[origin.start_byte..origin.end_byte]);
-    try std.testing.expectEqualDeep(prepared.assigned, try fixture.assign.execute(allocator, prepared.candidates));
+    try std.testing.expectEqualDeep(prepared.assigned, try fixture.stage.assignLiterals(allocator, prepared.candidates));
 }
 
 test "literal publication rejects forged scalars origins IDs and incomplete source coverage" {
@@ -81,11 +81,11 @@ test "literal publication rejects forged scalars origins IDs and incomplete sour
             6 => entries[0].origin.block_id.ordinal += 1,
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidPassiveLiteral, fixture.validate.execute(allocator, candidate, fixture.safety.value(prepared.owner), inputs));
+        try std.testing.expectError(error.InvalidPassiveLiteral, fixture.stage.validateLiterals(fixture.normalizer, fixture.folder, fixture.classifier, allocator, candidate, fixture.safety.value(prepared.owner), inputs));
     }
     var foreign = inputs;
     foreign.corpus.state_id.bytes = "different-state";
-    try std.testing.expectError(error.InvalidPathTokenGrammar, fixture.validate.execute(allocator, prepared.assigned, fixture.safety.value(prepared.owner), foreign));
+    try std.testing.expectError(error.InvalidPathTokenGrammar, fixture.stage.validateLiterals(fixture.normalizer, fixture.folder, fixture.classifier, allocator, prepared.assigned, fixture.safety.value(prepared.owner), foreign));
 }
 
 test "display literal IDs and source nodes are limited to their exact extraction chunk" {

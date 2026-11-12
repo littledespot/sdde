@@ -53,7 +53,6 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     );
     _ = package_directory.add(".sddtoolkit/workflows/toolchain.workflow.yaml", @embedFile("../../src/test_fixtures/toolchain.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/preflight.workflow.yaml", @embedFile("../../src/test_fixtures/reference-preflight.workflow.yaml"));
-    _ = package_directory.add(".sddtoolkit/workflows/feature-input.workflow.yaml", @embedFile("../../src/test_fixtures/feature-input-preflight.workflow.yaml"));
     _ = package_directory.add(".sddtoolkit/workflows/reference-ingestion.workflow.yaml", @embedFile("../../src/test_fixtures/reference-ingestion.workflow.yaml"));
     _ = package_directory.addCopyFile(b.path("test/e2e/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
     _ = package_directory.add("references/Unsupported/story.md", "# Valid sibling\n");
@@ -511,7 +510,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     path_token_command.expectStdOutEqual("");
     path_token_command.expectStdErrEqual("");
 
-    const literal_yaml = @import("../../src/test_fixtures/reference_text_workflow.zig").yaml(b.allocator) catch @panic("build passive-literal fixture");
+    const literal_yaml = @import("../../src/test_fixtures/path_token_workflow.zig").prepared(b.allocator) catch @panic("build passive-literal fixture");
     const named_literal_yaml = std.mem.replaceOwned(u8, b.allocator, literal_yaml, "id: reference-ingestion", "id: display-literals") catch @panic("name passive-literal fixture");
     const distinct_literal_yaml = std.mem.replaceOwned(u8, b.allocator, named_literal_yaml, "shortcode: RING", "shortcode: LITR") catch @panic("name passive-literal log scope");
     _ = toolchain_directory.add(".sddtoolkit/workflows/display-literals.workflow.yaml", distinct_literal_yaml);
@@ -523,7 +522,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     literal_command.expectStdOutEqual("");
     literal_command.expectStdErrEqual("");
 
-    const token_yaml = @import("../../src/test_fixtures/reference_tokens_workflow.zig").yaml(b.allocator) catch @panic("build structured-token fixture");
+    const token_yaml = @import("../../src/test_fixtures/path_token_workflow.zig").prepared(b.allocator) catch @panic("build structured-token fixture");
     const named_token_yaml = std.mem.replaceOwned(u8, b.allocator, token_yaml, "id: reference-ingestion", "id: exact-values") catch @panic("name exact-value fixture");
     const distinct_token_yaml = std.mem.replaceOwned(u8, b.allocator, named_token_yaml, "shortcode: RING", "shortcode: EXAC") catch @panic("name exact-value log scope");
     _ = toolchain_directory.add(".sddtoolkit/workflows/exact-values.workflow.yaml", distinct_token_yaml);
@@ -690,7 +689,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     }) |case| {
         const check = std.Build.Step.Run.create(b, "run packaged read-only clarification preflight");
         check.addFileArg(packaged_executable);
-        check.addArgs(&.{ "feature-input-preflight", "--feature", case.feature, "--reference", "Café/日本語" });
+        check.addArgs(&.{ "reference-preflight", "--feature", case.feature, "--reference", "Café/日本語" });
         check.setCwd(package_directory.getDirectory());
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);

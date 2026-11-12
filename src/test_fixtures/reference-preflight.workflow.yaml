@@ -3,24 +3,7 @@ id: reference-preflight
 version: 1
 shortcode: REFP
 invoke: specify-invocation
-policy: core.directory-read@1
-start: normalize-feature
+policy: core.feature-input-read@1
+start: inputs
 steps:
-  normalize-feature:
-    use: normalize-feature-directory
-    on: { ok: validate-feature, failed: end.failed }
-  validate-feature:
-    use: validate-feature-directory
-    on: { ok: inspect-feature, failed: end.failed }
-  inspect-feature:
-    use: inspect-feature-directory
-    on: { ok: normalize, failed: end.failed }
-  normalize:
-    use: normalize-reference-selector
-    on: { ok: validate, failed: end.failed }
-  validate:
-    use: validate-reference-selector
-    on: { ok: inspect, failed: end.failed }
-  inspect:
-    use: inspect-reference-directory
-    on: { ok: end.ok, failed: end.failed }
+  inputs: { use: prepare-inputs, on: { ok: end.ok, failed: end.failed } }

@@ -352,7 +352,7 @@ typed content cannot change the compiled semantic graph.
   retry/cycle checks, capability policy and runner semantics apply to the complete
   expanded graph.
 - Nothing is hidden in an action. An [ADR 0031](../decisions/0031-stage-actions.md) stage
-  action (`prepare-toolchain` is the first) hides no workflow choice either: its internal steps
+  action (`prepare-toolchain`, `prepare-inputs`, `prepare-reference-evidence` and `prepare-reference-tokens` are the stage actions) hides no workflow choice either: its internal steps
   are functions whose non-success outcomes all end the stage, and every routed outcome stays in
   YAML.
 - See [the spec workflow](../workflows/spec.workflow.yaml) for parameterized reuse.

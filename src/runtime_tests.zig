@@ -13,6 +13,8 @@ test {
     _ = @import("typed_text_test.zig");
     _ = @import("feature_directory_test.zig");
     _ = @import("clarification_inputs_test.zig");
+    _ = @import("input_preparation_test.zig");
+    _ = @import("reference_preparation_test.zig");
     _ = @import("application/specify_invocation_orchestrator.zig");
     _ = @import("workflow_value_flow_test.zig");
     _ = @import("feature_log_runtime_test.zig");

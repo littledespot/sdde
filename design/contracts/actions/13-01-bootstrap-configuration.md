@@ -336,14 +336,6 @@ owns the current toolchain shapes.
   registry entry and its supported controls; never accepts a raw provider/model tuple.
 - **Rejects:** `ProviderModelBindingInvalid`.
 
-## `CaptureWorkflowStateAction` (`capture-workflow-state`)
-
-- **Owner:** [`src/actions/workflow/capture_workflow_state.zig`](../../../src/actions/workflow/capture_workflow_state.zig)
-- **Reads:** `feature_directory`, `feature_artifact_paths` · **Writes:** `raw_workflow_state` · **Side effect:** `filesystem_read`
-- **Does:** Reads the feature's canonical workflow-state file through the state-source port, or
-  reports it absent.
-- **Rejects:** `FeatureInputUnavailable`.
-
 ## `PublishWorkflowOutputAction` (`publish-workflow-output`)
 
 - **Owner:** [`src/actions/workflow/publish_workflow_output.zig`](../../../src/actions/workflow/publish_workflow_output.zig)

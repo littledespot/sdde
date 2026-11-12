@@ -11,7 +11,7 @@ const model_request = @import("model_request_operations.zig");
 const toolchain = @import("../domain/toolchain.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const capabilities = @import("../domain/workflow_capability.zig");
-const reference = @import("../application/reference_workflow_runner.zig");
+const input_preparation = @import("../application/input_preparation_workflow.zig");
 const invocation = @import("../application/specify_invocation_runner.zig");
 const invocation_values = @import("../application/specify_invocation_values.zig");
 const reference_values = @import("../application/reference_workflow_values.zig");
@@ -23,7 +23,8 @@ const feature_source = @import("../ports/feature_directory_inspector.zig");
 const clarification = @import("../application/clarification_input_workflow.zig");
 const input_source = @import("../ports/feature_input_source.zig");
 const input_parser = @import("../ports/clarification_input_parser.zig");
-const ingestion = @import("../application/reference_ingestion_workflow.zig");
+const evidence_preparation = @import("../application/reference_evidence_preparation_workflow.zig");
+const token_preparation = @import("../application/reference_token_preparation_workflow.zig");
 const corpus_source = @import("../ports/reference_corpus_source.zig");
 const corpus_decoder = @import("../ports/reference_decoder.zig");
 const evidence = @import("../application/reference_evidence_workflow.zig");
@@ -66,26 +67,9 @@ pub const Assembly = struct {
     invocation: invocation.Invocation,
     parse_invocation: invocation.ParseInvocation,
     validate_arguments: invocation.ValidateArguments,
-    normalize_selector: reference.NormalizeSelector,
-    validate_selector: reference.ValidateSelector,
-    inspect_directory: reference.InspectDirectory,
-    normalize_feature: feature.Normalize,
-    validate_feature: feature.Validate,
-    inspect_feature: feature.Inspect,
+    prepare_inputs: input_preparation.PrepareInputs,
     activate_feature_logging: logging.Activate,
-    resolve_feature_paths: clarification.ResolvePaths,
-    capture_clarifications: clarification.Capture,
-    parse_clarification_state: clarification.ParseState,
-    validate_clarification_state: clarification.ValidateState,
-    validate_clarification_forms: clarification.ValidateForms,
-    inventory_references: ingestion.Inventory,
-    validate_reference_inventory: ingestion.ValidateInventory,
-    capture_references: ingestion.Capture,
-    decode_references: ingestion.Decode,
-    validate_reference_accounting: ingestion.ValidateAccounting,
-    assign_reference_identities: evidence.Assign,
-    build_reference_chunks: evidence.BuildChunks,
-    validate_reference_chunks: evidence.ValidateChunks,
+    prepare_reference_evidence: evidence_preparation.PrepareReferenceEvidence,
     validate_source_citations: evidence.ValidateCitations,
     parse_reference_extraction: extraction.Parse,
     validate_extraction_text: extraction.ValidateText,
@@ -94,13 +78,8 @@ pub const Assembly = struct {
     build_reference_extraction: extraction.Build,
     account_reference_extraction: extraction.Account,
     compile_naming: path_tokens.Compile,
-    build_path_grammar: path_tokens.Build,
     scan_path_tokens: path_tokens.Scan,
-    scan_passive_literals: passive_literals.Scan,
-    assign_passive_literals: passive_literals.Assign,
-    validate_passive_literals: passive_literals.Validate,
-    extract_structured_facts: structured_tokens.Extract,
-    assign_token_candidates: structured_tokens.AssignCandidates,
+    prepare_reference_tokens: token_preparation.PrepareReferenceTokens,
     validate_token_classifications: extraction.ValidateSelections,
     authorize_summary_repair: reconciliation_repair.Authorize(.summary),
     authorize_dispositions_repair: reconciliation_repair.Authorize(.dispositions),
@@ -208,8 +187,6 @@ pub const Assembly = struct {
     check_clarifications: clarification_refresh.Check,
     prepare_clarification_output: output.PrepareClarifications,
     publish_output: output.Publish,
-    capture_workflow_state: publication.Capture,
-    parse_specification_state: publication.Parse,
     build_resolved_needs: publication.ResolvedNeeds,
     build_specification_state: publication.Build,
     build_incomplete_specification: incomplete.Build,
@@ -218,7 +195,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 161 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 137 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -233,26 +210,9 @@ pub const Assembly = struct {
             .invocation = .{ .allocator = allocator },
             .parse_invocation = .{ .allocator = allocator },
             .validate_arguments = .{ .allocator = allocator },
-            .normalize_selector = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .validate_selector = .{ .allocator = allocator },
-            .inspect_directory = .{ .allocator = allocator, .action = .{ .inspector = directory_inspector } },
-            .normalize_feature = .{ .allocator = allocator, .action = .{ .normalizer = unicode } },
-            .validate_feature = .{ .allocator = allocator },
+            .prepare_inputs = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .feature_inspector = feature_inspector, .reference_inspector = directory_inspector, .input_source = input_capture, .state_parser = state_parser, .form_parser = form_parser } },
             .activate_feature_logging = .{ .allocator = allocator },
-            .inspect_feature = .{ .allocator = allocator, .action = .{ .inspector = feature_inspector } },
-            .resolve_feature_paths = .{ .allocator = allocator },
-            .capture_clarifications = .{ .allocator = allocator, .action = .{ .source = input_capture } },
-            .parse_clarification_state = .{ .allocator = allocator, .action = .{ .parser = state_parser } },
-            .validate_clarification_state = .{ .allocator = allocator },
-            .validate_clarification_forms = .{ .allocator = allocator, .action = .{ .parser = form_parser } },
-            .inventory_references = .{ .allocator = allocator, .action = .{ .source = reference_inventory } },
-            .validate_reference_inventory = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder } },
-            .capture_references = .{ .allocator = allocator, .action = .{ .source = reference_capture } },
-            .decode_references = .{ .allocator = allocator, .action = .{ .decoder = reference_decoder } },
-            .validate_reference_accounting = .{ .allocator = allocator },
-            .assign_reference_identities = .{ .allocator = allocator, .action = .{ .identities = reference_identity } },
-            .build_reference_chunks = .{ .allocator = allocator },
-            .validate_reference_chunks = .{ .allocator = allocator },
+            .prepare_reference_evidence = .{ .allocator = allocator, .action = .{ .enumerator = reference_inventory, .normalizer = unicode, .case_folder = case_folder, .capturer = reference_capture, .decoder = reference_decoder, .identities = reference_identity } },
             .validate_source_citations = .{ .allocator = allocator },
             .parse_reference_extraction = .{ .allocator = allocator },
             .initialize_extraction = .{ .allocator = allocator },
@@ -271,8 +231,6 @@ pub const Assembly = struct {
             .build_reconciliation_packet = .{ .allocator = allocator },
             .check_reconciliation = .{},
             .collect_reconciliation = .{ .allocator = allocator },
-            .extract_structured_facts = .{ .allocator = allocator },
-            .assign_token_candidates = .{ .allocator = allocator },
             .validate_token_classifications = .{ .allocator = allocator },
             .authorize_summary_repair = .{ .allocator = allocator },
             .authorize_dispositions_repair = .{ .allocator = allocator },
@@ -319,11 +277,8 @@ pub const Assembly = struct {
             .build_reference_extraction = .{ .allocator = allocator },
             .account_reference_extraction = .{ .allocator = allocator },
             .compile_naming = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
-            .build_path_grammar = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder } },
             .scan_path_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
-            .scan_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
-            .assign_passive_literals = .{ .allocator = allocator },
-            .validate_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
+            .prepare_reference_tokens = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .case_folder = case_folder, .classifier = classifier } },
             .model_requests = undefined,
             .specification_source_readiness = .{ .allocator = allocator },
             .source_preservation_policy = .{ .allocator = allocator },
@@ -338,8 +293,6 @@ pub const Assembly = struct {
             .check_clarifications = .{},
             .prepare_clarification_output = .{ .allocator = allocator },
             .publish_output = .{ .allocator = allocator },
-            .capture_workflow_state = .{ .allocator = allocator },
-            .parse_specification_state = .{ .allocator = allocator },
             .build_resolved_needs = .{ .allocator = allocator },
             .build_specification_state = .{ .allocator = allocator },
             .build_incomplete_specification = .{ .allocator = allocator },
@@ -400,26 +353,9 @@ pub const Assembly = struct {
             .{ .contract = invocation.Invocation.contract, .binding = binding.bind(invocation.Invocation, &self.invocation, invocation.Invocation.invoke) },
             invocationEntry(invocation.ParseInvocation, &self.parse_invocation),
             entry(invocation.ValidateArguments, &self.validate_arguments),
-            entry(reference.NormalizeSelector, &self.normalize_selector),
-            entry(reference.ValidateSelector, &self.validate_selector),
-            entry(reference.InspectDirectory, &self.inspect_directory),
-            entry(feature.Normalize, &self.normalize_feature),
-            entry(feature.Validate, &self.validate_feature),
-            entry(feature.Inspect, &self.inspect_feature),
+            entry(input_preparation.PrepareInputs, &self.prepare_inputs),
             .{ .contract = logging.Activate.contract, .binding = binding.bind(logging.Activate, &self.activate_feature_logging, logging.Activate.invoke) },
-            entry(clarification.ResolvePaths, &self.resolve_feature_paths),
-            entry(clarification.Capture, &self.capture_clarifications),
-            entry(clarification.ParseState, &self.parse_clarification_state),
-            entry(clarification.ValidateState, &self.validate_clarification_state),
-            entry(clarification.ValidateForms, &self.validate_clarification_forms),
-            entry(ingestion.Inventory, &self.inventory_references),
-            entry(ingestion.ValidateInventory, &self.validate_reference_inventory),
-            entry(ingestion.Capture, &self.capture_references),
-            entry(ingestion.Decode, &self.decode_references),
-            entry(ingestion.ValidateAccounting, &self.validate_reference_accounting),
-            entry(evidence.Assign, &self.assign_reference_identities),
-            entry(evidence.BuildChunks, &self.build_reference_chunks),
-            entry(evidence.ValidateChunks, &self.validate_reference_chunks),
+            entry(evidence_preparation.PrepareReferenceEvidence, &self.prepare_reference_evidence),
             entry(evidence.ValidateCitations, &self.validate_source_citations),
             entry(extraction.Parse, &self.parse_reference_extraction),
             entry(reference_model.Initialize, &self.initialize_extraction),
@@ -478,8 +414,6 @@ pub const Assembly = struct {
             entry(specification_support.Initialize, &self.initialize_specification_review),
             entry(authority.BuildObservations, &self.build_authority_observations),
             entry(authority.Retire, &self.retire_authority),
-            entry(structured_tokens.Extract, &self.extract_structured_facts),
-            entry(structured_tokens.AssignCandidates, &self.assign_token_candidates),
             entry(extraction.ValidateSelections, &self.validate_token_classifications),
             entry(reconciliation_repair.Authorize(.summary), &self.authorize_summary_repair),
             entry(reconciliation_repair.Authorize(.dispositions), &self.authorize_dispositions_repair),
@@ -526,11 +460,8 @@ pub const Assembly = struct {
             entry(extraction.Build, &self.build_reference_extraction),
             entry(extraction.Account, &self.account_reference_extraction),
             entry(path_tokens.Compile, &self.compile_naming),
-            entry(path_tokens.Build, &self.build_path_grammar),
             entry(path_tokens.Scan, &self.scan_path_tokens),
-            entry(passive_literals.Scan, &self.scan_passive_literals),
-            entry(passive_literals.Assign, &self.assign_passive_literals),
-            entry(passive_literals.Validate, &self.validate_passive_literals),
+            entry(token_preparation.PrepareReferenceTokens, &self.prepare_reference_tokens),
             entry(specification_rendering.Project, &self.project_specification_document),
             entry(specification_rendering.Render, &self.render_specification),
             entry(specification_rendering.Validate, &self.validate_specification_rendering),
@@ -541,8 +472,6 @@ pub const Assembly = struct {
             entry(clarification_refresh.Check, &self.check_clarifications),
             entry(output.PrepareClarifications, &self.prepare_clarification_output),
             entry(output.Publish, &self.publish_output),
-            entry(publication.Capture, &self.capture_workflow_state),
-            entry(publication.Parse, &self.parse_specification_state),
             entry(publication.ResolvedNeeds, &self.build_resolved_needs),
             entry(publication.Build, &self.build_specification_state),
             entry(incomplete.Build, &self.build_incomplete_specification),
@@ -568,7 +497,7 @@ pub const Assembly = struct {
     }
     pub fn bindWorkflows(self: *Assembly, registry: *const @import("../domain/workflow_registry.zig").ValidatedWorkflowDefinitionRegistry) void {
         const contracts = registry.contractSource();
-        self.parse_specification_state.action.contracts = contracts;
+        self.prepare_inputs.action.contracts = contracts;
         self.build_specification_state.action.contracts = contracts;
         self.build_incomplete_specification.action.contracts = contracts;
         self.prepare_incomplete_specification_output.action.contracts = contracts;
@@ -578,19 +507,19 @@ pub const Assembly = struct {
         self.prepare_toolchain.action.project_source.capability = registry.projectPrinciples();
         self.prepare_toolchain.action.preset_source.capability = registry.toolchainPresetRegistry();
         self.prepare_toolchain.action.preset_capture.capability = registry.toolchainPresetRegistry();
-        self.inspect_directory.action.inspector.capability = registry.referenceSources();
-        self.validate_feature.action.roots = registry.featureDirectoryRoots();
-        self.inspect_feature.action.inspector.capability = registry.featureDirectoryRead();
-        self.resolve_feature_paths.action.roots = registry.featureArtifactRoots();
-        self.capture_clarifications.action.source.capability = registry.featureInputRead();
-        if (self.capture_workflow_state.action.source) |*reader| reader.capability = registry.featureInputRead();
+        self.prepare_inputs.action.reference_inspector.capability = registry.referenceSources();
+        self.prepare_inputs.action.feature_roots = registry.featureDirectoryRoots();
+        self.prepare_inputs.action.feature_inspector.capability = registry.featureDirectoryRead();
+        self.prepare_inputs.action.artifact_roots = registry.featureArtifactRoots();
+        self.prepare_inputs.action.input_source.capability = registry.featureInputRead();
+        if (self.prepare_inputs.action.state_source) |*reader| reader.capability = registry.featureInputRead();
         if (self.publish_output.action.writer) |*writer| writer.capability = registry.featureOutputWrite();
-        self.inventory_references.action.source.capability = registry.referenceContentRead();
-        self.capture_references.action.source.capability = registry.referenceContentRead();
+        self.prepare_reference_evidence.action.enumerator.capability = registry.referenceContentRead();
+        self.prepare_reference_evidence.action.capturer.capability = registry.referenceContentRead();
     }
 };
 
-const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ ingestion.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
+const schemas = principles.schemas ++ packet_guidance.schemas ++ values.schemas ++ invocation_values.schemas ++ reference_values.schemas ++ feature.schemas ++ logging.schemas ++ clarification.schemas ++ evidence.schemas ++ extraction.schemas ++ path_tokens.schemas ++ passive_literals.schemas ++ structured_tokens.schemas ++ reconciliation_repair.schemas ++ text_repair.schemas ++ extraction_repair.schemas ++ reconciliation.schemas ++ authority.schemas ++ specification_support.schemas ++ support_repair.schemas ++ source_omission.schemas ++ reference_model.schemas ++ model_request.schemas ++ specification.schemas ++ scenario_link.schemas ++ coverage_repair.schemas ++ specification_repair.schemas ++ specification_rendering.schemas ++ clarification_refresh.schemas ++ output.schemas ++ publication.schemas ++ incomplete.schemas;
 const profiles = core.profiles ++ [_]@import("../domain/workflow_operation.zig").PolicyProfile{ .{
     .id = "core.specification-output@1",
     .allowed_capabilities = &.{ capabilities.principle_read, capabilities.reference_read, capabilities.feature_read, capabilities.feature_input_read, capabilities.reference_content_read, capabilities.reference_decode, capabilities.reference_identity, capabilities.toolchain_read, capabilities.toolchain_parser, capabilities.model_provider, capabilities.provider_authorization, capabilities.feature_output_write, capabilities.feature_logging },

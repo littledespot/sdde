@@ -1,9 +1,7 @@
 const std = @import("std");
 const reference = @import("domain/reference_ingestion.zig");
 const evidence = @import("domain/reference_evidence.zig");
-const assign = @import("actions/reference/assign_reference_identities.zig");
-const build = @import("actions/reference/build_reference_chunks.zig");
-const validate = @import("actions/reference/validate_reference_chunks.zig");
+const steps = @import("actions/reference/prepare_reference_evidence.zig").steps;
 const cite = @import("actions/reference/validate_source_citations.zig");
 const read = @import("reference_ingestion_test.zig").read;
 const feature: @import("domain/feature_identity.zig").FeatureId = .{ .bytes = "Chosen/Café" };
@@ -22,9 +20,9 @@ pub const IdSource = struct {
     }
 };
 pub fn prepare(allocator: std.mem.Allocator, source: *IdSource, inputs: reference.Inputs) !evidence.Inputs {
-    const corpus = try (assign.Action{ .identities = source.port() }).execute(allocator, inputs, feature);
-    const chunks = try (build.Action{}).execute(allocator, corpus);
-    return (validate.Action{}).execute(inputs, feature, corpus, chunks);
+    const corpus = try steps.assignIdentities(source.port(), allocator, inputs, feature);
+    const chunks = try steps.buildChunks(allocator, corpus);
+    return steps.validateChunks(inputs, feature, corpus, chunks);
 }
 fn proposals(inputs: evidence.Inputs, index: usize) evidence.CitationProposals {
     return .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[index].id }, .entries = &.{} };
@@ -129,10 +127,10 @@ test "global source block identities and total mappings are independent of provi
     try std.testing.expectError(error.InvalidSourceCitation, (cite.Action{}).execute(allocator, result, batch));
     var reordered_sources = result.corpus;
     reordered_sources.sources = &.{ result.corpus.sources[1], result.corpus.sources[0] };
-    try std.testing.expectError(error.InvalidReferenceChunks, (validate.Action{}).execute(input, feature, reordered_sources, result.chunks));
+    try std.testing.expectError(error.InvalidReferenceChunks, steps.validateChunks(input, feature, reordered_sources, result.chunks));
     var reordered_chunks = result.chunks;
     reordered_chunks.entries = &.{ result.chunks.entries[1], result.chunks.entries[0] };
-    try std.testing.expectError(error.InvalidReferenceChunks, (validate.Action{}).execute(input, feature, result.corpus, reordered_chunks));
+    try std.testing.expectError(error.InvalidReferenceChunks, steps.validateChunks(input, feature, result.corpus, reordered_chunks));
 }
 
 test "reference scopes reject stale runs unknown chunks and identity-source failure" {
@@ -247,7 +245,7 @@ test "citable input validation rejects incomplete duplicate reordered and forged
             .block_map => corpus.block_mappings = &.{},
             .feature => corpus.feature_id = .{ .bytes = "Other" },
         }
-        try std.testing.expectError(error.InvalidReferenceChunks, (validate.Action{}).execute(raw, feature, corpus, chunks));
+        try std.testing.expectError(error.InvalidReferenceChunks, steps.validateChunks(raw, feature, corpus, chunks));
     }
 }
 

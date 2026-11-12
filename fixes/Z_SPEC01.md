@@ -522,3 +522,120 @@ class is named and no semantic benefit is claimed (ADR 0031:250-252); no live ru
   | Files a new pure toolchain step touches | 8 (action, binding, values, `DataKey`, composition, YAML, fixture, 13-01) | 2 code files (the stage and its test) and the 13-01 entry |
 - **Rule:** the internal steps of a stage are functions, so a project cannot recompose them and
   a concept change lands in the stage's file.
+
+## E2b. `prepare-inputs` is the second stage action (ADR 0031)
+
+**Implemented 12 November 2026** (user: "yes" to starting it, after the preflight). The 13-step
+`inputs` subgraph of the Specify workflow is one stage action. No behaviour, model request, report,
+log or state version changes, so no published-output defect class is named and no semantic benefit
+is claimed; no live run (choice 7). The ADR 0031 status line and the design pointers name it the
+second stage action (user: "yes", 12 November 2026).
+- **Owners:** `src/actions/specify/prepare_inputs.zig` (the closed 13-member `Step` enum, the
+  `Diagnostic` slot, `Action.execute` sequencing 13 `steps.*` functions with a `NodeRuntime`
+  check between them; requires `specify_invocation`, produces the eight edge keys,
+  `filesystem_read`); one binding, `input_preparation_workflow.PrepareInputs`; the composition
+  root's one registry entry. Each port step takes only its own port, and its port aliases are
+  named `*_port` so the architecture rule sees them. The prior specification state and the bytes
+  it was parsed from use the retained allocator and the binding's owner; every other value is
+  allocated in scratch space and copied into the delta.
+- **Removed:** the 13 actions, their 13 bindings and `reference_workflow_runner.zig`, six
+  stage-internal `DataKey`s, the 13-step subgraph, and the `feature-input-preflight` fixture (the
+  `reference-preflight` fixture is now the single stage step). The failure representation of each
+  step is unchanged.
+- **Test wiring:** hand-built assemblies in the integration tests now bind the workflow-state
+  reader on the stage, as the composition root does.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); 122 of 122 integration scenarios; the unit suite adds nine
+  stage-edge and binding tests (every failing step named, cancellation between each pair, allocation
+  failure in scratch and retained space, exact produced keys, slot behaviour) and the architecture
+  suite four rules with rejected fixtures; `zig build verify` passes (169 of 169 steps, 2,041
+  tests).
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Input-preparation YAML in `spec.workflow.yaml` | 42-line subgraph, 13 steps (file 1,074 lines) | 1 step (file 1,032 lines) |
+  | Registry entries (`entry(` lines) | 158 | 148 |
+  | `DataKey` members | 186 | 180 |
+  | Input-preparation action files | 13 | 1 |
+  | Fixtures | `feature-input-preflight` plus the preflight steps in two others | one step in `reference-preflight`, one in `reference-ingestion` |
+
+## E2c. `prepare-reference-evidence` and `prepare-reference-tokens` are the third and fourth stage actions (ADR 0031)
+
+**Implemented 12 November 2026** (user: "apply best recommendations" to the open decisions for
+the 15-step `prepare-references` subgraph). Both answers were my recommendation: `compile-naming-policy`
+stays a separate step, and identity assignment keeps one port of its own. The first makes the
+subgraph two stages with the naming step between them, since the grammar step needs its output.
+No behaviour, model request, report, log or state version changes, so no published-output defect
+class is named and no semantic benefit is claimed; no live run (choice 7). The ADR 0031 status
+line, its one-port rule and the design pointers name all four stage actions (user: "action the
+best practice recommendations", 12 November 2026).
+- **Owners:**
+  - `src/actions/reference/prepare_reference_evidence.zig`: eight steps (inventory, validate
+    inventory, capture, decode, validate accounting, assign identities, build chunks, validate
+    chunks); requires `reference_directory` and `feature_directory`, produces
+    `citable_reference_inputs`, `filesystem_read`.
+  - `src/actions/reference/prepare_reference_tokens.zig`: six steps (build grammar, scan
+    literals, assign literals, validate literals, extract facts, assign candidates); requires
+    `compiled_naming_policy`, `valid_toolchain` and `citable_reference_inputs`, produces
+    `path_token_grammar`, `reference_passive_literals` and `structured_token_candidates`, `none`.
+  - Two bindings (`reference_evidence_preparation_workflow`, `reference_token_preparation_workflow`)
+    and two registry entries. Each stage has a closed `Step` enum, a `Diagnostic` slot and a
+    `NodeRuntime` check between steps.
+- **Port rule:** the user's earlier "yes" (12 November 2026) counts the Unicode text services
+  (normalizer, case folder, lexical classifier), all types of one port module, as one port family.
+  The architecture rule counts every `*_port` type in a step's parameters as one port, except that
+  the text services' alias (`text_port`) counts once in all; no other module is exempt, with
+  rejected fixtures for two types of `corpus_port`, `source_port` and `parser_port`. The `execute`
+  rule now rejects the whole words `Input` and `StepInput` (so `operations.Input` is caught and the
+  token stage's `evidence.Inputs` is not). The identity source stays one port in
+  `assignIdentities`, the only step that draws entropy.
+- **Removed:** the 14 actions, their bindings and schemas (`reference_ingestion_workflow.zig`
+  whole, and the stage-internal parts of the evidence, path-token, passive-literal and
+  structured-token binding files), ten stage-internal `DataKey`s, the 48-line subgraph, and the
+  two redundant composed test fixtures (`reference_text_workflow.zig`,
+  `reference_tokens_workflow.zig`): the stage always produces what each of them ended at, so the
+  one `prepared` composition serves all callers. The failure representation of each step is
+  unchanged. `compile-naming-policy` runs as its own step in the Specify graph instead of inside
+  the subgraph.
+- **Tests:** the per-step tests in the ingestion, evidence, path-token, typed-text and
+  structured-token test files call the step functions. The compiler test for reference ingestion
+  drops the mid-chain `core.noop` substitutions, which tested a chain that no longer exists, and
+  keeps the capability, parameter and dataflow rejections against the stage.
+- **Evidence (offline):** request projection across the integration matrix is byte-identical to
+  `q14b3-after` (`diff -rq` empty); 122 of 122 integration scenarios; a new test file covers each
+  stage edge with fake ports (each reachable failing step named, cancellation between each pair,
+  allocation failure in scratch space, the exact produced keys, slot behaviour); the chunk
+  validation and the literal and token steps can fail at the edge only by allocation, since their
+  derived inputs cannot be forged there, and their rejections stay tested as functions.
+  `zig build verify` passes (169 of 169 steps, 2,059 tests).
+- **Live set** (user: "run 3 e2e run per test case, once done perform an evaluation on each"; run
+  directories `2026-11-12T03-04-19Z` to `-23Z`; revision `a120c188`, `build.source.modified` true;
+  3 runs per case; skill `3fe52a92…`; compared with the E2 set): not required by choice 7, taken
+  because the preparation stages run against real adapters and the `compile-naming-policy` step
+  now precedes feature-log activation. In all six runs `references`, `naming` and `tokens`
+  completed `ok`, in that order, before any model call. 5 of 6 published and passed adjudication;
+  the sixth, loan-renewal, ended `workflow_failed` (`RetryLimitExhausted` at the scenario-link
+  choice request `g26-g14-g4-link-choose-request-account`, after three answers with reasoning and
+  no text; a model limitation in the generation phase, long after the stages, so counted as an
+  attempted workload and not repaired). Content-basis counts, lost / weakened / unsupported /
+  contradiction: hello-world 0 / 0 / 0 / 0 in 3 of 3 runs and loan-renewal 0 / 0 / 0 / 0 and
+  0 / 0 / 1 / 0 (AC-001's recording clause, one of two published runs), against 0 / 0 / 0 / 0 and
+  0 / 0 / 2 / 0 in the E2 set. Aggregates 96.43% for four runs and 100% for one. Hello-world: one
+  of three runs added an entity (3 of 3 in the E2 set) and two of three show the quote-mark
+  artefact (none in the E2 set), each costing one point. One hello-world run took one protocol
+  correction (10 calls); every other published run took 9 calls and none a re-send or runaway.
+  Median tokens 12,783 for hello-world and 16,206 and 16,477 for the two published loan-renewal
+  runs (the failed run used 17,916), against 12,768 and 16,500 in the E2 set. Every native delete
+  in the published runs (one each) was helpful. Evaluations: `evaluations/e2e/<run>/`.
+- **Measures, before then after:**
+
+  | Measure | Before | After |
+  | --- | --- | --- |
+  | Reference preparation YAML in `spec.workflow.yaml` | 48-line subgraph, 15 steps (file 1,032 lines) | 3 steps in the main graph (file 994 lines) |
+  | Registry entries (`entry(` lines) | 148 | 136 |
+  | `DataKey` members | 180 | 170 |
+  | Reference preparation action files | 14 | 2 |
+  | Composed test fixtures | 3 variants plus the ingestion fixture | one `prepared` composition plus the ingestion fixture |
+- **Rule:** the Unicode text services are one port family for ADR 0031's one-port rule; any other
+  step that mixes two port modules is rejected.
